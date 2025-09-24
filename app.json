@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "prophetik-daily",
+    "slug": "prophetik-daily",
+    "scheme": "prophetik-daily",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "firebase": {
+        "apiKey": "AIzaSyCISpoKSI-2U7NB4AvRlKXTzdEmwzc7pKE",
+        "authDomain": "capitaine.firebaseapp.com",
+        "projectId": "capitaine",
+        "storageBucket": "capitaine.firebasestorage.app",
+        "messagingSenderId": "502697214487",
+        "appId": "502697214487"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.prophetik.daily"
+    },
+    "android": {
+      "package": "com.prophetik.daily",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
