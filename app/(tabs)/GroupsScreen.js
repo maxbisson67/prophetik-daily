@@ -2,11 +2,11 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useGroups } from '../../src/groups/useGroups';
-import { createGroupService } from '../../src/groups/services';
-import { useAuth } from '../../src/auth/AuthProvider';
+import { useGroups } from '@src/groups/useGroups';
+import { createGroupService } from '@src/groups/services';
+import { useAuth } from '@src/auth/AuthProvider';
 import { signOut } from 'firebase/auth';
-import { auth } from '../../src/lib/firebase';
+import { auth } from '@src/lib/firebase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function GroupsScreen() {
@@ -24,7 +24,7 @@ export default function GroupsScreen() {
   const myMemberGroups = useMemo(() => groups.filter(g => g.role !== 'owner'), [groups]);
 
   function openGroup(g) {
-    router.push({ pathname: `/group/${g.id}` });
+    router.push({ pathname: `/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) }});
   }
 
   if (!user) {
@@ -55,7 +55,7 @@ export default function GroupsScreen() {
       setCreating(false);
       setCreateOpen(false);
       setName(''); setDescription(''); setInitialCredits('100');
-      router.push(`/group/${groupId}`);
+      router.push({ pathname: '/groups/[groupId]', params: { groupId: item.id } })
     } catch (e) {
       setCreating(false);
       Alert.alert('Erreur', e?.message || 'Création du groupe échouée');

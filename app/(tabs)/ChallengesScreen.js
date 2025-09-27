@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../../src/auth/AuthProvider';
-import { db } from '../../src/lib/firebase';
+import { useAuth } from '@src/auth/AuthProvider';
+import { db } from '@src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
 export default function ChallengesScreen() {

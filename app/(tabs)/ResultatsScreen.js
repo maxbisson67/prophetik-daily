@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList } from 'react-native';
-import { db } from '../../src/lib/firebase';
+import { db } from '@src/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
 export default function ResultsScreen() {

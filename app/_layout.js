@@ -1,13 +1,13 @@
-// app/_layout.js
-import React from 'react';
-import { Stack } from 'expo-router';
-
-// ⚠️ Ce layout est le layout racine.
-// Il ne contient PAS tes Tabs (ils sont dans app/(tabs)/_layout.js).
-// Ici, tu peux aussi ajouter un provider global si nécessaire.
+import { Stack, useRouter } from "expo-router";
+import { HeaderProfileButton } from "@src/profile/HeaderProfileButton";
 
 export default function RootLayout() {
+  const r = useRouter();
   return (
-    <Stack screenOptions={{ headerShown: false }} />
+    <Stack
+      screenOptions={{
+        headerRight: () => <HeaderProfileButton onPress={() => r.push("/profile")} />
+      }}
+    />
   );
 }

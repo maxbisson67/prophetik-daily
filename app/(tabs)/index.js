@@ -6,8 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 // ✅ Tes hooks & Firebase (chemins adaptés à ton projet)
-import { useAuth } from '../../src/auth/AuthProvider';
-import { db } from '../../src/lib/firebase';
+import { useAuth } from '@src/auth/AuthProvider';
+import { db } from '@src/lib/firebase';
 
 import { doc, getDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 

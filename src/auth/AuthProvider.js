@@ -1,20 +1,30 @@
-// src/auth/AuthProvider.js
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { onAuthStateChanged, getAuth } from 'firebase/auth';
 
-const Ctx = createContext({ user: null, initializing: true });
+const AuthCtx = createContext(undefined);
+export function useAuth() {
+  const ctx = useContext(AuthCtx);
+  if (ctx === undefined) {
+    throw new Error('useAuth must be used within <AuthProvider>');
+  }
+  return ctx;
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [initializing, setInit] = useState(true);
+  const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => { setUser(u); setInit(false); });
+    const unsub = onAuthStateChanged(getAuth(), (u) => {
+      setUser(u ?? null);
+      setBooting(false);
+    });
     return () => unsub();
   }, []);
 
-  return <Ctx.Provider value={{ user, initializing }}>{children}</Ctx.Provider>;
+  return (
+    <AuthCtx.Provider value={{ user, booting }}>
+      {children}
+    </AuthCtx.Provider>
+  );
 }
-
-export function useAuth() { return useContext(Ctx); }
