@@ -58,5 +58,5 @@ if (Platform.OS === 'web') {
 const db = getFirestore(app);
 // ⚠️ Mets la même région que tes Cloud Functions (us-central1 par défaut)
 const functions = getFunctions(app, 'us-central1');
-=const storage = getStorage(app);
+const storage = getStorage(app);
 export { app, auth, db, functions, storage };

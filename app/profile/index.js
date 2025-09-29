@@ -1,3 +1,4 @@
+// app/profile/index.js
 import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator, Alert, ScrollView } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
@@ -8,9 +9,15 @@ import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from "firebase/firest
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuth } from "@src/auth/AuthProvider";
 
+// crédits
+import CreditsWallet from "@src/credits/CreditsWallet";
+import { useCredits } from "@src/credits/useCredits";
+
 export default function ProfileScreen() {
   const r = useRouter();
   const { user, initializing } = useAuth?.() ?? { user: auth.currentUser, initializing: false };
+  const { credits, loading: creditsLoading, topUpFree } = useCredits();
+
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || null);
   const [busy, setBusy] = useState(false);
@@ -21,7 +28,6 @@ export default function ProfileScreen() {
   }, [user?.uid]);
 
   useEffect(() => {
-    // hydrate depuis participants
     (async () => {
       if (!user?.uid) return;
       const snap = await getDoc(doc(db, "participants", user.uid));
@@ -43,7 +49,7 @@ export default function ProfileScreen() {
         photoURL: u.photoURL || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        credits: 0,           // sera mis à jour par CF onCreate (+25)
+        credits: 0,        // la CF onCreate posera +25
         betaEligible: true
       }, { merge: true });
     }
@@ -52,8 +58,7 @@ export default function ProfileScreen() {
   const onSignIn = async () => {
     try {
       setBusy(true);
-      // Exemple rapide: anonyme. Remplace par Google/Email selon ton flux.
-      const res = await signInAnonymously(auth);
+      const res = await signInAnonymously(auth); // remplaçable par Google/Email
       await ensureParticipantDoc(res.user);
       Alert.alert("Connecté", "Bienvenue !");
     } catch (e) {
@@ -82,7 +87,10 @@ export default function ProfileScreen() {
       Alert.alert("Permission refusée", "Autorise l’accès à la galerie pour changer l’avatar.");
       return;
     }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
     if (res.canceled) return;
     const asset = res.assets[0];
     setPhotoURL(asset.uri);
@@ -97,7 +105,6 @@ export default function ProfileScreen() {
       setBusy(true);
       let newPhotoURL = user.photoURL || null;
 
-      // upload avatar si local
       if (photoURL && photoURL.startsWith("file:")) {
         const blob = await (await fetch(photoURL)).blob();
         const avatarRef = ref(storage, `avatars/${user.uid}.jpg`);
@@ -105,13 +112,11 @@ export default function ProfileScreen() {
         newPhotoURL = await getDownloadURL(avatarRef);
       }
 
-      // MAJ Auth (affiche nom + avatar dans Firebase Auth)
       await fbUpdateProfile(user, {
         displayName: displayName || null,
         photoURL: newPhotoURL || null
       });
 
-      // MAJ participants
       await updateDoc(doc(db, "participants", user.uid), {
         displayName: displayName || null,
         photoURL: newPhotoURL || null,
@@ -127,23 +132,36 @@ export default function ProfileScreen() {
   };
 
   if (initializing) {
-    return <View style={{ flex:1, alignItems:"center", justifyContent:"center" }}><ActivityIndicator /><Text> Initialisation…</Text></View>;
+    return (
+      <View style={{ flex:1, alignItems:"center", justifyContent:"center" }}>
+        <ActivityIndicator />
+        <Text> Initialisation…</Text>
+      </View>
+    );
   }
 
   return (
     <ScrollView contentContainerStyle={{ padding:16, gap:16 }}>
       <Text style={{ fontSize:22, fontWeight:"700" }}>Profil</Text>
 
+      {/* Solde crédits + actions */}
+      <CreditsWallet />
+
+      {/* Avatar */}
       <View style={{ alignItems:"center", gap:12 }}>
         <Image
           source={photoURL ? { uri: photoURL } : require("@src/assets/avatar-placeholder.png")}
           style={{ width:96, height:96, borderRadius:48, backgroundColor:"#eee" }}
         />
-        <TouchableOpacity onPress={pickAvatar} style={{ paddingHorizontal:12, paddingVertical:8, borderRadius:10, borderWidth:1, borderColor:"#ddd" }}>
+        <TouchableOpacity
+          onPress={pickAvatar}
+          style={{ paddingHorizontal:12, paddingVertical:8, borderRadius:10, borderWidth:1, borderColor:"#ddd" }}
+        >
           <Text>Changer l’avatar</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Nom d’affichage */}
       <View style={{ gap:6 }}>
         <Text style={{ fontWeight:"600" }}>Nom d’affichage</Text>
         <TextInput
@@ -156,6 +174,7 @@ export default function ProfileScreen() {
 
       {busy ? <ActivityIndicator /> : null}
 
+      {/* Auth */}
       {user ? (
         <View style={{ gap:10 }}>
           <TouchableOpacity onPress={saveProfile} style={{ backgroundColor:"#111", padding:14, borderRadius:10, alignItems:"center" }}>
@@ -170,6 +189,23 @@ export default function ProfileScreen() {
           <Text style={{ color:"#fff", fontWeight:"600" }}>Se connecter</Text>
         </TouchableOpacity>
       )}
+
+      {/* CTA top-up gratuit si bas solde */}
+      {user && !creditsLoading && credits < 5 ? (
+        <TouchableOpacity
+          onPress={async () => {
+            try {
+              const res = await topUpFree();
+              Alert.alert("Top-up", `Nouveau solde: ${res.credits}`);
+            } catch (e) {
+              Alert.alert("Top-up impossible", String(e?.message || e));
+            }
+          }}
+          style={{ marginTop:8, backgroundColor:"#111", padding:12, borderRadius:10, alignItems:"center" }}
+        >
+          <Text style={{ color:"#fff", fontWeight:"600" }}>+25 gratuits (bêta)</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }

@@ -1,8 +1,6 @@
-// app/groups/_layout.js
-import { Stack } from 'expo-router';
+import { Stack } from "expo-router";
 
 export default function GroupsLayout() {
-  return (
-    <Stack screenOptions={{ headerShown: true, title: 'Groupe' }} />
-  );
+  // Cache le header du parent pour /groups/**
+  return <Stack screenOptions={{ headerShown:true }} />;
 }

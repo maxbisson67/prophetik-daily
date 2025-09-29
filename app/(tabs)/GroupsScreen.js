@@ -1,7 +1,7 @@
 // app/(tabs)/GroupsScreen.js
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter , Stack} from 'expo-router';
 import { useGroups } from '@src/groups/useGroups';
 import { createGroupService } from '@src/groups/services';
 import { useAuth } from '@src/auth/AuthProvider';
@@ -17,12 +17,16 @@ export default function GroupsScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [initialCredits, setInitialCredits] = useState('100');
   const [creating, setCreating] = useState(false);
 
-  const myOwnerGroups = useMemo(() => groups.filter(g => g.role === 'owner'), [groups]);
-  const myMemberGroups = useMemo(() => groups.filter(g => g.role !== 'owner'), [groups]);
-
+  const myOwnerGroups = useMemo(
+  () => groups.filter(g => g.role === 'owner' || g.ownerId === user?.uid),
+  [groups, user?.uid]
+);
+const myMemberGroups = useMemo(
+  () => groups.filter(g => !(g.role === 'owner' || g.ownerId === user?.uid)),
+  [groups, user?.uid]
+);
   function openGroup(g) {
     router.push({ pathname: `/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) }});
   }
@@ -43,19 +47,18 @@ export default function GroupsScreen() {
 
   async function onCreateGroup() {
     if (!name.trim()) return Alert.alert('Nom requis', 'Donne un nom à ton groupe.');
-    const init = parseInt(initialCredits, 10);
-    if (Number.isNaN(init) || init < 0) return Alert.alert('Crédits initiaux invalides', 'Entre un nombre ≥ 0');
+  
+   // if (Number.isNaN(init) || init < 0) return Alert.alert('Crédits initiaux invalides', 'Entre un nombre ≥ 0');
     try {
       setCreating(true);
       const { groupId } = await createGroupService({ 
         name: name.trim(), 
-        description: description.trim(), 
-        initialCreditsPerMember: init 
+        description: description.trim()
       });
       setCreating(false);
       setCreateOpen(false);
-      setName(''); setDescription(''); setInitialCredits('100');
-      router.push({ pathname: '/groups/[groupId]', params: { groupId: item.id } })
+      setName(''); setDescription('');
+      router.push({ pathname: '/groups/[groupId]', params: { groupId } });
     } catch (e) {
       setCreating(false);
       Alert.alert('Erreur', e?.message || 'Création du groupe échouée');
@@ -71,7 +74,9 @@ export default function GroupsScreen() {
   }
 
   return (
+   
      <SafeAreaView style={{ flex: 1, backgroundColor: '#f3f4f6' }}>
+      
     <View style={{ flex: 1 }}>
       <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 22, fontWeight: '700' }}>Mes groupes</Text>
@@ -83,11 +88,11 @@ export default function GroupsScreen() {
       <Text style={{ color: 'white', fontWeight: '600' }}>Créer</Text>
     </TouchableOpacity>
     
-    <TouchableOpacity 
-      onPress={() => signOut(auth)} 
+     <TouchableOpacity 
+      onPress={() => router.push('/groups/join')} // 👈 vers une future page JoinGroup
       style={{ borderWidth: 1, borderColor: '#111827', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 }}
     >
-      <Text style={{ fontWeight: '600' }}>Déconnexion</Text>
+      <Text style={{ fontWeight: '600' }}>Joindre</Text>
     </TouchableOpacity>
   </View>
       </View>
@@ -107,7 +112,7 @@ export default function GroupsScreen() {
       ) : (
         <FlatList
           data={[{ header: true, title: 'Groupes que je gère' }, ...myOwnerGroups, { header: true, title: 'Groupes où je suis membre' }, ...myMemberGroups]}
-          keyExtractor={(item, idx) => (item.header ? `h-${idx}` : item.id)}
+          keyExtractor={(item, idx) => (item.header ? `h-${idx}` : String(item.id))}
           renderItem={({ item }) =>
             item.header ? (
               <Text style={{ paddingHorizontal: 16, paddingVertical: 8, fontSize: 16, fontWeight: '700' }}>{item.title}</Text>
@@ -116,7 +121,7 @@ export default function GroupsScreen() {
                 <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.name}</Text>
                 {!!item.description && <Text style={{ marginTop: 2 }}>{item.description}</Text>}
                 <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text>Solde: {item.balance ?? 0} crédits</Text>
+                  <Text>Code invitation: {item.codeInvitation} </Text>
                   <Text>{item.role === 'owner' ? 'Propriétaire' : 'Membre'}</Text>
                 </View>
               </TouchableOpacity>
@@ -136,8 +141,7 @@ export default function GroupsScreen() {
           <Text style={{ fontSize: 20, fontWeight: '700', marginBottom: 12 }}>Nouveau groupe</Text>
           <TextInput placeholder="Nom du groupe" value={name} onChangeText={setName} style={{ borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10 }} />
           <TextInput placeholder="Description (optionnel)" value={description} onChangeText={setDescription} style={{ borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10 }} />
-          <TextInput placeholder="Crédits initiaux" value={initialCredits} onChangeText={setInitialCredits} keyboardType="number-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 20 }} />
-
+         
           <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
             <TouchableOpacity onPress={() => setCreateOpen(false)} style={{ padding: 12, borderWidth: 1, borderRadius: 12 }}>
               <Text>Annuler</Text>
