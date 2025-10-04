@@ -9,6 +9,9 @@ import { useAuth } from "@src/auth/AuthProvider";
 const CODE_LEN = 8;
 const ALPHABET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"; // sans 0 ni O
 
+
+
+
 export default function JoinGroupScreen() {
   const r = useRouter();
   const { user } = useAuth();

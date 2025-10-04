@@ -16,7 +16,7 @@ export default function SignInScreen() {
     try {
       setBusy(true);
       await signInWithEmailAndPassword(auth, email.trim(), pwd);
-      r.replace("/profile"); // ou r.back()
+      r.replace("(tabs)"); // ou r.back()
     } catch (e) {
       Alert.alert("Connexion échouée", String(e?.message || e));
     } finally {

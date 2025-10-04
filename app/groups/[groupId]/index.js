@@ -383,9 +383,11 @@ export default function GroupDetailScreen() {
       createdBy: user?.uid || 'system',
       participationCost,
       // 👇 nouveaux champs persistés
-      status: 'active',
+      status: "open",               // ✅
+      pot: 0,                       // ✅
       firstGameUTC: firstGameDate,  // Date -> Timestamp Firestore
       signupDeadline,               // Date -> Timestamp Firestore
+      ...( __DEV__ ? { debugNotifyCreator: true } : {} )
     });
 
     setOpenCreate(false);

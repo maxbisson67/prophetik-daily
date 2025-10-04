@@ -1,5 +1,5 @@
 // app/defis/[defiId]/index.js
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,21 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Keyboard,
+  Image,
   Modal,
 } from 'react-native';
+import { TeamLogo } from '@src/nhl/nhlAssets';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { doc, onSnapshot, collection, query, where, getDocs, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '@src/lib/firebase';
 import { useAuth } from '@src/auth/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from '@src/lib/firebase';
+
+const functions = getFunctions(app);
+const participateInDefi = httpsCallable(functions, 'participateInDefi');
 
 /* --------------------------- Utils format & fetch --------------------------- */
 
@@ -35,7 +43,6 @@ function fmtLocalDateStr(d) {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 function toYMD(v) {
-  // accepte string "YYYY-MM-DD" ou Timestamp/Date
   if (typeof v === 'string') return v;
   const d = v?.toDate?.() ? v.toDate() : (v instanceof Date ? v : v ? new Date(v) : null);
   if (!d) return null;
@@ -46,9 +53,19 @@ function isPast(ts) {
   const d = ts?.toDate?.() ? ts.toDate() : (ts instanceof Date ? ts : new Date(ts));
   return Date.now() > d.getTime();
 }
-// petits helpers robustes sur les champs d’équipe renvoyés par api-web
 const pick = (o, k) => (o && o[k] !== undefined ? o[k] : undefined);
 const pickAbbr = (t) => pick(t, 'teamAbbrev')?.default ?? pick(t, 'teamAbbrev') ?? pick(t, 'abbrev') ?? null;
+
+// ✅ Logos PNG (RN ne supporte pas le SVG nativement)
+function teamLogoUrl(abbr) {
+  if (!abbr) return null;
+  return `https://assets.nhle.com/logos/nhl/png/${abbr}/light/primary_logo.png`;
+}
+// ✅ Headshots (playerId + abbr)
+function headshotUrl(abbr, playerId) {
+  if (!abbr || !playerId) return null;
+  return `https://assets.nhle.com/mugs/nhl/20252026/${abbr}/${playerId}.png`;
+}
 
 async function fetchGamesOn(ymd) {
   try {
@@ -72,15 +89,13 @@ async function fetchGamesOn(ymd) {
   }
 }
 
-async function fetchTeamsPlayingOn(ymd /* "YYYY-MM-DD" */) {
-  // Retourne Set d’abbr (ex: "MTL","TOR"...)
+async function fetchTeamsPlayingOn(ymd) {
   if (!ymd) return new Set();
   try {
     const res = await fetch(`https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`);
     if (!res.ok) return new Set();
     const data = await res.json();
 
-    // structure préférée: gameWeek[].date === ymd → day.games
     const day = Array.isArray(data?.gameWeek) ? data.gameWeek.find(d => d?.date === ymd) : null;
     const games = day ? (day.games || []) : (Array.isArray(data?.games) ? data.games : []);
     const abbrs = new Set();
@@ -98,136 +113,95 @@ async function fetchTeamsPlayingOn(ymd /* "YYYY-MM-DD" */) {
   }
 }
 
+/* --------------------------- Autocomplete (Modal) --------------------------- */
+
+function PlayerSelectModal({ visible, onClose, options, onPick }) {
+  const [q, setQ] = useState('');
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return options.slice(0, 50);
+    return options.filter(p =>
+      (p.fullName || '').toLowerCase().includes(s) ||
+      (p.teamAbbr || '').toLowerCase().includes(s)
+    ).slice(0, 50);
+  }, [q, options]);
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
+      <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.25)', justifyContent:'flex-end' }}>
+        <View style={{ maxHeight:'75%', backgroundColor:'#fff', borderTopLeftRadius:16, borderTopRightRadius:16 }}>
+          <View style={{ padding:12, borderBottomWidth:1, borderColor:'#eee', flexDirection:'row', alignItems:'center' }}>
+            <TextInput
+              placeholder="Tape le nom d’un joueur…"
+              value={q}
+              onChangeText={setQ}
+              autoFocus
+              autoCorrect={false}
+              autoCapitalize="none"
+              style={{ flex:1, borderWidth:1, borderColor:'#ddd', borderRadius:10, paddingHorizontal:12, paddingVertical:10, backgroundColor:'#fff' }}
+            />
+            <TouchableOpacity onPress={onClose} style={{ marginLeft:8, padding:8 }}>
+              <Ionicons name="close" size={22} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding:8 }}>
+            {filtered.length === 0 ? (
+              <Text style={{ textAlign:'center', color:'#666', paddingVertical:12 }}>Aucun résultat</Text>
+            ) : filtered.map(p => (
+              <TouchableOpacity
+                key={String(p.playerId)}
+                onPress={() => { onPick?.(p); onClose?.(); }}
+                style={{ flexDirection:'row', alignItems:'center', paddingVertical:10, paddingHorizontal:8, borderBottomWidth:1, borderColor:'#f3f3f3' }}
+              >
+                <Image
+                  source={{ uri: headshotUrl(p.teamAbbr, p.playerId) }}
+                  style={{ width:34, height:34, borderRadius:17, marginRight:10, backgroundColor:'#eee' }}
+                />
+                <Text numberOfLines={1} style={{ flex:1 }}>{p.fullName} {p.teamAbbr ? `• ${p.teamAbbr}` : ''}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 /* ----------------------- Fixed picker row (index-based) ---------------------- */
 
-function PlayerPickerRow({
-  label,
-  selected,
-  onOpenModal,
-  locked,
-}) {
+function PlayerPickerRow({ label, value, onEdit, locked }) {
   return (
     <View style={{ marginBottom: 12 }}>
       <Text style={{ marginBottom: 6, fontWeight: '600' }}>{label}</Text>
-      {selected ? (
-        <View
-          style={{
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            borderWidth: 1,
-            borderColor: '#eee',
-            borderRadius: 10,
-            backgroundColor: '#fafafa',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
-          }}
-        >
-          <Text numberOfLines={1} style={{ flex: 1 }}>
-            {selected.fullName} {selected.teamAbbr ? `• ${selected.teamAbbr}` : ''}
-          </Text>
+      {value ? (
+        <View style={{ paddingVertical:10, paddingHorizontal:12, borderWidth:1, borderColor:'#eee', borderRadius:10, backgroundColor:'#fafafa', flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+          <View style={{ flexDirection:'row', alignItems:'center', flex:1, marginRight:10 }}>
+            <Image
+              source={{ uri: headshotUrl(value.teamAbbr, value.playerId) }}
+              style={{ width:34, height:34, borderRadius:17, marginRight:8, backgroundColor:'#eee' }}
+            />
+            <Text numberOfLines={1} style={{ flex:1 }}>
+              {value.fullName} {value.teamAbbr ? `• ${value.teamAbbr}` : ''}
+            </Text>
+          </View>
           {!locked && (
-            <TouchableOpacity
-              onPress={onOpenModal}
-              accessibilityRole="button"
-              accessibilityLabel="Changer le joueur"
-              style={{ paddingHorizontal: 6, paddingVertical: 4 }}
-            >
-              <Ionicons name="create-outline" size={18} color="#555" />
+            <TouchableOpacity onPress={onEdit} style={{ padding:6 }}>
+              <Ionicons name="create-outline" size={20} color="#555" />
             </TouchableOpacity>
           )}
         </View>
       ) : (
         <TouchableOpacity
-          onPress={onOpenModal}
+          onPress={onEdit}
           disabled={locked}
-          style={{
-            paddingVertical:12, paddingHorizontal:12,
-            borderWidth:1, borderColor:'#ddd', borderRadius:10,
-            backgroundColor:'#fff'
-          }}
+          style={{ paddingVertical:12, paddingHorizontal:12, borderWidth:1, borderColor:'#ddd', borderRadius:10, backgroundColor:'#fff' }}
         >
-          <Text style={{ color:'#666' }}>{locked ? 'Inscription fermée' : 'Choisir un joueur…'}</Text>
+          <Text style={{ color:'#666' }}>Choisir un joueur…</Text>
         </TouchableOpacity>
       )}
     </View>
-  );
-}
-
-/* ------------------------- Full-screen picker modal ------------------------- */
-
-function PlayerPickerModal({
-  visible,
-  onClose,
-  onSelect,
-  options,         // full list of players [{playerId, fullName, teamAbbr}]
-  title = 'Choisir un joueur',
-}) {
-  const [query, setQuery] = useState('');
-
-  useEffect(() => {
-    if (!visible) setQuery('');
-  }, [visible]);
-
-  const filtered = useMemo(() => {
-    const s = query.trim().toLowerCase();
-    if (!s) return options.slice(0, 100);
-    return options.filter(p =>
-      (p.fullName || '').toLowerCase().includes(s) ||
-      (p.teamAbbr || '').toLowerCase().includes(s)
-    ).slice(0, 100);
-  }, [query, options]);
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
-        style={{ flex:1 }}
-      >
-        <View style={{ flex:1, paddingTop: 12 }}>
-          {/* Header */}
-          <View style={{ paddingHorizontal:16, paddingBottom:12, borderBottomWidth:1, borderColor:'#eee' }}>
-            <Text style={{ fontSize:18, fontWeight:'700' }}>{title}</Text>
-            <View style={{ marginTop:10, flexDirection:'row', alignItems:'center' }}>
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Tape le nom d’un joueur…"
-                autoCorrect={false}
-                autoCapitalize="none"
-                style={{
-                  flex:1, borderWidth:1, borderColor:'#ddd', borderRadius:10,
-                  paddingHorizontal:12, paddingVertical:10, backgroundColor:'#fff'
-                }}
-              />
-              <TouchableOpacity onPress={onClose} style={{ marginLeft:8, paddingHorizontal:12, paddingVertical:10, borderWidth:1, borderRadius:10 }}>
-                <Text>Fermer</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* List */}
-          <ScrollView keyboardShouldPersistTaps="handled" style={{ flex:1 }}>
-            {filtered.length === 0 ? (
-              <View style={{ padding:16 }}>
-                <Text style={{ color:'#666' }}>Aucun résultat</Text>
-              </View>
-            ) : (
-              filtered.map((p) => (
-                <TouchableOpacity
-                  key={String(p.playerId)}
-                  onPress={() => onSelect(p)}
-                  style={{ paddingVertical:12, paddingHorizontal:16, borderBottomWidth:1, borderColor:'#f0f0f0' }}
-                >
-                  <Text numberOfLines={1}>{p.fullName} {p.teamAbbr ? `• ${p.teamAbbr}` : ''}</Text>
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
   );
 }
 
@@ -242,27 +216,25 @@ export default function DefiParticipationScreen() {
   const [loadingDefi, setLoadingDefi] = useState(true);
   const [error, setError] = useState(null);
 
-  // dérivés precoces (avant effets qui l’utilisent)
-  const gameYMD = useMemo(() => toYMD(defi?.gameDate), [defi?.gameDate]);
-
-  // équipes du jour
   const [teamAbbrs, setTeamAbbrs] = useState(new Set());
+  const [games, setGames] = useState([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
 
-  // joueurs (liste brute des équipes qui jouent)
   const [players, setPlayers] = useState([]); // [{playerId, fullName, teamAbbr}]
   const [loadingPlayers, setLoadingPlayers] = useState(false);
 
-  // fixed fields state
-  const [selected, setSelected] = useState([]);        // [player|null, ...]
+  const [selected, setSelected] = useState([]); // [player|null, ...]
   const [saving, setSaving] = useState(false);
 
-  // games table
-  const [games, setGames] = useState([]);
-
-  // picker modal
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerSlot, setPickerSlot] = useState(null);
+  const [pickerIndex, setPickerIndex] = useState(0);
+
+  // keyboard spacer
+  useEffect(() => {
+    const sh = Keyboard.addListener('keyboardDidShow', () => {});
+    const hd = Keyboard.addListener('keyboardDidHide', () => {});
+    return () => { sh.remove(); hd.remove(); };
+  }, []);
 
   // Charger le défi
   useEffect(() => {
@@ -284,18 +256,13 @@ export default function DefiParticipationScreen() {
     return () => unsub();
   }, [defiId]);
 
-  // nb de choix autorisés = type
   const maxChoices = useMemo(() => {
     const t = Number(defi?.type || 0);
     return Number.isFinite(t) && t > 0 ? t : 1;
   }, [defi?.type]);
 
-  // initialise selected à la bonne taille
   useEffect(() => {
-    setSelected((old) => {
-      const next = Array.from({ length: maxChoices }, (_, i) => old?.[i] ?? null);
-      return next;
-    });
+    setSelected(prev => Array.from({ length: maxChoices }, (_, i) => prev?.[i] ?? null));
   }, [maxChoices]);
 
   // Charger participation existante (remplit selected)
@@ -308,13 +275,12 @@ export default function DefiParticipationScreen() {
         if (snap.exists()) {
           const p = snap.data();
           const picks = Array.isArray(p.picks) ? p.picks : [];
-          setSelected((prev) => {
-            const next = Array.from({ length: maxChoices }, (_, i) => {
+          setSelected((prev) =>
+            Array.from({ length: maxChoices }, (_, i) => {
               const x = picks[i];
               return x ? { playerId: x.playerId, fullName: x.fullName, teamAbbr: x.teamAbbr } : prev?.[i] ?? null;
-            });
-            return next;
-          });
+            })
+          );
         }
       } catch (e) {
         setError(e);
@@ -322,14 +288,19 @@ export default function DefiParticipationScreen() {
     })();
   }, [defi?.id, user?.uid, maxChoices]);
 
-  // Récup la table des matchs + équipes
+  const gameYMD = useMemo(() => toYMD(defi?.gameDate), [defi?.gameDate]);
+
+  // Récup équipes & matchs
   useEffect(() => {
     (async () => {
       if (!gameYMD) return;
-      setGames(await fetchGamesOn(gameYMD));
       setLoadingTeams(true);
-      const set = await fetchTeamsPlayingOn(gameYMD);
+      const [set, gm] = await Promise.all([
+        fetchTeamsPlayingOn(gameYMD),
+        fetchGamesOn(gameYMD),
+      ]);
       setTeamAbbrs(set);
+      setGames(gm || []);
       setLoadingTeams(false);
     })();
   }, [gameYMD]);
@@ -341,7 +312,6 @@ export default function DefiParticipationScreen() {
       if (!abbrList.length) { setPlayers([]); return; }
       setLoadingPlayers(true);
       try {
-        // Firestore n'autorise pas "where in" sur plus de 10 valeurs → on batch par 10
         const chunks = [];
         for (let i = 0; i < abbrList.length; i += 10) chunks.push(abbrList.slice(i, i + 10));
         const results = [];
@@ -353,7 +323,6 @@ export default function DefiParticipationScreen() {
             results.push({ playerId: p.playerId, fullName: p.fullName, teamAbbr: p.teamAbbr });
           });
         }
-        // tri alphabétique
         results.sort((a, b) => String(a.fullName).localeCompare(String(b.fullName)));
         setPlayers(results);
       } catch (e) {
@@ -365,10 +334,10 @@ export default function DefiParticipationScreen() {
   }, [abbrList]);
 
   const locked = useMemo(() => {
-    // bloqué si deadline passée OU status != active
     if (!defi) return true;
-    if (String(defi.status || '').toLowerCase() !== 'active') return true;
-    if (!defi.signupDeadline) return false; // si pas de deadline, autorise
+    const statusKey = String(defi.status || '').toLowerCase();
+    if (statusKey !== 'open') return true;
+    if (!defi.signupDeadline) return false;
     return isPast(defi.signupDeadline);
   }, [defi]);
 
@@ -377,61 +346,62 @@ export default function DefiParticipationScreen() {
     return base;
   }, [defi]);
 
-  // open picker for slot
-  const openPicker = useCallback((slotIndex) => {
-    if (locked) return;
-    setPickerSlot(slotIndex);
+  const openPicker = useCallback((index) => {
+    setPickerIndex(index);
     setPickerOpen(true);
-  }, [locked]);
+    Keyboard.dismiss();
+  }, []);
 
-  // selection from modal
-  const selectFromModal = useCallback((p) => {
-    if (pickerSlot == null) return;
+  const handlePick = useCallback((p) => {
     setSelected(prev => {
       const next = [...prev];
-      next[pickerSlot] = p;
+      next[pickerIndex] = p;
       return next;
     });
-    setPickerOpen(false);
-    setPickerSlot(null);
-  }, [pickerSlot]);
+  }, [pickerIndex]);
 
-  // condition bouton
   const allChosen = useMemo(() => selected.filter(Boolean).length === maxChoices, [selected, maxChoices]);
 
   // Sauvegarde
   const save = useCallback(async () => {
-    if (!user?.uid || !defi?.id) return;
-    if (locked) {
-      Alert.alert('Inscription fermée', 'La date limite est dépassée.');
-      return;
-    }
-    if (!allChosen) {
-      Alert.alert('Sélection incomplète', `Tu dois choisir ${maxChoices} joueur(s).`);
-      return;
-    }
-    setSaving(true);
-    try {
-      const ref = doc(db, 'defis', String(defi.id), 'participations', user.uid);
-      await setDoc(ref, {
-        uid: user.uid,
-        picks: selected.map(p => ({
-          playerId: p.playerId,
-          fullName: p.fullName,
-          teamAbbr: p.teamAbbr,
-        })),
-        updatedAt: new Date(),
-      }, { merge: true });
-      Alert.alert('Participation enregistrée', 'Bonne chance !');
-      router.back();
-    } catch (e) {
-      Alert.alert('Erreur', String(e?.message || e));
-    } finally {
-      setSaving(false);
-    }
-  }, [user?.uid, defi?.id, selected, maxChoices, locked, allChosen, router]);
+  if (!user?.uid || !defi?.id) return;
+  if (locked) {
+    Alert.alert('Inscription fermée', 'La date limite est dépassée.');
+    return;
+  }
+  if (!allChosen) {
+    Alert.alert('Sélection incomplète', `Tu dois choisir ${maxChoices} joueur(s).`);
+    return;
+  }
+  setSaving(true);
+  try {
+    const res = await participateInDefi({
+      defiId: defi.id,
+      picks: selected.map(p => ({
+        playerId: p.playerId,
+        fullName: p.fullName,
+        teamAbbr: p.teamAbbr,
+      })),
+    });
 
-  /* --------------------------------- Render --------------------------------- */
+    const ok = res?.data?.ok === true;
+    const newPot = typeof res?.data?.newPot === 'number' ? res.data.newPot : null;
+
+    if (ok) {
+      const potMsg = (newPot !== null)
+        ? `Cagnotte: ${newPot} crédits`
+        : 'Participation enregistrée.';
+      Alert.alert('Participation enregistrée', `Bonne chance ! ${potMsg}`);
+      router.back();
+    } else {
+      throw new Error(res?.data?.error || "Erreur inconnue");
+    }
+  } catch (e) {
+    Alert.alert('Erreur', String(e?.message || e));
+  } finally {
+    setSaving(false);
+  }
+}, [user?.uid, defi?.id, selected, maxChoices, locked, allChosen, router]);
 
   if (loadingDefi) {
     return (
@@ -478,60 +448,88 @@ export default function DefiParticipationScreen() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
+        >
           {/* Carte infos défi */}
-          <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', elevation:3,
-            shadowColor:'#000', shadowOpacity:0.1, shadowRadius:6, shadowOffset:{width:0, height:3} }}>
+          <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', elevation:3 }}>
             <Text style={{ fontWeight:'700', marginBottom:8 }}>{headerTitle}</Text>
             <Text>Date NHL: {gameDayStr || '—'}</Text>
-            {defi.signupDeadline && (
-              <Text>Limite inscription: {fmtTSLocalHM(defi.signupDeadline)}</Text>
-            )}
-            {defi.firstGameAtUTC && (
-              <Text>Premier match (UTC): {fmtTSLocalHM(defi.firstGameAtUTC)}</Text>
-            )}
+            {defi.signupDeadline && <Text>Limite inscription: {fmtTSLocalHM(defi.signupDeadline)}</Text>}
+            {defi.firstGameAtUTC && <Text>Premier match (UTC): {fmtTSLocalHM(defi.firstGameAtUTC)}</Text>}
             <Text>Nombre de choix: {maxChoices}</Text>
             <Text>Statut: {defi.status || '—'} {locked ? ' (verrouillé)' : ''}</Text>
+            <Text>Cagnotte: {defi.pot ?? 0} crédit(s)</Text>
           </View>
 
-          {/* Info équipes */}
-          <View style={{
-              padding: 12, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff', elevation: 3,
-              shadowColor:'#000', shadowOpacity:0.1, shadowRadius:6, shadowOffset:{ width:0, height:3 },
-            }}>
-            <Text style={{ fontWeight:'700', marginBottom:8, textAlign:'center' }}>Matchs NHL du jour</Text>
+          {/* Matchs du jour avec logos */}
+          <View
+            style={{
+              padding: 12,
+              borderWidth: 1,
+              borderRadius: 12,
+              backgroundColor: '#fff',
+              elevation: 3,
+              shadowColor: '#000',
+              shadowOpacity: 0.1,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 3 },
+            }}
+          >
+            <Text style={{ fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
+              Matchs NHL du jour
+            </Text>
             {games.length === 0 ? (
               <Text style={{ color: '#666', textAlign: 'center' }}>Aucun match trouvé.</Text>
             ) : (
               <View>
-                {/* entêtes */}
-                <View style={{ flexDirection:'row', paddingVertical:6, borderBottomWidth:1, borderColor:'#ddd' }}>
+                <View style={{ flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderColor: '#ddd' }}>
                   <Text style={{ flex: 1, fontWeight: '700' }}>Heure</Text>
-                  <Text style={{ flex: 1, fontWeight: '700' }}>Visiteur</Text>
-                  <Text style={{ flex: 1, fontWeight: '700' }}>Domicile</Text>
+                  <Text style={{ flex: 2, fontWeight: '700' }}>Visiteur</Text>
+                  <Text style={{ flex: 2, fontWeight: '700' }}>Domicile</Text>
                 </View>
-                {/* lignes */}
                 {games.map((g, idx) => (
-                  <View key={g.id || idx} style={{ flexDirection:'row', paddingVertical:6, borderBottomWidth:1, borderColor:'#eee' }}>
+                  <View key={g.id || idx} style={{ flexDirection: 'row', alignItems:'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' }}>
                     <Text style={{ flex: 1 }}>{g.start ? fmtTSLocalHM(g.start) : '—'}</Text>
-                    <Text style={{ flex: 1 }}>{g.away}</Text>
-                    <Text style={{ flex: 1 }}>{g.home}</Text>
+                    <View style={{ flex: 2, flexDirection:'row', alignItems:'center' }}>
+                      <TeamLogo abbr={g.away} size={24} style={{ marginRight: 8 }} />
+                      <Text>{g.away}</Text>
+                    </View>
+                    <View style={{ flex: 2, flexDirection:'row', alignItems:'center' }}>
+                      <TeamLogo abbr={g.home} size={24} style={{ marginRight: 8 }} />
+                      <Text>{g.home}</Text>
+                    </View>
                   </View>
                 ))}
               </View>
             )}
           </View>
 
+          {/* 👇 Bouton déplacé ici entre "Matchs NHL du jour" et "Sélectionne tes joueurs" */}
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/nhl/top-scorers', params: { date: gameDayStr || '' } })}
+            style={{
+              padding:12,
+              borderRadius:10,
+              borderWidth:1,
+              borderColor:'#e5e7eb',
+              alignItems:'center',
+              backgroundColor:'#fff'
+            }}
+          >
+            <Text style={{ fontWeight:'700' }}>Voir les meilleurs marqueurs</Text>
+          </TouchableOpacity>
+
           {/* Pickers fixes */}
-          <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', elevation:3,
-            shadowColor:'#000', shadowOpacity:0.1, shadowRadius:6, shadowOffset:{width:0, height:3} }}>
+          <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', elevation: 3 }}>
             <Text style={{ fontWeight:'700', marginBottom:8 }}>Sélectionne tes joueurs</Text>
             {Array.from({ length: maxChoices }).map((_, i) => (
               <PlayerPickerRow
                 key={i}
                 label={`Choix ${i + 1}`}
-                selected={selected[i]}
-                onOpenModal={() => openPicker(i)}
+                value={selected[i]}
+                onEdit={() => openPicker(i)}
                 locked={locked}
               />
             ))}
@@ -540,14 +538,14 @@ export default function DefiParticipationScreen() {
             </Text>
           </View>
 
-          {/* Actions */}
+          {/* Actions (sans le bouton top-scorers désormais) */}
           <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', gap:8 }}>
             <TouchableOpacity
-              disabled={locked || saving || !allChosen}
+              disabled={locked || saving || !selected.every(Boolean)}
               onPress={save}
               style={{
                 padding:14, borderRadius:10, alignItems:'center',
-                backgroundColor: (locked || saving || !allChosen) ? '#9ca3af' : '#111'
+                backgroundColor: (locked || saving || !selected.every(Boolean)) ? '#9ca3af' : '#111'
               }}
             >
               <Text style={{ color:'#fff', fontWeight:'700' }}>
@@ -566,11 +564,11 @@ export default function DefiParticipationScreen() {
       </KeyboardAvoidingView>
 
       {/* Modal de sélection */}
-      <PlayerPickerModal
+      <PlayerSelectModal
         visible={pickerOpen}
-        onClose={() => { setPickerOpen(false); setPickerSlot(null); }}
-        onSelect={selectFromModal}
+        onClose={() => setPickerOpen(false)}
         options={players}
+        onPick={handlePick}
       />
     </>
   );

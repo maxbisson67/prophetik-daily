@@ -21,11 +21,13 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || null);
   const [busy, setBusy] = useState(false);
+  const [participant, setParticipant] = useState(null);
 
   useEffect(() => {
     setDisplayName(user?.displayName || "");
     setPhotoURL(user?.photoURL || null);
   }, [user?.uid]);
+
 
   useEffect(() => {
     (async () => {
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
         const p = snap.data();
         setDisplayName(p?.displayName || user.displayName || "");
         setPhotoURL(p?.photoURL || user.photoURL || null);
+        setParticipant({ id: snap.id, ...snap.data() });
       }
     })();
   }, [user?.uid]);
@@ -73,7 +76,7 @@ export default function ProfileScreen() {
       setBusy(true);
       await signOut(auth);
       Alert.alert("Déconnecté");
-      r.back();
+      r.replace("/(auth)/auth-choice"); 
     } catch (e) {
       Alert.alert("Déconnexion impossible", String(e?.message || e));
     } finally {
@@ -142,34 +145,61 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ padding:16, gap:16 }}>
-      <Text style={{ fontSize:22, fontWeight:"700" }}>Profil</Text>
+     
 
       {/* Solde crédits + actions */}
-      <CreditsWallet />
+      <CreditsWallet credits={participant?.credits ?? 0}/>
 
-      {/* Avatar */}
-      <View style={{ alignItems:"center", gap:12 }}>
-        <Image
-          source={photoURL ? { uri: photoURL } : require("@src/assets/avatar-placeholder.png")}
-          style={{ width:96, height:96, borderRadius:48, backgroundColor:"#eee" }}
-        />
-        <TouchableOpacity
-          onPress={pickAvatar}
-          style={{ paddingHorizontal:12, paddingVertical:8, borderRadius:10, borderWidth:1, borderColor:"#ddd" }}
-        >
-          <Text>Changer l’avatar</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Avatar + Nom d’affichage */}
+      <View
+        style={{
+          padding: 16,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: "#eee",
+          backgroundColor: "#fff",
+          elevation: 3, // Android
+          shadowColor: "#000", // iOS
+          shadowOpacity: 0.08,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+          gap: 16,
+        }}
+      >
+        <View style={{ alignItems: "center", gap: 12 }}>
+          <Image
+            source={photoURL ? { uri: photoURL } : require("@src/assets/avatar-placeholder.png")}
+            style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: "#eee" }}
+          />
+          <TouchableOpacity
+            onPress={pickAvatar}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: "#ddd",
+            }}
+          >
+            <Text>Changer l’avatar</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Nom d’affichage */}
-      <View style={{ gap:6 }}>
-        <Text style={{ fontWeight:"600" }}>Nom d’affichage</Text>
-        <TextInput
-          value={displayName}
-          onChangeText={setDisplayName}
-          placeholder="Ton nom"
-          style={{ borderWidth:1, borderColor:"#ddd", borderRadius:10, paddingHorizontal:12, paddingVertical:10 }}
-        />
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontWeight: "600" }}>Nom d’affichage</Text>
+          <TextInput
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Ton nom"
+            style={{
+              borderWidth: 1,
+              borderColor: "#ddd",
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+            }}
+          />
+        </View>
       </View>
 
       {busy ? <ActivityIndicator /> : null}

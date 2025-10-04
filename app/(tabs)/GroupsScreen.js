@@ -1,6 +1,6 @@
 // app/(tabs)/GroupsScreen.js
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert  } from 'react-native';
 import { useRouter , Stack} from 'expo-router';
 import { useGroups } from '@src/groups/useGroups';
 import { createGroupService } from '@src/groups/services';
@@ -10,6 +10,7 @@ import { auth } from '@src/lib/firebase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function GroupsScreen() {
+ 
   const router = useRouter();
   const { user } = useAuth();
   const { groups, loading, error, refresh } = useGroups(user?.uid);
@@ -75,7 +76,7 @@ const myMemberGroups = useMemo(
 
   return (
    
-     <SafeAreaView style={{ flex: 1, backgroundColor: '#f3f4f6' }}>
+     <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
       
     <View style={{ flex: 1 }}>
       <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -117,14 +118,31 @@ const myMemberGroups = useMemo(
             item.header ? (
               <Text style={{ paddingHorizontal: 16, paddingVertical: 8, fontSize: 16, fontWeight: '700' }}>{item.title}</Text>
             ) : (
-              <TouchableOpacity onPress={() => openGroup(item)} style={{ marginHorizontal: 16, marginVertical: 6, padding: 14, borderRadius: 14, borderWidth: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.name}</Text>
-                {!!item.description && <Text style={{ marginTop: 2 }}>{item.description}</Text>}
-                <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text>Code invitation: {item.codeInvitation} </Text>
-                  <Text>{item.role === 'owner' ? 'Propriétaire' : 'Membre'}</Text>
-                </View>
-              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => openGroup(item)}
+                style={{
+                  marginHorizontal: 16,
+                  marginVertical: 6,
+                  padding: 14,
+                  borderRadius: 14,
+                  backgroundColor: '#fff',
+                  // ombre iOS
+                  shadowColor: '#000',
+                  shadowOpacity: 0.1,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 3 },
+                  // élévation Android
+                  elevation: 3,
+                }}
+              >
+              <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.name}</Text>
+              {!!item.description && <Text style={{ marginTop: 2 }}>{item.description}</Text>}
+              <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text>Code invitation: {item.codeInvitation}</Text>
+                <Text>{item.role === 'owner' ? 'Propriétaire' : 'Membre'}</Text>
+              </View>
+
+             </TouchableOpacity>
             )
           }
           ListEmptyComponent={() => (

@@ -11,6 +11,11 @@ export default function TabLayout() {
         headerRight: () => (
           <HeaderProfileButton onPress={() => r.push("/profile")} />
         ),
+        sceneStyle: { backgroundColor: 'transparent' },
+        contentStyle: { backgroundColor: 'transparent' }, // selon version
+        tabBarStyle: { backgroundColor: 'rgba(255,255,255,0.92)' },
+        headerStyle: { backgroundColor: '#fff' },
+
       }}
     >
       <Tabs.Screen

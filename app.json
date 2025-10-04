@@ -19,6 +19,10 @@
         "storageBucket": "capitaine.firebasestorage.app",
         "messagingSenderId": "502697214487",
         "appId": "502697214487"
+      },
+      "router": {},
+      "eas": {
+        "projectId": "b58db99d-83c8-4770-a5ff-e940f63c5883"
       }
     },
     "ios": {
@@ -27,6 +31,7 @@
     },
     "android": {
       "package": "com.prophetik.daily",
+      "googleServicesFile": "./google-services.json",
       "windowSoftInputMode": "adjustResize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
