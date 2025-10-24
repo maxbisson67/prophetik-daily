@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>502697214487-83hc06kjp1akjjanfivjiq5hh31tgpdj.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.502697214487-83hc06kjp1akjjanfivjiq5hh31tgpdj</string>
+	<key>API_KEY</key>
+	<string>AIzaSyCR9aZACTzAvJP13bio83Nx0oI9TF2mxxk</string>
+	<key>GCM_SENDER_ID</key>
+	<string>502697214487</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.prophetik</string>
+	<key>PROJECT_ID</key>
+	<string>capitaine</string>
+	<key>STORAGE_BUCKET</key>
+	<string>capitaine.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:502697214487:ios:3cfe61b3a1a62a26ead252</string>
+	<key>DATABASE_URL</key>
+	<string>https://capitaine-default-rtdb.firebaseio.com</string>
+</dict>
+</plist>

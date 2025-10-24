@@ -1,0 +1,15 @@
+{
+  "main": "index.js",
+  "name": "prophetik-functions",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.5.0",
+    "firebase-functions": "^6.4.0",
+    "luxon": "^3.7.2",
+    "node-fetch": "^3.3.2"
+  }
+}

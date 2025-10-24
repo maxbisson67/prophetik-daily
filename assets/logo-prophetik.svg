@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#0B1A2E"/>
+      <stop offset="100%" stop-color="#050C16"/>
+    </radialGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2AA8FF"/>
+      <stop offset="100%" stop-color="#0D68FF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fond -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bgGrad)"/>
+
+  <!-- Groupe des anneaux (centré) -->
+  <g id="rings" transform="translate(512,512)">
+    <circle r="420" fill="none" stroke="url(#ringGrad)" stroke-width="10"/>
+    <circle r="340" fill="none" stroke="url(#ringGrad)" stroke-width="10" opacity="0.9"/>
+    <circle r="260" fill="none" stroke="url(#ringGrad)" stroke-width="10" opacity="0.8"/>
+    <circle r="180" fill="none" stroke="url(#ringGrad)" stroke-width="10" opacity="0.7"/>
+    <circle r="100" fill="none" stroke="url(#ringGrad)" stroke-width="10" opacity="0.6"/>
+  </g>
+
+  <!-- Lettre P (fixe) -->
+  <g transform="translate(512,512)">
+    <!-- hampe -->
+    <rect x="-15" y="-360" width="30" height="620" rx="15" fill="url(#ringGrad)"/>
+    <!-- boucle -->
+    <path d="
+      M -15 -360
+      h 120
+      a 150 150 0 0 1 0 300
+      h -105
+      " fill="none" stroke="url(#ringGrad)" stroke-width="30" stroke-linecap="round"/>
+  </g>
+</svg>

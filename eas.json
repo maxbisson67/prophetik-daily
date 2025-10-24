@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 3.18.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "internal": {
+      "distribution": "store",
+      "android": { "buildType": "app-bundle" }
+    },
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "internal": {
+      "android": {
+        "track": "internal",
+        "serviceAccountKeyPath": "./play-service-account.json",
+        "releaseStatus": "draft"
+      }
+    },
+    "production": {
+      "android": {
+        "track": "production",
+        "serviceAccountKeyPath": "./play-service-account.json"
+      }
+    }
+  }
+}

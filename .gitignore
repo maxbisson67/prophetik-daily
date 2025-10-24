@@ -1,0 +1,53 @@
+# --- Dependencies / build ---
+node_modules/
+dist/
+web-build/
+
+# --- Expo / Metro ---
+.expo/
+.expo-shared/
+.metro-health-check*
+
+# --- Native (ignore si tu n’as PAS un repo bare RN) ---
+android/
+ios/
+.gradle/
+
+# --- OS / IDE / logs ---
+.DS_Store
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.idea/
+.vscode/
+
+# --- Typescript ---
+*.tsbuildinfo
+
+# --- Local env / certs (ne pas versionner) ---
+.env
+.env*.local
+*.pem
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+expo-env.d.ts
+
+# --- Secrets spécifiques à ton projet ---
+**/capitaine-firebase-adminsdk-fbsvc-a0066fa0df.json
+**/play-service-account.json
+
+/.firebase/
+/Archive.zip
+/app.zip
+*.zip
+/prophetik-daily
+/prophetik-daily.git
+
+# Secrets / service accounts
+**/play-service-account.json
+**/*firebase-adminsdk-*.json
+**/service-account*.json
