@@ -1,6 +1,6 @@
 // app/(drawer)/_layout.js
-import React, { useCallback } from 'react';
-import { View, Text, Image } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { View, Text } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import {
   DrawerToggleButton,
@@ -13,9 +13,14 @@ import {
 } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@src/auth/AuthProvider';
+import { useAuth } from '@src/auth/SafeAuthProvider';
 
-// ---------- Header title follows the focused tab ----------
+// ✅ expo-image pour contrôler le cache
+import { Image } from 'react-native';
+
+// 🔽 profil public (displayName, avatarUrl, updatedAt)
+import { usePublicProfile } from '@src/profile/usePublicProfile';
+
 function getHeaderTitle(route) {
   const focused = getFocusedRouteNameFromRoute(route) ?? 'AccueilScreen';
   switch (focused) {
@@ -30,6 +35,10 @@ function getHeaderTitle(route) {
       return 'Crédits';
     case 'boutique/index':
       return 'Boutique';
+    case 'profile/index':
+      return 'Profile';  
+    case 'settings/index':
+      return 'Réglages';
     case 'ClassementScreen':
       return 'Classement';
     default:
@@ -37,7 +46,6 @@ function getHeaderTitle(route) {
   }
 }
 
-// ---------- Custom drawer content ----------
 function SectionLabel({ children }) {
   return (
     <Text
@@ -66,10 +74,57 @@ function Separator() {
   );
 }
 
+function tsToMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  // Firestore Timestamp-like object
+  if (typeof ts.seconds === 'number') return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds / 1e6) : 0);
+  if (typeof ts === 'number') return ts;
+  return 0;
+}
+
+function withCacheBust(url, updatedAt) {
+  if (!url) return null;
+  const v = tsToMillis(updatedAt) || Date.now(); // ⚠️ si updatedAt absent → nonce
+  return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* DrawerHeader: lit profiles_public/{uid} pour afficher nom + avatar  */
+/* ------------------------------------------------------------------ */
 function DrawerHeader() {
-  const { profile } = useAuth();
+  const { user } = useAuth();
+  const { profile: pub, loading: loadingPub } = usePublicProfile(user?.uid);
+
+  const displayName =
+    pub?.displayName ||
+    user?.displayName ||
+    (user?.email ? user.email.split('@')[0] : 'Invité');
+
+  const email = user?.email || '';
+
+  //  A) Avatar: UNIQUEMENT profiles_public.avatarUrl (fallback auth.photoURL)
+  const rawAvatar = pub?.avatarUrl || user?.photoURL || null;
+
+  //  B) Version basée sur updatedAt (ou nonce si absent)
+  const avatarUri = useMemo(
+    () => withCacheBust(rawAvatar, pub?.updatedAt),
+    [rawAvatar, pub?.updatedAt]
+  );
+
+  //  C) Remount forcé quand l'URL change — et “bump” si on détecte un onError (cache récalcitrant)
+  const [bump, setBump] = React.useState(0);
+  const [lastKey, setLastKey] = React.useState('');
+  const imageKey = `${avatarUri || 'placeholder'}#${bump}`;
+
+  // si l’URL change, on remonte le composant pour éviter toute mémoisation interne
+  React.useEffect(() => {
+    if (imageKey !== lastKey) setLastKey(imageKey);
+  }, [imageKey, lastKey]);
+
   return (
     <View
+      key={lastKey} // ← remount du header quand l'URL (avec _cb) change
       style={{
         paddingHorizontal: 16,
         paddingTop: 16,
@@ -80,30 +135,41 @@ function DrawerHeader() {
       }}
     >
       <Image
+        key={imageKey} // ← remount de l'image elle-même
         source={
-          profile?.photoURL
-            ? { uri: profile.photoURL }
+          avatarUri
+            ? { uri: avatarUri }
             : require('@src/assets/avatar-placeholder.png')
         }
+        onError={() => {
+          if (__DEV__) console.warn('[DrawerHeader] avatar load error:', avatarUri);
+          // Dernier recours: on force un nouveau key avec un nonce
+          setBump((n) => n + 1);
+        }}
+        onLoadEnd={() => {
+          
+        }}
         style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#e5e7eb' }}
       />
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 16, fontWeight: '800' }}>
-          {profile?.displayName || 'Invité'}
+          {loadingPub ? 'Chargement…' : displayName}
         </Text>
         <Text style={{ color: '#6b7280', fontSize: 12 }}>
-          {profile?.email || 'Connecté'}
+          {email || (user ? 'Connecté' : 'Hors ligne')}
         </Text>
       </View>
     </View>
   );
 }
 
+/* ------------------------------------ */
+/* Drawer content                       */
+/* ------------------------------------ */
 function CustomDrawerContent(props) {
   const router = useRouter();
   const { signOut } = useAuth();
 
-  // Helper pour ouvrir un onglet du navigator "(tabs)" puis fermer le drawer
   const goTab = useCallback(
     (screenName) => {
       props.navigation.navigate('(tabs)', { screen: screenName });
@@ -133,34 +199,43 @@ function CustomDrawerContent(props) {
         onPress={() => goTab('ChallengesScreen')}
         icon={({ color, size }) => <Ionicons name="trophy" size={size} color={color} />}
       />
-
       <Separator />
 
       <SectionLabel>Espace perso</SectionLabel>
-      <DrawerItem
+       <DrawerItem
         label="Boutique"
-        onPress={() => goTab('boutique/index')}
-        icon={({ color, size }) => (
+        onPress={() => {
+          props.navigation.dispatch(DrawerActions.closeDrawer());
+          requestAnimationFrame(() => {
+            router.push('/(drawer)/boutique');
+          });
+        }}
+       icon={({ color, size }) => (
           <MaterialCommunityIcons name="shopping" size={size} color={color} />
         )}
       />
-      <DrawerItem
+       <DrawerItem
         label="Crédits"
-        onPress={() => goTab('credits/index')}
+        onPress={() => {
+          props.navigation.dispatch(DrawerActions.closeDrawer());
+          requestAnimationFrame(() => {
+            router.push('/(drawer)/credits');
+          });
+        }}
         icon={({ color, size }) => <Ionicons name="card" size={size} color={color} />}
       />
-      <DrawerItem
+     
+       <DrawerItem
         label="Profil"
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
           requestAnimationFrame(() => {
-            router.push('/profile');
+            router.push('/(drawer)/profile');
           });
         }}
-        icon={({ color, size }) => (
-          <Ionicons name="person-circle" size={size} color={color} />
-        )}
+        icon={({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />}
       />
+     
       <DrawerItem
         label="Réglages"
         onPress={() => {
@@ -192,7 +267,7 @@ export default function DrawerLayout() {
       id="rootDrawer"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
         drawerType: 'slide',
         drawerHideStatusBarOnOpen: true,
         headerLeft: (props) => <DrawerToggleButton {...props} />,
@@ -202,7 +277,6 @@ export default function DrawerLayout() {
         drawerLabelStyle: { fontWeight: '700' },
       }}
     >
-      {/* L’écran principal reste le tabs; le header reprend le titre de l’onglet actif */}
       <Drawer.Screen
         name="(tabs)"
         options={({ route }) => ({
@@ -210,6 +284,8 @@ export default function DrawerLayout() {
           headerTitle: getHeaderTitle(route),
         })}
       />
+
+
     </Drawer>
   );
 }

@@ -4,7 +4,10 @@ import { View, Text, ActivityIndicator, SectionList, TouchableOpacity, Image } f
 import { useRouter } from 'expo-router';
 import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
 import { db } from '@src/lib/firebase';
-import { useAuth } from '@src/auth/AuthProvider';
+//import { useAuth } from '@src/auth/AuthProvider';
+// Safe auth
+import { useAuth } from '@src/auth/SafeAuthProvider';
+
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
@@ -79,9 +82,15 @@ export default function ChallengesScreen() {
 
     const recompute = () => {
       // memberships actifs (tolérant)
-      const memberships = [...rowsByUid, ...rowsByPid].filter(m =>
-        (m?.status ? String(m.status).toLowerCase() === 'open' : (m?.active === true || m?.active === undefined))
-      );
+      const memberships = [...rowsByUid, ...rowsByPid].filter((m) => {
+        const st = String(m?.status || '').toLowerCase();
+        if (st) {
+          // Accepte les nouveaux statuts
+          return ['open', 'active', 'approved'].includes(st);
+        }
+        // Pas de champ status → on tolère tant que 'active' n'est pas explicitement false
+        return m?.active !== false;
+      });
       const gidsFromMemberships = memberships.map(m => m.groupId).filter(Boolean);
       const gidsFromOwner = [...rowsOwnerCreated, ...rowsOwnerOwnerId].map(g => g.id).filter(Boolean);
       const union = Array.from(new Set([...gidsFromMemberships, ...gidsFromOwner]));
@@ -186,46 +195,36 @@ export default function ChallengesScreen() {
   }, [activeDefis, pastDefis]);
 
   // 3b) Charger les infos gagnants (nom + avatar) depuis participants/{uid}
-  useEffect(() => {
+   useEffect(() => {
     const allDefis = [...activeDefis, ...pastDefis];
     const neededUids = Array.from(new Set(
-      allDefis
-        .flatMap(d => Array.isArray(d.winners) ? d.winners : [])
-        .filter(Boolean)
+      allDefis.flatMap(d => Array.isArray(d.winners) ? d.winners : []).filter(Boolean)
     ));
 
-    // remove listeners not needed
+    // retire les listeners obsolètes
     for (const [uid, un] of winnerUnsubsRef.current) {
-      if (!neededUids.includes(uid)) { try { un(); } catch {}; winnerUnsubsRef.current.delete(uid); }
+      if (!neededUids.includes(uid)) { try { un(); } catch {} ; winnerUnsubsRef.current.delete(uid); }
     }
 
-    // add listeners for missing
+    // ajoute les nouveaux listeners sur profiles_public
     for (const uid of neededUids) {
       if (winnerUnsubsRef.current.has(uid)) continue;
-      const ref = doc(db, 'participants', uid);
+      const ref = doc(db, 'profiles_public', uid);
       const un = onSnapshot(ref, snap => {
         if (snap.exists()) {
           const v = snap.data() || {};
-          const name = v.displayName || v.name || v.username || v.email || uid;
-          const photoURL = v.photoURL || v.avatarUrl || v.photo || null;
+          const name = v.displayName || v.name || uid;
+          const photoURL = v.avatarUrl || v.photoURL || null;
           setWinnerInfoMap(prev => {
             const old = prev[uid] || {};
             if (old.name === name && old.photoURL === photoURL) return prev;
             return { ...prev, [uid]: { name, photoURL } };
           });
         } else {
-          setWinnerInfoMap(prev => {
-            const old = prev[uid] || {};
-            if (old.name === uid && !old.photoURL) return prev;
-            return { ...prev, [uid]: { name: uid, photoURL: null } };
-          });
+          setWinnerInfoMap(prev => ({ ...prev, [uid]: { name: uid, photoURL: null } }));
         }
       }, () => {
-        setWinnerInfoMap(prev => {
-          const old = prev[uid] || {};
-          if (old.name === uid && !old.photoURL) return prev;
-          return { ...prev, [uid]: { name: uid, photoURL: null } };
-        });
+        setWinnerInfoMap(prev => ({ ...prev, [uid]: { name: uid, photoURL: null } }));
       });
       winnerUnsubsRef.current.set(uid, un);
     }
@@ -390,7 +389,7 @@ export default function ChallengesScreen() {
         {/* Boutons */}
         <View style={{ flexDirection:'row', gap:8, marginTop:10 }}>
           <TouchableOpacity
-            onPress={() => router.push(`/defis/${item.id}/results`)}
+            onPress={() => router.push(`/(drawer)/defis/${item.id}/results`)}
             style={{
               flex:1, paddingVertical:10, borderRadius:10, borderWidth:1, borderColor:'#e5e7eb',
               alignItems:'center', backgroundColor:'#fff'
@@ -400,7 +399,7 @@ export default function ChallengesScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => (statusKey === 'open' || statusKey === 'live') ? router.push(`/defis/${item.id}`) : null}
+            onPress={() => (statusKey === 'open' || statusKey === 'live') ? router.push(`/(drawer)/defis/${item.id}`) : null}
             disabled={!(statusKey === 'open' || statusKey === 'live')}
             style={{
               flex:1, paddingVertical:10, borderRadius:10,
@@ -454,6 +453,7 @@ export default function ChallengesScreen() {
       sections={sections}
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ padding:16 }}
+      stickySectionHeadersEnabled={false} 
       renderSectionHeader={({ section }) => (
         <Text style={{ fontSize:22, fontWeight:'700', marginBottom:8, marginTop: section.key === 'past' ? 10 : 0 }}>
           {section.title}

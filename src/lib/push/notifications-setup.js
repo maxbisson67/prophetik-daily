@@ -3,17 +3,35 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 /**
- * Configure l’app pour recevoir des notifications (côté client).
- * - Crée/maj les canaux Android
- * - (Optionnel) Demande la permission d’afficher
+ * Configuration des notifications côté client.
+ * - Crée / met à jour les canaux Android
+ * - Demande (optionnel) la permission d’afficher
  *
- * NOTE: Ne pas redéfinir setNotificationHandler ici si tu le fais déjà dans _layout.js
- * pour éviter des collisions de config.
+ * ⚠️ Ne pas redéfinir setNotificationHandler ici si tu le fais déjà dans _layout.js.
  */
-export async function setupNotificationsClient({ requestPermission = true } = {}) {
+
+// Drapeaux de session (module-scoped) pour éviter les ré-inits
+let _didInit = false;
+let _didChannels = false;
+let _didAskPermission = false;
+
+/**
+ * Initialise la config notifications une seule fois.
+ * @param {{ requestPermission?: boolean, force?: boolean }} options
+ *   - requestPermission: demande l’autorisation d’afficher si nécessaire (def. true)
+ *   - force: ignore le cache et refait l’init (rare – debug seulement)
+ * @returns {Promise<() => void>} teardown (no-op ici)
+ */
+export async function setupNotificationsClient({ requestPermission = true, force = false } = {}) {
+  if (_didInit && !force) {
+    // Déjà initialisé → no-op
+    return () => {};
+  }
+  _didInit = true;
+
   try {
-    if (Platform.OS === "android") {
-      // Canal par défaut (local + remote sans canal explicite)
+    // --- Android: canaux ---
+    if (Platform.OS === "android" && (!_didChannels || force)) {
       await Notifications.setNotificationChannelAsync("default", {
         name: "Général",
         importance: Notifications.AndroidImportance.HIGH,
@@ -23,7 +41,6 @@ export async function setupNotificationsClient({ requestPermission = true } = {}
         sound: "default",
       });
 
-      // Canal cible pour tes “défis”
       await Notifications.setNotificationChannelAsync("challenges_v2", {
         name: "Défis (v2)",
         importance: Notifications.AndroidImportance.HIGH,
@@ -32,15 +49,26 @@ export async function setupNotificationsClient({ requestPermission = true } = {}
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         sound: "default",
       });
+
+      _didChannels = true;
     }
 
-    if (requestPermission) {
-      // iOS + Android 13+ : autorisation d’afficher des notifs (UI)
-      await Notifications.requestPermissionsAsync();
+    // --- iOS + Android 13+: permission d’affichage ---
+    if (requestPermission && (!_didAskPermission || force)) {
+      const current = await Notifications.getPermissionsAsync();
+      // iOS: status.granted; Android 13+: same API
+      if (!current?.granted) {
+        const res = await Notifications.requestPermissionsAsync();
+        _didAskPermission = !!res?.granted;
+      } else {
+        _didAskPermission = true;
+      }
     }
 
-    console.log("[Notifications] setupNotificationsClient OK");
   } catch (e) {
-    console.log("setupNotificationsClient error:", e?.message || String(e));
+    console.log("[Notifications] setupNotificationsClient error:", e?.message || String(e));
   }
+
+  // Ici on ne garde pas de listeners, donc teardown no-op.
+  return () => {};
 }

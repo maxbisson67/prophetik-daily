@@ -1,41 +1,25 @@
-// app/(drawer)/(tabs)/_layout.js
+import React from 'react';
 import { Tabs } from 'expo-router';
+import { DrawerToggleButton } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@src/theme/ThemeProvider';
 
-const RED = '#ef4444';
-const GRAY = '#9ca3af';
-
-
-export default function TabLayout() {
-  const { colors } = useTheme();
+export default function TabsLayout() {
   return (
     <Tabs
       initialRouteName="AccueilScreen"
       screenOptions={{
-        headerShown: false, // le header des tabs peut servir (ou laisse true si tu veux le hamburger ici)
-        headerStyle: { backgroundColor: colors.card },
-        headerTintColor: colors.text,
-        headerTitleStyle: { color: colors.text },
-        tabBarStyle: {
-          backgroundColor: colors.tabbar,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.subtext,
-        tabBarLabelStyle: { fontWeight: '600' },
+        headerShown: true,
+        lazy: true,
+        headerStyle: { backgroundColor: '#fff' },
+        tabBarActiveTintColor: '#ef4444',
+        tabBarInactiveTintColor: '#6b7280',
       }}
     >
-      <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="credits/index" options={{ href: null, title: 'Crédits' }} />
-      <Tabs.Screen name="boutique/index" options={{ href: null, title: 'Crédits' }} />
-      <Tabs.Screen name="settings/index" options={{ href: null, title: 'Crédits' }} />
-      {/* Ne cache plus 'index' ici (voir fichier 3 pour la redirection) */}
       <Tabs.Screen
         name="AccueilScreen"
         options={{
           title: 'Accueil',
+          headerLeft: (props) => <DrawerToggleButton {...props} />,
           tabBarIcon: ({ color, size }) => <Ionicons name="home" color={color} size={size} />,
         }}
       />
@@ -43,6 +27,7 @@ export default function TabLayout() {
         name="GroupsScreen"
         options={{
           title: 'Groupes',
+          headerLeft: (props) => <DrawerToggleButton {...props} />,
           tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} />,
         }}
       />
@@ -50,16 +35,25 @@ export default function TabLayout() {
         name="ChallengesScreen"
         options={{
           title: 'Défis',
+          headerLeft: (props) => <DrawerToggleButton {...props} />,
           tabBarIcon: ({ color, size }) => <Ionicons name="trophy" color={color} size={size} />,
         }}
       />
-       <Tabs.Screen
+      <Tabs.Screen
         name="ClassementScreen"
         options={{
           title: 'Classement',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="podium" color={color} size={size} />
-          ),
+          headerLeft: (props) => <DrawerToggleButton {...props} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="podium" color={color} size={size} />,
+        }}
+      />
+
+      {/* Hide the file-based route (tabs index) */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,          // ✅ enough to hide it
+          headerShown: false,  // optional
         }}
       />
     </Tabs>

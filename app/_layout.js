@@ -1,3 +1,4 @@
+// app/_layout.js
 import React, { useEffect, useState, useRef } from "react";
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
@@ -6,8 +7,10 @@ import { Stack, useRouter, useRootNavigationState, usePathname, useSegments } fr
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Notifications from "expo-notifications";
 import { doc, onSnapshot } from "firebase/firestore";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { db } from "@src/lib/firebase";
-import { AuthProvider, useAuth } from "@src/auth/AuthProvider";
+import { AuthProvider, useAuth } from "@src/auth/SafeAuthProvider";
+import { AppVisibilityProvider} from "@src/providers/AppVisibilityProvider";
 import "@src/lib/safeAsyncStorage";
 import { ThemeProvider } from "@src/theme/ThemeProvider";
 
@@ -18,7 +21,11 @@ import {
   stopFcmTokenRefreshListener,
 } from "@src/lib/push/registerFcmToken";
 import { setupNotificationsClient } from "@src/lib/push/notifications-setup";
-import SplashRingsSvg from "@src/ui/SplashRingsSvg";
+
+import SplashRingsRotating from "@src/ui/SplashRingsRotating";
+
+import * as SystemUI from 'expo-system-ui';
+SystemUI.setBackgroundColorAsync('#ffffff');
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -81,7 +88,7 @@ function NotificationsMount() {
         const data = resp?.notification?.request?.content?.data || {};
         if (data.action === "OPEN_DEFI" && data.defiId) {
           router.push({
-            pathname: `/defis/${data.defiId}`,
+            pathname: `/(drawer)/defis/${data.defiId}`,
             params: { groupId: data.groupId },
           });
         }
@@ -145,8 +152,11 @@ function RootLayoutInner() {
         router.replace("/onboarding/welcome");
       }
     });
-
-    return () => unsub();
+    
+    return () => {
+      try { unsub?.(); } catch {}
+    };
+    //return () => unsub();
   }, [user?.uid, pathname, router]);
 
   // Splash animé (fade-out)
@@ -169,19 +179,24 @@ function RootLayoutInner() {
         style={styles.bg}
         resizeMode="cover"
       >
-        <Stack
+       <Stack
           screenOptions={{
-            contentStyle: { backgroundColor: "transparent" },
+            contentStyle: { backgroundColor: "#ffffff" },
             headerStyle: { backgroundColor: "#fff" },
             headerShadowVisible: true,
           }}
         >
-          {/* 👇 Drawer = racine de la zone authentifiée */}
+          {/* Section principale : drawer */}
           <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+
+          {/* Auth (login, signup) */}
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="profile/index" options={{ title: "Profil" }} />
-          <Stack.Screen name="groups" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
+
+          {/* Onboarding global */}
+          <Stack.Screen
+            name="onboarding/welcome"
+            options={{ headerShown: false }}
+          />
         </Stack>
 
         <AuthGateMount />
@@ -200,13 +215,9 @@ function RootLayoutInner() {
               opacity: fade,
             }}
           >
-            <SplashRingsSvg
-              size={260}
-              bg="#fff"
-              color1="#ff3b30"
-              color2="#b00020"
-              glow={false}
-            />
+            
+          <SplashRingsRotating size={260} color="#000" rings={2} logoSize={72} logoColor="#000" />
+
           </Animated.View>
         )}
       </ImageBackground>
@@ -218,12 +229,16 @@ function RootLayoutInner() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-       <ThemeProvider>
-        <AuthProvider>
-          <RootLayoutInner />
-        </AuthProvider>
-      </ThemeProvider>
+     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AppVisibilityProvider>
+            <AuthProvider>
+             <RootLayoutInner />
+            </AuthProvider>
+          </AppVisibilityProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

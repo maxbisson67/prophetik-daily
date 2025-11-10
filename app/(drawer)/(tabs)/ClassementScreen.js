@@ -1,16 +1,17 @@
+// app/(tabs)/ClassementScreen.js
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View, Text, ActivityIndicator, TouchableOpacity,
   FlatList, RefreshControl, Image
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 
-import { useAuth } from '@src/auth/AuthProvider';
+import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useGroups } from '@src/groups/useGroups';
 import { useTheme } from '@src/theme/ThemeProvider';
 import { db } from '@src/lib/firebase';
-import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
 
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
 const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
@@ -43,82 +44,131 @@ function useLeaderboards(groupIds) {
   return { loading, all };
 }
 
-/* ----------- charge (une fois) les profils manquants pour avatars ----------- */
-function useParticipantsProfiles(userIds) {
-  const [map, setMap] = useState({}); // { uid: { displayName, photoURL } }
+/* ---------------- helpers cache-bust ---------------- */
+function withCacheBust(url, tsMillis) {
+  if (!url) return null;
+  const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
+  return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
+}
+
+/* ----------- profils publics (profiles_public) pour un set dynamique d'uids ----------- */
+function usePublicProfilesFor(uids) {
+  const [map, setMap] = useState({}); // uid -> { displayName, avatarUrl, updatedAt }
 
   useEffect(() => {
-    const ids = (userIds || []).filter(Boolean);
-    if (!ids.length) return;
+    const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
+    if (ids.length === 0) { setMap({}); return; }
 
-    let cancelled = false;
-    (async () => {
-      const promises = ids.map(async (uid) => {
-        if (map[uid]) return null; // déjà en cache
-        try {
-          const snap = await getDoc(doc(db, 'participants', uid));
-          if (snap.exists()) {
-            const d = snap.data() || {};
-            return [uid, { displayName: d.displayName || '', photoURL: d.photoURL || d.avatarUrl || null }];
+    const unsubs = new Map();
+
+    ids.forEach((uid) => {
+      if (unsubs.has(uid)) return;
+      const ref = doc(db, 'profiles_public', uid);
+      const un = onSnapshot(
+        ref,
+        (snap) => {
+          if (!snap.exists()) {
+            setMap((prev) => {
+              if (prev[uid]) {
+                const next = { ...prev };
+                delete next[uid];
+                return next;
+              }
+              return prev;
+            });
+            return;
           }
-        } catch {}
-        return [uid, { displayName: '', photoURL: null }];
-      });
+          const d = snap.data() || {};
+          setMap((prev) => ({
+            ...prev,
+            [uid]: {
+              displayName: d.displayName || 'Invité',
+              avatarUrl: d.avatarUrl || null,
+              updatedAt: d.updatedAt || null,
+            },
+          }));
+        },
+        () => {
+          // on laisse l’entrée telle quelle en cas d’erreur
+        }
+      );
+      unsubs.set(uid, un);
+    });
 
-      const entries = (await Promise.all(promises)).filter(Boolean);
-      if (!cancelled && entries.length) {
-        setMap((prev) => {
-          const next = { ...prev };
-          for (const [uid, val] of entries) next[uid] = val;
-          return next;
-        });
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [JSON.stringify(userIds)]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      for (const [, un] of unsubs) { try { un(); } catch {} }
+    };
+  }, [JSON.stringify(uids || [])]);
 
   return map;
 }
 
-/* ---------------- Head col (icône OU label texte) ---------------- */
-function HeaderCol({
-  icon,        // nom Ionicons (ex: "person" | "trophy"), ou null
-  labelText,   // texte à afficher ("$" | "%") si icon est absent
-  sortKey,
-  currentSort,
-  onSort,
-  colors,
-  flex = 1,
-  center = false,
-}) {
-  const isActive = currentSort.key === sortKey;
-  const dirIcon = currentSort.dir === 'asc' ? 'chevron-up' : 'chevron-down';
-  return (
-    <TouchableOpacity
-      onPress={() => onSort(sortKey)}
-      style={{
-        flex,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: center ? 'center' : 'flex-start',
-        gap: 6,
-        paddingVertical: 2,
-      }}
-    >
-      {icon ? (
-        <Ionicons name={icon} size={16} color={isActive ? colors.primary : colors.subtext} />
-      ) : (
-        <Text style={{ fontWeight: '900', color: isActive ? colors.primary : colors.subtext }}>
-          {labelText}
-        </Text>
-      )}
-      {isActive ? <Ionicons name={dirIcon} size={14} color={colors.subtext} /> : null}
-    </TouchableOpacity>
-  );
+// 🔧 util: dédupliquer par id
+function dedupeById(arr) {
+  const map = new Map();
+  for (const g of (arr || [])) map.set(String(g.id), g);
+  return Array.from(map.values());
 }
 
-/* ---------------- Legend (rendue UNE SEULE FOIS en haut de l’écran) ---------------- */
+/* 🔎 hook: tous les groupes dont je suis owner, peu importe le schéma
+   - ownerId == uid
+   - owner.uid == uid   (champ imbriqué)
+   - createdBy == uid
+   - owners array-contains uid
+*/
+function useOwnedGroups(uid) {
+  const [owned, setOwned] = React.useState([]);
+  const [loading, setLoading] = React.useState(!!uid);
+
+  React.useEffect(() => {
+    if (!uid) { setOwned([]); setLoading(false); return; }
+
+    const results = {
+      ownerId: [],
+      createdBy: [],
+    };
+
+    const unsubs = [];
+
+    function attach(qRef, key) {
+      const un = onSnapshot(qRef, (snap) => {
+        results[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const merged = dedupeById([
+          ...results.ownerId,
+          ...results.createdBy,
+        ]);
+        setOwned(merged);
+        setLoading(false);
+
+      }, (err) => {
+        if (__DEV__) console.warn(`[useOwnedGroups] ${key} error:`, err?.message || err);
+        setLoading(false);
+      });
+      unsubs.push(un);
+    }
+
+    try {
+      // ownerId == uid
+      attach(query(collection(db, 'groups'), where('ownerId', '==', String(uid))), 'ownerId');
+    } catch (e) {
+      if (__DEV__) console.warn('[useOwnedGroups] ownerId query failed:', e?.message || e);
+    }
+
+    try {
+      // createdBy == uid
+      attach(query(collection(db, 'groups'), where('createdBy', '==', String(uid))), 'createdBy');
+    } catch (e) {
+      if (__DEV__) console.warn('[useOwnedGroups] createdBy query failed:', e?.message || e);
+    }
+
+
+    return () => { unsubs.forEach(u => { try { u(); } catch {} }); };
+  }, [uid]);
+
+  return { owned, loading };
+}
+
+/* ---------------- Legend ---------------- */
 function Legend({ colors }) {
   const Item = ({ left, text }) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 16, marginBottom: 6 }}>
@@ -130,19 +180,77 @@ function Legend({ colors }) {
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 }}>
       <Item left={<Ionicons name="person" size={14} color={colors.subtext} />} text="Nom" />
       <Item left={<Ionicons name="trophy" size={14} color={colors.subtext} />} text="Défis gagnés" />
-      <Item left={<Text style={{ fontWeight: '900', color: colors.subtext }}>$</Text>} text="Gain" />
-      <Item left={<Text style={{ fontWeight: '900', color: colors.subtext }}>%</Text>} text="Gain (%)" />
+      <Item left={<FontAwesome6 name="sack-dollar" size={14} color={colors.subtext} />} text="Gain" />
+      <Item left={<MaterialCommunityIcons name="sack-percent" size={18} color={colors.subtext} />} text="Gain moyen par défi" />
     </View>
   );
 }
 
+function HeaderCol({
+  icon,
+  iconSet = 'mci',
+  labelText,
+  sortKey,
+  currentSort,
+  onSort,
+  colors,
+  flex,
+  center,
+}) {
+  const isActive = currentSort?.key === sortKey;
+  const direction = isActive ? currentSort?.dir : null;
+  const IconSet = iconSet === 'fa6' ? FontAwesome6 : MaterialCommunityIcons;
+  const iconSize = iconSet === 'mci' && icon === 'sack-percent' ? 20 : 18;
+
+  return (
+    <TouchableOpacity
+      onPress={() => onSort(sortKey)}
+      style={{
+        flex: flex || (center ? 1 : undefined),
+        alignItems: center ? 'center' : 'flex-start',
+        flexDirection: 'row',
+        justifyContent: center ? 'center' : 'flex-start',
+        gap: 6,
+      }}
+    >
+      {icon && (
+        <IconSet
+          name={icon}
+          size={iconSize}
+          color={isActive ? colors.primary : colors.text}
+        />
+      )}
+      {labelText && (
+        <Text
+          style={{
+            color: isActive ? colors.primary : colors.text,
+            fontWeight: isActive ? '700' : '500',
+          }}
+        >
+          {labelText}
+        </Text>
+      )}
+      {isActive && (
+        <MaterialCommunityIcons
+          name={direction === 'asc' ? 'chevron-up' : 'chevron-down'}
+          size={24}
+          color={colors.primary}
+          style={{ marginLeft: 2 }}
+        />
+      )}
+    </TouchableOpacity>
+  );
+}
+
 /* ---------------- Leaderboard table ---------------- */
-function LeaderboardTable({ rows, colors }) {
+function LeaderboardTable({ rows, colors, groupId }) {
   const [sort, setSort] = useState({ key: 'wins', dir: 'desc' });
 
-  // profils pour avatars
-  const userIds = useMemo(() => rows.map(r => r.id), [rows]);
-  const profiles = useParticipantsProfiles(userIds);
+  // 🔁 Liste des uids visibles dans la table (ids des entries = uid des participants)
+  const uids = useMemo(() => rows.map((r) => String(r.id)), [rows]);
+
+  // 🔵 Profils publics en temps réel pour ces uids
+  const publicProfiles = usePublicProfilesFor(uids);
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -174,10 +282,12 @@ function LeaderboardTable({ rows, colors }) {
         backgroundColor: colors.card,
       }}
     >
-      {/* header (icônes/labels) */}
+      {/* header */}
       <View
         style={{
           flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
           paddingVertical: 10,
           paddingHorizontal: 12,
           backgroundColor: colors.card2,
@@ -186,20 +296,53 @@ function LeaderboardTable({ rows, colors }) {
         }}
       >
         <View style={{ width: 40 }} />
-        <HeaderCol icon="person"   sortKey="displayName" currentSort={sort} onSort={toggleSort} colors={colors} flex={1.5} />
-        <HeaderCol icon="trophy"   sortKey="wins"        currentSort={sort} onSort={toggleSort} colors={colors} center />
-        <HeaderCol labelText="$"   sortKey="potTotal"    currentSort={sort} onSort={toggleSort} colors={colors} center />
-        <HeaderCol labelText="%"   sortKey="potAvg"      currentSort={sort} onSort={toggleSort} colors={colors} center />
+        <HeaderCol
+          icon="account"
+          sortKey="displayName"
+          currentSort={sort}
+          onSort={toggleSort}
+          colors={colors}
+          flex={1.5}
+        />
+        <HeaderCol
+          icon="trophy"
+          sortKey="wins"
+          currentSort={sort}
+          onSort={toggleSort}
+          colors={colors}
+          center
+        />
+        <HeaderCol
+          iconSet="fa6"
+          icon="sack-dollar"
+          sortKey="potTotal"
+          currentSort={sort}
+          onSort={toggleSort}
+          colors={colors}
+          center
+        />
+        <HeaderCol
+          icon="sack-percent"
+          sortKey="potAvg"
+          currentSort={sort}
+          onSort={toggleSort}
+          colors={colors}
+          center
+        />
       </View>
 
       {/* rows */}
       {sorted.map((r, idx) => {
-        const prof = profiles[r.id] || {};
-        const display = r.displayName || prof.displayName || r.id;
-        const shortName = display.length > 10 ? display.slice(0, 10) + '…' : display;
+        const prof = publicProfiles[r.id] || {};
+        const version = prof.updatedAt?.toMillis?.() ? prof.updatedAt.toMillis() : 0;
 
-        // potAvg = déjà une valeur “%” (on n’applique pas ×100)
-        const gainPct = Number.isFinite(r.potAvg) ? r.potAvg : 0;
+        const display =
+          prof.displayName ||
+          r.displayName ||
+          r.id;
+
+        const shortName = display.length > 10 ? display.slice(0, 10) + '…' : display;
+        const uri = prof.avatarUrl ? withCacheBust(prof.avatarUrl, version) : null;
 
         return (
           <View
@@ -215,7 +358,8 @@ function LeaderboardTable({ rows, colors }) {
             }}
           >
             <Image
-              source={prof.photoURL ? { uri: prof.photoURL } : AVATAR_PLACEHOLDER}
+              key={`${version}:${uri || 'placeholder'}`}
+              source={uri ? { uri } : AVATAR_PLACEHOLDER}
               style={{
                 width: 32,
                 height: 32,
@@ -224,6 +368,9 @@ function LeaderboardTable({ rows, colors }) {
                 backgroundColor: colors.border,
                 borderWidth: 1,
                 borderColor: colors.border,
+              }}
+              onError={() => {
+                if (__DEV__) console.warn('[Classement] avatar load error:', uri);
               }}
             />
             <View style={{ flex: 1.5 }}>
@@ -244,7 +391,13 @@ function LeaderboardTable({ rows, colors }) {
               </Text>
             </View>
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: colors.text, textAlign: 'center' }}>{Number(gainPct).toFixed(2)}%</Text>
+              <Text style={{ color: colors.text, textAlign: 'center' }}>
+                {(r.potAvg ?? 0).toLocaleString('fr-CA', {
+                  style: 'currency',
+                  currency: 'CAD',
+                  maximumFractionDigits: 2,
+                })}
+              </Text>
             </View>
           </View>
         );
@@ -257,7 +410,23 @@ function LeaderboardTable({ rows, colors }) {
 export default function ClassementScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
-  const { groups, loading: loadingGroups, error } = useGroups(user?.uid);
+
+  // 1) Groupes où je suis MEMBRE
+  const {
+    groups: memberGroups,
+    loading: loadingMemberGroups,
+    error
+  } = useGroups(user?.uid);
+
+  // 2) Groupes dont je suis OWNER (tous schémas couverts)
+  const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(user?.uid);
+
+  // 3) Fusion dédupliquée
+  const groups = useMemo(
+    () => dedupeById([...(memberGroups || []), ...(ownedGroups || [])]),
+    [memberGroups, ownedGroups]
+  );
+
   const groupIds = useMemo(() => groups.map((g) => String(g.id)), [groups]);
   const { loading: loadingBoards, all } = useLeaderboards(groupIds);
 
@@ -301,7 +470,7 @@ export default function ClassementScreen() {
     );
   }
 
-  if (loadingGroups || loadingBoards) {
+  if (loadingMemberGroups || loadingOwned || loadingBoards) {
     return (
       <>
         <Stack.Screen options={{ title: 'Classement' }} />
@@ -332,10 +501,7 @@ export default function ClassementScreen() {
         data={groups}
         keyExtractor={(g) => String(g.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        ListHeaderComponent={
-          // ✅ Légende rendue une fois ici
-          <Legend colors={colors} />
-        }
+        ListHeaderComponent={<Legend colors={colors} />}
         renderItem={({ item }) => {
           const rows = all?.[item.id] || [];
           return (
@@ -377,35 +543,12 @@ export default function ClassementScreen() {
                     {item.name || item.id}
                   </Text>
                 </View>
-
-                <TouchableOpacity
-                  onPress={() => handleRebuild(item.id)}
-                  disabled={!!rebuilding[item.id]}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: 10,
-                    backgroundColor: rebuilding[item.id] ? colors.border : colors.primary,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  {rebuilding[item.id] ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Ionicons name="refresh" size={14} color="#fff" />
-                  )}
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
-                    {rebuilding[item.id] ? 'Recalcul…' : 'Recalculer'}
-                  </Text>
-                </TouchableOpacity>
               </View>
 
               {rows.length === 0 ? (
                 <Text style={{ color: colors.subtext }}>Pas encore de stats pour ce groupe.</Text>
               ) : (
-                <LeaderboardTable rows={rows} colors={colors} />
+                <LeaderboardTable rows={rows} colors={colors} groupId={item.id} />
               )}
             </View>
           );

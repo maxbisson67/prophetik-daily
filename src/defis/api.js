@@ -1,11 +1,48 @@
 // src/defis/api.js
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import {
+  addDoc, collection, serverTimestamp,
+  doc, getDoc
+} from 'firebase/firestore';
 import { db } from '@src/lib/firebase';
 
 /**
+ * Vérifie côté client si uid est owner du groupe:
+ * - soit membership role === "owner" (group_memberships/{groupId}_{uid})
+ * - soit groups/{groupId}.ownerId === uid
+ */
+async function isGroupMemberOrOwnerClientCheck(groupId: string, uid: string) {
+  try {
+    if (!groupId || !uid) return false;
+
+    // 1) Membership doc (id = "<groupId>_<uid>")
+    const gmRef = doc(db, 'group_memberships', `${groupId}_${uid}`);
+    const gmSnap = await getDoc(gmRef);
+    if (gmSnap.exists()) {
+      const gm = gmSnap.data() || {};
+      // active: default true if missing
+      const isActive = gm.active !== false;
+      const role = (gm.role || 'member').toLowerCase();
+      if (isActive && (role === 'member' || role === 'owner')) return true;
+    }
+
+    // 2) Fallback: owner of the group
+    const gRef = doc(db, 'groups', String(groupId));
+    const gSnap = await getDoc(gRef);
+    if (gSnap.exists() && gSnap.data()?.ownerId === uid) return true;
+
+    return false;
+  } catch (e) {
+    console.warn('[isGroupMemberOrOwnerClientCheck] error:', e?.code || e?.message || e);
+    // Be permissive in UI and let security rules be the source of truth:
+    return false;
+  }
+}
+
+/**
  * Crée un défi.
- * Attend au minimum: { groupId, title, type, gameDate, createdBy, participationCost }
- * Optionnels persistés: { status, firstGameUTC, signupDeadline }
+ * Requis:  { groupId, title, type, gameDate, createdBy }
+ * Optionnels: { participationCost, status='active', firstGameUTC, signupDeadline }
+ * ⚠️ Les règles exigent: isGroupOwner(groupId) ET createdBy == request.auth.uid
  */
 export async function createDefi(input) {
   const {
@@ -13,48 +50,52 @@ export async function createDefi(input) {
     title,
     type,               // entier (1..5)
     gameDate,           // "YYYY-MM-DD" (string)
-    createdBy,          // uid
-    participationCost,  // entier
-    status = 'active',  // 👈 par défaut "active" si non fourni
-    firstGameUTC = null,    // Date ou ISO string
-    signupDeadline = null,  // Date ou ISO string
+    createdBy,          // uid (OBLIGATOIRE)
+    participationCost,  // entier (optionnel)
+    status = 'active',
+    firstGameUTC = null,    // Date | ISO string | null
+    signupDeadline = null,  // Date | ISO string | null
   } = input || {};
 
+  // Garde-fous minimum
   if (!groupId) throw new Error('groupId requis');
+  if (!title) throw new Error('title requis');
   if (!type) throw new Error('type requis');
   if (!gameDate) throw new Error('gameDate requis');
+  if (!createdBy) throw new Error('createdBy (uid) requis');
 
-  // Normalise les dates en Date pour Firestore (Timestamp)
+  
+
+  // Pré-vérif owner (évite un permission-denied silencieux)
+  const okOwner = await isGroupMemberOrOwnerClientCheck(groupId, createdBy);
+  if (!okOwner) {
+    throw new Error("Création refusée: l'utilisateur n'est pas owner du groupe.");
+  }
+
+  // Normalise les dates en Date pour Firestore (Timestamp côté serveur)
   const toDate = (v) => (v instanceof Date ? v : (v ? new Date(v) : null));
 
   const payload = {
-    groupId,
-    title,
-    type,
-    gameDate,
-    createdBy: createdBy || null,
+    groupId: String(groupId),
+    title: String(title),
+    type: Number(type),
+    gameDate: String(gameDate),
+    createdBy: String(createdBy),             // ⚠️ requis par les règles
     participationCost: participationCost ?? null,
-    status, // 👈 on respecte le statut fourni
+    status,
     firstGameUTC: toDate(firstGameUTC) || undefined,
     signupDeadline: toDate(signupDeadline) || undefined,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
 
-  // Nettoie les undefined
+  // Nettoyage des undefined
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
   // Ecrit le défi
   const defisCol = collection(db, 'defis');
+ 
   const defiRef = await addDoc(defisCol, payload);
-
-  // (Facultatif) Si tu utilises un index de relation, dé-commente:
-  // await addDoc(collection(db, 'group_defis'), {
-  //   groupId,
-  //   defiId: defiRef.id,
-  //   status,
-  //   createdAt: serverTimestamp(),
-  // });
 
   return { id: defiRef.id };
 }

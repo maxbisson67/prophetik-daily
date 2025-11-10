@@ -2,9 +2,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, ScrollView, Image, Modal, Pressable } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
-import { collection, doc, onSnapshot, query, where, limit } from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
-import { useAuth } from '@src/auth/AuthProvider';
+import { collection, doc, query, where, limit, onSnapshot /*, getDoc */ } from 'firebase/firestore';
+import { db, webAuth } from '@src/lib/firebase';
+
+// Safe auth
+import { useAuth } from '@src/auth/SafeAuthProvider';
+
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -35,9 +38,36 @@ function Chip({ bg, fg, icon, label }) {
   );
 }
 
+// Web bridge guard: assure que le Web SDK est connecté au même uid
+function isWebBridgeReady(expectedUid) {
+  const cu = webAuth?.currentUser;
+  return !!(cu && cu.uid === expectedUid);
+}
+
+// Logger uniforme des listeners
+function listen(refOrQuery, onNext, tag) {
+  return onSnapshot(
+    refOrQuery,
+    onNext,
+    (e) => {
+      // On garde la forme courte pour bien repérer la source dans la console.
+      console.log(`[FS:${tag}]`, e?.code, e?.message);
+    }
+  );
+}
+
+// Message d'erreur convivial
+function friendlyError(e) {
+  if (!e) return 'Erreur inconnue';
+  if (e?.code === 'permission-denied') {
+    return 'Accès refusé par les règles Firestore (permission-denied).';
+  }
+  return String(e?.message || e);
+}
+
 /* ----------------------------- Screen ----------------------------- */
 export default function AccueilScreen() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const router = useRouter();
 
   // ---- participant / wallet ----
@@ -59,7 +89,7 @@ export default function AccueilScreen() {
   const [groupsMeta, setGroupsMeta] = useState({}); // id -> {name}
   const groupMetaUnsubs = useRef(new Map()); // id -> unsub
 
-  // listeners refs
+  // listeners refs (stable across renders)
   const subs = useRef({
     me: null,
     byUid: null,
@@ -73,15 +103,15 @@ export default function AccueilScreen() {
   const lastGroupIdsKeyRef = useRef('');
   const lastActiveKeyRef = useRef('');
 
-  // Reset states quand user change
+  // Reset states quand authReady/uid changent
   useEffect(() => {
     setMeDoc(null);
     setGroupIds([]);
     setActiveDefis([]);
     setError(null);
-    setLoadingMe(!!user?.uid);
-    setLoadingGroups(!!user?.uid);
-    setLoadingDefis(!!user?.uid);
+    setLoadingMe(!!(authReady && user?.uid));
+    setLoadingGroups(!!(authReady && user?.uid));
+    setLoadingDefis(!!(authReady && user?.uid));
     setShowGroupPicker(false);
 
     const { me, ...rest } = subs.current;
@@ -95,21 +125,29 @@ export default function AccueilScreen() {
     for (const [, un] of groupMetaUnsubs.current) { try { un(); } catch {} }
     groupMetaUnsubs.current.clear();
     setGroupsMeta({});
-  }, [user?.uid]);
+  }, [authReady, user?.uid]);
 
   /* ---------- 1) Participant (wallet, profil) ---------- */
   useEffect(() => {
-    if (!user?.uid) { setLoadingMe(false); return; }
+    if (!authReady || !user?.uid) { setLoadingMe(false); return; }
+    if (!isWebBridgeReady(user.uid)) { return; }
     if (subs.current.me) { setLoadingMe(false); return; }
 
+    console.log('[Diag] authReady:', authReady, 'user.uid:', user?.uid);
     const ref = doc(db, 'participants', user.uid);
-    const un = onSnapshot(ref, (snap) => {
-      setMeDoc(snap.exists() ? ({ uid: snap.id, ...snap.data() }) : null);
-      setLoadingMe(false);
-    }, (e) => {
-      setError(e);
-      setLoadingMe(false);
-    });
+
+    // (Optionnel) Probe direct pour logs utiles
+    // getDoc(ref).then(s => console.log('[Probe participants]', s.exists()))
+    //            .catch(e => console.log('[Probe participants error]', e?.code, e?.message));
+
+    const un = listen(
+      ref,
+      (snap) => {
+        setMeDoc(snap.exists() ? ({ uid: snap.id, ...snap.data() }) : null);
+        setLoadingMe(false);
+      },
+      'participants/self'
+    );
 
     subs.current.me = un;
 
@@ -117,13 +155,14 @@ export default function AccueilScreen() {
       try { subs.current.me?.(); } catch {}
       subs.current.me = null;
     };
-  }, [user?.uid]);
+  }, [authReady, user?.uid, webAuth?.currentUser?.uid]);
 
   /* ---------- 2) Mes groupes : memberships + ownership ---------- */
   useEffect(() => {
     setError(null);
     setGroupIds([]);
-    if (!user?.uid) { setLoadingGroups(false); return; }
+    if (!authReady || !user?.uid) { setLoadingGroups(false); return; }
+    if (!isWebBridgeReady(user.uid)) { return; }
     setLoadingGroups(true);
 
     const qByUid         = query(collection(db, 'group_memberships'), where('uid', '==', user.uid));
@@ -157,57 +196,64 @@ export default function AccueilScreen() {
     Object.values(rest).forEach(un => { try { un?.(); } catch {} });
     subs.current = { me: keepMe, byUid: null, byPid: null, ownerCreated: null, ownerOwnerId: null };
 
-    subs.current.byUid = onSnapshot(
+    subs.current.byUid = listen(
       qByUid,
       (snap) => { rowsByUid = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
-      (e) => { setError(e); setLoadingGroups(false); }
+      'group_memberships:uid'
     );
-    subs.current.byPid = onSnapshot(
+    subs.current.byPid = listen(
       qByPid,
       (snap) => { rowsByPid = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
-      (e) => { setError(e); setLoadingGroups(false); }
+      'group_memberships:participantId'
     );
-    subs.current.ownerCreated = onSnapshot(
+    subs.current.ownerCreated = listen(
       qOwnerCreated,
       (snap) => { rowsOwnerCreated = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
-      (e) => { setError(e); setLoadingGroups(false); }
+      'groups:createdBy'
     );
-    subs.current.ownerOwnerId = onSnapshot(
+    subs.current.ownerOwnerId = listen(
       qOwnerOwnerId,
       (snap) => { rowsOwnerOwnerId = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
-      (e) => { setError(e); setLoadingGroups(false); }
+      'groups:ownerId'
     );
 
     return () => {
       const { me: keepMe2, ...rest2 } = subs.current;
-      Object.values(rest2).forEach(un => { try { un?.(); } catch {} });
+      Object.values(rest2).forEach(un => { try { un(); } catch {} });
       subs.current = { me: keepMe2, byUid: null, byPid: null, ownerCreated: null, ownerOwnerId: null };
     };
-  }, [user?.uid]);
+  }, [authReady, user?.uid, webAuth?.currentUser?.uid]);
 
   /* ---------- 2b) Charger les métadonnées des groupes pour le sélecteur ---------- */
   useEffect(() => {
-    // Retire les listeners pour les groupes qui ne sont plus présents
+    if (!authReady || !user?.uid || !isWebBridgeReady(user.uid)) return;
+
+    // Clean listeners for groups no longer in list
     for (const [gid, un] of groupMetaUnsubs.current) {
-      if (!groupIds.includes(gid)) { try { un(); } catch {}; groupMetaUnsubs.current.delete(gid); }
+      if (!groupIds.includes(gid)) { try { un(); } catch {} ; groupMetaUnsubs.current.delete(gid); }
     }
-    // Ajoute un listener par groupe pour récupérer le nom
+
     groupIds.forEach((gid) => {
       if (groupMetaUnsubs.current.has(gid)) return;
       const ref = doc(db, 'groups', gid);
-      const un = onSnapshot(ref, (snap) => {
+      const un = listen(ref, (snap) => {
         setGroupsMeta(prev => ({ ...prev, [gid]: { name: snap.data()?.name || snap.data()?.title || gid } }));
-      }, () => {});
+      }, `groups:meta:${gid}`);
       groupMetaUnsubs.current.set(gid, un);
     });
-    return () => { /* cleaned elsewhere */ };
-  }, [groupIds]);
+
+    return () => { /* nettoyé ailleurs */ };
+  }, [authReady, user?.uid, groupIds, webAuth?.currentUser?.uid]);
 
   /* ---------- 3) Défis actifs/live par groupId (merge) ---------- */
   useEffect(() => {
+    if (!authReady || !user?.uid || !isWebBridgeReady(user.uid)) return;
+
+    // Retire les listeners des groupes supprimés
     for (const [gid, un] of defisUnsubsRef.current) {
-      if (!groupIds.includes(gid)) { try { un(); } catch {}; defisUnsubsRef.current.delete(gid); }
+      if (!groupIds.includes(gid)) { try { un(); } catch {} ; defisUnsubsRef.current.delete(gid); }
     }
+
     if (!groupIds.length) {
       setActiveDefis([]);
       setLoadingDefis(false);
@@ -224,7 +270,7 @@ export default function AccueilScreen() {
         limit(50)
       );
 
-      const un = onSnapshot(
+      const un = listen(
         qActiveLive,
         (snap) => {
           const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -253,17 +299,14 @@ export default function AccueilScreen() {
           });
           setLoadingDefis(false);
         },
-        (e) => {
-          setError(e);
-          setLoadingDefis(false);
-        }
+        `defis:active:${gid}`
       );
 
       defisUnsubsRef.current.set(gid, un);
     });
 
     return () => { /* nettoyé ailleurs */ };
-  }, [groupIds]);
+  }, [authReady, user?.uid, groupIds, webAuth?.currentUser?.uid]);
 
   /* ---------- Cleanup global ---------- */
   useEffect(() => {
@@ -280,35 +323,7 @@ export default function AccueilScreen() {
     };
   }, []);
 
-  /* ----------------------------- UI ----------------------------- */
-  if (!user) {
-    return (
-      <>
-        <Stack.Screen options={{ title: 'Accueil' }} />
-        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
-          <Text>Connecte-toi pour accéder à l’accueil.</Text>
-          <TouchableOpacity
-            onPress={() => router.push('/(auth)/auth-choice')}
-            style={{ marginTop:12, backgroundColor:'#111', paddingHorizontal:16, paddingVertical:10, borderRadius:10 }}
-          >
-            <Text style={{ color:'#fff', fontWeight:'700' }}>Se connecter</Text>
-          </TouchableOpacity>
-        </View>
-      </>
-    );
-  }
-
-  if (error) {
-    return (
-      <>
-        <Stack.Screen options={{ title: 'Accueil' }} />
-        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:16 }}>
-          <Text>Erreur : {String(error?.message || error)}</Text>
-        </View>
-      </>
-    );
-  }
-
+  /* ----------------------------- Derived UI data ----------------------------- */
   const credits =
     typeof meDoc?.credits === 'number'
       ? meDoc.credits
@@ -357,257 +372,278 @@ export default function AccueilScreen() {
     setShowGroupPicker(true);
   }
 
+  /* ----------------------------- UI ----------------------------- */
   return (
     <>
       <Stack.Screen options={{ title: 'Accueil' }} />
-      <ScrollView contentContainerStyle={{ padding:16, gap:16 }}>
-        {/* === Header profil (Avatar + nom + crédits + Créer un défi) === */}
-        <View style={{
-          padding:14,
-          borderWidth:1,
-          borderRadius:12,
-          backgroundColor:'#fff',
-          borderColor: RED_LIGHT,
-          elevation:4,
-          shadowColor: RED,
-          shadowOpacity:0.18,
-          shadowRadius:8,
-          shadowOffset:{width:0,height:4}
-        }}>
-          {/* Avatar agrandi + edit */}
-          <View style={{ alignItems:'center', marginBottom:12 }}>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Modifier l'avatar"
-              onPress={() => router.push('/avatars/AvatarsScreen')}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={avatarUrl ? { uri: avatarUrl } : require('@src/assets/avatar-placeholder.png')}
+
+      {!authReady ? (
+        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
+          <ActivityIndicator />
+          <Text style={{ marginTop:8 }}>Initialisation…</Text>
+        </View>
+      ) : !user ? (
+        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
+          <Text>Connecte-toi pour accéder à l’accueil.</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/auth-choice')}
+            style={{ marginTop:12, backgroundColor:'#111', paddingHorizontal:16, paddingVertical:10, borderRadius:10 }}
+          >
+            <Text style={{ color:'#fff', fontWeight:'700' }}>Se connecter</Text>
+          </TouchableOpacity>
+        </View>
+      ) : error ? (
+        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:16 }}>
+          <Text>Erreur : {friendlyError(error)}</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding:16, gap:16 }}>
+          {/* === Header profil (Avatar + nom + crédits + Créer un défi) === */}
+          <View style={{
+            padding:14,
+            borderWidth:1,
+            borderRadius:12,
+            backgroundColor:'#fff',
+            borderColor: RED_LIGHT,
+            elevation:4,
+            shadowColor: RED,
+            shadowOpacity:0.18,
+            shadowRadius:8,
+            shadowOffset:{width:0,height:4}
+          }}>
+            {/* Avatar agrandi + edit */}
+            <View style={{ alignItems:'center', marginBottom:12 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Modifier l'avatar"
+                onPress={() => router.push('/avatars/AvatarsScreen')}
+                activeOpacity={0.8}
+              >
+                <Image
+                  source={avatarUrl ? { uri: avatarUrl } : require('@src/assets/avatar-placeholder.png')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 60,
+                    borderWidth: 3,
+                    borderColor: '#eee',
+                    backgroundColor: '#f3f4f6',
+                  }}
+                />
+                <View
+                  style={{
+                    position: 'absolute',
+                    bottom: 6,
+                    right: 6,
+                    backgroundColor: '#fff',
+                    borderRadius: 12,
+                    padding: 4,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.15,
+                    shadowRadius: 3,
+                    shadowOffset: { width: 0, height: 1 },
+                    elevation: 3,
+                  }}
+                >
+                  <Feather name="edit-2" size={14} color="#111" />
+                </View>
+              </TouchableOpacity>
+              <Text style={{ fontWeight:'800', fontSize:16, marginTop:8 }}>
+                Bonjour {meDoc?.displayName || meDoc?.name || '—'}
+              </Text>
+            </View>
+
+            {/* Crédits */}
+            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+              <View />
+              <View style={{ alignItems:'flex-end', paddingRight:6 }}>
+                <Text style={{ fontSize:12, color:'#6b7280' }}>Crédits</Text>
+                <Text style={{ fontWeight:'900', fontSize:20 }}>{credits}</Text>
+              </View>
+            </View>
+
+            {/* Bouton "Créer un défi" */}
+            <View style={{ marginTop:12 }}>
+              <TouchableOpacity
+                onPress={onPressCreateDefi}
                 style={{
-                  width: 120,
-                  height: 120,
-                  borderRadius: 60,
-                  borderWidth: 3,
-                  borderColor: '#eee',
-                  backgroundColor: '#f3f4f6',
-                }}
-              />
-              <View
-                style={{
-                  position: 'absolute',
-                  bottom: 6,
-                  right: 6,
-                  backgroundColor: '#fff',
-                  borderRadius: 12,
-                  padding: 4,
-                  shadowColor: '#000',
-                  shadowOpacity: 0.15,
-                  shadowRadius: 3,
-                  shadowOffset: { width: 0, height: 1 },
-                  elevation: 3,
+                  backgroundColor: RED_DARK,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  elevation: 2
                 }}
               >
-                <Feather name="edit-2" size={14} color="#111" />
-              </View>
-            </TouchableOpacity>
-            <Text style={{ fontWeight:'800', fontSize:16, marginTop:8 }}>
-              Bonjour {meDoc?.displayName || meDoc?.name || '—'}
-            </Text>
-          </View>
-
-          {/* Crédits */}
-          <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-            <View />
-            <View style={{ alignItems:'flex-end', paddingRight:6 }}>
-              <Text style={{ fontSize:12, color:'#6b7280' }}>Crédits</Text>
-              <Text style={{ fontWeight:'900', fontSize:20 }}>{credits}</Text>
-            </View>
-          </View>
-
-          {/* Bouton "Créer un défi" */}
-          <View style={{ marginTop:12 }}>
-            <TouchableOpacity
-              onPress={onPressCreateDefi}
-              style={{
-                backgroundColor: RED_DARK,
-                paddingVertical: 12,
-                borderRadius: 10,
-                alignItems: 'center',
-                elevation: 2
-              }}
-            >
-              <Text style={{ color:'#fff', fontWeight:'800' }}>⚡ Créer un défi</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-           {/* === Stats rapides (après Mes défis) === */}
-        <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
-          elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
-          <View style={{ flexDirection:'row', gap:12 }}>
-            <View style={{ flex:1, padding:10, borderRadius:10, backgroundColor:'#FEE2E2', borderWidth:1, borderColor:'#FECACA' }}>
-              <Text style={{ fontSize:12, color:'#991B1B' }}>Défis actifs</Text>
-              <Text style={{ fontWeight:'800', fontSize:18, color:'#7F1D1D' }}>
-                {activeDefis.length}
-              </Text>
-            </View>
-            <View style={{ flex:1, padding:10, borderRadius:10, backgroundColor:'#FFE4E6', borderWidth:1, borderColor:'#FECDD3' }}>
-              <Text style={{ fontSize:12, color:'#9F1239' }}>Cagnotte totale</Text>
-              <Text style={{ fontWeight:'800', fontSize:18, color:'#881337' }}>
-                {activeDefis.reduce((sum, d) => sum + Number(d.pot || 0), 0)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* === Mes défis du jour : actifs/live === */}
-        <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
-          elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
-          <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-            <Text style={{ fontWeight:'800', fontSize:16 }}>Mes défis du jour</Text>
-            {(loadingGroups || loadingDefis) ? <ActivityIndicator /> : null}
-          </View>
-
-          {(!groupIds.length && !loadingGroups) ? (
-            <Text style={{ color:'#666' }}>Tu n’as pas encore de groupes.</Text>
-          ) : (activeDefis.length === 0 && !loadingDefis) ? (
-            <Text style={{ color:'#666' }}>Aucun défi actif pour le moment.</Text>
-          ) : (
-            <View>
-              {activeDefis.map((item) => {
-                const st = statusStyle(item.status);
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    onPress={() => router.push(`/defis/${item.id}`)}
-                    style={{ paddingVertical:10, borderBottomWidth:1, borderColor:'#f0f0f0' }}
-                  >
-                    <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-                      <Text style={{ fontWeight:'700' }}>
-                        {item.title || (item.type ? `Défi ${item.type}x${item.type}` : 'Défi')}
-                      </Text>
-                      <Chip bg={st.bg} fg={st.fg} icon={st.icon} label={st.label} />
-                    </View>
-                    <View style={{ marginTop:4, flexDirection:'row', alignItems:'center', gap:12 }}>
-                      <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
-                        <MaterialCommunityIcons name="clock-outline" size={16} color="#555" />
-                        <Text style={{ color:'#555' }}>
-                          {item.signupDeadline ? `Limite ${fmtTSLocalHM(item.signupDeadline)}` :
-                          item.firstGameAtUTC ? `Débute ${fmtTSLocalHM(item.firstGameAtUTC)}` : '—'}
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
-                        <MaterialCommunityIcons name="treasure-chest" size={16} color="#111" />
-                        <Text style={{ fontWeight:'700' }}>{Number(item.pot || 0)}</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-     
-
-        {/* === Gamification (à la fin) === */}
-        <View style={{ padding:14, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
-          borderColor:'#eee', elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
-          <Text style={{ fontWeight:'800', fontSize:16, marginBottom:8 }}>Crédits à gagner</Text>
-
-          {/* 1 — Premier défi créé */}
-          <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor: doneFirstDefi ? '#DCFCE7' : '#E5E7EB', backgroundColor: doneFirstDefi ? '#F0FDF4' : '#FFF', marginBottom:10 }}>
-            <Text style={{ fontWeight:'700' }}>Premier défi créé {doneFirstDefi ? '✅' : '(+1 crédit)'}</Text>
-            {!doneFirstDefi && (
-              <View style={{ flexDirection:'row', justifyContent:'space-between', marginTop:6 }}>
-                <Text style={{ color:'#6b7280', fontSize:12 }}>Crée ton premier défi</Text>
-                <TouchableOpacity
-                  onPress={onPressCreateDefi}
-                  style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:RED_DARK }}
-                >
-                  <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* 2 — Premier groupe créé */}
-          <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor: doneFirstGroup ? '#DCFCE7' : '#E5E7EB', backgroundColor: doneFirstGroup ? '#F0FDF4' : '#FFF', marginBottom:10 }}>
-            <Text style={{ fontWeight:'700' }}>Premier groupe créé {doneFirstGroup ? '✅' : '(+1 crédit)'}</Text>
-            {!doneFirstGroup && (
-              <View style={{ flexDirection:'row', justifyContent:'space-between', marginTop:6 }}>
-                <Text style={{ color:'#6b7280', fontSize:12 }}>Crée ton premier groupe</Text>
-                <TouchableOpacity
-                  onPress={() => router.push('/(drawer)/(tabs)/GroupsScreen')}
-                  style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:RED_DARK }}
-                >
-                  <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* 3 — 5 participations */}
-          <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor:'#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
-            <Text style={{ fontWeight:'700' }}>
-              Participer à 5 défis {doneFiveAny ? '✅' : '(+2 crédits)'}
-            </Text>
-            <Text style={{ color:'#6b7280', fontSize:12, marginTop:4 }}>
-              Progression : {Math.min(totalParticipations,5)}/5
-            </Text>
-            <View style={{ height:8, borderRadius:99, backgroundColor:'#f3f4f6', marginTop:6 }}>
-              <View style={{ width:`${pctFive}%`, height:8, borderRadius:99, backgroundColor:RED }} />
-            </View>
-          </View>
-
-          {/* 4 — 3 jours consécutifs */}
-          <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor:'#E5E7EB', backgroundColor:'#FFF' }}>
-            <Text style={{ fontWeight:'700' }}>
-              3 jours consécutifs {doneStreak3 ? '✅' : '(+2 crédits)'}
-            </Text>
-            <Text style={{ color:'#6b7280', fontSize:12, marginTop:4 }}>
-              Série : {Math.min(streak,3)}/3
-            </Text>
-            <View style={{ height:8, borderRadius:99, backgroundColor:'#f3f4f6', marginTop:6 }}>
-              <View style={{ width:`${pctStreak}%`, height:8, borderRadius:99, backgroundColor:RED }} />
-            </View>
-          </View>
-        </View>
-
-        {/* Modal sélection de groupe */}
-        <Modal visible={showGroupPicker} transparent animationType="fade" onRequestClose={() => setShowGroupPicker(false)}>
-          <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.4)', justifyContent:'center', padding:24 }}>
-            <View style={{ backgroundColor:'#fff', borderRadius:12, padding:16 }}>
-              <Text style={{ fontWeight:'800', fontSize:16, marginBottom:8 }}>Choisir un groupe</Text>
-              {groupIds.length === 0 ? (
-                <Text style={{ color:'#6b7280' }}>Aucun groupe disponible.</Text>
-              ) : (
-                groupIds.map((gid) => (
-                  <Pressable
-                    key={gid}
-                    onPress={() => {
-                      setShowGroupPicker(false);
-                      router.push({ pathname: `/groups/${gid}`, params: { openCreate: '1' } });
-                    }}
-                    style={({ pressed }) => ({
-                      paddingVertical:12,
-                      borderBottomWidth:1,
-                      borderColor:'#eee',
-                      opacity: pressed ? 0.6 : 1
-                    })}
-                  >
-                    <Text style={{ fontWeight:'600' }}>{groupsMeta[gid]?.name || gid}</Text>
-                  </Pressable>
-                ))
-              )}
-              <TouchableOpacity onPress={() => setShowGroupPicker(false)} style={{ marginTop:10, alignSelf:'flex-end' }}>
-                <Text style={{ color:'#ef4444', fontWeight:'700' }}>Annuler</Text>
+                <Text style={{ color:'#fff', fontWeight:'800' }}>⚡ Créer un défi</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </ScrollView>
+
+          {/* === Stats rapides === */}
+          <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
+            elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
+            <View style={{ flexDirection:'row', gap:12 }}>
+              <View style={{ flex:1, padding:10, borderRadius:10, backgroundColor:'#FEE2E2', borderWidth:1, borderColor:'#FECACA' }}>
+                <Text style={{ fontSize:12, color:'#991B1B' }}>Défis actifs</Text>
+                <Text style={{ fontWeight:'800', fontSize:18, color:'#7F1D1D' }}>
+                  {activeDefis.length}
+                </Text>
+              </View>
+              <View style={{ flex:1, padding:10, borderRadius:10, backgroundColor:'#FFE4E6', borderWidth:1, borderColor:'#FECDD3' }}>
+                <Text style={{ fontSize:12, color:'#9F1239' }}>Cagnotte totale</Text>
+                <Text style={{ fontWeight:'800', fontSize:18, color:'#881337' }}>
+                  {activeDefis.reduce((sum, d) => sum + Number(d.pot || 0), 0)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* === Mes défis du jour : actifs/live === */}
+          <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
+            elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
+            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+              <Text style={{ fontWeight:'800', fontSize:16 }}>Mes défis du jour</Text>
+              {(loadingGroups || loadingDefis) ? <ActivityIndicator /> : null}
+            </View>
+
+            {(!groupIds.length && !loadingGroups) ? (
+              <Text style={{ color:'#666' }}>Tu n’as pas encore de groupes.</Text>
+            ) : (activeDefis.length === 0 && !loadingDefis) ? (
+              <Text style={{ color:'#666' }}>Aucun défi actif pour le moment.</Text>
+            ) : (
+              <View>
+                {activeDefis.map((item) => {
+                  const st = statusStyle(item.status);
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => router.push(`/(drawer)/defis/${item.id}`)}
+                      style={{ paddingVertical:10, borderBottomWidth:1, borderColor:'#f0f0f0' }}
+                    >
+                      <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+                        <Text style={{ fontWeight:'700' }}>
+                          {item.title || (item.type ? `Défi ${item.type}x${item.type}` : 'Défi')}
+                        </Text>
+                        <Chip bg={st.bg} fg={st.fg} icon={st.icon} label={st.label} />
+                      </View>
+                      <View style={{ marginTop:4, flexDirection:'row', alignItems:'center', gap:12 }}>
+                        <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
+                          <MaterialCommunityIcons name="clock-outline" size={16} color="#555" />
+                          <Text style={{ color:'#555' }}>
+                            {item.signupDeadline ? `Limite ${fmtTSLocalHM(item.signupDeadline)}` :
+                            item.firstGameAtUTC ? `Débute ${fmtTSLocalHM(item.firstGameAtUTC)}` : '—'}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
+                          <MaterialCommunityIcons name="treasure-chest" size={16} color="#111" />
+                          <Text style={{ fontWeight:'700' }}>{Number(item.pot || 0)}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* === Gamification === */}
+          <View style={{ padding:14, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
+            borderColor:'#eee', elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
+            <Text style={{ fontWeight:'800', fontSize:16, marginBottom:8 }}>Crédits à gagner</Text>
+
+            {/* 1 — Premier défi créé */}
+            <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor: '#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
+              <Text style={{ fontWeight:'700' }}>Premier défi créé {meDoc?.achievements?.firstDefiCreated ? '✅' : '(+1 crédit)'}</Text>
+              {!meDoc?.achievements?.firstDefiCreated && (
+                <View style={{ flexDirection:'row', justifyContent:'space-between', marginTop:6 }}>
+                  <Text style={{ color:'#6b7280', fontSize:12 }}>Crée ton premier défi</Text>
+                  <TouchableOpacity
+                    onPress={onPressCreateDefi}
+                    style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:'#b91c1c' }}
+                  >
+                    <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* 2 — Premier groupe créé */}
+            <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor: '#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
+              <Text style={{ fontWeight:'700' }}>Premier groupe créé {meDoc?.achievements?.firstGroupCreated ? '✅' : '(+1 crédit)'}</Text>
+              {!meDoc?.achievements?.firstGroupCreated && (
+                <View style={{ flexDirection:'row', justifyContent:'space-between', marginTop:6 }}>
+                  <Text style={{ color:'#6b7280', fontSize:12 }}>Crée ton premier groupe</Text>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(drawer)/(tabs)/GroupsScreen')}
+                    style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:'#b91c1c' }}
+                  >
+                    <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* 3 — 5 participations */}
+            <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor:'#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
+              <Text style={{ fontWeight:'700' }}>
+                Participer à 5 défis {meDoc?.achievements?.fiveParticipationsAny ? '✅' : '(+2 crédits)'}
+              </Text>
+              <Text style={{ color:'#6b7280', fontSize:12, marginTop:4 }}>
+                Progression : {Math.min(Number(meDoc?.stats?.totalParticipations ?? 0),5)}/5
+              </Text>
+              <View style={{ height:8, borderRadius:99, backgroundColor:'#f3f4f6', marginTop:6 }}>
+                <View style={{ width:`${Math.max(0, Math.min(100, Math.round(((Number(meDoc?.stats?.totalParticipations ?? 0) || 0) / 5) * 100))) }%`, height:8, borderRadius:99, backgroundColor:'#ef4444' }} />
+              </View>
+            </View>
+
+            {/* 4 — 3 jours consécutifs */}
+            <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor:'#E5E7EB', backgroundColor:'#FFF' }}>
+              <Text style={{ fontWeight:'700' }}>
+                3 jours consécutifs {meDoc?.achievements?.threeConsecutiveDays ? '✅' : '(+2 crédits)'}
+              </Text>
+              <Text style={{ color:'#6b7280', fontSize:12, marginTop:4 }}>
+                Série : {Math.min(Number(meDoc?.stats?.currentStreakDays ?? 0),3)}/3
+              </Text>
+              <View style={{ height:8, borderRadius:99, backgroundColor:'#f3f4f6', marginTop:6 }}>
+                <View style={{ width:`${Math.max(0, Math.min(100, Math.round(((Number(meDoc?.stats?.currentStreakDays ?? 0) || 0) / 3) * 100))) }%`, height:8, borderRadius:99, backgroundColor:'#ef4444' }} />
+              </View>
+            </View>
+          </View>
+
+          {/* Modal sélection de groupe */}
+          <Modal visible={showGroupPicker} transparent animationType="fade" onRequestClose={() => setShowGroupPicker(false)}>
+            <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.4)', justifyContent:'center', padding:24 }}>
+              <View style={{ backgroundColor:'#fff', borderRadius:12, padding:16 }}>
+                <Text style={{ fontWeight:'800', fontSize:16, marginBottom:8 }}>Choisir un groupe</Text>
+                {groupIds.length === 0 ? (
+                  <Text style={{ color:'#6b7280' }}>Aucun groupe disponible.</Text>
+                ) : (
+                  groupIds.map((gid) => (
+                    <Pressable
+                      key={gid}
+                      onPress={() => {
+                        setShowGroupPicker(false);
+                        router.push({ pathname: `/groups/${gid}`, params: { openCreate: '1' } });
+                      }}
+                      style={({ pressed }) => ({
+                        paddingVertical:12,
+                        borderBottomWidth:1,
+                        borderColor:'#eee',
+                        opacity: pressed ? 0.6 : 1
+                      })}
+                    >
+                      <Text style={{ fontWeight:'600' }}>{groupsMeta[gid]?.name || gid}</Text>
+                    </Pressable>
+                  ))
+                )}
+                <TouchableOpacity onPress={() => setShowGroupPicker(false)} style={{ marginTop:10, alignSelf:'flex-end' }}>
+                  <Text style={{ color:'#ef4444', fontWeight:'700' }}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </ScrollView>
+      )}
     </>
   );
 }

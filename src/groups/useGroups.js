@@ -11,33 +11,27 @@ import {
 
 /**
  * useGroups(uid)
- *
- * Retourne en temps réel la liste des groupes liés à l'utilisateur via
- * - ses memberships actives (status:"active" OU active:true)
- * - les groupes qu'il possède (ownerId == uid OU createdBy == uid)
- *
- * Renvoie: { groups, groupsOwned, groupsMember, loading, error, refresh }
+ * - Lit uniquement group_memberships (uid / participantId)
+ * - Pour chaque groupId, lit le doc /groups/{groupId}
+ * - AUCUNE query de collection sur /groups (évite 'list' dans les règles)
  */
 export function useGroups(uid) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(!!uid);
   const [error, setError] = useState(null);
 
-  // Listeners dynamiques sur chaque doc group
-  const groupUnsubsRef = useRef(new Map()); // Map<groupId, Unsub>
-  // Listeners pour les groupes possédés (ownerId/createdBy)
-  const ownerUnsubsRef = useRef([]); // Unsub[]
+  // Listeners dynamiques par groupId
+  const groupUnsubsRef = useRef(new Map()); // Map<groupId, () => void>
 
   useEffect(() => {
-    // Cleanup helper
+    // helper cleanup
     const cleanupAll = () => {
-      for (const [, un] of groupUnsubsRef.current) un();
+      for (const [, un] of groupUnsubsRef.current) {
+        try { un(); } catch {}
+      }
       groupUnsubsRef.current.clear();
-      for (const un of ownerUnsubsRef.current) un();
-      ownerUnsubsRef.current = [];
     };
 
-    // Reset si pas d'utilisateur
     if (!uid) {
       cleanupAll();
       setGroups([]);
@@ -49,98 +43,92 @@ export function useGroups(uid) {
     setLoading(true);
     setError(null);
 
-    // 1) Groupes possédés par l'utilisateur (ownerId == uid OU createdBy == uid)
-    const attachOwnedListener = (field) => {
-      const qOwner = query(collection(db, "groups"), where(field, "==", uid));
-      const unsub = onSnapshot(
-        qOwner,
-        (gSnap) => {
-          const owned = gSnap.docs.map((d) => ({ id: d.id, ...d.data(), role: "owner" }));
-          setGroups((prev) => {
-            const map = new Map(prev.map((g) => [g.id, g]));
-            for (const g of owned) {
-              const existing = map.get(g.id) || {};
-              map.set(g.id, { ...existing, ...g, role: "owner" }); // priorité à owner
+    // on écoute 2 champs possibles (compat)
+    const qByUid = query(collection(db, "group_memberships"), where("uid", "==", uid));
+    const qByPid = query(collection(db, "group_memberships"), where("participantId", "==", uid));
+
+    // état courant des memberships (fusion des deux listeners)
+    let rowsByUid = [];
+    let rowsByPid = [];
+
+    const recomputeFromMemberships = () => {
+      // filtre "actives"
+      const active = (m) =>
+        (m?.status ? String(m.status).toLowerCase() === "active" : (m?.active === true || m?.active === undefined));
+
+      const ms = [...rowsByUid, ...rowsByPid].filter(active);
+
+      // map groupId -> role effectif (owner prioritaire si une des entries dit owner)
+      const byGroup = new Map();
+      for (const m of ms) {
+        if (!m?.groupId) continue;
+        const prev = byGroup.get(m.groupId);
+        const role = (m.role === "owner" || prev === "owner") ? "owner" : (m.role || "member");
+        byGroup.set(m.groupId, role);
+      }
+
+      // détache les listeners obsolètes
+      for (const [gid, un] of groupUnsubsRef.current) {
+        if (!byGroup.has(gid)) {
+          try { un(); } catch {}
+          groupUnsubsRef.current.delete(gid);
+        }
+      }
+
+      // attache les listeners manquants
+      for (const [gid, role] of byGroup.entries()) {
+        if (groupUnsubsRef.current.has(gid)) continue;
+
+        const gref = doc(db, "groups", gid);
+        const un = onSnapshot(
+          gref,
+          (gSnap) => {
+            if (!gSnap.exists()) {
+              setGroups((prev) => prev.filter((g) => g.id !== gid));
+              return;
             }
-            return Array.from(map.values()).sort(sortByUpdatedAt);
-          });
-          setLoading(false); // on a déjà des données utiles
-        },
-        (err) => setError(err)
-      );
-      ownerUnsubsRef.current.push(unsub);
+            const data = { id: gSnap.id, ...gSnap.data() };
+
+            setGroups((prev) => {
+              const map = new Map(prev.map((g) => [g.id, g]));
+              const existing = map.get(gid) || {};
+              // si existing.role = 'owner', on garde; sinon on met le role calculé
+              const effRole = existing.role === "owner" ? "owner" : role;
+              map.set(gid, { ...existing, ...data, role: effRole });
+              return Array.from(map.values()).sort(sortByUpdatedAt);
+            });
+          },
+          (err) => setError(err)
+        );
+        groupUnsubsRef.current.set(gid, un);
+      }
+
+      // si aucun groupId actif, on vide
+      if (byGroup.size === 0) {
+        setGroups([]);
+      }
+
+      setLoading(false);
     };
 
-    attachOwnedListener("ownerId");
-    attachOwnedListener("createdBy");
-
-    // 2) Memberships actives de l'utilisateur
-    const qM = query(collection(db, "group_memberships"), where("uid", "==", uid));
-    const unsubMemberships = onSnapshot(
-      qM,
-      (snap) => {
-        const memberships = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          // compat: status:"active" OU active:true (ou pas de champ -> actif)
-          .filter((m) => (m.status ? m.status === "active" : m.active === true || m.active === undefined));
-
-        const currentIds = new Set(memberships.map((m) => m.groupId));
-
-        // Stop les listeners obsolètes
-        for (const [gid, un] of groupUnsubsRef.current) {
-          if (!currentIds.has(gid)) {
-            un();
-            groupUnsubsRef.current.delete(gid);
-          }
-        }
-
-        // Ajoute listeners manquants pour chaque groupe de membership
-        for (const gid of currentIds) {
-          if (groupUnsubsRef.current.has(gid)) continue;
-
-          const gref = doc(db, "groups", gid);
-          const un = onSnapshot(
-            gref,
-            (gSnap) => {
-              if (!gSnap.exists()) {
-                setGroups((prev) => prev.filter((g) => g.id !== gid));
-                return;
-              }
-              const gData = { id: gSnap.id, ...gSnap.data() };
-              const role = memberships.find((m) => m.groupId === gid)?.role ?? "member";
-
-              setGroups((prev) => {
-                const map = new Map(prev.map((x) => [x.id, x]));
-                const existing = map.get(gid) || {};
-                // Si déjà marqué owner via owned-listener, on garde owner
-                const effRole = existing.role === "owner" ? "owner" : role;
-                map.set(gid, { ...existing, ...gData, role: effRole });
-                return Array.from(map.values()).sort(sortByUpdatedAt);
-              });
-            },
-            (err) => setError(err)
-          );
-
-          groupUnsubsRef.current.set(gid, un);
-        }
-
-        setLoading(false);
-      },
-      (err) => {
-        setError(err);
-        setLoading(false);
-      }
+    const unByUid = onSnapshot(
+      qByUid,
+      (snap) => { rowsByUid = snap.docs.map((d) => ({ id: d.id, ...d.data() })); recomputeFromMemberships(); },
+      (err) => { setError(err); setLoading(false); }
     );
 
-    // cleanup global
+    const unByPid = onSnapshot(
+      qByPid,
+      (snap) => { rowsByPid = snap.docs.map((d) => ({ id: d.id, ...d.data() })); recomputeFromMemberships(); },
+      (err) => { setError(err); setLoading(false); }
+    );
+
     return () => {
-      unsubMemberships();
-      for (const [, un] of groupUnsubsRef.current) un();
-      groupUnsubsRef.current.clear();
-      for (const un of ownerUnsubsRef.current) un();
-      ownerUnsubsRef.current = [];
+      try { unByUid(); } catch {}
+      try { unByPid(); } catch {}
+      cleanupAll();
     };
-  }, [uid]);
+  }, [uid, db]);
 
   const groupsOwned = useMemo(
     () => groups.filter((g) => g.role === "owner" || g.ownerId === uid || g.createdBy === uid),
@@ -152,9 +140,7 @@ export function useGroups(uid) {
     [groups, uid]
   );
 
-  const refresh = () => {
-    // rien à faire: listeners temps réel. (placeholder pour compat)
-  };
+  const refresh = () => {}; // realtime
 
   return { groups, groupsOwned, groupsMember, loading, error, refresh };
 }

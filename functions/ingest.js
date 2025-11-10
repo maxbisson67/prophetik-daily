@@ -29,6 +29,12 @@ async function runIngestStatsForDate() {
       for (const p of plays) {
         const isGoal = String(p?.typeDescKey||"").toLowerCase() === "goal" || Number(p?.typeCode) === 505;
         if (!isGoal) continue;
+
+          // ⛔ Exclure les buts en fusillade (shootout)
+        const periodType = String(p?.periodDescriptor?.periodType || "").toUpperCase();
+        if (periodType === "SO") continue;  // ← exclut tous les buts en fusillade
+
+
         const det = p?.details || {};
         const scorerId = det.scoringPlayerId || det.playerId || null;
         const a1 = det.assist1PlayerId || null;

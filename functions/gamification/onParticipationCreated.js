@@ -1,125 +1,130 @@
-// functions/gamification/onParticipationCreated.js
+// functions/onParticipationCreated.js
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import * as logger from 'firebase-functions/logger';
-import { awardCredit, todayLocalISO } from './utils.js';
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { awardCredit } from './utils.js';
 
 const db = getFirestore();
 
-/**
- * Attribution des crédits liés aux participations :
- * - Maintient les stats (totalParticipations, streak par jour local).
- * - +2 crédits quand totalParticipations atteint 5 (one-shot).
- * - +2 crédits quand streak >= 3 jours (one-shot).
- *
- * Suppose que chaque participation crée un doc à:
- * defis/{defiId}/participants/{uid}
- */
-export const onParticipationCreated = onDocumentCreated('defis/{defiId}/participants/{uid}', async (event) => {
-  const defiId = event.params.defiId;
-  const uid = event.params.uid;
-  if (!uid) return;
+/** YYYY-MM-DD (UTC) */
+function ymdUTC(d) {
+  const dd = d instanceof Date ? d : new Date(d);
+  const y = dd.getUTCFullYear();
+  const m = String(dd.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(dd.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-  try {
-    const dRef = db.collection('defis').doc(defiId);
-    const dSnap = await dRef.get();
-    const groupId = dSnap.exists ? (dSnap.data().groupId || null) : null;
+/** Diff en jours (UTC) entre deux YMD strings (t2 - t1). */
+function diffDaysYmd(t1, t2) {
+  if (!t1 || !t2) return NaN;
+  const a = new Date(`${t1}T00:00:00Z`).getTime();
+  const b = new Date(`${t2}T00:00:00Z`).getTime();
+  return Math.round((b - a) / (24 * 60 * 60 * 1000));
+}
 
-    const pRef = db.collection('participants').doc(uid);
-    const today = todayLocalISO();
-    let after = null;
+export const onParticipationCreated = onDocumentCreated(
+  // ✅ bon chemin: participations (et non participants)
+  'defis/{defiId}/participations/{uid}',
+  async (event) => {
+    const { uid, defiId } = event.params || {};
+    if (!uid) return;
+
+    // Pour la streak, on fige "aujourd’hui" côté serveur
+    const nowTs = Timestamp.now();
+    const todayYmd = ymdUTC(nowTs.toDate());
+
+    const pRef = db.doc(`participants/${uid}`);
+
+    // Ces flags nous diront APRÈS la transaction quoi créditer (idempotent)
+    let justHitFive = false;
+    let justHitThreeStreak = false;
 
     await db.runTransaction(async (tx) => {
       const pSnap = await tx.get(pRef);
-      const p = pSnap.exists ? (pSnap.data() || {}) : {};
-      const stats = p.stats || {};
-      const ach = p.achievements || {};
+      const p = pSnap.exists ? pSnap.data() : {};
 
-      const prevTotal = stats.totalParticipations || 0;
+      // --- Stats existantes ---
+      const stats = p?.stats || {};
+      const ach = p?.achievements || {};
+
+      const prevTotal = Number(stats.totalParticipations || 0);
+      const prevLastDay = stats.lastParticipationDay || null; // YYYY-MM-DD
+      const prevCurrent = Number(stats.currentStreakDays || 0);
+      const prevMax = Number(stats.maxStreakDays || 0);
+
+      // --- Nouveau total ---
       const total = prevTotal + 1;
 
-      const last = stats.lastParticipationDay || null;
-      let current = stats.currentStreakDays || 0;
-
-      if (!last) {
+      // --- Calcul de streak (par jours) ---
+      let current = prevCurrent;
+      if (!prevLastDay) {
+        // Première participation connue
         current = 1;
-      } else if (last === today) {
-        // same day -> streak unchanged
+      } else if (prevLastDay === todayYmd) {
+        // Même jour: on garde la streak telle quelle (pas d’incrément)
+        current = prevCurrent > 0 ? prevCurrent : 1;
       } else {
-        const wasYesterday = (() => {
-          try {
-            const [y, m, d] = last.split('-').map((n) => parseInt(n, 10));
-            const prev = new Date(y, m - 1, d);
-            prev.setDate(prev.getDate() + 1);
-            const pad = (n) => String(n).padStart(2, '0');
-            const nextOfLast = `${prev.getFullYear()}-${pad(prev.getMonth() + 1)}-${pad(prev.getDate())}`;
-            return nextOfLast === today;
-          } catch {
-            return false;
-          }
-        })();
-        current = wasYesterday ? current + 1 : 1;
+        const d = diffDaysYmd(prevLastDay, todayYmd);
+        if (d === 1) {
+          // Jour consécutif
+          current = (prevCurrent || 0) + 1;
+        } else {
+          // Nouvelle séquence
+          current = 1;
+        }
       }
 
-      const maxStreak = Math.max(current, stats.maxStreakDays || 0);
+      const maxStreak = Math.max(prevMax || 0, current);
 
-      tx.set(
-        pRef,
-        {
-          stats: {
-            totalParticipations: total,
-            lastParticipationDay: today,
-            currentStreakDays: current,
-            maxStreakDays: maxStreak,
-          },
-          achievements: {
-            firstDefiCreated: !!(p.achievements && p.achievements.firstDefiCreated),
-            firstGroupCreated: !!(p.achievements && p.achievements.firstGroupCreated),
-            fiveParticipationsAny: !!(p.achievements && p.achievements.fiveParticipationsAny),
-            threeConsecutiveDays: !!(p.achievements && p.achievements.threeConsecutiveDays),
-          },
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // --- Achievements à poser (sans écrasement) ---
+      const updates = {
+        'stats.totalParticipations': total,
+        'stats.lastParticipationDay': todayYmd,
+        'stats.currentStreakDays': current,
+        'stats.maxStreakDays': maxStreak,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
 
-      after = { total, current, ach };
+      // - 5 participations (peu importe le jour/groupe)
+      if (!ach?.fiveParticipationsAny && total >= 5) {
+        updates['achievements.fiveParticipationsAny'] = true;
+        justHitFive = true; // sera utilisé après la transaction
+      }
+
+      // - 3 jours consécutifs
+      if (!ach?.threeConsecutiveDays && current >= 3) {
+        updates['achievements.threeConsecutiveDays'] = true;
+        justHitThreeStreak = true;
+      }
+
+      tx.set(pRef, updates, { merge: true });
     });
 
-    if (after.total === 5 && !after.ach?.fiveParticipationsAny) {
-      await awardCredit({
-        uid,
-        delta: 2,
-        reason: '5_participations',
-        meta: { ref: { type: 'defi', id: defiId } },
-        idempotencyKey: `5_participations:${uid}`,
-        defiId,
-        groupId,
-      });
-      await db.collection('participants').doc(uid).set(
-        { achievements: { fiveParticipationsAny: true } },
-        { merge: true }
-      );
-      logger.info('Awarded 5_participations +2', { uid });
-    }
+    // --- Récompenses (idempotentes) en DEHORS de la transaction ---
+    try {
+      // Donne 2 crédits à l’atteinte de chaque jalon (à adapter si besoin)
+      if (justHitFive) {
+        await awardCredit(db, {
+          uid,
+          amount: 2,
+          reason: 'ACH_FIVE_PARTICIPATIONS_ANY',
+          // Idempotency key stable: même si la fonction est rejouée, un seul crédit sera ajouté
+          idempotencyKey: `ach:five_any:${uid}`,
+        });
+      }
 
-    if (after.current >= 3 && !after.ach?.threeConsecutiveDays) {
-      await awardCredit({
-        uid,
-        delta: 2,
-        reason: '3_consecutive_days',
-        meta: { ref: { type: 'defi', id: defiId } },
-        idempotencyKey: `3_consecutive_days:${uid}`,
-        defiId,
-        groupId,
-      });
-      await db.collection('participants').doc(uid).set(
-        { achievements: { threeConsecutiveDays: true } },
-        { merge: true }
-      );
-      logger.info('Awarded 3_consecutive_days +2', { uid });
+      if (justHitThreeStreak) {
+        await awardCredit(db, {
+          uid,
+          amount: 2,
+          reason: 'ACH_THREE_CONSECUTIVE_DAYS',
+          idempotencyKey: `ach:streak3:${uid}`,
+        });
+      }
+    } catch (e) {
+      console.error('[onParticipationCreated] awardCredit error:', e?.message || e);
+      // Pas de throw: l’achèvement reste posé; la récompense pourra être rejouée via batch admin si besoin,
+      // et l’idempotency key empêchera le double crédit.
     }
-  } catch (e) {
-    logger.error('onParticipationCreated failed', { error: e?.message || String(e) });
   }
-});
+);

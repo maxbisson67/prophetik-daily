@@ -1,26 +1,44 @@
 // app/(tabs)/GroupsScreen.js
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity,
-  ActivityIndicator, Modal, TextInput, Alert, Image,
-  KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View, Text, FlatList, TouchableOpacity, ActivityIndicator, Modal, TextInput,
+  Alert, Image, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard
 } from 'react-native';
-
+import { useRouter, Stack } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { useRouter, Stack } from 'expo-router';
-import { useGroups } from '@src/groups/useGroups';
-import { createGroupService } from '@src/groups/services';
-import { useAuth } from '@src/auth/AuthProvider';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp, deleteField, getDoc } from 'firebase/firestore';
+// Auth
+import { useAuth } from '@src/auth/SafeAuthProvider';
 
+// Firebase
+import {
+  collection, doc, onSnapshot, query, where,
+  setDoc, updateDoc, getDoc, serverTimestamp, deleteField
+} from 'firebase/firestore';
 import { db } from '@src/lib/firebase';
 
+import { createGroupService } from '@src/groups/services';
 
+
+// ----------------------------------------------------
+// Utils
+// ----------------------------------------------------
+function uniq(arr) {
+  return Array.from(new Set(arr.filter(Boolean)));
+}
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// ----------------------------------------------------
+// Écran
+// ----------------------------------------------------
 export default function GroupsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { groups, loading, error, refresh } = useGroups(user?.uid);
 
   // Création
   const [createOpen, setCreateOpen] = useState(false);
@@ -28,108 +46,236 @@ export default function GroupsScreen() {
   const [description, setDescription] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Favori (abonné au doc participant)
+  // Favori
   const [favoriteGroupId, setFavoriteGroupId] = useState(null);
   const [loadingFavorite, setLoadingFavorite] = useState(!!user?.uid);
 
-  
+  // Memberships (source de vérité)
+  // rolesByGroupId: { [groupId]: 'owner' | 'member' | 'admin' | ... }
+  const [rolesByGroupId, setRolesByGroupId] = useState({});
+  const [loadingMemberships, setLoadingMemberships] = useState(!!user?.uid);
 
-    useEffect(() => {
-      if (!user?.uid) { setFavoriteGroupId(null); setLoadingFavorite(false); return; }
-      setLoadingFavorite(true);
-      const ref = doc(db, 'participants', user.uid);
-      const unsub = onSnapshot(ref, (snap) => {
-        const data = snap.data() || {};
-        setFavoriteGroupId(data.favoriteGroupId || null);
-        setLoadingFavorite(false);
-      }, (err) => {
-        console.log('participants onSnapshot error:', err);
-        setLoadingFavorite(false);
-        Alert.alert('Lecture du favori', String(err?.message || err));
+  // Détails des groupes (abonnements par docId)
+  const [groupsMap, setGroupsMap] = useState({}); // { [groupId]: { id, name, ... } }
+  const groupsUnsubsRef = useRef([]);
+
+  // -------------------------
+  // Favori live (participants/{uid})
+  // -------------------------
+  useEffect(() => {
+    if (!user?.uid) { setFavoriteGroupId(null); setLoadingFavorite(false); return; }
+    setLoadingFavorite(true);
+    const ref = doc(db, 'participants', user.uid);
+    const unsub = onSnapshot(ref, (snap) => {
+      const data = snap.data() || {};
+      setFavoriteGroupId(data.favoriteGroupId || null);
+      setLoadingFavorite(false);
+    }, (err) => {
+      console.log('participants onSnapshot error:', err);
+      setLoadingFavorite(false);
+      Alert.alert('Lecture du favori', String(err?.message || err));
+    });
+    return () => { try { unsub(); } catch {} };
+  }, [user?.uid]);
+
+  // -------------------------
+  // Écoute group_memberships pour CE user (uid | userId | participantId)
+  // -> remplit rolesByGroupId
+  // -------------------------
+  useEffect(() => {
+    if (!user?.uid) {
+      setRolesByGroupId({});
+      setLoadingMemberships(false);
+      return;
+    }
+    setLoadingMemberships(true);
+
+    const fields = ['uid', 'userId', 'participantId'];
+    const buffers = [];
+    const unsubs = [];
+
+    const merge = (parts) => {
+      const merged = {};
+      parts.forEach(list => {
+        (list || []).forEach(row => {
+          const prev = merged[row.groupId];
+          const r = (row.role || 'member').toLowerCase();
+          // owner prioritaire si plusieurs entrées existent
+          merged[row.groupId] = prev === 'owner' ? 'owner' : (r === 'owner' ? 'owner' : (prev || r));
+        });
       });
-      return () => { try { unsub(); } catch {} };
-    }, [user?.uid]);
+      setRolesByGroupId(merged);
+      setLoadingMemberships(false);
+    };
 
-  // Groupes: owner / member
+    fields.forEach((field, idx) => {
+      try {
+        const qRef = query(collection(db, 'group_memberships'), where(field, '==', String(user.uid)));
+        const un = onSnapshot(qRef, (snap) => {
+          const rows = snap.docs.map(d => {
+            const x = d.data() || {};
+            const active = x.active === true || x.status === undefined || String(x.status).toLowerCase() === 'active';
+            return active ? {
+              id: d.id,
+              groupId: x.groupId,
+              role: x.role || 'member',
+            } : null;
+          }).filter(Boolean);
+          buffers[idx] = rows;
+          merge(buffers);
+        }, (e) => {
+          console.log('[GroupsScreen] memberships listener error:', e?.message || e);
+          buffers[idx] = [];
+          merge(buffers);
+        });
+        unsubs.push(un);
+      } catch (e) {
+        console.log('[GroupsScreen] memberships query setup error:', e?.message || e);
+      }
+    });
+
+    return () => { unsubs.forEach(u => u && u()); };
+  }, [user?.uid]);
+
+  // -------------------------
+  // Abonnement en temps réel aux docs groups/{id} trouvés
+  // -------------------------
+  useEffect(() => {
+    // stop anciens abonnements
+    groupsUnsubsRef.current.forEach(u => { try { u(); } catch {} });
+    groupsUnsubsRef.current = [];
+    setGroupsMap({});
+
+    const ids = uniq(Object.keys(rolesByGroupId || {}));
+    if (ids.length === 0) return;
+
+    const nextMap = {};
+    ids.forEach((gid) => {
+      try {
+        const unsub = onSnapshot(doc(db, 'groups', String(gid)), (snap) => {
+          if (snap.exists()) {
+            nextMap[String(gid)] = { id: snap.id, ...snap.data() };
+          } else {
+            // doc supprimé: retirer si présent
+            delete nextMap[String(gid)];
+          }
+          // setState immuable à chaque update
+          setGroupsMap(prev => ({ ...prev, [String(gid)]: nextMap[String(gid)] }));
+        }, (e) => {
+          console.log('[GroupsScreen] group doc listener error:', gid, e?.message || e);
+        });
+        groupsUnsubsRef.current.push(unsub);
+      } catch (e) {
+        console.log('[GroupsScreen] group doc subscribe error:', gid, e?.message || e);
+      }
+    });
+
+    return () => {
+      groupsUnsubsRef.current.forEach(u => { try { u(); } catch {} });
+      groupsUnsubsRef.current = [];
+    };
+  }, [JSON.stringify(Object.keys(rolesByGroupId || {}))]);
+
+  // -------------------------
+  // Partition owner / member à partir des rôles + groupsMap
+  // -------------------------
+  const allGroups = useMemo(() => {
+    const ids = Object.keys(rolesByGroupId || {});
+    return ids.map(id => {
+      const base = groupsMap[id] || { id, name: '(groupe)' };
+      const role = (rolesByGroupId[id] || 'member').toLowerCase();
+      return { ...base, id, role };
+    });
+  }, [rolesByGroupId, groupsMap]);
+
   const myOwnerGroups = useMemo(
-    () => groups.filter(g => g.role === 'owner' || g.ownerId === user?.uid),
-    [groups, user?.uid]
+    () => allGroups.filter(g => g.role === 'owner'),
+    [allGroups]
   );
   const myMemberGroups = useMemo(
-    () => groups.filter(g => !(g.role === 'owner' || g.ownerId === user?.uid)),
-    [groups, user?.uid]
+    () => allGroups.filter(g => g.role !== 'owner'),
+    [allGroups]
   );
 
+  // -------------------------
+  // Actions
+  // -------------------------
   function openGroup(g) {
-    router.push({ pathname: `/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) }});
+    router.push({ pathname: `/(drawer)/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) }});
   }
 
   async function onCreateGroup() {
     if (!name.trim()) return Alert.alert('Nom requis', 'Donne un nom à ton groupe.');
+    if (!user?.uid)   return Alert.alert('Non connecté', 'Connecte-toi pour créer un groupe.');
+
     try {
       setCreating(true);
       const { groupId } = await createGroupService({
         name: name.trim(),
-        description: description.trim()
+        description: description.trim(),
+        uid: user.uid,                           // ← INDISPENSABLE
+        displayName: user.displayName || null,
+        avatarUrl: user.photoURL || null,
       });
       setCreating(false);
       setCreateOpen(false);
       setName(''); setDescription('');
-      router.push({ pathname: '/groups/[groupId]', params: { groupId } });
+      router.push({ pathname: '/(drawer)/groups/[groupId]', params: { groupId } });
     } catch (e) {
       setCreating(false);
-      Alert.alert('Erreur', e?.message || 'Création du groupe échouée');
+      Alert.alert('Erreur', String(e?.message || e));
     }
   }
 
-  
-async function toggleFavorite(gid) {
-  if (!user?.uid) return;
-  const ref = doc(db, 'participants', user.uid);
+  async function toggleFavorite(gid) {
+    if (!user?.uid) return;
+    const ref = doc(db, 'participants', user.uid);
 
-  try {
-    const snap = await getDoc(ref);
-    const current = snap.exists() ? snap.data()?.favoriteGroupId || null : null;
+    try {
+      const snap = await getDoc(ref);
+      const current = snap.exists() ? snap.data()?.favoriteGroupId || null : null;
 
-    if (current === gid) {
-      // --- UNFAVORITE: utiliser updateDoc pour supprimer proprement les champs ---
-      try {
-        await updateDoc(ref, {
-          favoriteGroupId: deleteField(),
-          favoriteGroupAt: deleteField(),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (e) {
-        // Si le doc n'existe pas encore, on crée un doc vide puis on réessaie
-        if (String(e?.message || e).includes('No document to update')) {
-          await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true });
+      if (current === gid) {
+        // UNFAVORITE
+        try {
           await updateDoc(ref, {
             favoriteGroupId: deleteField(),
             favoriteGroupAt: deleteField(),
             updatedAt: serverTimestamp(),
           });
-        } else {
-          throw e;
+        } catch (e) {
+          if (String(e?.message || e).includes('No document to update')) {
+            await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true });
+            await updateDoc(ref, {
+              favoriteGroupId: deleteField(),
+              favoriteGroupAt: deleteField(),
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            throw e;
+          }
         }
+        setFavoriteGroupId(null);
+        return;
       }
-      setFavoriteGroupId(null); // UI optimiste
-      return;
+
+      // SET FAVORITE
+      await setDoc(ref, {
+        favoriteGroupId: gid,
+        favoriteGroupAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      setFavoriteGroupId(gid);
+    } catch (e) {
+      console.log('toggleFavorite error:', e);
+      Alert.alert('Favori', `Impossible de mettre à jour: ${String(e?.message || e)}`);
     }
-
-    // --- SET NEW FAVORITE (A -> B) : écrire directement B, sans faire unremove avant
-    await setDoc(ref, {
-      favoriteGroupId: gid,
-      favoriteGroupAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-
-    setFavoriteGroupId(gid); // UI optimiste
-  } catch (e) {
-    console.log('toggleFavorite error:', e);
-    Alert.alert('Favori', `Impossible de mettre à jour: ${String(e?.message || e)}`);
   }
-}
 
+  // -------------------------
+  // UI
+  // -------------------------
   if (!user) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
@@ -144,8 +290,12 @@ async function toggleFavorite(gid) {
     );
   }
 
+  const isLoading = loadingMemberships || loadingFavorite;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
+    <>
+   
+
       <View style={{ flex: 1 }}>
         <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 22, fontWeight: '700' }}>Mes groupes</Text>
@@ -166,17 +316,10 @@ async function toggleFavorite(gid) {
           </View>
         </View>
 
-        {loading || loadingFavorite ? (
+        {isLoading ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator />
             <Text style={{ marginTop: 8 }}>Chargement…</Text>
-          </View>
-        ) : error ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <Text>Erreur: {String(error)}</Text>
-            <TouchableOpacity onPress={refresh} style={{ marginTop: 12, padding: 10, borderWidth: 1, borderRadius: 10 }}>
-              <Text>Réessayer</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -201,20 +344,18 @@ async function toggleFavorite(gid) {
                     padding: 14,
                     borderRadius: 14,
                     backgroundColor: '#fff',
-                    // ombre iOS
                     shadowColor: '#000',
                     shadowOpacity: 0.1,
                     shadowRadius: 6,
                     shadowOffset: { width: 0, height: 3 },
-                    // élévation Android
                     elevation: 3,
                     position: 'relative'
                   }}
                 >
-                  {/* Étoile favori en haut-droite */}
+                  {/* Favori */}
                   <TouchableOpacity
                     onPress={(e) => {
-                      e.stopPropagation(); // éviter d’ouvrir la carte
+                      e.stopPropagation();
                       toggleFavorite(item.id);
                     }}
                     hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
@@ -223,60 +364,43 @@ async function toggleFavorite(gid) {
                     <MaterialCommunityIcons
                       name={favoriteGroupId === item.id ? 'star' : 'star-outline'}
                       size={22}
-                      color={favoriteGroupId === item.id ? '#ef4444' : '#9ca3af'}
+                      // Pas de code couleur ambigu : icône pleine vs contour
+                      color={'#111827'}
                     />
                   </TouchableOpacity>
 
-                 <View style={{ flexDirection:'row', alignItems:'center', paddingRight:28 /* laisser la place à l’étoile */ }}>
-                  <Image
-                    source={item.avatarUrl ? { uri: item.avatarUrl } : require('@src/assets/group-placeholder.png')}
-                    style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: '#f3f4f6', marginRight: 10, borderWidth:1, borderColor:'#eee'
-                    }}
-                  />
-                  <View style={{ flex:1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '600' }}>
-                      {item.name}
-                    </Text>
-                    {!!item.description && (
-                      <Text style={{ marginTop: 2, color:'#6b7280' }} numberOfLines={1}>
-                        {item.description}
+                  <View style={{ flexDirection:'row', alignItems:'center', paddingRight:28 }}>
+                    <Image
+                      source={item.avatarUrl ? { uri: item.avatarUrl } : require('@src/assets/group-placeholder.png')}
+                      style={{
+                        width: 40, height: 40, borderRadius: 20,
+                        backgroundColor: '#f3f4f6', marginRight: 10, borderWidth:1, borderColor:'#eee'
+                      }}
+                    />
+                    <View style={{ flex:1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '600' }}>
+                        {item.name || item.id}
                       </Text>
-                    )}
-                    {item.avatarId && (
-                      <View style={{ paddingHorizontal:8, paddingVertical:4, borderRadius:999, backgroundColor:'#f1f5f9' }}>
-                        <Text style={{ fontSize:11, color:'#334155' }}>Avatar actif</Text>
-                      </View>
-                    )}
+                      {!!item.description && (
+                        <Text style={{ marginTop: 2 }} numberOfLines={1}>
+                          {item.description}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                </View>
-                  {!!item.description && <Text style={{ marginTop: 2 }}>{item.description}</Text>}
 
                   <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text>Code invitation: {item.codeInvitation}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      {favoriteGroupId === item.id ? (
-                        <View style={{
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 999,
-                          backgroundColor: '#fee2e2',
-                          borderWidth: 1,
-                          borderColor: '#fecaca'
-                        }}>
-                          <Text style={{ color: '#b91c1c', fontWeight: '700', fontSize: 12 }}>Favori</Text>
-                        </View>
-                      ) : null}
-                      <Text>{item.role === 'owner' ? 'Propriétaire' : 'Membre'}</Text>
-                    </View>
+                    <Text>Code invitation: {item.codeInvitation || '—'}</Text>
+                    <Text style={{ fontWeight: '700' }}>
+                      {item.role === 'owner' ? 'Propriétaire' : 'Membre'}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               )
             }
             ListEmptyComponent={() => (
               <View style={{ alignItems: 'center', marginTop: 40 }}>
-                <Text>Tu n’as pas encore de groupes.</Text>
+                <Text>Aucun groupe trouvé pour ce compte.</Text>
               </View>
             )}
           />
@@ -285,45 +409,34 @@ async function toggleFavorite(gid) {
         {/* Modal création */}
         <Modal
           visible={createOpen}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={() => setCreateOpen(false)}
           transparent
         >
-          {/* Fond assombri + dismiss clavier au tap */}
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={{
-              flex: 1,
-              backgroundColor: 'rgba(0,0,0,0.25)',
-              justifyContent: 'flex-end'
-            }}>
+            <View style={{ flex: 1,paddingTop: 60, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'flex-start' }}>
               <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
               >
                 <SafeAreaView style={{
                   backgroundColor: '#fff',
-                  borderTopLeftRadius: 18,
-                  borderTopRightRadius: 18,
+                  borderBottomLeftRadius: 18,
+                  borderBottomRightRadius: 18,
                   paddingBottom: 16,
-                  maxHeight: '92%'
+                  maxHeight: '92%',
+                  marginBottom: 12 
                 }}>
-                  {/* Handle drag visuel */}
-                  <View style={{ alignItems:'center', paddingTop:8 }}>
-                    <View style={{ width:48, height:5, borderRadius:3, backgroundColor:'#e5e7eb' }} />
-                  </View>
+                 
 
-                  {/* Header inspirant */}
                   <View style={{ paddingHorizontal:16, paddingTop:12, paddingBottom:8 }}>
                     <View style={{ flexDirection:'row', alignItems:'center', gap:10, marginBottom:6 }}>
-                      <MaterialCommunityIcons name="rocket-launch-outline" size={22} color="#ef4444" />
+                      <MaterialCommunityIcons name="rocket-launch-outline" size={22} />
                       <Text style={{ fontSize:20, fontWeight:'900' }}>Nouveau groupe</Text>
                     </View>
-                    <Text style={{ color:'#6b7280' }}>
-                      Rassemble ton crew et dominez les défis 🔥
-                    </Text>
+                    <Text>Rassemble ton crew et dominez les défis.</Text>
                   </View>
 
-                  {/* Form */}
                   <View style={{ paddingHorizontal:16, paddingTop:12, gap:12 }}>
                     <View>
                       <Text style={{ fontWeight:'700', marginBottom:6 }}>Nom du groupe</Text>
@@ -337,34 +450,15 @@ async function toggleFavorite(gid) {
                           paddingHorizontal:12, paddingVertical:12, backgroundColor:'#fafafa'
                         }}
                       />
-                      <Text style={{ marginTop:4, color:'#9ca3af', fontSize:12 }}>
+                      <Text style={{ marginTop:4, fontSize:12 }}>
                         {name.length}/40
                       </Text>
-                    </View>
-
-                    {/* Suggestions rapides */}
-                    <View>
-                      <Text style={{ fontWeight:'700', marginBottom:6 }}>Inspiration</Text>
-                      <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8 }}>
-                        {['Les Visionnaires', 'Pool du Samedi', 'Team Hot Takes', 'Les Prophètes'].map((sugg) => (
-                          <TouchableOpacity
-                            key={sugg}
-                            onPress={() => setName(sugg)}
-                            style={{
-                              paddingHorizontal:12, paddingVertical:8, borderRadius:999,
-                              backgroundColor:'#f3f4f6', borderWidth:1, borderColor:'#e5e7eb'
-                            }}
-                          >
-                            <Text style={{ color:'#111827', fontWeight:'600' }}>{sugg}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
                     </View>
 
                     <View>
                       <Text style={{ fontWeight:'700', marginBottom:6 }}>Description (optionnel)</Text>
                       <TextInput
-                        placeholder="Ex. Notre pool du samedi entre amis 🍻"
+                        placeholder="Ex. Notre pool du samedi entre amis"
                         value={description}
                         onChangeText={setDescription}
                         multiline
@@ -376,32 +470,23 @@ async function toggleFavorite(gid) {
                     </View>
                   </View>
 
-                  {/* Actions */}
                   <View style={{ paddingHorizontal:16, paddingVertical:16, flexDirection:'row', gap:10 }}>
                     <TouchableOpacity
                       onPress={() => setCreateOpen(false)}
-                      style={{
-                        flex:1, paddingVertical:14, borderRadius:12,
-                        borderWidth:1, borderColor:'#111827', alignItems:'center', backgroundColor:'#fff'
-                      }}
+                      style={{ flex:1, paddingVertical:14, borderRadius:12, borderWidth:1, alignItems:'center' }}
                       disabled={creating}
                     >
-                      <Text style={{ color:'#111827', fontWeight:'700' }}>Annuler</Text>
+                      <Text style={{ fontWeight:'700' }}>Annuler</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={onCreateGroup}
                       disabled={creating || !name.trim()}
-                      style={{
-                        flex:1, paddingVertical:14, borderRadius:12, alignItems:'center',
-                        backgroundColor: (!name.trim() || creating) ? '#9ca3af' : '#ef4444'
+                      style={{ flex:1, paddingVertical:14, borderRadius:12, alignItems:'center',
+                        backgroundColor: (!name.trim() || creating) ? '#9ca3af' : '#111827'
                       }}
                     >
-                      {creating ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>
-                      )}
+                      {creating ? <ActivityIndicator color="#fff" /> : <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>}
                     </TouchableOpacity>
                   </View>
                 </SafeAreaView>
@@ -410,6 +495,6 @@ async function toggleFavorite(gid) {
           </TouchableWithoutFeedback>
         </Modal>
       </View>
-    </SafeAreaView>
+    </>
   );
 }

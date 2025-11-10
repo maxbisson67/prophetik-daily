@@ -6,9 +6,19 @@
     "scheme": "prophetik-daily",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/prophetik_red_1024.png",
+    "icon": "./assets/prophetik_icon_1024.png",
     "backgroundColor": "#ffffff",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/prophetik_icon_1024.png",
+      "backgroundColor": "#FFFFFF",
+      "resizeMode": "contain"
+    },
+    "updates": {
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0,
+      "reloadOnForeground": false
+    },
     "notification": {
       "icon": "./assets/notification-icon.png"
     },
@@ -22,6 +32,7 @@
           }
         }
       ],
+      "@react-native-firebase/app",
       "expo-router",
       "expo-notifications",
       "expo-font"
@@ -39,7 +50,7 @@
       }
     },
     "ios": {
-      "icon": "./assets/prophetik_red_1024.png",
+      "icon": "./assets/prophetik_icon_1024.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.prophetik",
       "googleServicesFile": "./GoogleService-Info.plist",
@@ -49,9 +60,10 @@
     },
     "android": {
       "versionCode": 1,
+      "backgroundColor": "#0B1020",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/prophetik_adaptive_foreground_432_transparent.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive_foreground_432_transparent_padded.png",
+        "backgroundColor": "#E11D48"
       },
       "package": "com.prophetik",
       "googleServicesFile": "./google-services.json",

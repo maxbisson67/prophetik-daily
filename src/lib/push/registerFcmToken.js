@@ -3,13 +3,12 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import { doc, setDoc, deleteField, serverTimestamp } from 'firebase/firestore';
 import { db } from '@src/lib/firebase';
 
 const AS_KEY = 'prophetik:lastPushToken';
 
-// Affichage en foreground (bannière)
+// ⚠️ Laisse un seul endroit définir ce handler (ici c'est OK si tu n'en as pas ailleurs)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -27,83 +26,162 @@ export function attachNotificationListeners() {
     console.log('Notification ouverte:', r);
   });
   return () => {
-    sub1.remove();
-    sub2.remove();
+    try { sub1.remove(); } catch {}
+    try { sub2.remove(); } catch {}
   };
 }
 
-// === Permissions + récupération du token ===
-// Par défaut on retourne le token Expo Push (simple et fiable).
-export async function registerForPushNotificationsAsync() {
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') throw new Error('Permission refusée');
+/* ──────────────────────────────────────────────────────────────────────────
+   Anti-spam Expo Push + robustesse
+   - single-flight (une seule promesse en cours)
+   - retry exponentiel + jitter sur 503
+   - cooldown 15 min après un succès
+   - cooloff 20 s après un échec
+   ────────────────────────────────────────────────────────────────────────── */
 
-  const projectId =
-    Constants?.expoConfig?.extra?.eas?.projectId ||
-    Constants?.easConfig?.projectId; // fallback
+let _inflight = null;
+let _lastOkToken = null;
+let _lastAttemptAt = 0;
+let _lastSuccessAt = 0;
+const SUCCESS_COOLDOWN_MS = 15 * 60 * 1000; // 15 min
+const ERROR_COOLdown_MS   = 20 * 1000;      // 20 s
 
-  const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
-  return { type: 'expo', value: data };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const jitter = (ms) => {
+  const j = ms * 0.3;
+  return Math.max(0, Math.floor(ms + (Math.random() * 2 - 1) * j));
+};
+
+function getProjectId() {
+  const c = Constants ?? {};
+  return (
+    c.expoConfig?.extra?.eas?.projectId ||
+    c.easConfig?.projectId ||
+    c.expoConfig?.projectId ||
+    c.projectId ||
+    null
+  );
 }
 
-// === Enregistre le token courant pour un utilisateur (participants/{uid}) ===
-export async function registerCurrentFcmToken(uid) {
+// Permissions (ne redemande pas si déjà accordé)
+async function ensureNotificationPermission() {
+  const cur = await Notifications.getPermissionsAsync();
+  if (cur?.granted) return true;
+  const req = await Notifications.requestPermissionsAsync();
+  return !!req?.granted;
+}
+
+// Récupération Expo token avec retry/backoff
+async function getExpoTokenWithRetry(maxRetries = 4) {
+  const projectId = getProjectId();
+  if (!projectId) {
+    console.log('[Push] projectId introuvable dans Constants — skip');
+    return null;
+  }
+
+  let attempt = 0;
+  let delay = 1500;
+
+  while (true) {
+    try {
+      const res = await Notifications.getExpoPushTokenAsync({ projectId });
+      const token = res?.data || res;
+      if (token && typeof token === 'string') return token;
+      throw new Error('Invalid token shape');
+    } catch (e) {
+      attempt += 1;
+      const msg = e?.message || String(e);
+      const isLast = attempt > maxRetries;
+      console.log(`[Push] getExpoPushToken attempt ${attempt}/${maxRetries} failed: ${msg}`);
+      if (isLast) throw e;
+      await sleep(jitter(delay));
+      delay *= 2;
+    }
+  }
+}
+
+/**
+ * Récupère et enregistre le token courant pour un utilisateur (participants/{uid})
+ * – respecte single-flight + cooldowns.
+ */
+export async function registerCurrentFcmToken(uid, { force = false } = {}) {
   if (!uid) return null;
 
-  const tok = await registerForPushNotificationsAsync();
-  const tokenValue = tok.value; // string (Expo push token ou device token)
-  if (!tokenValue) return null;
+  const now = Date.now();
 
-  // Évite les écritures inutiles
-  const prev = await AsyncStorage.getItem(AS_KEY);
-  if (prev !== tokenValue) await AsyncStorage.setItem(AS_KEY, tokenValue);
+  // Cooldown après succès
+  if (!force && _lastSuccessAt && now - _lastSuccessAt < SUCCESS_COOLDOWN_MS) {
+    const cached = _lastOkToken || (await AsyncStorage.getItem(AS_KEY));
+    if (cached) return cached;
+  }
 
-  const pRef = doc(db, 'participants', uid);
-  const now = serverTimestamp();
+  // Cooloff après échec
+  if (!force && _lastAttemptAt && now - _lastAttemptAt < ERROR_COOLdown_MS) {
+    return _lastOkToken || (await AsyncStorage.getItem(AS_KEY));
+  }
 
-  // Map fcmTokens.{token} = true  (tu gardes ton modèle existant)
-  await setDoc(
-    pRef,
-    { fcmTokens: { [tokenValue]: true }, updatedAt: now, platform: Platform.OS },
-    { merge: true }
-  );
+  _lastAttemptAt = now;
 
-  // Sous-collection /participants/{uid}/fcm_tokens/{token}
-  await setDoc(
-    doc(db, 'participants', uid, 'fcm_tokens', tokenValue),
-    { token: tokenValue, type: tok.type, updatedAt: now, platform: Platform.OS },
-    { merge: true }
-  );
+  // Single-flight
+  if (_inflight) return _inflight;
 
-  return tokenValue;
+  _inflight = (async () => {
+    try {
+      const granted = await ensureNotificationPermission();
+      if (!granted) throw new Error('Notifications permission not granted');
+
+      const tokenValue = await getExpoTokenWithRetry(4);
+      if (!tokenValue) return _lastOkToken || (await AsyncStorage.getItem(AS_KEY));
+
+      _lastOkToken = tokenValue;
+      _lastSuccessAt = Date.now();
+
+      const prev = await AsyncStorage.getItem(AS_KEY);
+      if (prev !== tokenValue) {
+        await AsyncStorage.setItem(AS_KEY, tokenValue);
+
+        // Écritures Firestore seulement si changement
+        const pRef = doc(db, 'participants', uid);
+        const nowTs = serverTimestamp();
+
+        await setDoc(
+          pRef,
+          { fcmTokens: { [tokenValue]: true }, updatedAt: nowTs, platform: Platform.OS },
+          { merge: true }
+        );
+
+        await setDoc(
+          doc(db, 'participants', uid, 'fcm_tokens', tokenValue),
+          { token: tokenValue, type: 'expo', updatedAt: nowTs, platform: Platform.OS },
+          { merge: true }
+        );
+      }
+
+      return tokenValue;
+    } catch (e) {
+      console.log('[Push] token refresh failed:', e?.message || String(e));
+      return _lastOkToken || (await AsyncStorage.getItem(AS_KEY));
+    } finally {
+      _inflight = null;
+    }
+  })();
+
+  return _inflight;
 }
 
-// === Rafraîchir le token au retour en foreground (pas de onTokenRefresh en Expo) ===
+/* ──────────────────────────────────────────────────────────────────────────
+   Listener AppState → on tente un refresh au retour actif,
+   mais il est naturellement bridé par single-flight + cooldowns.
+   ────────────────────────────────────────────────────────────────────────── */
 let appStateSub;
 export function startFcmTokenRefreshListener(uid) {
   stopFcmTokenRefreshListener();
   appStateSub = AppState.addEventListener('change', async (next) => {
     if (next === 'active' && uid) {
+      // Petite respiration pour laisser l’UI se stabiliser
+      await sleep(400);
       try {
-        const tok = await registerForPushNotificationsAsync();
-        const tokenValue = tok.value;
-        if (!tokenValue) return;
-        const prev = await AsyncStorage.getItem(AS_KEY);
-        if (prev !== tokenValue) {
-          await AsyncStorage.setItem(AS_KEY, tokenValue);
-          const pRef = doc(db, 'participants', uid);
-          const now = serverTimestamp();
-          await setDoc(
-            pRef,
-            { fcmTokens: { [tokenValue]: true }, updatedAt: now },
-            { merge: true }
-          );
-          await setDoc(
-            doc(db, 'participants', uid, 'fcm_tokens', tokenValue),
-            { token: tokenValue, type: tok.type, updatedAt: now, platform: Platform.OS },
-            { merge: true }
-          );
-        }
+        await registerCurrentFcmToken(uid);
       } catch (e) {
         console.log('[Push] refresh token on foreground failed:', e?.message || String(e));
       }
@@ -112,12 +190,14 @@ export function startFcmTokenRefreshListener(uid) {
 }
 
 export function stopFcmTokenRefreshListener() {
-  appStateSub?.remove?.();
+  try { appStateSub?.remove?.(); } catch {}
   appStateSub = undefined;
 }
 
-// === Désinscrire (on ne peut pas “révoquer” un Expo push token côté client) ===
-// On nettoie simplement Firestore (retire la clé de la map).
+/**
+ * Désinscrire: on supprime simplement la clé côté Firestore et le cache local.
+ * (On ne “révoque” pas un Expo token côté client.)
+ */
 export async function unregisterDeviceToken(uid) {
   try {
     const last = await AsyncStorage.getItem(AS_KEY);

@@ -1,11 +1,59 @@
 // app/(auth)/auth-choice.js
 import React from "react";
-import { View, Text, TouchableOpacity, Alert, SafeAreaView } from "react-native";
+import { View, Text, TouchableOpacity, SafeAreaView } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
 export default function AuthChoiceScreen() {
   const router = useRouter();
+
+  const PrimaryBtn = ({ onPress, icon, label, testID }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        backgroundColor: "#111827",
+        padding: 14,
+        borderRadius: 12,
+      }}
+    >
+      {icon}
+      <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const OutlineBtn = ({ onPress, icon, label, testID }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#111827",
+        backgroundColor: "#fff",
+      }}
+    >
+      {icon}
+      <Text style={{ fontWeight: "700", fontSize: 16, color: "#111827" }}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const Divider = ({ text = "ou" }) => (
+    <View style={{ alignItems: "center", marginVertical: 6 }}>
+      <Text style={{ color: "#9CA3AF", fontWeight: "600" }}>{text}</Text>
+    </View>
+  );
 
   return (
     <>
@@ -36,108 +84,41 @@ export default function AuthChoiceScreen() {
             </Text>
           </View>
 
-          {/* Bouton: SMS (OTP) */}
-          <TouchableOpacity
+          {/* ——— Connexion ——— */}
+          <PrimaryBtn
             onPress={() => router.push("/(auth)/phone-login")}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              backgroundColor: "#111827",
-              padding: 14,
-              borderRadius: 12,
-            }}
-          >
-            <Ionicons name="chatbox-ellipses-outline" size={20} color="#fff" />
-            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-              Continuer avec SMS
-            </Text>
-          </TouchableOpacity>
+            label="Continuer avec SMS"
+            testID="btn-continue-sms"
+            icon={<Ionicons name="chatbox-ellipses-outline" size={20} color="#fff" />}
+          />
 
-          {/* Bouton: Email (écran existant) */}
-          <TouchableOpacity
-            onPress={() => router.push("/(auth)/sign-in")}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: 14,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "#111827",
-              backgroundColor: "#fff",
-            }}
-          >
-            <Ionicons name="mail-outline" size={20} color="#111827" />
-            <Text style={{ fontWeight: "700", fontSize: 16, color: "#111827" }}>
-              Continuer avec Email
-            </Text>
-          </TouchableOpacity>
+          <OutlineBtn
+            onPress={() => router.push("/(auth)/email-login")}
+            label="Continuer avec Email"
+            testID="btn-continue-email"
+            icon={<Ionicons name="mail-outline" size={20} color="#111827" />}
+          />
 
-           {/* Bouton: Créer un compte */}
-         <TouchableOpacity
-           onPress={() => router.push("/(auth)/sign-up")}
-           style={{
-             flexDirection: "row",
-             alignItems: "center",
-             gap: 12,
-             padding: 14,
-             borderRadius: 12,
-             backgroundColor: "#111827",
-           }}
-         >
-           <MaterialCommunityIcons name="account-plus-outline" size={20} color="#fff" />
-           <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-             Créer un compte
-           </Text>
-         </TouchableOpacity>
+          <Divider text="ou" />
 
-          {/* Lignes de séparation */}
-          <View style={{ alignItems: "center", marginVertical: 6 }}>
-            <Text style={{ color: "#9CA3AF", fontWeight: "600" }}>ou</Text>
-          </View>
+          {/* ——— Création de compte ——— */}
+          <PrimaryBtn
+            onPress={() => router.push("/(auth)/phone-signup")}
+            label="Créer un compte SMS"
+            testID="btn-signup-sms"
+            icon={<Ionicons name="keypad-outline" size={20} color="#fff" />}
+          />
 
-          {/* Bouton: Apple (placeholder) */}
-          <TouchableOpacity
-            onPress={() => Alert.alert("Bientôt disponible", "Connexion Apple à venir.")}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: 14,
-              borderRadius: 12,
-              backgroundColor: "#000",
-            }}
-          >
-            <Ionicons name="logo-apple" size={22} color="#fff" />
-            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-              Continuer avec Apple
-            </Text>
-          </TouchableOpacity>
-
-          {/* Bouton: Google (placeholder) */}
-          <TouchableOpacity
-            onPress={() => Alert.alert("Bientôt disponible", "Connexion Google à venir.")}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: 14,
-              borderRadius: 12,
-              backgroundColor: "#fff",
-              borderWidth: 1,
-              borderColor: "#e5e7eb",
-            }}
-          >
-            <MaterialCommunityIcons name="google" size={20} color="#EA4335" />
-            <Text style={{ fontWeight: "700", fontSize: 16, color: "#111827" }}>
-              Continuer avec Google
-            </Text>
-          </TouchableOpacity>
+          <OutlineBtn
+            onPress={() => router.push("/(auth)/email-signup")}
+            label="Créer un compte Email"
+            testID="btn-signup-email"
+            icon={<MaterialCommunityIcons name="account-plus-outline" size={20} color="#111827" />}
+          />
 
           {/* Footer petit rappel */}
           <View style={{ alignItems: "center", marginTop: 8 }}>
-            <Text style={{ color: "#6B7280", fontSize: 12 }}>
+            <Text style={{ color: "#6B7280", fontSize: 12, textAlign: "center" }}>
               En continuant, tu acceptes nos conditions d’utilisation.
             </Text>
           </View>

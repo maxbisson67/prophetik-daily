@@ -4,7 +4,9 @@ import { View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-na
 import { Stack, useRouter } from 'expo-router';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@src/lib/firebase';
-import { useAuth } from '@src/auth/AuthProvider';
+// Safe auth
+import { useAuth } from '@src/auth/SafeAuthProvider';
+
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
