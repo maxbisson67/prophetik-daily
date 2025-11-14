@@ -3,12 +3,11 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, setDoc, deleteField, serverTimestamp } from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
+import firestore from '@react-native-firebase/firestore';
 
 const AS_KEY = 'prophetik:lastPushToken';
 
-// ⚠️ Laisse un seul endroit définir ce handler (ici c'est OK si tu n'en as pas ailleurs)
+// ⚠️ Un seul handler global
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -17,7 +16,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// === Listeners d’affichage (équivalent onMessage / onNotificationOpened) ===
+// === Listeners d’affichage ===
 export function attachNotificationListeners() {
   const sub1 = Notifications.addNotificationReceivedListener((n) => {
     console.log('Notification reçue (foreground):', n);
@@ -33,12 +32,7 @@ export function attachNotificationListeners() {
 
 /* ──────────────────────────────────────────────────────────────────────────
    Anti-spam Expo Push + robustesse
-   - single-flight (une seule promesse en cours)
-   - retry exponentiel + jitter sur 503
-   - cooldown 15 min après un succès
-   - cooloff 20 s après un échec
    ────────────────────────────────────────────────────────────────────────── */
-
 let _inflight = null;
 let _lastOkToken = null;
 let _lastAttemptAt = 0;
@@ -102,7 +96,7 @@ async function getExpoTokenWithRetry(maxRetries = 4) {
 
 /**
  * Récupère et enregistre le token courant pour un utilisateur (participants/{uid})
- * – respecte single-flight + cooldowns.
+ * – respecte single-flight + cooldowns (RNFB Firestore).
  */
 export async function registerCurrentFcmToken(uid, { force = false } = {}) {
   if (!uid) return null;
@@ -140,19 +134,27 @@ export async function registerCurrentFcmToken(uid, { force = false } = {}) {
       if (prev !== tokenValue) {
         await AsyncStorage.setItem(AS_KEY, tokenValue);
 
-        // Écritures Firestore seulement si changement
-        const pRef = doc(db, 'participants', uid);
-        const nowTs = serverTimestamp();
+        // === RNFB Firestore writes uniquement si changement ===
+        const pRef = firestore().doc(`participants/${uid}`);
+        const nowTs = firestore.FieldValue.serverTimestamp();
 
-        await setDoc(
-          pRef,
-          { fcmTokens: { [tokenValue]: true }, updatedAt: nowTs, platform: Platform.OS },
+        await pRef.set(
+          {
+            fcmTokens: { [tokenValue]: true },
+            updatedAt: nowTs,
+            platform: Platform.OS,
+          },
           { merge: true }
         );
 
-        await setDoc(
-          doc(db, 'participants', uid, 'fcm_tokens', tokenValue),
-          { token: tokenValue, type: 'expo', updatedAt: nowTs, platform: Platform.OS },
+        const tokenRef = firestore().doc(`participants/${uid}/fcm_tokens/${tokenValue}`);
+        await tokenRef.set(
+          {
+            token: tokenValue,
+            type: 'expo',
+            updatedAt: nowTs,
+            platform: Platform.OS,
+          },
           { merge: true }
         );
       }
@@ -170,20 +172,18 @@ export async function registerCurrentFcmToken(uid, { force = false } = {}) {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Listener AppState → on tente un refresh au retour actif,
-   mais il est naturellement bridé par single-flight + cooldowns.
+   Listener AppState → tente un refresh au retour actif
    ────────────────────────────────────────────────────────────────────────── */
 let appStateSub;
 export function startFcmTokenRefreshListener(uid) {
   stopFcmTokenRefreshListener();
   appStateSub = AppState.addEventListener('change', async (next) => {
     if (next === 'active' && uid) {
-      // Petite respiration pour laisser l’UI se stabiliser
       await sleep(400);
       try {
         await registerCurrentFcmToken(uid);
       } catch (e) {
-        console.log('[Push] refresh token on foreground failed:', e?.message || String(e));
+        console.log('[Push] refresh token on foreground failed:', e?.message || e);
       }
     }
   });
@@ -195,17 +195,19 @@ export function stopFcmTokenRefreshListener() {
 }
 
 /**
- * Désinscrire: on supprime simplement la clé côté Firestore et le cache local.
- * (On ne “révoque” pas un Expo token côté client.)
+ * Désinscrire: supprime la clé côté Firestore et le cache local.
  */
 export async function unregisterDeviceToken(uid) {
   try {
     const last = await AsyncStorage.getItem(AS_KEY);
     if (uid && last) {
-      const pRef = doc(db, 'participants', uid);
-      await setDoc(
-        pRef,
-        { [`fcmTokens.${last}`]: deleteField(), updatedAt: serverTimestamp() },
+      const pRef = firestore().doc(`participants/${uid}`);
+      await pRef.set(
+        {
+          // suppression d’un champ imbriqué: utiliser la notation dot + FieldValue.delete()
+          [`fcmTokens.${last}`]: firestore.FieldValue.delete(),
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+        },
         { merge: true }
       );
     }

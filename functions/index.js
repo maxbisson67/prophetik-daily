@@ -34,6 +34,8 @@ export { rebuildLeaderboardForGroup, rebuildAllLeaderboards } from "./leaderboar
 
 import { reconcileLive, reconcileLiveManual  } from "./reconcileLive.js";
 
+export { precheckPhoneLogin } from "./precheckPhoneLogin.js";
+
 // ⚠️ Cloud Scheduler minimum = 1 minute.
 // Si tu veux “toutes les 30s”, il faut un ping externe ou une Task Queue.
 export const scheduledReconcileLive = onSchedule(

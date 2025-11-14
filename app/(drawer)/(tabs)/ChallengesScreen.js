@@ -2,11 +2,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, SectionList, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
-//import { useAuth } from '@src/auth/AuthProvider';
-// Safe auth
+
+// ✅ Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
+
+// ✅ RNFirebase Firestore
+import firestore from '@react-native-firebase/firestore';
 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -55,8 +56,8 @@ export default function ChallengesScreen() {
     byOwnerCreated: null,
     byOwnerOwnerId: null,
   });
-  const defisUnsubsRef = useRef(new Map());     // Map<gid, unsub>
-  const groupsUnsubsRef = useRef(new Map());    // Map<gid, unsub>
+  const defisUnsubsRef = useRef(new Map());  // Map<gid, unsub>
+  const groupsUnsubsRef = useRef(new Map()); // Map<gid, unsub>
 
   // 1) Mes groupes (membre + owner)
   useEffect(() => {
@@ -70,10 +71,10 @@ export default function ChallengesScreen() {
     Object.values(subs.current).forEach(un => { try { un?.(); } catch {} });
     subs.current = { byUid: null, byPid: null, byOwnerCreated: null, byOwnerOwnerId: null };
 
-    const qByUid = query(collection(db, 'group_memberships'), where('uid', '==', user.uid));
-    const qByPid = query(collection(db, 'group_memberships'), where('participantId', '==', user.uid));
-    const qOwnerCreated = query(collection(db, 'groups'), where('createdBy', '==', user.uid));
-    const qOwnerOwnerId = query(collection(db, 'groups'), where('ownerId', '==', user.uid));
+    const qByUid          = firestore().collection('group_memberships').where('uid', '==', user.uid);
+    const qByPid          = firestore().collection('group_memberships').where('participantId', '==', user.uid);
+    const qOwnerCreated   = firestore().collection('groups').where('createdBy', '==', user.uid);
+    const qOwnerOwnerId   = firestore().collection('groups').where('ownerId', '==', user.uid);
 
     let rowsByUid = [];
     let rowsByPid = [];
@@ -84,11 +85,7 @@ export default function ChallengesScreen() {
       // memberships actifs (tolérant)
       const memberships = [...rowsByUid, ...rowsByPid].filter((m) => {
         const st = String(m?.status || '').toLowerCase();
-        if (st) {
-          // Accepte les nouveaux statuts
-          return ['open', 'active', 'approved'].includes(st);
-        }
-        // Pas de champ status → on tolère tant que 'active' n'est pas explicitement false
+        if (st) return ['open', 'active', 'approved'].includes(st);
         return m?.active !== false;
       });
       const gidsFromMemberships = memberships.map(m => m.groupId).filter(Boolean);
@@ -98,23 +95,19 @@ export default function ChallengesScreen() {
       setLoading(false);
     };
 
-    subs.current.byUid = onSnapshot(
-      qByUid,
+    subs.current.byUid = qByUid.onSnapshot(
       (snap) => { rowsByUid = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       (e) => { setError(e); setLoading(false); }
     );
-    subs.current.byPid = onSnapshot(
-      qByPid,
+    subs.current.byPid = qByPid.onSnapshot(
       (snap) => { rowsByPid = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       (e) => { setError(e); setLoading(false); }
     );
-    subs.current.byOwnerCreated = onSnapshot(
-      qOwnerCreated,
+    subs.current.byOwnerCreated = qOwnerCreated.onSnapshot(
       (snap) => { rowsOwnerCreated = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       (e) => { setError(e); setLoading(false); }
     );
-    subs.current.byOwnerOwnerId = onSnapshot(
-      qOwnerOwnerId,
+    subs.current.byOwnerOwnerId = qOwnerOwnerId.onSnapshot(
       (snap) => { rowsOwnerOwnerId = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       (e) => { setError(e); setLoading(false); }
     );
@@ -135,9 +128,8 @@ export default function ChallengesScreen() {
     for (const gid of groupIds) {
       if (defisUnsubsRef.current.has(gid)) continue;
 
-      const qAll = query(collection(db, 'defis'), where('groupId', '==', gid));
-      const un = onSnapshot(
-        qAll,
+      const qAll = firestore().collection('defis').where('groupId', '==', gid);
+      const un = qAll.onSnapshot(
         (snap) => {
           const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           // partition
@@ -181,21 +173,23 @@ export default function ChallengesScreen() {
   // 3) Charger noms des groupes (pour toutes les cartes)
   useEffect(() => {
     const neededIds = Array.from(new Set([...activeDefis, ...pastDefis].map(d => d.groupId).filter(Boolean)));
+
     for (const [gid, un] of groupsUnsubsRef.current) {
       if (!neededIds.includes(gid)) { try { un(); } catch {}; groupsUnsubsRef.current.delete(gid); }
     }
+
     for (const gid of neededIds) {
       if (groupsUnsubsRef.current.has(gid)) continue;
-      const ref = doc(db, 'groups', gid);
-      const un = onSnapshot(ref, snap => {
-        if (snap.exists()) setGroupsMap(prev => ({ ...prev, [gid]: { id: gid, ...snap.data() } }));
+      const ref = firestore().collection('groups').doc(gid);
+      const un = ref.onSnapshot(snap => {
+        if (snap.exists) setGroupsMap(prev => ({ ...prev, [gid]: { id: gid, ...snap.data() } }));
       });
       groupsUnsubsRef.current.set(gid, un);
     }
   }, [activeDefis, pastDefis]);
 
-  // 3b) Charger les infos gagnants (nom + avatar) depuis participants/{uid}
-   useEffect(() => {
+  // 3b) Charger les infos gagnants (nom + avatar) depuis profiles_public/{uid}
+  useEffect(() => {
     const allDefis = [...activeDefis, ...pastDefis];
     const neededUids = Array.from(new Set(
       allDefis.flatMap(d => Array.isArray(d.winners) ? d.winners : []).filter(Boolean)
@@ -206,12 +200,12 @@ export default function ChallengesScreen() {
       if (!neededUids.includes(uid)) { try { un(); } catch {} ; winnerUnsubsRef.current.delete(uid); }
     }
 
-    // ajoute les nouveaux listeners sur profiles_public
+    // ajoute les nouveaux listeners
     for (const uid of neededUids) {
       if (winnerUnsubsRef.current.has(uid)) continue;
-      const ref = doc(db, 'profiles_public', uid);
-      const un = onSnapshot(ref, snap => {
-        if (snap.exists()) {
+      const ref = firestore().collection('profiles_public').doc(uid);
+      const un = ref.onSnapshot(snap => {
+        if (snap.exists) {
           const v = snap.data() || {};
           const name = v.displayName || v.name || uid;
           const photoURL = v.avatarUrl || v.photoURL || null;
@@ -302,44 +296,43 @@ export default function ChallengesScreen() {
           elevation: 3, borderColor:'#eee'
         }}
       >
-    
-     {/* En-tête avec avatar groupe */}
-      <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
-        <View style={{ flexDirection:'row', alignItems:'center', flex:1, minWidth:0 }}>
-          <Image
-            source={groupsMap[item.groupId]?.avatarUrl
-              ? { uri: groupsMap[item.groupId].avatarUrl }
-              : GROUP_PLACEHOLDER}
-            style={{
-              width: 28, height: 28, borderRadius: 14,
-              backgroundColor:'#f3f4f6', borderWidth:1, borderColor:'#e5e7eb', marginRight:8
-            }}
-          />
-          <Text
-            style={{ fontWeight:'700', fontSize:16, flexShrink:1 }}
-            numberOfLines={1}
-          >
-            {(groupsMap[item.groupId]?.name || item.groupId)} – {title}
-          </Text>
-        </View>
+        {/* En-tête avec avatar groupe */}
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+          <View style={{ flexDirection:'row', alignItems:'center', flex:1, minWidth:0 }}>
+            <Image
+              source={groupsMap[item.groupId]?.avatarUrl
+                ? { uri: groupsMap[item.groupId].avatarUrl }
+                : GROUP_PLACEHOLDER}
+              style={{
+                width: 28, height: 28, borderRadius: 14,
+                backgroundColor:'#f3f4f6', borderWidth:1, borderColor:'#e5e7eb', marginRight:8
+              }}
+            />
+            <Text
+              style={{ fontWeight:'700', fontSize:16, flexShrink:1 }}
+              numberOfLines={1}
+            >
+              {(groupsMap[item.groupId]?.name || item.groupId)} – {title}
+            </Text>
+          </View>
 
-        {statusKey === 'open' || statusKey === 'live' ? (
-          <View style={{ flexDirection:'row', alignItems:'center' }}>
-            <Ionicons name="flame" size={18} color="#16a34a" />
-            <Text style={{ marginLeft:6, color:'#16a34a', fontWeight:'700' }}>Actif</Text>
-          </View>
-        ) : statusKey === 'awaiting_result' ? (
-          <View style={{ flexDirection:'row', alignItems:'center' }}>
-            <Ionicons name="timer-outline" size={18} color="#ea580c" />
-            <Text style={{ marginLeft:6, color:'#ea580c', fontWeight:'700' }}>À valider</Text>
-          </View>
-        ) : (
-          <View style={{ flexDirection:'row', alignItems:'center' }}>
-            <Ionicons name="checkmark-circle" size={18} color="#6b7280" />
-            <Text style={{ marginLeft:6, color:'#6b7280', fontWeight:'700' }}>Terminé</Text>
-          </View>
-        )}
-      </View>
+          {statusKey === 'open' || statusKey === 'live' ? (
+            <View style={{ flexDirection:'row', alignItems:'center' }}>
+              <Ionicons name="flame" size={18} color="#16a34a" />
+              <Text style={{ marginLeft:6, color:'#16a34a', fontWeight:'700' }}>Actif</Text>
+            </View>
+          ) : statusKey === 'awaiting_result' ? (
+            <View style={{ flexDirection:'row', alignItems:'center' }}>
+              <Ionicons name="timer-outline" size={18} color="#ea580c" />
+              <Text style={{ marginLeft:6, color:'#ea580c', fontWeight:'700' }}>À valider</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection:'row', alignItems:'center' }}>
+              <Ionicons name="checkmark-circle" size={18} color="#6b7280" />
+              <Text style={{ marginLeft:6, color:'#6b7280', fontWeight:'700' }}>Terminé</Text>
+            </View>
+          )}
+        </View>
 
         {/* Infos */}
         <View style={{ marginTop:6, gap:2 }}>
@@ -453,7 +446,7 @@ export default function ChallengesScreen() {
       sections={sections}
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ padding:16 }}
-      stickySectionHeadersEnabled={false} 
+      stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
         <Text style={{ fontSize:22, fontWeight:'700', marginBottom:8, marginTop: section.key === 'past' ? 10 : 0 }}>
           {section.title}

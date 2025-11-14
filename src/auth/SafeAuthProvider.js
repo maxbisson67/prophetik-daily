@@ -3,7 +3,9 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import RNFBAuth from "@react-native-firebase/auth";
 import { webAuth } from "@src/lib/firebase";
 import { signOut as webSignOut } from "firebase/auth";
-import { bridgeWebAuthOnce } from "./bridgeWebAuth";
+//import { bridgeWebAuthOnce } from "./bridgeWebAuth";
+
+
 
 const AuthCtx = createContext(null);
 
@@ -27,7 +29,7 @@ export function AuthProvider({ children }) {
   const settledRef = useRef(false);
   const safetyTimerRef = useRef(null);
 
-  // Subscribe to native auth
+  // 1) S'abonner à l'état d'auth natif (source de vérité)
   useEffect(() => {
     safetyTimerRef.current = setTimeout(() => {
       if (!settledRef.current) {
@@ -53,33 +55,31 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Bridge native -> web after any login / uid change
+  // 2) Bridge native -> web après chaque login / changement d’uid
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
       try {
-        // Reset flag; we’ll re-enable it once bridged
         setWebBridged(false);
 
-        // If native is out, keep web out too
+        // Si aucun user natif → on s'assure que le web SDK est déconnecté
         if (!user?.uid) {
           try { await webSignOut(webAuth); } catch {}
           if (!cancelled) setWebBridged(false);
           return;
         }
 
-        const ok = await bridgeWebAuthOnce();
-        if (!cancelled) setWebBridged(!!ok);
+        // Génère un custom token côté serveur (cloud function) ou
+        // récupère l'ID token RNFB + signInWithCustomToken côté web (bridgeWebAuthOnce)
+        //const ok = await bridgeWebAuthOnce();
+        //if (!cancelled) setWebBridged(!!ok);
       } catch (e) {
-        console.log("[Bridge] failed:", e?.message || String(e));
-        if (!cancelled) setWebBridged(false);
+        console.log(e?.message || String(e));
       }
     }
 
-    // Only start bridging once native auth is known
     if (authReady) run();
-
     return () => { cancelled = true; };
   }, [authReady, user?.uid]);
 
@@ -89,10 +89,12 @@ export function AuthProvider({ children }) {
     return {
       user,
       authReady,
-      webBridged,            // 👈 expose this
+      webBridged,      // utile pour bloquer des listeners Firestore tant que le bridge n'est pas prêt
       initializing,
       signOut: async () => {
-        try { await RNFBAuth().signOut(); } catch (e) { console.log("[Auth] signOut native:", e?.message || String(e)); }
+        try { await RNFBAuth().signOut(); } catch (e) {
+          console.log("[Auth] signOut native:", e?.message || String(e));
+        }
         try { await webSignOut(webAuth); } catch {}
         setWebBridged(false);
       },

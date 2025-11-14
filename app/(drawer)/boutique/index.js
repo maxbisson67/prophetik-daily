@@ -13,10 +13,9 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-// Firebase
-import { storage, db } from '@src/lib/firebase';
-import { getDownloadURL, ref as storageRef } from 'firebase/storage';
-import { doc, onSnapshot } from 'firebase/firestore';
+// RNFirebase
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 
 // Hooks & thèmes
 import { useAuth } from '@src/auth/SafeAuthProvider';
@@ -30,19 +29,91 @@ const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
    Helpers
 ========================================================= */
 
+// util dédup
+function dedupeById(arr) {
+  const m = new Map();
+  for (const g of (arr || [])) m.set(String(g.id), g);
+  return Array.from(m.values());
+}
+
+// hook: groupes dont je suis owner (couvre plusieurs schémas)
+function useOwnedGroups(uid) {
+  const [owned, setOwned] = React.useState([]);
+  const [loading, setLoading] = React.useState(!!uid);
+
+  React.useEffect(() => {
+    if (!uid) { setOwned([]); setLoading(false); return; }
+
+    const results = { ownerId: [], createdBy: [], ownersArr: [] };
+    const unsubs = [];
+
+    const attach = (q, key) => {
+      const un = q.onSnapshot(
+        (snap) => {
+          results[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setOwned(dedupeById([
+            ...results.ownerId,
+            ...results.createdBy,
+            ...results.ownersArr,
+          ]));
+          setLoading(false);
+        },
+        () => setLoading(false)
+      );
+      unsubs.push(un);
+    };
+
+    try {
+      attach(
+        firestore().collection('groups').where('ownerId', '==', String(uid)),
+        'ownerId'
+      );
+    } catch {}
+
+    try {
+      attach(
+        firestore().collection('groups').where('createdBy', '==', String(uid)),
+        'createdBy'
+      );
+    } catch {}
+
+    // owners: array-contains uid
+    try {
+      attach(
+        firestore().collection('groups').where('owners', 'array-contains', String(uid)),
+        'ownersArr'
+      );
+    } catch {}
+
+    return () => { unsubs.forEach(u => { try { u(); } catch {} }); };
+  }, [uid]);
+
+  return { owned, loading };
+}
+
+// Résout une URL potentielle provenant de Storage (gs://, chemin brut) ou retourne l’URL http(s) telle quelle.
 async function resolveStorageUrlMaybe(raw) {
   try {
     if (!raw || typeof raw !== 'string') return null;
+
+    // URL http(s) → telle quelle
     if (/^https?:\/\//i.test(raw)) return raw;
-    if (raw.startsWith('gs://')) {
-      const ref = storageRef(storage, raw);
-      return await getDownloadURL(ref);
-    }
-    if (!raw.includes('://') && !raw.startsWith('data:')) {
-      const ref = storageRef(storage, raw);
-      return await getDownloadURL(ref);
-    }
+
+    // Data URI
     if (raw.startsWith('data:')) return raw;
+
+    // gs://bucket/path → via refFromURL
+    if (raw.startsWith('gs://')) {
+      const ref = storage().refFromURL(raw);
+      return await ref.getDownloadURL();
+    }
+
+    // Chemin relatif dans Storage (ex: "avatars/user123.png")
+    if (!raw.includes('://')) {
+      const ref = storage().ref(raw);
+      return await ref.getDownloadURL();
+    }
+
     return null;
   } catch (e) {
     console.log('[Boutique] resolveStorageUrlMaybe error:', e?.message || e);
@@ -63,24 +134,30 @@ function useParticipantAvatarLive(uid) {
 
   useEffect(() => {
     if (!uid) { setParticipant(null); return; }
-    const ref = doc(db, 'participants', String(uid));
-    const unsub = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) {
-        setParticipant({ displayName: '', photoURL: null, updatedAt: null, avatarPurchasedAt: null });
-        return;
-      }
-      const d = snap.data() || {};
-      setParticipant({
-        displayName: d.displayName || '',
-        photoURL: d.photoURL || d.avatarUrl || d.photoUrl || d.avatar || null,
-        updatedAt: d.updatedAt || null,
-        avatarPurchasedAt: d.avatarPurchasedAt || null,
-      });
-    }, (e) => {
-      console.log('[Boutique] useParticipantAvatarLive error:', e?.message || e);
-      setParticipant({ displayName: '', photoURL: null, updatedAt: null, avatarPurchasedAt: null });
-    });
-    return () => { try { unsub(); } catch {} };
+
+    const unsub = firestore()
+      .doc(`participants/${String(uid)}`)
+      .onSnapshot(
+        (snap) => {
+          if (!snap.exists) {
+            setParticipant({ displayName: '', photoURL: null, updatedAt: null, avatarPurchasedAt: null });
+            return;
+          }
+          const d = snap.data() || {};
+          setParticipant({
+            displayName: d.displayName || '',
+            photoURL: d.photoURL || d.avatarUrl || d.photoUrl || d.avatar || null,
+            updatedAt: d.updatedAt || null,
+            avatarPurchasedAt: d.avatarPurchasedAt || null,
+          });
+        },
+        (e) => {
+          console.log('[Boutique] useParticipantAvatarLive error:', e?.message || e);
+          setParticipant({ displayName: '', photoURL: null, updatedAt: null, avatarPurchasedAt: null });
+        }
+      );
+
+  return () => { try { unsub(); } catch {} };
   }, [uid]);
 
   return participant;
@@ -94,30 +171,35 @@ export default function BoutiqueScreen() {
   const styles = makeStyles(colors);
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { owned: ownedGroups } = useOwnedGroups(user?.uid);
   const { groups, loading, error } = useGroups(user?.uid);
 
-  // 🔁 Groupes dont je suis propriétaire
-  const groupsOwned = useMemo(
-    () => groups.filter(g => g.role === 'owner' || g.ownerId === user?.uid),
-    [groups, user?.uid]
-  );
+  // Fusion: tout groupe dont je suis owner, qu'il vienne de useGroups ou du hook owned
+  const groupsOwned = React.useMemo(() => {
+    const ownedFromMembership = (groups || []).filter(g => (
+      String(g.role || '').toLowerCase() === 'owner' ||
+      g.ownerId === user?.uid ||
+      g.createdBy === user?.uid ||
+      (Array.isArray(g.owners) && g.owners.includes(user?.uid))
+    ));
+    return dedupeById([...(ownedGroups || []), ...ownedFromMembership]);
+  }, [groups, ownedGroups, user?.uid]);
+
 
   // 👂 Participant live (réagit aux changements d’avatar)
   const participantDoc = useParticipantAvatarLive(user?.uid);
 
   // Clé de version (sert de cache-buster)
   const versionKey = useMemo(() => {
-    // on prend d’abord la date la plus pertinente du participant
     const pUpd = participantDoc?.updatedAt?.seconds || participantDoc?.updatedAt || '';
     const pBuy = participantDoc?.avatarPurchasedAt?.seconds || participantDoc?.avatarPurchasedAt || '';
-    // on ajoute un peu de profil s’il expose une date
     const profUpd = profile?.updatedAt?.seconds || profile?.updatedAt || '';
     return [pUpd, pBuy, profUpd].filter(Boolean).join('|') || (user?.uid ?? 'v1');
   }, [participantDoc?.updatedAt, participantDoc?.avatarPurchasedAt, profile?.updatedAt, user?.uid]);
 
   // Candidats d’avatar (ordre de préférence)
   const avatarCandidates = useMemo(() => {
-    const c = [
+    return [
       participantDoc?.photoURL, // 👈 prioritaire: ce que la CF vient d’écrire
       profile?.photoURL,
       profile?.avatarUrl,
@@ -125,8 +207,6 @@ export default function BoutiqueScreen() {
       user?.photoURL,
       user?.photoUrl,
     ].filter(Boolean);
-    // console.log('[Boutique] avatar candidates:', c);
-    return c;
   }, [participantDoc?.photoURL, profile?.photoURL, profile?.avatarUrl, profile?.photoUrl, user?.photoURL, user?.photoUrl]);
 
   const [avatarUri, setAvatarUri] = useState(null);
@@ -150,7 +230,6 @@ export default function BoutiqueScreen() {
   // Re-resout quand l’écran reprend le focus (utile au retour de AvatarsScreen)
   useFocusEffect(
     React.useCallback(() => {
-      // force un petit refresh en réinitialisant d’abord l’URI
       setAvatarUri((prev) => (prev ? withCacheKey(prev.split('?')[0], versionKey) : prev));
     }, [versionKey])
   );
@@ -204,12 +283,12 @@ export default function BoutiqueScreen() {
           <Text style={styles.cardTitle}>Avatar de profil</Text>
 
           <View style={styles.rowCenter}>
-           <Image
-            key={avatarUri || 'placeholder'}           // 👈 force remount when URL changes
-            source={avatarUri ? { uri: avatarUri, cache: 'reload' } : AVATAR_PLACEHOLDER} // 👈 try to reload
-            onError={() => setAvatarUri(null)}
-            style={[styles.avatarXL, { backgroundColor: colors.border }]}
-          />
+            <Image
+              key={avatarUri || 'placeholder'}
+              source={avatarUri ? { uri: avatarUri, cache: 'reload' } : AVATAR_PLACEHOLDER}
+              onError={() => setAvatarUri(null)}
+              style={[styles.avatarXL, { backgroundColor: colors.border }]}
+            />
             <View style={{ flex: 1 }}>
               <Text style={styles.textSubtle}>
                 Personnalise ton identité dans l’app.
@@ -223,13 +302,7 @@ export default function BoutiqueScreen() {
                 <Text style={styles.btnPrimaryText}>Changer d’avatar (1 crédit)</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => router.push({ pathname: '/avatars/AvatarsScreen', params: { mode: 'shop' } })}
-                style={[styles.btnDark, styles.btnWithIcon, { marginTop: 8 }]}
-              >
-                <Ionicons name="cart" size={16} color="#fff" />
-                <Text style={styles.btnDarkText}>Acheter de nouveaux avatars (5 crédits)</Text>
-              </TouchableOpacity>
+              
             </View>
           </View>
         </View>
@@ -268,9 +341,9 @@ export default function BoutiqueScreen() {
                     </View>
                   </View>
 
-                  <TouchableOpacity
+                 <TouchableOpacity
                     onPress={() =>
-                      router.push({ pathname: `/groups/${item.id}`, params: { focus: 'avatar' } })
+                      router.push({ pathname: '/avatars/GroupAvatarsScreen', params: { groupId: item.id } })
                     }
                     style={[styles.btnDark, styles.btnWithIcon]}
                   >

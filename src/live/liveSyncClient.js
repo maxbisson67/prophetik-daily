@@ -1,9 +1,10 @@
 // src/live/liveSyncClient.js
-import { doc, getDoc, setDoc, serverTimestamp, writeBatch, collection, getDocs, query } from "firebase/firestore";
-import { db } from "@src/lib/firebase";
+import firestore from '@react-native-firebase/firestore';
+
+const db = firestore();
 
 /** --- API helpers --- **/
-const UA = { "User-Agent": "prophetik-daily/1.0" };
+const UA = { 'User-Agent': 'prophetik-daily/1.0' };
 async function jget(url, { retries = 2 } = {}) {
   let last;
   for (let i = 0; i <= retries; i++) {
@@ -12,26 +13,47 @@ async function jget(url, { retries = 2 } = {}) {
       const t = await r.text();
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return JSON.parse(t);
-    } catch (e) { last = e; await new Promise(res => setTimeout(res, 400 * (i+1))); }
+    } catch (e) {
+      last = e;
+      await new Promise((res) => setTimeout(res, 400 * (i + 1)));
+    }
   }
-  throw last || new Error("fetch failed");
+  throw last || new Error('fetch failed');
 }
 
+/** --- NHL fetchers --- **/
+export async function fetchGameIds(ymd) {
+  const data = await jget(`https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`);
+  const day = Array.isArray(data?.gameWeek) ? data.gameWeek.find((d) => d?.date === ymd) : null;
+  const games = day ? day.games || [] : Array.isArray(data?.games) ? data.games : [];
+  return games.map((g) => g?.id || g?.gamePk).filter(Boolean);
+}
+
+export async function fetchPbp(gameId) {
+  return jget(`https://api-web.nhle.com/v1/gamecenter/${encodeURIComponent(gameId)}/play-by-play`);
+}
+
+/** --- tallies (consolidée, sans doublon) --- **/
 export function computeTalliesFromPbpList(pbps) {
-  const goals = new Map();   // playerId -> n
+  const goals = new Map(); // playerId -> n
   const a1 = new Map();
   const a2 = new Map();
-  const feed = [];           // [{ scorerId, assists:[a1,a2], teamId, timeInPeriod, period, ts }]
+  const feed = []; // [{ scorerId, assists:[a1,a2], teamId, timeInPeriod, period, ts }]
 
-  const inc = (m, pid) => { if (!pid) return; m.set(pid, (m.get(pid) || 0) + 1); };
+  const inc = (m, pid) => {
+    if (!pid) return;
+    m.set(pid, (m.get(pid) || 0) + 1);
+  };
 
   for (const pbp of pbps) {
-    const plays = Array.isArray(pbp?.plays) ? pbp.plays
-                : Array.isArray(pbp?.allPlays) ? pbp.allPlays
-                : [];
+    const plays = Array.isArray(pbp?.plays)
+      ? pbp.plays
+      : Array.isArray(pbp?.allPlays)
+      ? pbp.allPlays
+      : [];
     for (const ev of plays) {
-      const key = String(ev?.typeDescKey || ev?.typeCode || "").toLowerCase();
-      if (!key.includes("goal")) continue;
+      const key = String(ev?.typeDescKey || ev?.typeCode || '').toLowerCase();
+      if (!key.includes('goal')) continue;
 
       const d = ev?.details || {};
       const scorerId = d.scoringPlayerId || null;
@@ -46,111 +68,106 @@ export function computeTalliesFromPbpList(pbps) {
         id: ev?.eventId || undefined,
         scorerId,
         assists: [a1Id, a2Id].filter(Boolean),
-        teamId: d.eventOwnerTeamId || null,               // on met l’ID; l’UI déduira l’abbr si besoin
+        teamId: d.eventOwnerTeamId || null,
         timeInPeriod: ev?.timeInPeriod || d?.timeInPeriod || null,
         period: ev?.periodDescriptor?.number || null,
-        ts: (ev?.epochMs || ev?.timeUTC) ? Number(new Date(ev?.epochMs || ev?.timeUTC)) : Date.now(),
+        ts:
+          (ev?.epochMs || ev?.timeUTC)
+            ? Number(new Date(ev?.epochMs || ev?.timeUTC))
+            : Date.now(),
       });
     }
   }
 
-  // to plain objects
-  const toObj = (m) => Object.fromEntries(Array.from(m.entries()).map(([k,v]) => [String(k), v]));
+  const toObj = (m) =>
+    Object.fromEntries(Array.from(m.entries()).map(([k, v]) => [String(k), v]));
+
   return {
     playerGoals: toObj(goals),
     playerA1: toObj(a1),
     playerA2: toObj(a2),
-    goalsFeed: feed.sort((a,b) => (a.ts||0) - (b.ts||0)),
+    goalsFeed: feed.sort((a, b) => (a.ts || 0) - (b.ts || 0)),
   };
 }
 
-export async function fetchGameIds(ymd) {
-  const data = await jget(`https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`);
-  const day = Array.isArray(data?.gameWeek) ? data.gameWeek.find(d => d?.date === ymd) : null;
-  const games = day ? (day.games || []) : (Array.isArray(data?.games) ? data.games : []);
-  // gamePk / id
-  return games.map(g => g?.id || g?.gamePk).filter(Boolean);
-}
-
-export async function fetchPbp(gameId) {
-  return jget(`https://api-web.nhle.com/v1/gamecenter/${encodeURIComponent(gameId)}/play-by-play`);
-}
-
-/** --- tallies --- **/
-export function computeTalliesFromPbpList(pbps) {
-  const goals = new Map();   // playerId -> n
-  const a1 = new Map();
-  const a2 = new Map();
-
-  const inc = (m, pid) => { if (!pid) return; m.set(pid, (m.get(pid) || 0) + 1); };
-
-  for (const pbp of pbps) {
-    const plays = Array.isArray(pbp?.plays) ? pbp.plays : Array.isArray(pbp?.allPlays) ? pbp.allPlays : [];
-    for (const ev of plays) {
-      const key = String(ev?.typeDescKey || ev?.typeCode || "").toLowerCase();
-      if (!key.includes("goal")) continue;
-
-      const d = ev?.details || {};
-      inc(goals, d.scoringPlayerId);
-      inc(a1, d.assist1PlayerId);
-      inc(a2, d.assist2PlayerId);
-    }
-  }
-
-  // to plain objects
-  const toObj = (m) => Object.fromEntries(Array.from(m.entries()).map(([k,v]) => [String(k), v]));
-  return { playerGoals: toObj(goals), playerA1: toObj(a1), playerA2: toObj(a2) };
-}
-
-/** --- lock --- **/
+/** --- lock (RNFB) --- **/
 export async function tryAcquireLock(defiId, uid) {
-  const ref = doc(db, "defis", String(defiId), "live", "lock");
-  const snap = await getDoc(ref);
+  const ref = db.collection('defis').doc(String(defiId)).collection('live').doc('lock');
+  const snap = await ref.get();
   const now = Date.now();
   const ttlMs = 90_000;
 
-  const data = snap.exists() ? snap.data() : {};
-  const last = data.heartbeatAt?.toMillis ? data.heartbeatAt.toMillis() : (typeof data.heartbeatAt === "number" ? data.heartbeatAt : 0);
+  const data = snap.exists ? snap.data() : {};
+  const last = data?.heartbeatAt?.toMillis
+    ? data.heartbeatAt.toMillis()
+    : typeof data?.heartbeatAt === 'number'
+    ? data.heartbeatAt
+    : 0;
   const valid = last && now - last < ttlMs;
 
-  if (!valid || data.ownerUid === uid) {
-    await setDoc(ref, { ownerUid: uid, heartbeatAt: serverTimestamp() }, { merge: true });
+  if (!valid || data?.ownerUid === uid) {
+    await ref.set(
+      { ownerUid: uid, heartbeatAt: firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
     return true;
   }
   return false;
 }
 
 export async function heartbeat(defiId, uid) {
-  const ref = doc(db, "defis", String(defiId), "live", "lock");
-  await setDoc(ref, { ownerUid: uid, heartbeatAt: serverTimestamp() }, { merge: true });
+  const ref = db.collection('defis').doc(String(defiId)).collection('live').doc('lock');
+  await ref.set(
+    { ownerUid: uid, heartbeatAt: firestore.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
 }
 
-/** --- write live stats & scores --- **/
+/** --- write live stats & scores (RNFB) --- **/
 export async function writeLive(defi, tallies) {
-  const liveRef = doc(db, "defis", String(defi.id), "live", "stats");
-  await setDoc(liveRef, { ...tallies, updatedAt: serverTimestamp() }, { merge: true });
+  const liveRef = db.collection('defis').doc(String(defi.id)).collection('live').doc('stats');
+  await liveRef.set(
+    { ...tallies, updatedAt: firestore.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
 }
 
+/** --- recompute participants (RNFB) --- **/
 export async function recomputeParticipants(defi, tallies) {
-  const { playerGoals={}, playerA1={}, playerA2={} } = tallies;
+  const { playerGoals = {}, playerA1 = {}, playerA2 = {} } = tallies;
   // barème simple
-  const P_GOAL = 1.0, P_A1 = 0.5, P_A2 = 0.5;
+  const P_GOAL = 1.0,
+    P_A1 = 0.5,
+    P_A2 = 0.5;
 
-  const partsQ = query(collection(db, "defis", String(defi.id), "participations"));
-  const partsSnap = await getDocs(partsQ);
-  const batch = writeBatch(db);
+  const partsSnap = await db
+    .collection('defis')
+    .doc(String(defi.id))
+    .collection('participations')
+    .get();
 
-  partsSnap.forEach(d => {
+  const batch = db.batch();
+
+  partsSnap.forEach((d) => {
     const v = d.data() || {};
     const picks = Array.isArray(v.picks) ? v.picks : [];
     let pts = 0;
+
     for (const p of picks) {
-      const pid = String(p.playerId);
+      const pid = String(
+        p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id ?? ''
+      ).trim();
+      if (!pid) continue;
       pts += (playerGoals[pid] || 0) * P_GOAL;
       pts += (playerA1[pid] || 0) * P_A1;
       pts += (playerA2[pid] || 0) * P_A2;
     }
-    batch.set(d.ref, { livePoints: pts, liveUpdatedAt: serverTimestamp() }, { merge: true });
+
+    batch.set(
+      d.ref,
+      { livePoints: pts, liveUpdatedAt: firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
   });
 
   await batch.commit();
@@ -159,20 +176,27 @@ export async function recomputeParticipants(defi, tallies) {
 /** --- master step (one tick) --- **/
 export async function runOneTick(defi, uid) {
   // 1) schedule → gameIds
-  const ymd = typeof defi.gameDate === "string" ? defi.gameDate : (defi.gameDate?.toDate?.() ? (
-    defi.gameDate.toDate().toISOString().slice(0,10)
-  ) : null);
-  if (!ymd) return { ok:false, reason:"no-date" };
+  const ymd =
+    typeof defi.gameDate === 'string'
+      ? defi.gameDate
+      : defi.gameDate?.toDate?.()
+      ? defi.gameDate.toDate().toISOString().slice(0, 10)
+      : null;
+  if (!ymd) return { ok: false, reason: 'no-date' };
 
   const gameIds = await fetchGameIds(ymd);
-  if (!gameIds.length) return { ok:false, reason:"no-games" };
+  if (!gameIds.length) return { ok: false, reason: 'no-games' };
 
   // 2) pbp list
   const pbps = [];
   for (const gid of gameIds) {
-    try { pbps.push(await fetchPbp(gid)); } catch { /* ignore per-game */ }
+    try {
+      pbps.push(await fetchPbp(gid));
+    } catch {
+      /* ignore per-game */
+    }
   }
-  if (!pbps.length) return { ok:false, reason:"no-pbp" };
+  if (!pbps.length) return { ok: false, reason: 'no-pbp' };
 
   // 3) tallies
   const tallies = computeTalliesFromPbpList(pbps);
@@ -181,5 +205,5 @@ export async function runOneTick(defi, uid) {
   await writeLive(defi, tallies);
   await recomputeParticipants(defi, tallies);
 
-  return { ok:true };
+  return { ok: true };
 }

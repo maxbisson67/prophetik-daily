@@ -30,11 +30,12 @@ export const purchaseGroupAvatar = onCall(async (req) => {
     if (!canManage) throw new HttpsError("permission-denied", "Tu ne peux pas gérer ce groupe.");
 
     const u = userSnap.data() || {};
-    const bal =
-      (typeof u?.credits === "number" && u.credits) ??
-      (typeof u?.credits?.balance === "number" && u.credits.balance) ??
-      (typeof u?.balance === "number" && u.balance) ??
-      0;
+    const balRaw =
+    (typeof u?.credits === "number" ? u.credits : undefined) ??
+    (typeof u?.credits?.balance === "number" ? u.credits.balance : undefined) ??
+    (typeof u?.balance === "number" ? u.balance : undefined);
+
+    const bal = Number.isFinite(balRaw) ? balRaw : 0;
     if (bal < p) throw new HttpsError("failed-precondition", "Crédits insuffisants.");
 
     const newBal = bal - p;

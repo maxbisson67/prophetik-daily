@@ -3,12 +3,12 @@ import React, { useMemo, useState, useCallback } from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, BackHandler } from "react-native";
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { doc, updateDoc } from "firebase/firestore";
 
-import { app, db } from "@src/lib/firebase";
+import firestore from "@react-native-firebase/firestore";
+import functions from "@react-native-firebase/functions";
+
 // Safe auth
-import { useAuth } from '@src/auth/SafeAuthProvider';
+import { useAuth } from "@src/auth/SafeAuthProvider";
 
 const CODE_LEN = 8;
 const ALPHABET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"; // sans O ni 0
@@ -51,24 +51,27 @@ export default function JoinGroupScreen() {
 
   // 🔙 Retour sûr (onboarding vs normal)
   const safeBack = useCallback(async () => {
-    if (fromOnboarding) {
-      try {
-        if (user?.uid) {
-          const ref = doc(db, "participants", user.uid);
-          await updateDoc(ref, { "onboarding.welcomeSeen": false });
-        }
-      } catch (e) {
-        console.log("Erreur reset onboarding:", e);
+    try {
+      if (fromOnboarding && user?.uid) {
+        await firestore()
+          .doc(`participants/${user.uid}`)
+          .set({ onboarding: { welcomeSeen: false } }, { merge: true });
+        router.replace("/onboarding/welcome");
+        return true;
       }
-      router.replace("/onboarding/welcome");
+
+      if (router.canGoBack?.()) {
+        router.back();
+        return true;
+      }
+
+      // Retour par défaut vers l’onglet Accueil
+      router.replace("/(drawer)/(tabs)/AccueilScreen");
+      return true;
+    } catch (e) {
+      console.log("Erreur reset onboarding:", e?.message || e);
       return true;
     }
-    if (router.canGoBack?.()) {
-      router.back();
-      return true;
-    }
-    router.replace("/(drawer)/(tabs)/AccueilScreen");
-    return true;
   }, [fromOnboarding, router, user?.uid]);
 
   // 🔙 Support bouton physique Android
@@ -101,14 +104,18 @@ export default function JoinGroupScreen() {
         avatarUrl: pickAvatarUrl(profile, user),
       };
 
-      const functions = getFunctions(app, "us-central1");
-      const joinGroupByCode = httpsCallable(functions, "joinGroupByCode");
-      const res = await joinGroupByCode({ code: cleanedCode, identity }); // 👈 on envoie l’identité
+      // RNFirebase Functions (par défaut region = us-central1 comme ta CF)
+      const joinGroupByCode = functions().httpsCallable("joinGroupByCode");
+      const res = await joinGroupByCode({ code: cleanedCode, identity });
+
       const groupId = res?.data?.groupId || res?.data?.id;
       if (!groupId) throw new Error("Réponse inattendue du serveur.");
 
-      // Navigation
-      router.replace({ pathname: `/groups/${groupId}`, params: { initial: JSON.stringify({ id: groupId }) } });
+      // Navigation → détail du groupe dans le Drawer
+      router.replace({
+        pathname: "/(drawer)/groups/[groupId]",
+        params: { groupId, initial: JSON.stringify({ id: groupId }) },
+      });
     } catch (e) {
       const msg = String(e?.message || e);
       if (msg.includes("not-found")) Alert.alert("Code introuvable", "Vérifie le code et réessaie.");

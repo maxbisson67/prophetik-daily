@@ -1,8 +1,6 @@
 // app/(drawer)/groups/_layout.js
 import React from 'react';
 import { Stack } from 'expo-router';
-import { Text } from 'react-native';
-import { DrawerToggleButton } from '@react-navigation/drawer';
 
 export default function GroupsStackLayout() {
   return (

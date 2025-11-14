@@ -4,12 +4,12 @@ import Constants from 'expo-constants';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 
-// Web Auth SDK (sur natif on utilise initializeAuth RN + AsyncStorage comme persistance)
+// Web Auth SDK (utilisée uniquement comme "bridge" pour que Firestore Web récupère un token)
+// ⚠️ On n’exporte PAS `auth` ici pour éviter tout mauvais usage côté natif.
 import {
   getAuth as getWebAuth,
   initializeAuth as initializeWebAuth,
   getReactNativePersistence as getRNPersistenceAuth,
-  signOut as webSignOut,
 } from 'firebase/auth';
 
 import {
@@ -21,15 +21,16 @@ import {
   setLogLevel,
   doc,
   getDoc,
+  enableNetwork
 } from 'firebase/firestore';
 
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 🔥 Verbose Firestore logs en dev
+// 🔥 Logs Firestore verbeux en dev
 if (__DEV__) {
-  setLogLevel('debug');
+  setLogLevel('silent'); // 'debug' | 'error' | 'silent'
 }
 
 /* ----------------------- Config ----------------------- */
@@ -55,32 +56,16 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 /* ----------------------- Storage ----------------------- */
 export const storage = getStorage(app);
 
-/* ----------------------- Auth (web only) -----------------------
-   Sur natif, on n’utilise PAS firebase/auth pour l’UI — c’est RNFB Auth.
-   MAIS on initialise quand même une instance "webAuth" pour que Firestore
-   récupère le token (le Web SDK Firestore s’accroche à l’Auth du même app).
------------------------------------------------------------------- */
-
-// Ancien export `auth` (web uniquement). Sur natif il reste `null`.
-export const auth = (() => {
-  if (Platform.OS === 'web') {
-    try {
-      return getWebAuth(app);
-    } catch {
-      return getWebAuth(app);
-    }
-  }
-  return null;
-})();
-
-// 👉 IMPORTANT: Initialiser ici une instance d’auth compatible RN (même sur natif),
-// AVANT d’initialiser Firestore, pour que Firestore reçoive bien le user.
+/* ----------------------- webAuth (bridge only) -----------------------
+   On initialise `webAuth` même sur natif pour que le Web SDK Firestore
+   puisse récupérer le token via cette instance (persistance AsyncStorage).
+   👉 Ne pas utiliser `webAuth` pour l’UI d’auth sur natif : on utilise RNFB Auth.
+----------------------------------------------------------------------- */
 export const webAuth = (() => {
   try {
-    // use React Native persistence (AsyncStorage) sur iOS/Android
     return initializeWebAuth(app, { persistence: getRNPersistenceAuth(AsyncStorage) });
   } catch {
-    // si déjà initialisé
+    // déjà initialisée
     return getWebAuth(app);
   }
 })();
@@ -88,6 +73,8 @@ export const webAuth = (() => {
 /* ----------------------- Firestore ----------------------- */
 function createDb() {
   try {
+    // IMPORTANT: Firestore est initialisé APRÈS webAuth pour que le token
+    // soit bien pris en compte par le Web SDK.
     const baseOpts = {
       experimentalAutoDetectLongPolling: true,
       useFetchStreams: false,
@@ -96,18 +83,18 @@ function createDb() {
     let opts = { ...baseOpts };
 
     if (Platform.OS === 'web' && typeof persistentLocalCache === 'function' && typeof persistentMultipleTabManager === 'function') {
+      // Web: cache persistant + multi-onglets
       opts.localCache = persistentLocalCache({ tabManager: persistentMultipleTabManager() });
     } else if (typeof memoryLocalCache === 'function') {
-      // Natif: cache en mémoire pour éviter l’AsyncStorage et les données périmées au boot
+      // Natif: cache en mémoire pour éviter des états périmés au boot
       opts.localCache = memoryLocalCache();
     }
 
-    // ⚠️ Firestore est initialisé APRÈS webAuth → il pourra s’abonner aux changements d’auth
     return initializeFirestore(app, opts);
   } catch {
     const db = getFirestore(app);
     try {
-      // @ts-ignore selon versions SDK
+      // @ts-ignore (selon versions)
       if (!db._settingsFrozen && typeof db.settings === 'function') {
         db.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
       }
@@ -116,6 +103,13 @@ function createDb() {
   }
 }
 export const db = createDb();
+
+
+try {
+  enableNetwork(db)
+    .then(() => console.log('[Firestore] Réseau activé manuellement'))
+    .catch((e) => console.warn('[Firestore] enableNetwork error', e));
+} catch {}
 
 /* ----------------------- Functions ----------------------- */
 export const functions = getFunctions(app, 'us-central1');
@@ -129,12 +123,14 @@ export function enableFirestoreDebugLogs() {
  * UID courant: tente RNFB Auth (natif), sinon firebase/auth.
  */
 function getCurrentUidSafe() {
+  // RNFB (natif)
   try {
     const rnfbAuth = require('@react-native-firebase/auth').default;
     const u = rnfbAuth()?.currentUser;
     if (u?.uid) return u.uid;
   } catch {}
 
+  // Web Auth (bridge)
   try {
     const u2 = getWebAuth(app)?.currentUser;
     if (u2?.uid) return u2.uid;
@@ -144,9 +140,9 @@ function getCurrentUidSafe() {
 }
 
 /**
- * Petit probe pour diagnostiquer l’accès à quelques docs.
+ * Probe simple pour vérifier lecture de quelques documents
  */
-export async function runFirestoreProbe({ groupId, defiId } = {}) {
+/*export async function runFirestoreProbe({ groupId, defiId } = {}) {
   try {
     const uid = getCurrentUidSafe();
     if (!uid) {
@@ -177,17 +173,8 @@ export async function runFirestoreProbe({ groupId, defiId } = {}) {
   } catch (e) {
     console.warn('[Probe] global error:', e);
   }
-}
+}*/
 
-/* ----------------------- Diag init (ordre correct) ----------------------- */
-try {
-  console.log(
-    '[Firebase DEBUG] db.app.projectId =', db?.app?.options?.projectId,
-    '| webAuth.app.projectId =', webAuth?.app?.options?.projectId,
-    '| app.name =', app?.name
-  );
-} catch (e) {
-  console.warn('[Firebase DEBUG] Impossible de logguer le projectId', e);
-}
 
-export default { app, auth, db, functions, storage, enableFirestoreDebugLogs, runFirestoreProbe, webAuth };
+
+export default { app, db, functions, storage, enableFirestoreDebugLogs,  webAuth };

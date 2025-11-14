@@ -1,5 +1,7 @@
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
-import { db } from "@src/lib/firebase";
+// src/nhl/api.js (RNFB)
+import firestore from '@react-native-firebase/firestore';
+
+const db = firestore();
 
 // util: chunk un array en tableaux de 10 (limite "in" Firestore)
 function chunk(arr, n = 10) {
@@ -14,40 +16,46 @@ function chunk(arr, n = 10) {
  *            games: number }
  */
 export async function getPlayersForDate(gameDate /* YYYY-MM-DD */) {
-  const idxRef = doc(db, "nhl_players_by_date", gameDate);
-  const idxSnap = await getDoc(idxRef);
-  if (!idxSnap.exists()) {
+  const idxRef = db.collection('nhl_players_by_date').doc(String(gameDate));
+  const idxSnap = await idxRef.get();
+
+  if (!idxSnap.exists) {
     return { players: [], firstGameAtUTC: null, games: 0 };
   }
-  const idx = idxSnap.data();
+
+  const idx = idxSnap.data() || {};
   const ids = Array.isArray(idx.players) ? idx.players : [];
-  const chs = chunk(ids, 10);
+  if (ids.length === 0) {
+    return { players: [], firstGameAtUTC: idx.firstGameAtUTC || null, games: idx.games || 0 };
+  }
+
   const players = [];
+  const chs = chunk(ids, 10); // RNFB/Firestore limite "in" = 10
 
   for (const c of chs) {
-    const qPlayers = query(
-      collection(db, "nhl_players"),
-      where("__name__", "in", c) // docId in chunk
-    );
-    const snap = await getDocs(qPlayers);
-    snap.forEach(d => {
-      const v = d.data();
+    const qPlayers = db
+      .collection('nhl_players')
+      .where(firestore.FieldPath.documentId(), 'in', c.map(String));
+
+    const snap = await qPlayers.get();
+    snap.forEach((d) => {
+      const v = d.data() || {};
       players.push({
         id: d.id,
         fullName: v.fullName,
         pos: v.pos,
         tri: v.tri,
-        teamName: v.teamName || ""
+        teamName: v.teamName || '',
       });
     });
   }
 
-  // trie alpha nom
-  players.sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
+  // tri alpha nom
+  players.sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
 
   return {
     players,
     firstGameAtUTC: idx.firstGameAtUTC || null,
-    games: idx.games || 0
+    games: idx.games || 0,
   };
 }

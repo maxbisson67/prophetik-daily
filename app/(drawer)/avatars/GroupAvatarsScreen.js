@@ -2,22 +2,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '@src/lib/firebase';
+import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 // Safe auth
-import { useAuth } from '@src/auth/SafeAuthProvider';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuth } from '@src/auth/SafeAuthProvider';  
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const DEFAULT_PRICE = 5;
 
 const FALLBACK = [
-  { id:'wolves',  name:'Les Loups',        url:'https://picsum.photos/seed/wolves/400',  sort:10, price:5 },
-  { id:'titans',  name:'Les Titans',       url:'https://picsum.photos/seed/titans/400',  sort:20, price:5 },
-  { id:'visions', name:'Les Visionnaires', url:'https://picsum.photos/seed/visions/400', sort:30, price:5 },
-  { id:'dragons', name:'Les Dragons',      url:'https://picsum.photos/seed/dragons/400', sort:40, price:5 },
+  { id:'wolves',  name:'Les Loups',          url:'https://picsum.photos/seed/wolves/400',  sort:10, price:5 },
+  { id:'titans',  name:'Les Titans',         url:'https://picsum.photos/seed/titans/400',  sort:20, price:5 },
+  { id:'visions', name:'Les Visionnaires',   url:'https://picsum.photos/seed/visions/400', sort:30, price:5 },
+  { id:'dragons', name:'Les Dragons',        url:'https://picsum.photos/seed/dragons/400', sort:40, price:5 },
   { id:'skaters', name:'Les Patineurs Fous', url:'https://picsum.photos/seed/skaters/400', sort:50, price:5 },
-  { id:'blizzard',name:'Le Blizzard',      url:'https://picsum.photos/seed/blizzard/400', sort:60, price:5 },
+  { id:'blizzard',name:'Le Blizzard',        url:'https://picsum.photos/seed/blizzard/400',sort:60, price:5 },
 ];
 
 function Chip({ icon, color, bg, label }) {
@@ -31,7 +30,9 @@ function Chip({ icon, color, bg, label }) {
 }
 
 export default function GroupAvatarsScreen() {
-  const { groupId } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const groupId = useMemo(() => (Array.isArray(params.groupId) ? params.groupId[0] : params.groupId) || '', [params.groupId]);
+
   const router = useRouter();
   const { user } = useAuth();
 
@@ -53,48 +54,86 @@ export default function GroupAvatarsScreen() {
   useEffect(() => {
     if (!user?.uid) { setMe(null); setLoadingMe(false); return; }
     setLoadingMe(true);
-    const ref = doc(db, 'participants', user.uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      setMe(snap.exists() ? ({ uid: snap.id, ...snap.data() }) : null);
-      setLoadingMe(false);
-    }, () => setLoadingMe(false));
+    const ref = firestore().doc(`participants/${user.uid}`);
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        setMe(snap.exists ? ({ uid: snap.id, ...snap.data() }) : null);
+        setLoadingMe(false);
+      },
+      () => setLoadingMe(false)
+    );
     return () => { try { unsub(); } catch {} };
   }, [user?.uid]);
 
   // Group meta
   useEffect(() => {
-    if (!groupId) { setLoadingGroup(false); return; }
+    if (!groupId) { setGroup(null); setLoadingGroup(false); return; }
     setLoadingGroup(true);
-    const ref = doc(db, 'groups', String(groupId));
-    const unsub = onSnapshot(ref, (snap) => {
-      setGroup(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null);
-      setLoadingGroup(false);
-    }, () => setLoadingGroup(false));
+    const ref = firestore().doc(`groups/${String(groupId)}`);
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        setGroup(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+        setLoadingGroup(false);
+      },
+      () => setLoadingGroup(false)
+    );
     return () => { try { unsub(); } catch {} };
   }, [groupId]);
 
   // Catalog (group avatars)
   useEffect(() => {
     setLoadingItems(true);
-    const qRef = query(collection(db, 'catalog_group_avatars'), orderBy('sort', 'asc'));
-    const unsub = onSnapshot(qRef, (snap) => {
-      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setItems(rows.length ? rows : FALLBACK);
-      setLoadingItems(false);
-    }, () => {
-      setItems(FALLBACK);
-      setLoadingItems(false);
-    });
+    const qRef = firestore().collection('catalog_group_avatars').orderBy('sort', 'asc');
+    const unsub = qRef.onSnapshot(
+      (snap) => {
+        const rows = snap?.docs?.map(d => ({ id: d.id, ...d.data() })) || [];
+        setItems(rows.length ? rows : FALLBACK);
+        setLoadingItems(false);
+      },
+      () => {
+        setItems(FALLBACK);
+        setLoadingItems(false);
+      }
+    );
     return () => { try { unsub(); } catch {} };
   }, []);
 
-  const credits = useMemo(() => {
-    const d = me || {};
-    if (typeof d.credits === 'number') return d.credits;
-    if (typeof d?.credits?.balance === 'number') return d.credits.balance;
-    if (typeof d.balance === 'number') return d.balance;
+  // 🔧 util crédit(s) – couvre plusieurs schémas possibles
+  function readCredits(me) {
+    if (!me) return 0;
+
+    // numériques directs
+    if (typeof me.credits === 'number') return me.credits;
+    if (typeof me.balance === 'number') return me.balance;
+
+    // objets connus
+    if (me.credits && typeof me.credits === 'object') {
+      if (typeof me.credits.balance === 'number') return me.credits.balance;
+      if (typeof me.credits.total === 'number' && typeof me.credits.spent === 'number') {
+        return me.credits.total - me.credits.spent;
+      }
+    }
+
+    // autres variantes fréquemment vues
+    if (me.wallets && me.wallets.main && typeof me.wallets.main.balance === 'number') {
+      return me.wallets.main.balance;
+    }
+    if (typeof me.creditBalance === 'number') return me.creditBalance;
+
+    // strings → nombre
+    const candidates = [
+      me.credits, me.balance,
+      me?.credits?.balance, me?.wallets?.main?.balance, me.creditBalance
+    ].filter(v => typeof v === 'string');
+    for (const s of candidates) {
+      const n = Number(s);
+      if (Number.isFinite(n)) return n;
+    }
+
     return 0;
-  }, [me]);
+  }
+
+  const credits = useMemo(() => readCredits(me), [me]);
 
   const canManage =
     !!user?.uid &&
@@ -107,18 +146,17 @@ export default function GroupAvatarsScreen() {
     );
 
   async function handleBuy() {
-    if (!user?.uid) return Alert.alert('Connexion requise', 'Connecte-toi pour acheter un avatar.');
-    if (!group?.id) return Alert.alert('Groupe requis', 'Aucun groupe n’a été fourni.');
+    if (!user?.uid)  return Alert.alert('Connexion requise', 'Connecte-toi pour acheter un avatar.');
+    if (!group?.id)  return Alert.alert('Groupe requis', 'Aucun groupe n’a été fourni.');
     if (!selectedItem) return Alert.alert('Choisis un avatar', 'Sélectionne un avatar avant d’acheter.');
-    if (!canManage) return Alert.alert('Accès refusé', 'Seul le propriétaire du groupe peut changer son avatar.');
+    if (!canManage)   return Alert.alert('Accès refusé', 'Seul le propriétaire du groupe peut changer son avatar.');
 
     const price = Number.isFinite(selectedItem.price) ? selectedItem.price : DEFAULT_PRICE;
-    if (credits < price) return Alert.alert('Crédits insuffisants', `Il te faut ${price} crédits (solde: ${credits}).`);
+    //if (credits < price) return Alert.alert('Crédits insuffisants', `Il te faut ${price} crédits (solde: ${credits}).`);
 
     try {
       setBusy(true);
-      // 👉 Appel CF: fait l’atomicité (débit crédits + update groupe + log)
-      const call = httpsCallable(functions, 'purchaseGroupAvatar');
+      const call = functions().httpsCallable('purchaseGroupAvatar');
       const res = await call({
         groupId: group.id,
         avatarId: selectedItem.id,
@@ -144,7 +182,19 @@ export default function GroupAvatarsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Avatars de groupe' }} />
+      <Stack.Screen
+        options={{
+          title: 'Avatars de groupe',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.replace('/(drawer)/boutique')}
+              style={{ paddingHorizontal: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#111827" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <FlatList
         data={items || []}
         keyExtractor={(it) => it.id}
@@ -163,9 +213,12 @@ export default function GroupAvatarsScreen() {
               </Text>
 
               <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginTop:8 }}>
-                <Chip icon={canManage ? 'shield-check' : 'lock'} color={canManage ? '#065F46' : '#991B1B'}
-                      bg={canManage ? '#ECFDF5' : '#FEE2E2'}
-                      label={canManage ? 'Tu es propriétaire' : 'Lecture seule'} />
+                <Chip
+                  icon={canManage ? 'shield-check' : 'lock'}
+                  color={canManage ? '#065F46' : '#991B1B'}
+                  bg={canManage ? '#ECFDF5' : '#FEE2E2'}
+                  label={canManage ? 'Tu es propriétaire' : 'Lecture seule'}
+                />
                 <View style={{ alignItems:'flex-end' }}>
                   <Text style={{ fontSize:12, color:'#6b7280' }}>Tes crédits</Text>
                   {loadingMe ? <ActivityIndicator /> : <Text style={{ fontWeight:'900', fontSize:20 }}>{credits}</Text>}
@@ -192,10 +245,10 @@ export default function GroupAvatarsScreen() {
 
                 <TouchableOpacity
                   onPress={handleBuy}
-                  disabled={busy || !selectedItem || !canManage || credits < (Number.isFinite(selectedItem?.price) ? selectedItem.price : DEFAULT_PRICE)}
+                  disabled={busy || !selectedItem || !canManage}
                   style={{
                     marginTop:12,
-                    backgroundColor: (busy || !selectedItem || !canManage || credits < (Number.isFinite(selectedItem?.price) ? selectedItem.price : DEFAULT_PRICE)) ? '#9ca3af' : '#ef4444',
+                    backgroundColor: (busy || !selectedItem || !canManage) ? '#9ca3af' : '#ef4444',
                     paddingVertical:14,
                     paddingHorizontal:16,
                     borderRadius:12,

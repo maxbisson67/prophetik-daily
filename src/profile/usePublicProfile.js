@@ -1,8 +1,12 @@
-// src/profile/usePublicProfile.js
-import { useEffect, useState } from "react";
-import { db } from "@src/lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+// src/profile/usePublicProfile.js (RNFB)
+import { useEffect, useState } from 'react';
+import firestore from '@react-native-firebase/firestore';
 
+const db = firestore();
+
+/**
+ * Abonnement temps réel au profil public d’un utilisateur.
+ */
 export function usePublicProfile(uid) {
   const [loading, setLoading] = useState(!!uid);
   const [profile, setProfile] = useState(null);
@@ -13,31 +17,40 @@ export function usePublicProfile(uid) {
       setLoading(false);
       return;
     }
+
     setLoading(true);
-    const ref = doc(db, "profiles_public", uid);
-    const un = onSnapshot(
-      ref,
+    const ref = db.collection('profiles_public').doc(String(uid));
+
+    const unsubscribe = ref.onSnapshot(
       (snap) => {
-        if (!snap.exists()) {
+        if (!snap.exists) {
           setProfile(null);
           setLoading(false);
           return;
         }
+
         const d = snap.data() || {};
         setProfile({
           id: snap.id,
-          displayName: d.displayName || "Invité",
+          displayName: d.displayName || 'Invité',
           avatarUrl: d.avatarUrl || null,
           avatarId: d.avatarId || null,
-          updatedAt: d.updatedAt || null, // Firestore Timestamp (peut être null la première fois)
-          visibility: d.visibility ?? "public",
+          updatedAt: d.updatedAt || null, // Timestamp Firestore
+          visibility: d.visibility ?? 'public',
         });
         setLoading(false);
       },
-      () => setLoading(false)
+      (error) => {
+        console.warn('[usePublicProfile] onSnapshot error:', error);
+        setLoading(false);
+      }
     );
-    return () => { try { un?.(); } catch {} };
-    //return () => un();
+
+    return () => {
+      try {
+        unsubscribe?.();
+      } catch {}
+    };
   }, [uid]);
 
   return { profile, loading };

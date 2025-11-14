@@ -32,10 +32,10 @@
               "client_type": 3
             },
             {
-              "client_id": "502697214487-do98tvk3c6crp2dga8rn169sjfaldep4.apps.googleusercontent.com",
+              "client_id": "502697214487-83hc06kjp1akjjanfivjiq5hh31tgpdj.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.maxbisson.Capitaine"
+                "bundle_id": "com.prophetik"
               }
             }
           ]
@@ -50,6 +50,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "502697214487-lqbsu6d0lasvotji9khsnkf51s2ufb3a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.prophetik",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
         {
           "client_id": "502697214487-81j3937o6s25dbs4b2bo93t7lf800vja.apps.googleusercontent.com",
           "client_type": 3
@@ -68,10 +76,10 @@
               "client_type": 3
             },
             {
-              "client_id": "502697214487-do98tvk3c6crp2dga8rn169sjfaldep4.apps.googleusercontent.com",
+              "client_id": "502697214487-83hc06kjp1akjjanfivjiq5hh31tgpdj.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.maxbisson.Capitaine"
+                "bundle_id": "com.prophetik"
               }
             }
           ]

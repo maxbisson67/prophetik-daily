@@ -5,8 +5,7 @@ import { Stack, useRouter } from 'expo-router';
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
-import { db } from '@src/lib/firebase';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function BoutiqueHub() {
@@ -20,34 +19,52 @@ export default function BoutiqueHub() {
   const [groupsMeta, setGroupsMeta] = useState({}); // id -> {name}
   const metaUnsubs = useRef(new Map());
 
+  // Me + mes memberships (uid | participantId)
   useEffect(() => {
     if (!user?.uid) { setLoading(false); return; }
-    const unsubMe = onSnapshot(doc(db, 'participants', user.uid), s => setMe(s.exists()?({uid:s.id,...s.data()}):null));
-    const q1 = query(collection(db, 'group_memberships'), where('uid','==',user.uid));
-    const q2 = query(collection(db, 'group_memberships'), where('participantId','==',user.uid));
-    let a=[], b=[];
-    const recompute=()=>{
-      const ids = Array.from(new Set([...a,...b].map(r=>r.groupId).filter(Boolean))).sort();
+
+    const unsubMe = firestore()
+      .doc(`participants/${user.uid}`)
+      .onSnapshot(s => setMe(s?.exists ? ({ uid: s.id, ...s.data() }) : null));
+
+    const q1 = firestore().collection('group_memberships').where('uid', '==', String(user.uid));
+    const q2 = firestore().collection('group_memberships').where('participantId', '==', String(user.uid));
+
+    let a = [], b = [];
+    const recompute = () => {
+      const ids = Array.from(new Set([...a, ...b].map(r => r.groupId).filter(Boolean))).sort();
       setGroupIds(ids);
       setLoading(false);
     };
-    const u1 = onSnapshot(q1, s=>{ a=s.docs.map(d=>d.data()); recompute(); });
-    const u2 = onSnapshot(q2, s=>{ b=s.docs.map(d=>d.data()); recompute(); });
-    return () => { u1?.(); u2?.(); unsubMe?.(); };
+
+    const u1 = q1.onSnapshot(
+      s => { a = (s?.docs || []).map(d => d.data() || {}); recompute(); },
+      () => { a = []; recompute(); }
+    );
+    const u2 = q2.onSnapshot(
+      s => { b = (s?.docs || []).map(d => d.data() || {}); recompute(); },
+      () => { b = []; recompute(); }
+    );
+
+    return () => { try { u1?.(); } catch {} try { u2?.(); } catch {} try { unsubMe?.(); } catch {} };
   }, [user?.uid]);
 
+  // Métadonnées de chaque groupe (nom)
   useEffect(() => {
+    // retire les listeners obsolètes
     for (const [gid, un] of metaUnsubs.current) {
-      if (!groupIds.includes(gid)) { try { un(); } catch{}; metaUnsubs.current.delete(gid); }
+      if (!groupIds.includes(gid)) { try { un(); } catch {} metaUnsubs.current.delete(gid); }
     }
-    groupIds.forEach(gid => {
-      if (metaUnsubs.current.has(gid)) return;
-      const un = onSnapshot(doc(db,'groups',gid),(s)=>{
-        const d=s.data()||{};
-        setGroupsMeta(prev=>({ ...prev, [gid]: { name: d.name || d.title || gid } }));
-      });
-      metaUnsubs.current.set(gid, un);
+
+   groupIds.forEach(gid => {
+    if (metaUnsubs.current.has(gid)) return;
+    const un = firestore().doc(`groups/${gid}`).onSnapshot(s => {
+      const data = typeof s?.data === 'function' ? (s.data() || {}) : {};
+      setGroupsMeta(prev => ({ ...prev, [gid]: { name: data.name || data.title || gid } }));
     });
+    metaUnsubs.current.set(gid, un);
+  });
+
     return () => {};
   }, [groupIds]);
 
@@ -56,7 +73,7 @@ export default function BoutiqueHub() {
   const goGroup = () => {
     if (groupIds.length === 0) return setShowPicker(false);
     if (groupIds.length === 1) {
-      return router.push({ pathname:'/avatars/GroupAvatarsScreen', params:{ groupId: groupIds[0] }});
+      return router.push({ pathname: '/avatars/GroupAvatarsScreen', params: { groupId: groupIds[0] } });
     }
     setShowPicker(true);
   };

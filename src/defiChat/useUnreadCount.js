@@ -1,66 +1,50 @@
 // src/defiChat/useUnreadCount.js
 import { useEffect, useState, useCallback } from 'react';
-import { db } from '@src/lib/firebase';
-import {
-  doc, getDoc, limitToLast , collectionGroup, query, where, orderBy,
-  onSnapshot, getCountFromServer
-} from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 
+/**
+ * useUnreadCount(defiId, uid, { useCollectionGroup = true, groupId })
+ * - Compte les messages > lastSeenAt (hors messages envoyés par l’utilisateur)
+ * - Version RN Firebase (firestore())
+ */
 export function useUnreadCount(defiId, uid, opts = {}) {
-  const {
-    useCollectionGroup = true,
-    groupId,
-  } = opts;
-
+  const { useCollectionGroup = true, groupId } = opts;
   const [count, setCount] = useState(0);
 
   const compute = useCallback(async () => {
     try {
       if (!defiId || !uid) { setCount(0); return; }
-
-      // ✅ Si on utilise CG, on attend que groupId soit dispo (pas de fallback per-défi)
       if (useCollectionGroup && !groupId) { setCount(0); return; }
 
-      // 1) lastSeen
-      const readRef = doc(db, 'defis', String(defiId), 'reads', String(uid));
-      const readSnap = await getDoc(readRef);
-      const lastSeenAt = readSnap.exists() ? readSnap.data()?.lastSeenAt : null;
+      // 1) lastSeenAt
+      const readRef = firestore().doc(`defis/${String(defiId)}/reads/${String(uid)}`);
+      const readSnap = await readRef.get();
+      const lastSeenAt = readSnap.exists ? readSnap.data()?.lastSeenAt : null;
       if (!lastSeenAt?.toMillis) { setCount(0); return; }
 
-      // 2) build queries
-      const afterSeen = where('createdAt', '>', lastSeenAt);
-      let qTotal, qMine;
-
+      // 2) Requêtes > lastSeenAt
       if (useCollectionGroup) {
-        const base = collectionGroup(db, 'messages');
-        qTotal = query(
-         base,
-         where('groupId', '==', String(groupId)),
-         where('createdAt', '>', lastSeenAt),
-         orderBy('createdAt', 'asc')
-       );
-       qMine  = query(
-         base,
-         where('groupId', '==', String(groupId)),
-         where('createdAt', '>', lastSeenAt),
-         where('uid', '==', String(uid)),
-         orderBy('createdAt', 'asc')
-       );
+        const base = firestore().collectionGroup('messages');
+        const qTotal = base
+          .where('groupId', '==', String(groupId))
+          .where('createdAt', '>', lastSeenAt)
+          .orderBy('createdAt', 'asc');
+
+        const qMine = base
+          .where('groupId', '==', String(groupId))
+          .where('createdAt', '>', lastSeenAt)
+          .where('uid', '==', String(uid))
+          .orderBy('createdAt', 'asc');
+
+        const [snapTotal, snapMine] = await Promise.all([qTotal.get(), qMine.get()]);
+        const total = snapTotal.size || 0;
+        const mine  = snapMine.size || 0;
+
+        setCount(Math.max(0, total - mine));
       } else {
-        // (Optionnel) si tu veux absolument le fallback un jour, tu pourras le remettre,
-        // mais c'est lui qui demande l'index composite per-défi et provoquait failed-precondition.
+        // Pas de fallback per-défi (évite les index composites spécifiques)
         setCount(0);
-        return;
       }
-
-      const [snapTotal, snapMine] = await Promise.all([
-        getCountFromServer(qTotal),
-        getCountFromServer(qMine),
-      ]);
-
-      const total = Number(snapTotal.data().count || 0);
-      const mine  = Number(snapMine.data().count || 0);
-      setCount(Math.max(0, total - mine));
     } catch (e) {
       console.warn('[useUnreadCount] compute error:', e?.code || e?.message || e);
       setCount(0);
@@ -71,21 +55,24 @@ export function useUnreadCount(defiId, uid, opts = {}) {
     compute();
 
     if (!defiId) return;
-    if (useCollectionGroup && !groupId) return; // pas d'écoute tant que groupId inconnu
+    if (useCollectionGroup && !groupId) return;
 
+    // Écoute “tick” minimaliste : on surveille le dernier message du groupe,
+    // et on relance compute() à chaque nouveau message.
     let unsub = () => {};
     if (useCollectionGroup) {
-      const qCG = query(
-        collectionGroup(db, 'messages'),
-       where('groupId', '==', String(groupId)),
-       orderBy('createdAt', 'asc'),
-       limitToLast(1)
-     );
-      unsub = onSnapshot(qCG, () => compute(), (err) => {
-        console.warn('[useUnreadCount] CG onSnapshot error:', err?.code || err?.message || err);
-      });
+      const qCG = firestore()
+        .collectionGroup('messages')
+        .where('groupId', '==', String(groupId))
+        .orderBy('createdAt', 'asc')
+        .limitToLast(1);
+
+      unsub = qCG.onSnapshot(
+        () => compute(),
+        (err) => console.warn('[useUnreadCount] CG onSnapshot error:', err?.code || err?.message || err)
+      );
     }
-    return () => unsub();
+    return () => { try { unsub(); } catch {} };
   }, [defiId, groupId, useCollectionGroup, compute]);
 
   return count;

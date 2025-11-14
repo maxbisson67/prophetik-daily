@@ -7,19 +7,21 @@ import {
 import {
   Stack, useRouter, useLocalSearchParams, useFocusEffect
 } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from 'react-native-vector-icons/Ionicons'; // ou '@expo/vector-icons' si déjà configuré
+// Si tu utilises déjà @expo/vector-icons partout, garde plutôt cette ligne :
+// import { Ionicons } from '@expo/vector-icons';
+
+import firestore from '@react-native-firebase/firestore';
 
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
 import { createGroupService } from '@src/groups/services';
-import { db } from '@src/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 
 export default function CreateGroupScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const { from } = useLocalSearchParams();                 // ?from=onboarding
+  const { from } = useLocalSearchParams(); // ?from=onboarding
   const fromOnboarding = String(from || '') === 'onboarding';
 
   const [name, setName] = useState('');
@@ -28,28 +30,28 @@ export default function CreateGroupScreen() {
 
   // 🔙 Gestion du back (annule ou réinitialise onboarding)
   const safeBack = useCallback(async () => {
-    if (fromOnboarding) {
-      try {
-        if (user?.uid) {
-          await updateDoc(doc(db, 'participants', user.uid), {
-            'onboarding.welcomeSeen': false,
-          });
-        }
-      } catch (e) {
-        console.log('Reset onboarding failed:', e?.message || e);
+    try {
+      if (fromOnboarding && user?.uid) {
+        // RNFirebase: merge pour créer le doc si absent
+        await firestore()
+          .doc(`participants/${user.uid}`)
+          .set({ onboarding: { welcomeSeen: false } }, { merge: true });
+        router.replace('/onboarding/welcome');
+        return true;
       }
-      router.replace('/onboarding/welcome');
+
+      if (router.canGoBack?.()) {
+        router.back();
+        return true;
+      }
+
+      // ✅ Redirige vers l’onglet Groupes (dans le Drawer)
+      router.replace('/(drawer)/(tabs)/GroupsScreen');
+      return true;
+    } catch (e) {
+      console.log('Reset onboarding failed:', e?.message || e);
       return true;
     }
-
-    if (router.canGoBack?.()) {
-      router.back();
-      return true;
-    }
-
-    // ✅ Redirige vers la bonne page de groupes (dans le Drawer)
-    router.replace('/(drawer)/(tabs)/GroupsScreen');
-    return true;
   }, [fromOnboarding, router, user?.uid]);
 
   // 🔙 Support bouton retour physique Android
@@ -67,14 +69,19 @@ export default function CreateGroupScreen() {
 
     try {
       setCreating(true);
+
+      // On passe explicitement l’uid (et éventuellement des infos utiles)
       const { groupId } = await createGroupService({
         name: name.trim(),
         description: description.trim(),
+        uid: user.uid,
+        displayName: user.displayName || null,
+        avatarUrl: user.photoURL || null,
       });
 
-      // 👉 Après création, on va directement sur la page du groupe
+      // 👉 Aller directement sur la page du groupe (dans le Drawer)
       router.replace({
-        pathname: '/groups/[groupId]',
+        pathname: '/(drawer)/groups/[groupId]',
         params: { groupId },
       });
     } catch (e) {
@@ -160,7 +167,7 @@ export default function CreateGroupScreen() {
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Ex. Notre pool du samedi entre amis 🍻"
+            placeholder="Ex. Notre pool du samedi entre amis"
             style={{
               borderWidth: 1,
               borderColor: '#ddd',

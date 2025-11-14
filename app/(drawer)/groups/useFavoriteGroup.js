@@ -1,13 +1,13 @@
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@src/lib/firebase";
+// src/hooks/useFavoriteGroup.js
+import firestore from '@react-native-firebase/firestore';
 
 export default function useFavoriteGroup(meDoc) {
   const favoriteGroupId = meDoc?.favoriteGroupId || null;
 
   async function setFavoriteGroup(uid, groupId) {
-    if (!uid) throw new Error("Not authenticated");
-    const ref = doc(db, "participants", uid);
-    await updateDoc(ref, { favoriteGroupId: groupId || null });
+    if (!uid) throw new Error('Not authenticated');
+    const ref = firestore().doc(`participants/${uid}`);
+    await ref.set({ favoriteGroupId: groupId || null }, { merge: true });
   }
 
   return { favoriteGroupId, setFavoriteGroup };

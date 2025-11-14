@@ -1,12 +1,10 @@
 // app/onboarding/welcome.js
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
+import firestore from '@react-native-firebase/firestore';
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
-
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
@@ -16,24 +14,26 @@ export default function WelcomeOnboarding() {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
 
-  // ✅ Met à jour Firestore + navigue vers la destination
   async function markSeenAndGo(nextPath) {
-    if (!user?.uid) return router.replace('/'); // fallback
-
+    if (!user?.uid) {
+      router.replace('/'); // fallback
+      return;
+    }
     try {
       setSaving(true);
-      await setDoc(
-        doc(db, 'participants', user.uid),
-        {
-          onboarding: { welcomeSeen: true },
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await firestore()
+        .doc(`participants/${user.uid}`)
+        .set(
+          {
+            onboarding: { welcomeSeen: true },
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    } catch (e) {
+      Alert.alert('Oups', String(e?.message || e));
     } finally {
       setSaving(false);
-
-      // Navigation corrigée selon nouvelle arbo
       if (nextPath) {
         router.replace(nextPath);
       } else {
@@ -45,9 +45,7 @@ export default function WelcomeOnboarding() {
   return (
     <>
       <Stack.Screen options={{ title: 'Bienvenue' }} />
-
       <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
-        {/* Hero */}
         <View
           style={{
             padding: 16,
@@ -79,9 +77,7 @@ export default function WelcomeOnboarding() {
             </Text>
           </View>
 
-          {/* CTA zone */}
           <View style={{ marginTop: 16, gap: 10 }}>
-            {/* Rejoindre un groupe */}
             <TouchableOpacity
               disabled={saving}
               onPress={() => markSeenAndGo('/groups/join?from=onboarding')}
@@ -92,14 +88,9 @@ export default function WelcomeOnboarding() {
                 alignItems: 'center',
               }}
             >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: '#fff', fontWeight: '800' }}>Rejoindre un groupe</Text>
-              )}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>Rejoindre un groupe</Text>}
             </TouchableOpacity>
 
-            {/* Créer un groupe */}
             <TouchableOpacity
               disabled={saving}
               onPress={() => markSeenAndGo('/groups/create?from=onboarding')}
@@ -115,7 +106,6 @@ export default function WelcomeOnboarding() {
               <Text style={{ color: '#111827', fontWeight: '800' }}>Créer un groupe</Text>
             </TouchableOpacity>
 
-            {/* Option “Plus tard” */}
             <TouchableOpacity
               disabled={saving}
               onPress={() => markSeenAndGo(null)}
@@ -125,7 +115,6 @@ export default function WelcomeOnboarding() {
             </TouchableOpacity>
           </View>
 
-          {/* Points clés */}
           <View style={{ marginTop: 16, gap: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialCommunityIcons name="trophy" size={18} color="#b91c1c" />

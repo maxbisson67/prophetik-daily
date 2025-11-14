@@ -1,30 +1,40 @@
-// src/participants/api.js
-import { db } from '../lib/firebase';
-import {
-  doc, getDoc, setDoc, serverTimestamp, updateDoc
-} from 'firebase/firestore';
+// src/participants/api.js (RNFB)
+import firestore from '@react-native-firebase/firestore';
 
+const db = firestore();
+
+/**
+ * Crée un participant s'il n'existe pas déjà.
+ * Retourne true si créé, false sinon.
+ */
 export async function createParticipantIfMissing(uid, { name, email, avatarUrl = null }) {
   if (!uid) throw new Error('uid manquant');
-  const ref = doc(db, 'participants', uid);
-  const snap = await getDoc(ref);
-  if (snap.exists()) return false; // déjà présent
 
-  await setDoc(ref, {
+  const ref = db.collection('participants').doc(String(uid));
+  const snap = await ref.get();
+  if (snap.exists) return false; // déjà présent
+
+  await ref.set({
     name: name ?? '',
     email: email ?? '',
     creditCents: 0,
     avatarUrl,
-    createdAt: serverTimestamp(),
+    createdAt: firestore.FieldValue.serverTimestamp(),
   });
+
   return true; // créé
 }
 
+/**
+ * Met à jour partiellement un participant.
+ */
 export async function updateParticipant(uid, partial) {
-  const ref = doc(db, 'participants', uid);
-  await updateDoc(ref, {
+  if (!uid) throw new Error('uid manquant');
+
+  const ref = db.collection('participants').doc(String(uid));
+  await ref.update({
     ...partial,
-    // si tu veux suivre la dernière maj:
-    // updatedAt: serverTimestamp(),
+    // tu peux décommenter si tu veux garder une trace des MAJ
+    // updatedAt: firestore.FieldValue.serverTimestamp(),
   });
 }

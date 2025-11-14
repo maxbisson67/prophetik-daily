@@ -10,8 +10,9 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-ico
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useGroups } from '@src/groups/useGroups';
 import { useTheme } from '@src/theme/ThemeProvider';
-import { db } from '@src/lib/firebase';
-import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
+
+// ⬇️ RNFirebase
+import firestore from '@react-native-firebase/firestore';
 
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
 const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
@@ -29,16 +30,21 @@ function useLeaderboards(groupIds) {
     }
     const unsubs = [];
     setLoading(true);
+
     groupIds.forEach((gid) => {
-      const ref = collection(db, 'groups', gid, 'leaderboard');
-      const unsub = onSnapshot(ref, (snap) => {
+      const ref = firestore().collection('groups').doc(String(gid)).collection('leaderboard');
+      const unsub = ref.onSnapshot((snap) => {
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setAll((prev) => ({ ...prev, [gid]: rows }));
+      }, () => {
+        // en cas d'erreur de permissions, on laisse vide
+        setAll((prev) => ({ ...prev, [gid]: [] }));
       });
       unsubs.push(unsub);
     });
+
     setLoading(false);
-    return () => unsubs.forEach((u) => u && u());
+    return () => unsubs.forEach((u) => { try { u(); } catch {} });
   }, [JSON.stringify(groupIds)]);
 
   return { loading, all };
@@ -63,11 +69,10 @@ function usePublicProfilesFor(uids) {
 
     ids.forEach((uid) => {
       if (unsubs.has(uid)) return;
-      const ref = doc(db, 'profiles_public', uid);
-      const un = onSnapshot(
-        ref,
+      const ref = firestore().collection('profiles_public').doc(uid);
+      const un = ref.onSnapshot(
         (snap) => {
-          if (!snap.exists()) {
+          if (!snap.exists) {
             setMap((prev) => {
               if (prev[uid]) {
                 const next = { ...prev };
@@ -110,12 +115,7 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-/* 🔎 hook: tous les groupes dont je suis owner, peu importe le schéma
-   - ownerId == uid
-   - owner.uid == uid   (champ imbriqué)
-   - createdBy == uid
-   - owners array-contains uid
-*/
+/* 🔎 hook: tous les groupes dont je suis owner (ownerId == uid OU createdBy == uid) */
 function useOwnedGroups(uid) {
   const [owned, setOwned] = React.useState([]);
   const [loading, setLoading] = React.useState(!!uid);
@@ -131,7 +131,7 @@ function useOwnedGroups(uid) {
     const unsubs = [];
 
     function attach(qRef, key) {
-      const un = onSnapshot(qRef, (snap) => {
+      const un = qRef.onSnapshot((snap) => {
         results[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const merged = dedupeById([
           ...results.ownerId,
@@ -139,28 +139,25 @@ function useOwnedGroups(uid) {
         ]);
         setOwned(merged);
         setLoading(false);
-
-      }, (err) => {
-        if (__DEV__) console.warn(`[useOwnedGroups] ${key} error:`, err?.message || err);
-        setLoading(false);
-      });
+      }, () => setLoading(false));
       unsubs.push(un);
     }
 
     try {
       // ownerId == uid
-      attach(query(collection(db, 'groups'), where('ownerId', '==', String(uid))), 'ownerId');
-    } catch (e) {
-      if (__DEV__) console.warn('[useOwnedGroups] ownerId query failed:', e?.message || e);
-    }
+      attach(
+        firestore().collection('groups').where('ownerId', '==', String(uid)),
+        'ownerId'
+      );
+    } catch (e) {}
 
     try {
       // createdBy == uid
-      attach(query(collection(db, 'groups'), where('createdBy', '==', String(uid))), 'createdBy');
-    } catch (e) {
-      if (__DEV__) console.warn('[useOwnedGroups] createdBy query failed:', e?.message || e);
-    }
-
+      attach(
+        firestore().collection('groups').where('createdBy', '==', String(uid)),
+        'createdBy'
+      );
+    } catch (e) {}
 
     return () => { unsubs.forEach(u => { try { u(); } catch {} }); };
   }, [uid]);
@@ -334,13 +331,9 @@ function LeaderboardTable({ rows, colors, groupId }) {
       {/* rows */}
       {sorted.map((r, idx) => {
         const prof = publicProfiles[r.id] || {};
-        const version = prof.updatedAt?.toMillis?.() ? prof.updatedAt.toMillis() : 0;
+        const version = prof?.updatedAt?.toMillis?.() ? prof.updatedAt.toMillis() : 0;
 
-        const display =
-          prof.displayName ||
-          r.displayName ||
-          r.id;
-
+        const display = prof.displayName || r.displayName || r.id;
         const shortName = display.length > 10 ? display.slice(0, 10) + '…' : display;
         const uri = prof.avatarUrl ? withCacheBust(prof.avatarUrl, version) : null;
 
@@ -543,6 +536,24 @@ export default function ClassementScreen() {
                     {item.name || item.id}
                   </Text>
                 </View>
+
+                {/* (optionnel) bouton rebuild si owner */}
+                {item?.role === 'owner' && (
+                  <TouchableOpacity
+                    onPress={() => handleRebuild(item.id)}
+                    disabled={!!rebuilding[item.id]}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor: rebuilding[item.id] ? '#9ca3af' : '#111827'
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>
+                      {rebuilding[item.id] ? '…' : 'Rebuilder'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               {rows.length === 0 ? (

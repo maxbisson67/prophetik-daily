@@ -1,11 +1,11 @@
+// app/defis/[defiId]/participate-rnfirebase.js
 import React, { useEffect, useMemo, useState, useLayoutEffect } from "react";
 import { View, Text, ActivityIndicator, TextInput, FlatList, TouchableOpacity, Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter, useNavigation } from "expo-router";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { HeaderBackButton } from "@react-navigation/elements";
-import { Ionicons } from "@expo/vector-icons"; // (utile si tu veux des icônes dans la liste)
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { db } from "@src/lib/firebase";
+import { Ionicons } from "@expo/vector-icons";
+import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { getPlayersForDate } from "@src/nhl/api";
 
@@ -33,10 +33,7 @@ export default function ParticipateScreen() {
       headerLeft: ({ tintColor }) => (
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           {navigation.canGoBack() && (
-            <HeaderBackButton
-              tintColor={tintColor}
-              onPress={() => navigation.goBack()}
-            />
+            <HeaderBackButton tintColor={tintColor} onPress={() => navigation.goBack()} />
           )}
           <DrawerToggleButton tintColor={tintColor} />
         </View>
@@ -44,12 +41,13 @@ export default function ParticipateScreen() {
     });
   }, [navigation]);
 
-  // Charge défi + roster
+  // Charge défi + roster (RNFirebase)
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDoc(doc(db, "defis", String(defiId)));
-        if (!snap.exists()) { setError("Défi introuvable"); setLoading(false); return; }
+        const ref = firestore().doc(`defis/${String(defiId)}`);
+        const snap = await ref.get();
+        if (!snap.exists) { setError("Défi introuvable"); setLoading(false); return; }
         const d = { id: snap.id, ...snap.data() };
         setDefi(d);
 
@@ -61,9 +59,10 @@ export default function ParticipateScreen() {
         // choix déjà faits ?
         if (user?.uid) {
           const choiceId = `${d.id}_${user.uid}`;
-          const cSnap = await getDoc(doc(db, "defi_choices", choiceId));
-          if (cSnap.exists()) {
-            const dd = cSnap.data();
+          const cRef = firestore().doc(`defi_choices/${choiceId}`);
+          const cSnap = await cRef.get();
+          if (cSnap.exists) {
+            const dd = cSnap.data() || {};
             if (Array.isArray(dd.players)) setSelected(dd.players.slice(0, d.type));
           }
         }
@@ -84,12 +83,8 @@ export default function ParticipateScreen() {
       headerLeft: ({ tintColor }) => (
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           {navigation.canGoBack() ? (
-            <HeaderBackButton
-              tintColor={tintColor}
-              onPress={() => navigation.goBack()}
-            />
+            <HeaderBackButton tintColor={tintColor} onPress={() => navigation.goBack()} />
           ) : (
-            // fallback (si on arrive via un lien direct)
             <TouchableOpacity
               onPress={() => router.replace("/(drawer)/(tabs)/ChallengesScreen")}
               style={{ paddingHorizontal: 8 }}
@@ -130,26 +125,27 @@ export default function ParticipateScreen() {
       return;
     }
     // deadline respectée ?
-    if (defi?.signupDeadline?.toDate) {
-      if (new Date() > defi.signupDeadline.toDate()) {
-        Alert.alert("Trop tard", "L’heure limite d’inscription est dépassée.");
-        return;
-      }
+    const dl = defi?.signupDeadline;
+    const deadline = dl?.toDate?.() ? dl.toDate() : dl ? new Date(dl) : null;
+    if (deadline && new Date() > deadline) {
+      Alert.alert("Trop tard", "L’heure limite d’inscription est dépassée.");
+      return;
     }
 
     const choiceId = `${defi.id}_${user.uid}`;
-    await setDoc(doc(db, "defi_choices", choiceId), {
+    const cRef = firestore().doc(`defi_choices/${choiceId}`);
+    await cRef.set({
       id: choiceId,
       defiId: defi.id,
       groupId: defi.groupId,
       userId: user.uid,
-      players: selected,         // uniquement les playerId !
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      players: selected, // uniquement les playerId !
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      updatedAt: firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
     Alert.alert("Sauvegardé", "Tes choix ont été enregistrés.");
-    router.replace("/(drawer)/(tabs)/ChallengesScreen"); // évite d’empiler des écrans détail
+    router.replace("/(drawer)/(tabs)/ChallengesScreen");
   }
 
   if (loading) {
@@ -178,9 +174,7 @@ export default function ParticipateScreen() {
     <>
       <Stack.Screen
         options={{
-          // ✅ Le titre vient d’ici (pas de "headerTitle")
           title: defi?.title || (defi?.type ? `Défi ${defi.type}` : "Participer"),
-          // ✅ Back vers la liste + Hamburger à gauche
           headerLeft: ({ tintColor }) => (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <HeaderBackButton

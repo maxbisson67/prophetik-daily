@@ -1,16 +1,16 @@
 // app/_layout.js
 import React, { useEffect, useState, useRef } from "react";
+import "../app/_prelude"; 
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
-import { View, ImageBackground, StyleSheet, Animated, Easing } from "react-native";
+import {  ImageBackground, StyleSheet, Animated, Easing, Platform } from "react-native";
 import { Stack, useRouter, useRootNavigationState, usePathname, useSegments } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Notifications from "expo-notifications";
-import { doc, onSnapshot } from "firebase/firestore";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { db } from "@src/lib/firebase";
+
 import { AuthProvider, useAuth } from "@src/auth/SafeAuthProvider";
-import { AppVisibilityProvider} from "@src/providers/AppVisibilityProvider";
+import { AppVisibilityProvider } from "@src/providers/AppVisibilityProvider";
 import "@src/lib/safeAsyncStorage";
 import { ThemeProvider } from "@src/theme/ThemeProvider";
 
@@ -24,8 +24,9 @@ import { setupNotificationsClient } from "@src/lib/push/notifications-setup";
 
 import SplashRingsRotating from "@src/ui/SplashRingsRotating";
 
-import * as SystemUI from 'expo-system-ui';
-SystemUI.setBackgroundColorAsync('#ffffff');
+import * as SystemUI from "expo-system-ui";
+
+SystemUI.setBackgroundColorAsync("#ffffff");
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -35,6 +36,28 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+/* ------------------------------------------------------------------ */
+/* Helpers Firestore cross-plateforme (RNFirebase natif / Web SDK web) */
+/* ------------------------------------------------------------------ */
+
+function subscribeParticipantDoc(uid, onNext, onError) {
+  if (!uid) return () => {};
+
+  if (Platform.OS === "web") {
+    // Web → SDK Web
+    // Import tardif pour éviter que Metro bundle le SDK Web en natif
+    const { doc, onSnapshot, getFirestore } = require("firebase/firestore");
+    const { app } = require("@src/lib/firebase"); // sur web, ton index.web exporte app/db/etc.
+    const db = getFirestore(app);
+    const ref = doc(db, "participants", uid);
+    return onSnapshot(ref, onNext, onError);
+  }
+
+  // iOS/Android → RNFirebase
+  const firestore = require("@react-native-firebase/firestore").default;
+  return firestore().collection("participants").doc(uid).onSnapshot(onNext, onError);
+}
 
 /* ---------------- Mounts qui consomment le contexte Auth ---------------- */
 
@@ -129,34 +152,55 @@ function RootLayoutInner() {
   const router = useRouter();
   const pathname = usePathname();
   const hasRoutedOnboarding = useRef(false);
+  const onboardingUnsubRef = useRef(null);
 
   // Garde-fou onboarding (ne déclenche que depuis des entrées "accueil")
   useEffect(() => {
+    // Nettoyage si user change ou on démonte
+    return () => {
+      try {
+        onboardingUnsubRef.current?.();
+      } catch {}
+      onboardingUnsubRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      onboardingUnsubRef.current?.();
+    } catch {}
+    onboardingUnsubRef.current = null;
+
     if (!user?.uid) return;
     if (hasRoutedOnboarding.current) return;
 
-    const ref = doc(db, "participants", user.uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      const seen = !!snap.data()?.onboarding?.welcomeSeen;
-
+    const isEntryPath = (() => {
       const p = pathname || "";
-      const isEntry =
+      return (
         p === "/" ||
         p === "/(drawer)" ||
         p === "/(drawer)/(tabs)" ||
-        p === "/(drawer)/(tabs)/AccueilScreen";
-      const inOnboarding = p.startsWith("/onboarding");
+        p === "/(drawer)/(tabs)/AccueilScreen"
+      );
+    })();
 
-      if (!seen && isEntry && !inOnboarding) {
-        hasRoutedOnboarding.current = true;
-        router.replace("/onboarding/welcome");
+    // On ne met le listener que si on est à une “entrée” (évite les boucles)
+    if (!isEntryPath) return;
+
+    onboardingUnsubRef.current = subscribeParticipantDoc(
+      user.uid,
+      (snap) => {
+        const seen = !!snap.data()?.onboarding?.welcomeSeen;
+        const inOnboarding = (pathname || "").startsWith("/onboarding");
+        if (!seen && !inOnboarding && !hasRoutedOnboarding.current) {
+          hasRoutedOnboarding.current = true;
+          router.replace("/onboarding/welcome");
+        }
+      },
+      (e) => {
+        console.log("[onboarding listener] error:", e?.code, e?.message || String(e));
       }
-    });
-    
-    return () => {
-      try { unsub?.(); } catch {}
-    };
-    //return () => unsub();
+    );
   }, [user?.uid, pathname, router]);
 
   // Splash animé (fade-out)
@@ -179,7 +223,7 @@ function RootLayoutInner() {
         style={styles.bg}
         resizeMode="cover"
       >
-       <Stack
+        <Stack
           screenOptions={{
             contentStyle: { backgroundColor: "#ffffff" },
             headerStyle: { backgroundColor: "#fff" },
@@ -193,10 +237,7 @@ function RootLayoutInner() {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
 
           {/* Onboarding global */}
-          <Stack.Screen
-            name="onboarding/welcome"
-            options={{ headerShown: false }}
-          />
+          <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
         </Stack>
 
         <AuthGateMount />
@@ -215,9 +256,7 @@ function RootLayoutInner() {
               opacity: fade,
             }}
           >
-            
-          <SplashRingsRotating size={260} color="#000" rings={2} logoSize={72} logoColor="#000" />
-
+            <SplashRingsRotating size={260} color="#000" rings={2} logoSize={72} logoColor="#000" />
           </Animated.View>
         )}
       </ImageBackground>
@@ -229,12 +268,12 @@ function RootLayoutInner() {
 
 export default function RootLayout() {
   return (
-     <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
           <AppVisibilityProvider>
             <AuthProvider>
-             <RootLayoutInner />
+              <RootLayoutInner />
             </AuthProvider>
           </AppVisibilityProvider>
         </ThemeProvider>

@@ -1,24 +1,23 @@
 // app/groups/[groupId]/index.js
 import { View, Text, ActivityIndicator, TouchableOpacity, Alert, Share, ScrollView, Modal, Image } from 'react-native';
-import { useEffect, useMemo, useState, useRef, useCallback,useLayoutEffect } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { DrawerToggleButton } from '@react-navigation/drawer';
 import { useLocalSearchParams, Stack, useRouter, useNavigation } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
-import { useAuth } from '@src/auth/SafeAuthProvider';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { HeaderBackButton } from '@react-navigation/elements';
+// ✅ RNFirebase Firestore
+import firestore from '@react-native-firebase/firestore';
+
+// Auth
+import { useAuth } from '@src/auth/SafeAuthProvider';
 
 // Profils publics
 import { usePublicProfile } from '@src/profile/usePublicProfile';
 import { getNameAvatarFrom as _getNameAvatarFrom } from '@src/profile/getNameAvatar';
 
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createDefi } from '@src/defis/api';
-
 
 /* ----------------------------- Helpers NHL ----------------------------- */
 async function fetchNhlDaySummary(gameDate) {
@@ -133,27 +132,18 @@ function getGroupEffectivePrice(group) {
 /* ---------- Normalisation de la forme renvoyée par usePublicProfile --------- */
 function unwrapProfileShape(raw) {
   if (!raw) return null;
-
-  // 1) Si le hook renvoie { profile: ... }
   let p = raw.profile ?? raw;
-
-  // 2) DocumentSnapshot Firestore ?
   if (p && typeof p.data === 'function') {
     const d = p.data();
     if (d && typeof d === 'object') p = d;
   }
-
-  // 3) { data: {...} }
   if (p && p.data && typeof p.data === 'object' && !Array.isArray(p.data)) {
     p = p.data;
   }
-
-  // 4) { doc: {...} }
   if (p && p.doc && typeof p.doc === 'object') {
     const d = p.doc.data?.() ?? p.doc.data ?? p.doc;
     if (d && typeof d === 'object') p = d;
   }
-
   return (p && typeof p === 'object') ? p : null;
 }
 
@@ -181,7 +171,6 @@ function MemberRow({ uid, role, item }) {
   const pubRaw = usePublicProfile(uid);
   const profile = unwrapProfileShape(pubRaw);
 
-  // Essaye d'abord ton utilitaire si présent
   let utilName = null, utilAvatar = null;
   try {
     if (typeof _getNameAvatarFrom === 'function') {
@@ -194,10 +183,6 @@ function MemberRow({ uid, role, item }) {
   const fallback = chooseNameAvatar(profile, item);
   const displayName = utilName || fallback.displayName || 'Invité';
   const avatarUrl   = utilAvatar || fallback.avatarUrl || null;
-
-  if (__DEV__ && !displayName) {
-    console.log('[MemberRow] No displayName for uid:', uid, 'profile keys:', profile ? Object.keys(profile) : null);
-  }
 
   return (
     <View
@@ -230,7 +215,6 @@ export default function GroupDetailScreen() {
   const { user } = useAuth();
   const r = useRouter();
   const params = useLocalSearchParams();
-  const openCreateParam = params?.openCreate;
 
   const id = useMemo(() => {
     const raw = params.groupId;
@@ -242,39 +226,6 @@ export default function GroupDetailScreen() {
   }, [params.initial]);
 
   const navigation = useNavigation();
- 
-  useLayoutEffect(() => {
-    const goToGroupsTab = () => {
-      // Remplace l’écran détail par l’onglet Groupes (pas d’empilement infini)
-      r.replace('/(drawer)/(tabs)/GroupsScreen');
-    };
-
-    navigation.setOptions({
-      title: group?.name || 'Groupe',
-      headerLeft: ({ tintColor }) => (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity onPress={goToGroupsTab} style={{ paddingHorizontal: 8 }}>
-            <Ionicons name="arrow-back" size={24} color={tintColor} />
-          </TouchableOpacity>
-          <DrawerToggleButton tintColor={tintColor} />
-        </View>
-      ),
-    });
-  }, [navigation, r, group?.name]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const onBeforeRemove = (e) => {
-        // Empêche le back natif (hardware, swipe, bouton du header par défaut)
-        e.preventDefault();
-        // Envoie toujours vers l’onglet Groupes
-        r.replace('/(drawer)/(tabs)/GroupsScreen');
-      };
-      const sub = navigation.addListener('beforeRemove', onBeforeRemove);
-      return sub; // unsubscribe on blur/unmount
-    }, [navigation, r])
-  );
-
 
   const [group, setGroup] = useState(initial);
   const [loading, setLoading] = useState(!initial);
@@ -288,43 +239,66 @@ export default function GroupDetailScreen() {
   const [verifyFirstISO, setVerifyFirstISO] = useState(null);
 
   const SIZES = ['1x1', '2x2', '3x3', '4x4', '5x5'];
-  const [openCreate, setOpenCreate] = useState(false);
+  const [openCreate, setOpenCreate] = useState(params?.openCreate === '1');
   const [size, setSize] = useState('1x1');
   const [gameDay, setGameDay] = useState(new Date());
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // Options d’entête (titre dynamique + back vers l’onglet Groupes)
+  useLayoutEffect(() => {
+    const goToGroupsTab = () => r.replace('/(drawer)/(tabs)/GroupsScreen');
+    navigation.setOptions({
+      title: group?.name || 'Groupe',
+      headerLeft: ({ tintColor }) => (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={goToGroupsTab} style={{ paddingHorizontal: 8 }}>
+            <Ionicons name="arrow-back" size={24} color={tintColor} />
+          </TouchableOpacity>
+          <DrawerToggleButton tintColor={tintColor} />
+        </View>
+      ),
+    });
+  }, [navigation, r, group?.name]);
 
+  // Forcer le retour vers l’onglet Groupes (évite l’empilement d’écrans)
+  useFocusEffect(
+    useCallback(() => {
+      const onBeforeRemove = (e) => {
+        e.preventDefault();
+        r.replace('/(drawer)/(tabs)/GroupsScreen');
+      };
+      const sub = navigation.addListener('beforeRemove', onBeforeRemove);
+      return sub;
+    }, [navigation, r])
+  );
 
-  useEffect(() => {
-    if (openCreateParam === '1') {
-      setOpenCreate(true);
-      try { r.setParams({ openCreate: undefined }); } catch {}
-    }
-  }, [openCreateParam, r]);
-
+  // 🔴 Groupe (live) — RNFirebase
   useEffect(() => {
     if (!id) return;
     setLoading(true); setError(null);
-    const ref = doc(db, 'groups', id);
-    const unsub = onSnapshot(
-      ref,
-      (snap) => { setGroup(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null); setLoading(false); },
+    const ref = firestore().collection('groups').doc(id);
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        setGroup(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+        setLoading(false);
+      },
       (e) => { setError(e); setLoading(false); }
     );
-    return () => unsub();
+    return () => { try { unsub(); } catch {} };
   }, [id]);
 
+  // 🔵 Memberships (live) — RNFirebase
   useEffect(() => {
     if (!id) return;
-    const qM = query(collection(db, 'group_memberships'), where('groupId', '==', id));
-    const unsub = onSnapshot(qM, (snap) => {
+    const qM = firestore().collection('group_memberships').where('groupId', '==', id);
+    const unsub = qM.onSnapshot((snap) => {
       const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const activeRows = rows.filter(m => (m.status ? m.status === 'active' : (m.active === true || m.active === undefined)));
       const norm = activeRows.map(m => ({ ...m, role: String(m.role || 'member').toLowerCase() }));
       setMemberships(norm);
     });
-    return () => unsub();
+    return () => { try { unsub(); } catch {} };
   }, [id]);
 
   const normalizedMemberships = useMemo(
@@ -341,8 +315,6 @@ export default function GroupDetailScreen() {
 
   const name = group?.name;
   const codeInvitation = group?.codeInvitation;
-  const createdAt = group?.createdAt;
-  const isPrivate = group?.isPrivate;
 
   const inviteMessage = `Rejoins mon groupe "${name || id}" dans Prophetik-daily.\nCode: ${codeInvitation ?? '—'}\nID: ${group?.id || id}`;
   const onShareInvite = async () => {
@@ -499,26 +471,7 @@ export default function GroupDetailScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: group?.name || 'Groupe',
-          // on reconstruit manuellement la zone gauche
-          headerLeft: ({ tintColor }) => (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {/* Back d’abord, si possible */}
-              {navigation.canGoBack() && (
-                <HeaderBackButton
-                  tintColor={tintColor}
-                  onPress={() => navigation.goBack()}
-                />
-              )}
-              {/* Puis le hamburger du Drawer */}
-              <DrawerToggleButton tintColor={tintColor} />
-            </View>
-          ),
-        
-        }}
-      />
+      <Stack.Screen options={{ title: group?.name || 'Groupe' }} />
 
       <ScrollView contentContainerStyle={{ padding:16, gap:16 }}>
         {/* === Carte Avatar de groupe === */}
@@ -542,7 +495,6 @@ export default function GroupDetailScreen() {
             <Text style={{ fontWeight:'800', fontSize:18, marginTop:10 }}>
               {group?.name || group?.title || 'Groupe'}
             </Text>
-          
           </View>
 
           <View style={{ marginTop:12 }}>
@@ -586,8 +538,8 @@ export default function GroupDetailScreen() {
           )}
         </View>
 
-        {/* Carte Membres (depuis profiles_public) */}
-        <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor: "#fff"  }}>
+        {/* Carte Membres */}
+        <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor: "#fff" }}>
           <View style={{ padding: 16 }}>
             <Text style={{ fontSize: 18, fontWeight: "700" }}>Membres du groupe</Text>
           </View>
@@ -642,7 +594,7 @@ export default function GroupDetailScreen() {
 
           <Text style={{ fontWeight:'600' }}>Format du défi</Text>
           <View style={{ flexDirection:'row', gap:8, flexWrap:'wrap' }}>
-            {SIZES.map((s) => {
+            {['1x1','2x2','3x3','4x4','5x5'].map((s) => {
               const active = s === size;
               return (
                 <TouchableOpacity
@@ -667,7 +619,7 @@ export default function GroupDetailScreen() {
             </View>
             <View style={{ flexDirection:'row' }}>
               <Text style={{ width: 160, fontWeight:'600' }}>Coût participation</Text>
-              <Text>{nType} crédit(s)</Text>
+              <Text>{parseInt(size,10)} crédit(s)</Text>
             </View>
           </View>
 

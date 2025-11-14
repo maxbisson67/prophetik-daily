@@ -1,18 +1,11 @@
 // src/groups/useGroupMembers.js
 import { useEffect, useMemo, useState } from "react";
-import { db } from "@src/lib/firebase";
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
+import firestore from "@react-native-firebase/firestore";
 
 /**
  * useGroupMembers(groupId)
  * Lit group_memberships pour un groupId donné et retourne
- * une liste prête pour l’UI (name, avatarUrl, email, credits, role…).
+ * une liste prête pour l’UI (name, avatarUrl, role, etc.).
  */
 export function useGroupMembers(groupId) {
   const [members, setMembers] = useState([]);
@@ -20,33 +13,35 @@ export function useGroupMembers(groupId) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // reset à chaque changement de groupId
+    setMembers([]);
+    setError(null);
+
     if (!groupId) {
-      setMembers([]);
       setLoading(false);
-      setError(null);
       return;
     }
 
     setLoading(true);
-    setError(null);
 
-    // On filtre par groupId et on trie par name (index composite possible)
-    const qRef = query(
-      collection(db, "group_memberships"),
-      where("groupId", "==", groupId)
-    );
+    // RNFB: use firestore().collection(...).where(...)
+    const qRef = firestore()
+      .collection("group_memberships")
+      .where("groupId", "==", String(groupId));
 
-    const un = onSnapshot(
-      qRef,
+    const unsubscribe = qRef.onSnapshot(
       (snap) => {
         const rows = snap.docs.map((d) => {
           const data = d.data() || {};
-          // compat: certains projets stockent "uid" ou "userId"
-          const uid = data.uid || data.userId || data.participantId || null;
 
-          // actif si status=active, ou active=true, ou absence de champ
+          // compat: uid vs userId vs participantId
+          const uid =
+            data.uid || data.userId || data.participantId || null;
+
+          // actif si status=active, ou active=true, ou champ absent
           const isActive =
-            (typeof data.status === "string" && data.status.toLowerCase() === "active") ||
+            (typeof data.status === "string" &&
+              data.status.toLowerCase() === "active") ||
             data.active === true ||
             data.status === undefined;
 
@@ -71,7 +66,7 @@ export function useGroupMembers(groupId) {
     );
 
     return () => {
-      try { un(); } catch {}
+      try { unsubscribe(); } catch {}
     };
   }, [groupId]);
 

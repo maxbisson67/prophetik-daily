@@ -1,28 +1,35 @@
-// src/defis/useDefis.js
+// src/defis/useDefis.js (version RNFB)
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
+import firestore from '@react-native-firebase/firestore';
 
 /**
  * Souscrit en temps réel aux défis d’un groupe.
- * Option: tu peux filtrer côté rendu selon dates (start/end) ou statut.
+ * Options possibles : orderBy('createdAt','desc'), filtre de statut, etc.
  */
-export function useGroupDefis(groupId) {
-  const [defis, setDefis] = useState([]);
+export function useGroupDefis(groupId, { status } = {}) {
+  const [defis, setDefis]   = useState([]);
   const [loading, setLoading] = useState(!!groupId);
-  const [error, setError] = useState(null);
+  const [error, setError]   = useState(null);
 
   useEffect(() => {
     if (!groupId) {
       setDefis([]);
       setLoading(false);
+      setError(null);
       return;
     }
-    const qd = query(collection(db, 'defis'), where('groupId', '==', groupId));
-    const un = onSnapshot(
-      qd,
+
+    let q = firestore()
+      .collection('defis')
+      .where('groupId', '==', String(groupId));
+
+    if (status) q = q.where('status', '==', String(status));
+    // Optionnel : trier (nécessite parfois un index composite si combiné à where)
+    q = q.orderBy('createdAt', 'desc');
+
+    const unsub = q.onSnapshot(
       (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setDefis(rows);
         setLoading(false);
       },
@@ -31,40 +38,45 @@ export function useGroupDefis(groupId) {
         setLoading(false);
       }
     );
-    return () => un();
-  }, [groupId]);
+
+    return () => { try { unsub(); } catch {} };
+  }, [groupId, status]);
 
   return { defis, loading, error };
 }
 
 /**
- * Si tu veux souscrire aux participations d’un utilisateur pour un défi donné
- * (utile pour pré-remplir son choix, afficher “déjà répondu”, etc.)
+ * Souscrit à MA participation dans un défi donné
+ * defis/{defiId}/participations/{uid}
  */
 export function useMyDefiParticipation(defiId, uid) {
   const [participation, setParticipation] = useState(null);
   const [loading, setLoading] = useState(!!(defiId && uid));
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!defiId || !uid) {
       setParticipation(null);
       setLoading(false);
+      setError(null);
       return;
     }
-    const pid = `${defiId}_${uid}`;
-    const un = onSnapshot(
-      collection(db, 'defi_participations'),
-      () => {}, // placeholder pour éviter un unused import si tu préfères doc() + onSnapshot
+
+    const ref = firestore().doc(`defis/${String(defiId)}/participations/${String(uid)}`);
+
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        setParticipation(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+        setLoading(false);
+      },
+      (e) => {
+        setError(e);
+        setLoading(false);
+      }
     );
-    // version doc directe:
-    // const un = onSnapshot(doc(db, 'defi_participations', pid), (snap) => {
-    //   setParticipation(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-    //   setLoading(false);
-    // }, () => setLoading(false));
-    return () => {
-      try { un(); } catch {}
-    };
+
+    return () => { try { unsub(); } catch {} };
   }, [defiId, uid]);
 
-  return { participation, loading };
+  return { participation, loading, error };
 }

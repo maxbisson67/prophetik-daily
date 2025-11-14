@@ -1,78 +1,62 @@
-// src/defis/api.js
-import {
-  addDoc, collection, serverTimestamp,
-  doc, getDoc
-} from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
+// src/defis/api.js (RNFB)
+import firestore from '@react-native-firebase/firestore';
 
-/**
- * Vérifie côté client si uid est owner du groupe:
- * - soit membership role === "owner" (group_memberships/{groupId}_{uid})
- * - soit groups/{groupId}.ownerId === uid
- */
-async function isGroupMemberOrOwnerClientCheck(groupId: string, uid: string) {
+/** Client-side check: membre actif OU owner du groupe */
+async function isGroupMemberOrOwnerClientCheck(groupId, uid) {
   try {
     if (!groupId || !uid) return false;
 
-    // 1) Membership doc (id = "<groupId>_<uid>")
-    const gmRef = doc(db, 'group_memberships', `${groupId}_${uid}`);
-    const gmSnap = await getDoc(gmRef);
-    if (gmSnap.exists()) {
+    // 1) membership: group_memberships/{groupId}_{uid}
+    const gmRef  = firestore().doc(`group_memberships/${groupId}_${uid}`);
+    const gmSnap = await gmRef.get();
+    if (gmSnap.exists) {
       const gm = gmSnap.data() || {};
-      // active: default true if missing
       const isActive = gm.active !== false;
-      const role = (gm.role || 'member').toLowerCase();
+      const role = String(gm.role || 'member').toLowerCase();
       if (isActive && (role === 'member' || role === 'owner')) return true;
     }
 
-    // 2) Fallback: owner of the group
-    const gRef = doc(db, 'groups', String(groupId));
-    const gSnap = await getDoc(gRef);
-    if (gSnap.exists() && gSnap.data()?.ownerId === uid) return true;
+    // 2) fallback owner
+    const gRef  = firestore().doc(`groups/${String(groupId)}`);
+    const gSnap = await gRef.get();
+    if (gSnap.exists && gSnap.data()?.ownerId === uid) return true;
 
     return false;
   } catch (e) {
-    console.warn('[isGroupMemberOrOwnerClientCheck] error:', e?.code || e?.message || e);
-    // Be permissive in UI and let security rules be the source of truth:
+    console.warn('[isGroupMemberOrOwnerClientCheck]', e?.code || e?.message || e);
     return false;
   }
 }
 
 /**
- * Crée un défi.
+ * Crée un défi (RNFB).
  * Requis:  { groupId, title, type, gameDate, createdBy }
  * Optionnels: { participationCost, status='active', firstGameUTC, signupDeadline }
- * ⚠️ Les règles exigent: isGroupOwner(groupId) ET createdBy == request.auth.uid
+ * Règles Firestore attendues: isGroupOwner(groupId) && createdBy == request.auth.uid
  */
-export async function createDefi(input) {
+export async function createDefi(input = {}) {
   const {
     groupId,
     title,
-    type,               // entier (1..5)
-    gameDate,           // "YYYY-MM-DD" (string)
-    createdBy,          // uid (OBLIGATOIRE)
-    participationCost,  // entier (optionnel)
+    type,
+    gameDate,            // "YYYY-MM-DD"
+    createdBy,           // uid
+    participationCost,   // number | null
     status = 'active',
-    firstGameUTC = null,    // Date | ISO string | null
-    signupDeadline = null,  // Date | ISO string | null
-  } = input || {};
+    firstGameUTC = null,     // Date | ISO | null
+    signupDeadline = null,   // Date | ISO | null
+  } = input;
 
-  // Garde-fous minimum
-  if (!groupId) throw new Error('groupId requis');
-  if (!title) throw new Error('title requis');
-  if (!type) throw new Error('type requis');
-  if (!gameDate) throw new Error('gameDate requis');
+  if (!groupId)   throw new Error('groupId requis');
+  if (!title)     throw new Error('title requis');
+  if (!type)      throw new Error('type requis');
+  if (!gameDate)  throw new Error('gameDate requis');
   if (!createdBy) throw new Error('createdBy (uid) requis');
 
-  
-
-  // Pré-vérif owner (évite un permission-denied silencieux)
+  // Vérif UI (les règles restent l’ultime source de vérité)
   const okOwner = await isGroupMemberOrOwnerClientCheck(groupId, createdBy);
-  if (!okOwner) {
-    throw new Error("Création refusée: l'utilisateur n'est pas owner du groupe.");
-  }
+  if (!okOwner) throw new Error("Création refusée: l'utilisateur n'est pas owner/membre actif du groupe.");
 
-  // Normalise les dates en Date pour Firestore (Timestamp côté serveur)
   const toDate = (v) => (v instanceof Date ? v : (v ? new Date(v) : null));
 
   const payload = {
@@ -80,22 +64,19 @@ export async function createDefi(input) {
     title: String(title),
     type: Number(type),
     gameDate: String(gameDate),
-    createdBy: String(createdBy),             // ⚠️ requis par les règles
+    createdBy: String(createdBy),
     participationCost: participationCost ?? null,
-    status,
+    status: String(status),
     firstGameUTC: toDate(firstGameUTC) || undefined,
     signupDeadline: toDate(signupDeadline) || undefined,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    createdAt: firestore.FieldValue.serverTimestamp(),
+    updatedAt: firestore.FieldValue.serverTimestamp(),
   };
 
-  // Nettoyage des undefined
+  // Retire les undefined (RNFB ignore souvent, mais gardons propre)
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
-  // Ecrit le défi
-  const defisCol = collection(db, 'defis');
- 
-  const defiRef = await addDoc(defisCol, payload);
-
-  return { id: defiRef.id };
+  const col = firestore().collection('defis');
+  const ref = await col.add(payload);
+  return { id: ref.id };
 }

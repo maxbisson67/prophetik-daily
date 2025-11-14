@@ -1,9 +1,5 @@
 // app/defis/[defiId]/index.js
-// Écran de participation à un défi NHL
-// - Logos NHL locaux
-// - Cache versionné (CACHE_VERSION) + clés par saison (AsyncStorage)
-// - Force reload lors du changement de saison (évite de servir l’autre saison)
-// - Tri par points décroissant (puis nom)
+// Écran de participation à un défi NHL (RNFirebase)
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
@@ -16,21 +12,16 @@ import { HeaderBackButton } from '@react-navigation/elements';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import {
-  doc, onSnapshot, collection, query, where, getDocs, getDoc,
-  orderBy, startAfter, limit as qLimit,
-} from 'firebase/firestore';
-import { db } from '@src/lib/firebase';
+
+import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
 import { Ionicons } from '@expo/vector-icons';
-import { functions } from '@src/lib/firebase'; 
-import { httpsCallable } from 'firebase/functions';
 import isEqual from 'lodash.isequal';
 
-
-// Logos NHL (local)
+/* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
   ANA: require('../../../../assets/nhl-logos/ANA.png'),
   ARI: require('../../../../assets/nhl-logos/ARI.png'),
@@ -70,33 +61,11 @@ const LOGO_MAP = {
 function LoadingOverlay({ visible, text = "Chargement..." }) {
   if (!visible) return null;
   return (
-    <View
-      pointerEvents="auto"
-      style={{
-        position: "absolute",
-        inset: 0,
-        backgroundColor: "rgba(0,0,0,0.25)",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 999,
-      }}
-    >
-      <View
-        style={{
-          paddingVertical: 16,
-          paddingHorizontal: 18,
-          borderRadius: 12,
-          backgroundColor: "#fff",
-          minWidth: 220,
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
+    <View pointerEvents="auto" style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+      <View style={{ paddingVertical: 16, paddingHorizontal: 18, borderRadius: 12, backgroundColor: '#fff', minWidth: 220, alignItems: 'center', gap: 10 }}>
         <ActivityIndicator size="large" />
-        <Text style={{ fontSize: 15, fontWeight: "600" }}>{text}</Text>
-        <Text style={{ fontSize: 12, color: "#666", textAlign: "center" }}>
-          Cela peut prendre quelques secondes…
-        </Text>
+        <Text style={{ fontSize: 15, fontWeight: '600' }}>{text}</Text>
+        <Text style={{ fontSize: 12, color: '#666', textAlign: 'center' }}>Cela peut prendre quelques secondes…</Text>
       </View>
     </View>
   );
@@ -131,9 +100,7 @@ function isPast(ts) {
 const pick = (o, k) => (o && o[k] !== undefined ? o[k] : undefined);
 const pickAbbr = (t) => (pick(t,'teamAbbrev')?.default ?? pick(t,'teamAbbrev') ?? pick(t,'abbrev') ?? '')?.toUpperCase?.();
 
-// Logos équipe (local)
 function teamLogo(abbr) { return LOGO_MAP[abbr]; }
-// Headshots (mets à jour l’année si nécessaire côté NHL)
 function headshotUrl(abbr, playerId) {
   return (abbr && playerId) ? `https://assets.nhle.com/mugs/nhl/20252026/${abbr}/${playerId}.png` : null;
 }
@@ -178,7 +145,6 @@ async function fetchTeamsPlayingOn(ymd) {
 
 /* --------------------------- Saison & cache --------------------------- */
 const DAY = 24 * 60 * 60 * 1000;
-
 function msUntilNextSept15(from = new Date()) {
   const y = from.getFullYear();
   const sept15ThisYear = new Date(y, 8, 15, 0, 0, 0, 0);
@@ -199,8 +165,8 @@ function getPreviousSeasonId(date = new Date()) {
 function ttlForSeason(seasonId, now = new Date()) {
   const cur = getCurrentSeasonId(now);
   const prev = getPreviousSeasonId(now);
-  if (seasonId === cur) return DAY;                          // saison courante: 1 jour
-  if (seasonId === prev) return Math.max(msUntilNextSept15(now), DAY); // précédente: jusqu’au 15 sept
+  if (seasonId === cur) return DAY;
+  if (seasonId === prev) return Math.max(msUntilNextSept15(now), DAY);
   return 180 * DAY;
 }
 
@@ -208,47 +174,51 @@ function ttlForSeason(seasonId, now = new Date()) {
 const CACHE_VERSION = 'v4';
 const cacheKeyForSeason = (seasonId) => `${CACHE_VERSION}_nhl_stats_current_${seasonId}`;
 
-async function loadAllSkaterStatsForSeason(db, seasonId) {
+/* ----------- Firestore (RNFirebase) utils: stats paginées ----------- */
+async function loadAllSkaterStatsForSeason(seasonId) {
   const map = {};
   try {
-    let pageQ = query(
-      collection(db,'nhl_player_stats_current'),
-      where('seasonId','==',seasonId),
-      orderBy('playerId'),
-      qLimit(500)
-    );
+    // chemin de base
+    let pageQ = firestore()
+      .collection('nhl_player_stats_current')
+      .where('seasonId', '==', seasonId)
+      .orderBy('playerId')
+      .limit(500);
+
     while (true) {
-      const snap = await getDocs(pageQ);
+      const snap = await pageQ.get();
       if (snap.empty) break;
+
       snap.forEach(docSnap => {
         const s = docSnap.data() || {};
         const pid = String(s.playerId ?? '');
         if (!pid) return;
         const g = Number(s.goals ?? 0);
         const a = Number(s.assists ?? 0);
-        const p = Number(s.points ?? g + a);
+        const p = Number.isFinite(s.points) ? Number(s.points) : g + a;
         map[pid] = {
           goals: g, assists: a, points: p,
           teamAbbr: s.teamAbbr ?? null, fullName: s.fullName ?? null, playerId: pid,
         };
       });
-      const last = snap.docs[snap.docs.length-1];
-      pageQ = query(
-        collection(db,'nhl_player_stats_current'),
-        where('seasonId','==',seasonId),
-        orderBy('playerId'),
-        startAfter(last),
-        qLimit(500)
-      );
+
+      const last = snap.docs[snap.docs.length - 1];
+      pageQ = firestore()
+        .collection('nhl_player_stats_current')
+        .where('seasonId', '==', seasonId)
+        .orderBy('playerId')
+        .startAfter(last)
+        .limit(500);
     }
+
     console.log(`[FIRESTORE] seasonId=${seasonId} fetched=${Object.keys(map).length}`);
     return map;
   } catch (err) {
     console.log('[STATS] Fallback no-index path', err?.message || err);
     try {
-      let pageQ = query(collection(db,'nhl_player_stats_current'), orderBy('playerId'), qLimit(500));
+      let pageQ = firestore().collection('nhl_player_stats_current').orderBy('playerId').limit(500);
       while (true) {
-        const snap = await getDocs(pageQ);
+        const snap = await pageQ.get();
         if (snap.empty) break;
         snap.forEach(docSnap => {
           const s = docSnap.data() || {};
@@ -257,14 +227,14 @@ async function loadAllSkaterStatsForSeason(db, seasonId) {
           if (!pid) return;
           const g = Number(s.goals ?? 0);
           const a = Number(s.assists ?? 0);
-          const p = Number(s.points ?? g + a);
+          const p = Number.isFinite(s.points) ? Number(s.points) : g + a;
           map[pid] = {
             goals: g, assists: a, points: p,
             teamAbbr: s.teamAbbr ?? null, fullName: s.fullName ?? null, playerId: pid,
           };
         });
-        const last = snap.docs[snap.docs.length-1];
-        pageQ = query(collection(db,'nhl_player_stats_current'), orderBy('playerId'), startAfter(last), qLimit(500));
+        const last = snap.docs[snap.docs.length - 1];
+        pageQ = firestore().collection('nhl_player_stats_current').orderBy('playerId').startAfter(last).limit(500);
       }
       console.log(`[FIRESTORE] (fallback) seasonId=${seasonId} fetched=${Object.keys(map).length}`);
       return map;
@@ -274,17 +244,19 @@ async function loadAllSkaterStatsForSeason(db, seasonId) {
     }
   }
 }
-async function loadAllSkaterStatsWithCache(db, seasonId, { force = false } = {}){
+
+async function loadAllSkaterStatsWithCache(seasonId, { force = false } = {}) {
   const key = cacheKeyForSeason(seasonId);
   const ttl = ttlForSeason(seasonId);
+
   if (!force) {
     try {
       const raw = await AsyncStorage.getItem(key);
-      if (raw){
+      if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.ts && parsed?.seasonId === seasonId){
+        if (parsed?.ts && parsed?.seasonId === seasonId) {
           const age = Date.now() - parsed.ts;
-          if (age < ttl && parsed?.data && Object.keys(parsed.data).length){
+          if (age < ttl && parsed?.data && Object.keys(parsed.data).length) {
             console.log(`[STATS] cache hit seasonId=${seasonId} players=${Object.keys(parsed.data).length}`);
             return parsed.data;
           }
@@ -292,12 +264,14 @@ async function loadAllSkaterStatsWithCache(db, seasonId, { force = false } = {})
       }
     } catch {}
   }
-  const fresh = await loadAllSkaterStatsForSeason(db, seasonId);
+
+  const fresh = await loadAllSkaterStatsForSeason(seasonId);
   try { await AsyncStorage.setItem(key, JSON.stringify({ ts: Date.now(), seasonId, data: fresh })); } catch {}
   return fresh;
 }
 
 /* --------------------------- Modal de sélection --------------------------- */
+// (inchangé)
 function PlayerSelectModal({ visible, onClose, options, onPick }) {
   const [q, setQ] = useState('');
   const [kbHeight, setKbHeight] = useState(0);
@@ -439,35 +413,34 @@ export default function DefiParticipationScreen() {
   const [refreshNote, setRefreshNote] = useState(null);
 
   const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false); // empêche les doubles envois
+  const savingRef = useRef(false);
 
-  // Saison & cache (préférence persistée)
+  // Saison & cache
   const [seasonId, _setSeasonId] = useState(getCurrentSeasonId());
   useEffect(() => { (async () => {
     try { const saved = await AsyncStorage.getItem('preferred_seasonId'); if (saved) _setSeasonId(saved); } catch {}
   })(); }, []);
   useEffect(() => { AsyncStorage.setItem('preferred_seasonId', seasonId).catch(() => {}); }, [seasonId]);
 
-  // Charger défi
+  // Charger défi (RNFirebase)
   useEffect(() => {
     if (!defiId) return;
-      setLoadingDefi(true);
-      const ref = doc(db, 'defis', String(defiId));
+    setLoadingDefi(true);
+    const ref = firestore().doc(`defis/${String(defiId)}`);
 
-      let lastDefi = null;
-      const unsub = onSnapshot(
-        ref,
-        (snap) => {
-          const next = snap.exists() ? { id: snap.id, ...snap.data() } : null;
-          if (!isEqual(next, lastDefi)) {
-            lastDefi = next;
-            setDefi(next);
-          }
-          setLoadingDefi(false);
-        },
-        (e) => { setError(e); setLoadingDefi(false); }
-      );
-      return () => unsub();
+    let lastDefi = null;
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        const next = snap.exists ? { id: snap.id, ...snap.data() } : null;
+        if (!isEqual(next, lastDefi)) {
+          lastDefi = next;
+          setDefi(next);
+        }
+        setLoadingDefi(false);
+      },
+      (e) => { setError(e); setLoadingDefi(false); }
+    );
+    return () => unsub();
   }, [defiId]);
 
   const maxChoices = useMemo(() => {
@@ -479,15 +452,15 @@ export default function DefiParticipationScreen() {
     setSelected(prev => Array.from({ length: maxChoices }, (_, i) => prev?.[i] ?? null));
   }, [maxChoices]);
 
-  // Charger participation existante
+  // Charger participation existante (RNFirebase)
   useEffect(() => {
     (async () => {
       if (!defi?.id || !user?.uid) return;
       try {
-        const ref = doc(db, 'defis', String(defi.id), 'participations', user.uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          const p = snap.data();
+        const ref = firestore().doc(`defis/${String(defi.id)}/participations/${user.uid}`);
+        const snap = await ref.get();
+        if (snap.exists) {
+          const p = snap.data() || {};
           const picks = Array.isArray(p.picks) ? p.picks : [];
           setSelected((prev) =>
             Array.from({ length: maxChoices }, (_, i) => {
@@ -515,7 +488,7 @@ export default function DefiParticipationScreen() {
     return () => { cancelled = true; };
   }, [gameYMD]);
 
-  // Joueurs des équipes qui jouent (depuis nhl_players)
+  // Joueurs des équipes qui jouent (RNFirebase, with 'in' chunks)
   const abbrList = useMemo(() => Array.from(teamAbbrs), [teamAbbrs]);
   useEffect(() => {
     (async () => {
@@ -525,10 +498,13 @@ export default function DefiParticipationScreen() {
         for (let i = 0; i < abbrList.length; i += 10) chunks.push(abbrList.slice(i, i + 10));
         const results = [];
         for (const chunk of chunks) {
-          const qRef = query(collection(db, 'nhl_players'), where('teamAbbr', 'in', chunk));
-          const snap = await getDocs(qRef);
+          const snap = await firestore()
+            .collection('nhl_players')
+            .where('teamAbbr', 'in', chunk)
+            .get();
+
           snap.forEach(docSnap => {
-            const p = docSnap.data();
+            const p = docSnap.data() || {};
             results.push({ playerId: p.playerId, fullName: p.fullName, teamAbbr: (p.teamAbbr || '').toUpperCase() });
           });
         }
@@ -536,9 +512,9 @@ export default function DefiParticipationScreen() {
         setPlayers(prev => (isEqual(prev, results) ? prev : results));
       } catch (e) { setError(e); }
     })();
-  }, [JSON.stringify(abbrList)]); 
+  }, [JSON.stringify(abbrList)]);
 
-  // Chargement des stats pour la saison (cache-first)
+  // Chargement des stats pour la saison (cache-first RNFirebase)
   const loadingRef = useRef(false);
   const lastAppliedRef = useRef(null);
 
@@ -552,7 +528,7 @@ export default function DefiParticipationScreen() {
         const isCurrent = seasonId === getCurrentSeasonId();
         if (isCurrent) setRefreshNote('Mise à jour des statistiques du jour…');
         setLoadingStats(true);
-        const data = await loadAllSkaterStatsWithCache(db, seasonId, { force: false });
+        const data = await loadAllSkaterStatsWithCache(seasonId, { force: false });
         if (!cancelled && !isEqual(lastAppliedRef.current?.data, data)) {
           setStatsById(data);
           lastAppliedRef.current = { id: seasonId, data };
@@ -566,7 +542,7 @@ export default function DefiParticipationScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [db, seasonId]);
+  }, [seasonId]);
 
   // Changement de saison → force reload
   const setSeasonId = useCallback((val) => {
@@ -575,7 +551,7 @@ export default function DefiParticipationScreen() {
     setRefreshNote(true);
     _setSeasonId(val);
     setTimeout(async () => {
-      const map = await loadAllSkaterStatsWithCache(db, val, { force: true });
+      const map = await loadAllSkaterStatsWithCache(val, { force: true });
       console.log('[STATS] applied seasonId (forced)', val, 'players', Object.keys(map).length);
       setStatsById(map);
       setLoadingStats(false);
@@ -602,7 +578,7 @@ export default function DefiParticipationScreen() {
       const st = statsById[String(p.playerId)] || {};
       const g = Number(st.goals ?? 0);
       const a = Number(st.assists ?? 0);
-      const pts = Number(st.points ?? (g + a));
+      const pts = Number.isFinite(st.points) ? Number(st.points) : g + a;
       return { ...p, goals: g, assists: a, points: pts };
     });
     arr.sort((x, y) => (Number(y.points ?? 0) - Number(x.points ?? 0)) || String(x.fullName||'').localeCompare(String(y.fullName||'')));
@@ -615,16 +591,11 @@ export default function DefiParticipationScreen() {
     Keyboard.dismiss();
   }, []);
 
- const handlePick = useCallback((p) => {
+  const handlePick = useCallback((p) => {
     setSelected(prev => {
-      // Vérifie si le joueur est déjà sélectionné ailleurs
       const alreadyUsed = prev.some((pl, idx) => pl?.playerId === p.playerId && idx !== pickerIndex);
       if (alreadyUsed) {
-        Alert.alert(
-          "Joueur déjà sélectionné",
-          `${p.fullName} est déjà choisi pour un autre poste.`,
-          [{ text: "OK" }]
-        );
+        Alert.alert("Joueur déjà sélectionné", `${p.fullName} est déjà choisi pour un autre poste.`, [{ text: "OK" }]);
         return prev;
       }
       const next = [...prev];
@@ -639,18 +610,17 @@ export default function DefiParticipationScreen() {
     if (!user?.uid || !defi?.id) return;
     if (locked) { Alert.alert('Inscription fermée', 'La date limite est dépassée.'); return; }
     if (!allChosen) { Alert.alert('Sélection incomplète', `Tu dois choisir ${maxChoices} joueur(s).`); return; }
-    if (savingRef.current) return;            // garde
+    if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
 
-    // petit délai pour afficher un message convivial si c'est long (cold-start)
     const msgTimer = setTimeout(() => {
       setRefreshNote("Création de la participation… (le premier participant peut prendre quelques secondes)");
     }, 400);
 
     try {
-      const participateInDefi = httpsCallable(functions, 'participateInDefi');
-      const res = await participateInDefi({
+      const call = functions().httpsCallable('participateInDefi');
+      const res = await call({
         defiId: defi.id,
         picks: selected.map(p => ({ playerId: p.playerId, fullName: p.fullName, teamAbbr: p.teamAbbr })),
       });
@@ -660,7 +630,7 @@ export default function DefiParticipationScreen() {
       if (ok) {
         const potMsg = (newPot !== null) ? `Cagnotte: ${newPot} crédits` : 'Participation enregistrée.';
         Alert.alert('Participation enregistrée', `Bonne chance ! ${potMsg}`, [
-          { text: "OK", onPress: () => router.replace("/(tabs)/ChallengesScreen") }
+          { text: "OK", onPress: () => router.replace("/(drawer)/(tabs)/ChallengesScreen") }
         ]);
       } else {
         throw new Error(res?.data?.error || 'Erreur inconnue');
@@ -673,7 +643,8 @@ export default function DefiParticipationScreen() {
       setSaving(false);
       savingRef.current = false;
     }
-  }, [user?.uid, defi?.id, selected, maxChoices, locked, allChosen, functions, router]);
+  }, [user?.uid, defi?.id, selected, maxChoices, locked, allChosen, router]);
+
   if (loadingDefi) {
     return (
       <>
@@ -717,23 +688,14 @@ export default function DefiParticipationScreen() {
           title: headerTitle || 'Défi',
           headerLeft: ({ tintColor }) => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {/* Back that ALWAYS goes to the Défis list */}
-              <HeaderBackButton
-                tintColor={tintColor}
-                onPress={() => router.replace('/(drawer)/(tabs)/ChallengesScreen')}
-              />
-              {/* Hamburger (needs this screen to be under the drawer) */}
+              <HeaderBackButton tintColor={tintColor} onPress={() => router.replace('/(drawer)/(tabs)/ChallengesScreen')} />
               <DrawerToggleButton tintColor={tintColor} />
             </View>
           ),
         }}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-      >
+      <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}>
           {/* Infos défi */}
           <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', elevation:3 }}>
@@ -795,25 +757,22 @@ export default function DefiParticipationScreen() {
 
           {/* Actions */}
           <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff', gap:8 }}>
-           <TouchableOpacity
-            disabled={locked || !selected.every(Boolean) || saving}
-            onPress={save}
-            style={{
-              padding:14, borderRadius:10, alignItems:'center',
-              backgroundColor: (locked || !selected.every(Boolean) || saving) ? '#9ca3af' : '#111'
-            }}
-          >
-            {saving ? (
-              <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={{ color:'#fff', fontWeight:'700' }}>Création de la participation…</Text>
-              </View>
-            ) : (
-              <Text style={{ color:'#fff', fontWeight:'700' }}>
-                {locked ? 'Inscription fermée' : 'Enregistrer ma participation'}
-              </Text>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              disabled={locked || !selected.every(Boolean) || saving}
+              onPress={save}
+              style={{ padding:14, borderRadius:10, alignItems:'center', backgroundColor: (locked || !selected.every(Boolean) || saving) ? '#9ca3af' : '#111' }}
+            >
+              {saving ? (
+                <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={{ color:'#fff', fontWeight:'700' }}>Création de la participation…</Text>
+                </View>
+              ) : (
+                <Text style={{ color:'#fff', fontWeight:'700' }}>
+                  {locked ? 'Inscription fermée' : 'Enregistrer ma participation'}
+                </Text>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.back()} style={{ padding:12, borderRadius:10, borderWidth:1, alignItems:'center', backgroundColor:'#fff' }}>
               <Text>Annuler</Text>
             </TouchableOpacity>
@@ -822,22 +781,8 @@ export default function DefiParticipationScreen() {
       </KeyboardAvoidingView>
 
       {/* Modal & overlay */}
-      <PlayerSelectModal
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        options={playersWithStats}
-        onPick={handlePick}
-      />
-     <LoadingOverlay
-        visible={loadingStats || saving}
-        text={
-          saving
-            ? "Création de la participation…"
-            : refreshNote
-            ? "Mise à jour des statistiques du jour…"
-            : "Chargement des statistiques…"
-        }
-      />
+      <PlayerSelectModal visible={pickerOpen} onClose={() => setPickerOpen(false)} options={playersWithStats} onPick={handlePick} />
+      <LoadingOverlay visible={loadingStats || saving} text={saving ? 'Création de la participation…' : (refreshNote ? 'Mise à jour des statistiques du jour…' : 'Chargement des statistiques…')} />
     </>
   );
 }

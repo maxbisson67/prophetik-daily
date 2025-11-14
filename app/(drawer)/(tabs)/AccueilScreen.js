@@ -2,12 +2,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, ScrollView, Image, Modal, Pressable } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
-import { collection, doc, query, where, limit, onSnapshot /*, getDoc */ } from 'firebase/firestore';
-import { db, webAuth } from '@src/lib/firebase';
-
-// Safe auth
+import firestore from '@react-native-firebase/firestore';
 import { useAuth } from '@src/auth/SafeAuthProvider';
-
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -37,32 +33,16 @@ function Chip({ bg, fg, icon, label }) {
     </View>
   );
 }
-
-// Web bridge guard: assure que le Web SDK est connecté au même uid
-function isWebBridgeReady(expectedUid) {
-  const cu = webAuth?.currentUser;
-  return !!(cu && cu.uid === expectedUid);
-}
-
-// Logger uniforme des listeners
-function listen(refOrQuery, onNext, tag) {
-  return onSnapshot(
-    refOrQuery,
-    onNext,
-    (e) => {
-      // On garde la forme courte pour bien repérer la source dans la console.
-      console.log(`[FS:${tag}]`, e?.code, e?.message);
-    }
-  );
-}
-
-// Message d'erreur convivial
 function friendlyError(e) {
   if (!e) return 'Erreur inconnue';
-  if (e?.code === 'permission-denied') {
-    return 'Accès refusé par les règles Firestore (permission-denied).';
-  }
+  if (e?.code === 'permission-denied') return 'Accès refusé par les règles Firestore.';
   return String(e?.message || e);
+}
+// Petit helper homogène pour onSnapshot
+function listenRNFB(refOrQuery, onNext, tag) {
+  return refOrQuery.onSnapshot(onNext, (e) => {
+    console.log(`[FS:${tag}]`, e?.code, e?.message);
+  });
 }
 
 /* ----------------------------- Screen ----------------------------- */
@@ -103,7 +83,7 @@ export default function AccueilScreen() {
   const lastGroupIdsKeyRef = useRef('');
   const lastActiveKeyRef = useRef('');
 
-  // Reset states quand authReady/uid changent
+  // Reset au changement d’auth
   useEffect(() => {
     setMeDoc(null);
     setGroupIds([]);
@@ -121,7 +101,6 @@ export default function AccueilScreen() {
     try { me?.(); } catch {}
     subs.current = { me: null, byUid: null, byPid: null, ownerCreated: null, ownerOwnerId: null };
 
-    // clear group meta listeners
     for (const [, un] of groupMetaUnsubs.current) { try { un(); } catch {} }
     groupMetaUnsubs.current.clear();
     setGroupsMeta({});
@@ -130,45 +109,35 @@ export default function AccueilScreen() {
   /* ---------- 1) Participant (wallet, profil) ---------- */
   useEffect(() => {
     if (!authReady || !user?.uid) { setLoadingMe(false); return; }
-    if (!isWebBridgeReady(user.uid)) { return; }
     if (subs.current.me) { setLoadingMe(false); return; }
 
-    console.log('[Diag] authReady:', authReady, 'user.uid:', user?.uid);
-    const ref = doc(db, 'participants', user.uid);
 
-    // (Optionnel) Probe direct pour logs utiles
-    // getDoc(ref).then(s => console.log('[Probe participants]', s.exists()))
-    //            .catch(e => console.log('[Probe participants error]', e?.code, e?.message));
+    const ref = firestore().collection('participants').doc(user.uid);
 
-    const un = listen(
+    const un = listenRNFB(
       ref,
       (snap) => {
-        setMeDoc(snap.exists() ? ({ uid: snap.id, ...snap.data() }) : null);
+        setMeDoc(snap.exists ? ({ uid: snap.id, ...snap.data() }) : null);
         setLoadingMe(false);
       },
       'participants/self'
     );
 
     subs.current.me = un;
-
-    return () => {
-      try { subs.current.me?.(); } catch {}
-      subs.current.me = null;
-    };
-  }, [authReady, user?.uid, webAuth?.currentUser?.uid]);
+    return () => { try { subs.current.me?.(); } catch {}; subs.current.me = null; };
+  }, [authReady, user?.uid]);
 
   /* ---------- 2) Mes groupes : memberships + ownership ---------- */
   useEffect(() => {
     setError(null);
     setGroupIds([]);
     if (!authReady || !user?.uid) { setLoadingGroups(false); return; }
-    if (!isWebBridgeReady(user.uid)) { return; }
     setLoadingGroups(true);
 
-    const qByUid         = query(collection(db, 'group_memberships'), where('uid', '==', user.uid));
-    const qByPid         = query(collection(db, 'group_memberships'), where('participantId', '==', user.uid));
-    const qOwnerCreated  = query(collection(db, 'groups'), where('createdBy', '==', user.uid));
-    const qOwnerOwnerId  = query(collection(db, 'groups'), where('ownerId', '==', user.uid));
+    const qByUid        = firestore().collection('group_memberships').where('uid', '==', user.uid);
+    const qByPid        = firestore().collection('group_memberships').where('participantId', '==', user.uid);
+    const qOwnerCreated = firestore().collection('groups').where('createdBy', '==', user.uid);
+    const qOwnerOwnerId = firestore().collection('groups').where('ownerId', '==', user.uid);
 
     let rowsByUid = [];
     let rowsByPid = [];
@@ -196,22 +165,22 @@ export default function AccueilScreen() {
     Object.values(rest).forEach(un => { try { un?.(); } catch {} });
     subs.current = { me: keepMe, byUid: null, byPid: null, ownerCreated: null, ownerOwnerId: null };
 
-    subs.current.byUid = listen(
+    subs.current.byUid = listenRNFB(
       qByUid,
       (snap) => { rowsByUid = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       'group_memberships:uid'
     );
-    subs.current.byPid = listen(
+    subs.current.byPid = listenRNFB(
       qByPid,
       (snap) => { rowsByPid = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       'group_memberships:participantId'
     );
-    subs.current.ownerCreated = listen(
+    subs.current.ownerCreated = listenRNFB(
       qOwnerCreated,
       (snap) => { rowsOwnerCreated = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       'groups:createdBy'
     );
-    subs.current.ownerOwnerId = listen(
+    subs.current.ownerOwnerId = listenRNFB(
       qOwnerOwnerId,
       (snap) => { rowsOwnerOwnerId = snap.docs.map(d => ({ id: d.id, ...d.data() })); recompute(); },
       'groups:ownerId'
@@ -222,34 +191,37 @@ export default function AccueilScreen() {
       Object.values(rest2).forEach(un => { try { un(); } catch {} });
       subs.current = { me: keepMe2, byUid: null, byPid: null, ownerCreated: null, ownerOwnerId: null };
     };
-  }, [authReady, user?.uid, webAuth?.currentUser?.uid]);
+  }, [authReady, user?.uid]);
 
-  /* ---------- 2b) Charger les métadonnées des groupes pour le sélecteur ---------- */
+  /* ---------- 2b) Métadonnées des groupes ---------- */
   useEffect(() => {
-    if (!authReady || !user?.uid || !isWebBridgeReady(user.uid)) return;
+    if (!authReady || !user?.uid) return;
 
-    // Clean listeners for groups no longer in list
+    // Clean listeners des groupes enlevés
     for (const [gid, un] of groupMetaUnsubs.current) {
       if (!groupIds.includes(gid)) { try { un(); } catch {} ; groupMetaUnsubs.current.delete(gid); }
     }
 
     groupIds.forEach((gid) => {
       if (groupMetaUnsubs.current.has(gid)) return;
-      const ref = doc(db, 'groups', gid);
-      const un = listen(ref, (snap) => {
-        setGroupsMeta(prev => ({ ...prev, [gid]: { name: snap.data()?.name || snap.data()?.title || gid } }));
-      }, `groups:meta:${gid}`);
+      const ref = firestore().collection('groups').doc(gid);
+      const un = listenRNFB(
+        ref,
+        (snap) => {
+          const data = snap.data() || {};
+          setGroupsMeta(prev => ({ ...prev, [gid]: { name: data.name || data.title || gid } }));
+        },
+        `groups:meta:${gid}`
+      );
       groupMetaUnsubs.current.set(gid, un);
     });
+  }, [authReady, user?.uid, groupIds]);
 
-    return () => { /* nettoyé ailleurs */ };
-  }, [authReady, user?.uid, groupIds, webAuth?.currentUser?.uid]);
-
-  /* ---------- 3) Défis actifs/live par groupId (merge) ---------- */
+  /* ---------- 3) Défis actifs/live par groupId ---------- */
   useEffect(() => {
-    if (!authReady || !user?.uid || !isWebBridgeReady(user.uid)) return;
+    if (!authReady || !user?.uid) return;
 
-    // Retire les listeners des groupes supprimés
+    // Retirer listeners des groupes supprimés
     for (const [gid, un] of defisUnsubsRef.current) {
       if (!groupIds.includes(gid)) { try { un(); } catch {} ; defisUnsubsRef.current.delete(gid); }
     }
@@ -263,14 +235,14 @@ export default function AccueilScreen() {
     groupIds.forEach((gid) => {
       if (defisUnsubsRef.current.has(gid)) return;
 
-      const qActiveLive = query(
-        collection(db, 'defis'),
-        where('groupId', '==', gid),
-        where('status', 'in', ['open', 'live']),
-        limit(50)
-      );
+      // ⚠️ Cette requête 'in' peut nécessiter un index composite (groupId + status)
+      const qActiveLive = firestore()
+        .collection('defis')
+        .where('groupId', '==', gid)
+        .where('status', 'in', ['open', 'live'])
+        .limit(50);
 
-      const un = listen(
+      const un = listenRNFB(
         qActiveLive,
         (snap) => {
           const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -304,9 +276,7 @@ export default function AccueilScreen() {
 
       defisUnsubsRef.current.set(gid, un);
     });
-
-    return () => { /* nettoyé ailleurs */ };
-  }, [authReady, user?.uid, groupIds, webAuth?.currentUser?.uid]);
+  }, [authReady, user?.uid, groupIds]);
 
   /* ---------- Cleanup global ---------- */
   useEffect(() => {
@@ -337,13 +307,6 @@ export default function AccueilScreen() {
   const ach = meDoc?.achievements || {};
   const streak = Number(st.currentStreakDays ?? 0);
   const totalParticipations = Number(st.totalParticipations ?? 0);
-  const doneFirstDefi   = !!ach.firstDefiCreated;
-  const doneFirstGroup  = !!ach.firstGroupCreated;
-  const doneFiveAny     = !!ach.fiveParticipationsAny;
-  const doneStreak3     = !!ach.threeConsecutiveDays;
-  const pct = (n, d) => Math.max(0, Math.min(100, Math.round((Number(n || 0) / Number(d || 1)) * 100)));
-  const pctFive   = pct(totalParticipations, 5);
-  const pctStreak = pct(streak, 3);
 
   const RED = '#ef4444';
   const RED_LIGHT = '#fecaca';
@@ -357,7 +320,6 @@ export default function AccueilScreen() {
     user?.photoURL ??
     null;
 
-  // Action: créer un défi (avec logique de sélection)
   function onPressCreateDefi() {
     const fav = meDoc?.favoriteGroupId;
     if (fav) {
@@ -398,7 +360,7 @@ export default function AccueilScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding:16, gap:16 }}>
-          {/* === Header profil (Avatar + nom + crédits + Créer un défi) === */}
+          {/* === Header profil === */}
           <View style={{
             padding:14,
             borderWidth:1,
@@ -411,7 +373,6 @@ export default function AccueilScreen() {
             shadowRadius:8,
             shadowOffset:{width:0,height:4}
           }}>
-            {/* Avatar agrandi + edit */}
             <View style={{ alignItems:'center', marginBottom:12 }}>
               <TouchableOpacity
                 accessibilityRole="button"
@@ -454,13 +415,22 @@ export default function AccueilScreen() {
             </View>
 
             {/* Crédits */}
-            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+            <TouchableOpacity
+              onPress={() => router.push('/(drawer)/credits')}
+              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}
+              accessibilityRole="button"
+              accessibilityLabel="Voir et acheter des crédits"
+            >
               <View />
               <View style={{ alignItems:'flex-end', paddingRight:6 }}>
                 <Text style={{ fontSize:12, color:'#6b7280' }}>Crédits</Text>
-                <Text style={{ fontWeight:'900', fontSize:20 }}>{credits}</Text>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
+                  <Text style={{ fontWeight:'900', fontSize:20 }}>{credits}</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={18} color="#6b7280" />
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
 
             {/* Bouton "Créer un défi" */}
             <View style={{ marginTop:12 }}>
@@ -498,7 +468,7 @@ export default function AccueilScreen() {
             </View>
           </View>
 
-          {/* === Mes défis du jour : actifs/live === */}
+          {/* === Mes défis du jour === */}
           <View style={{ padding:12, borderWidth:1, borderRadius:12, backgroundColor:'#fff',
             elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
             <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
@@ -531,7 +501,7 @@ export default function AccueilScreen() {
                           <MaterialCommunityIcons name="clock-outline" size={16} color="#555" />
                           <Text style={{ color:'#555' }}>
                             {item.signupDeadline ? `Limite ${fmtTSLocalHM(item.signupDeadline)}` :
-                            item.firstGameAtUTC ? `Débute ${fmtTSLocalHM(item.firstGameAtUTC)}` : '—'}
+                             item.firstGameAtUTC ? `Débute ${fmtTSLocalHM(item.firstGameAtUTC)}` : '—'}
                           </Text>
                         </View>
                         <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
@@ -551,7 +521,6 @@ export default function AccueilScreen() {
             borderColor:'#eee', elevation:3, shadowColor:'#000', shadowOpacity:0.08, shadowRadius:6, shadowOffset:{width:0,height:3} }}>
             <Text style={{ fontWeight:'800', fontSize:16, marginBottom:8 }}>Crédits à gagner</Text>
 
-            {/* 1 — Premier défi créé */}
             <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor: '#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
               <Text style={{ fontWeight:'700' }}>Premier défi créé {meDoc?.achievements?.firstDefiCreated ? '✅' : '(+1 crédit)'}</Text>
               {!meDoc?.achievements?.firstDefiCreated && (
@@ -567,7 +536,6 @@ export default function AccueilScreen() {
               )}
             </View>
 
-            {/* 2 — Premier groupe créé */}
             <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor: '#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
               <Text style={{ fontWeight:'700' }}>Premier groupe créé {meDoc?.achievements?.firstGroupCreated ? '✅' : '(+1 crédit)'}</Text>
               {!meDoc?.achievements?.firstGroupCreated && (
@@ -583,7 +551,6 @@ export default function AccueilScreen() {
               )}
             </View>
 
-            {/* 3 — 5 participations */}
             <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor:'#E5E7EB', backgroundColor:'#FFF', marginBottom:10 }}>
               <Text style={{ fontWeight:'700' }}>
                 Participer à 5 défis {meDoc?.achievements?.fiveParticipationsAny ? '✅' : '(+2 crédits)'}
@@ -596,7 +563,6 @@ export default function AccueilScreen() {
               </View>
             </View>
 
-            {/* 4 — 3 jours consécutifs */}
             <View style={{ padding:10, borderRadius:10, borderWidth:1, borderColor:'#E5E7EB', backgroundColor:'#FFF' }}>
               <Text style={{ fontWeight:'700' }}>
                 3 jours consécutifs {meDoc?.achievements?.threeConsecutiveDays ? '✅' : '(+2 crédits)'}

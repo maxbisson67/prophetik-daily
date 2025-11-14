@@ -1,10 +1,9 @@
-// src/groups/services.js
-import { db } from '@src/lib/firebase';
-import {
-  collection, doc, setDoc, getDoc, serverTimestamp,
-} from 'firebase/firestore';
+// src/groups/services.js (RNFB)
+// Conversion vers @react-native-firebase/firestore
 
-// Générateur déjà en place…
+import firestore from '@react-native-firebase/firestore';
+
+/** Générateur déjà en place… */
 function generateCodeInvitation(length = 8) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789'; // sans 0 ni O
   let code = '';
@@ -12,12 +11,19 @@ function generateCodeInvitation(length = 8) {
   return code;
 }
 
+/**
+ * Crée un groupe + membership owner (atomique).
+ * @param {{name: string, description?: string, uid: string}} params
+ * @returns {Promise<{groupId: string, codeInvitation: string}>}
+ */
 export async function createGroupService({ name, description = '', uid }) {
   if (!uid) throw new Error('uid manquant');
 
-  // 1) Récupérer le profil participant (pour name/avatar)
-  const pSnap = await getDoc(doc(db, 'participants', uid));
-  const p = pSnap.exists() ? pSnap.data() : {};
+  const now = firestore.FieldValue.serverTimestamp();
+
+  // 1) Profil participant (pour nom/avatar)
+  const pSnap = await firestore().doc(`participants/${uid}`).get();
+  const p = pSnap.exists ? (pSnap.data() || {}) : {};
   const displayName =
     p.displayName ||
     (p.email ? String(p.email).split('@')[0] : '') ||
@@ -25,14 +31,16 @@ export async function createGroupService({ name, description = '', uid }) {
   const avatarUrl =
     p.photoURL || p.avatarUrl || p.photoUrl || p.avatar || null;
 
-  const now = serverTimestamp();
-
-  // 2) Créer le groupe
-  const groupRef = doc(collection(db, 'groups'));
+  // 2) Réfs & IDs
+  const groupRef = firestore().collection('groups').doc(); // auto-ID
   const groupId = groupRef.id;
   const codeInvitation = generateCodeInvitation(8);
+  const gmRef = firestore().doc(`group_memberships/${groupId}_${uid}`);
 
-  await setDoc(groupRef, {
+  // 3) Batch (écriture atomique)
+  const batch = firestore().batch();
+
+  batch.set(groupRef, {
     name: String(name || '').trim(),
     description: String(description || '').trim(),
     avatarUrl: null,
@@ -49,9 +57,7 @@ export async function createGroupService({ name, description = '', uid }) {
     ownerAvatarUrl: avatarUrl || null,
   });
 
-  // 3) Créer le membership owner **avec identité**
-  const gmRef = doc(db, 'group_memberships', `${groupId}_${uid}`);
-  await setDoc(gmRef, {
+  batch.set(gmRef, {
     groupId,
     uid,
     role: 'owner',
@@ -62,6 +68,8 @@ export async function createGroupService({ name, description = '', uid }) {
     createdAt: now,
     updatedAt: now,
   });
+
+  await batch.commit();
 
   return { groupId, codeInvitation };
 }

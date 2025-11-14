@@ -5,6 +5,26 @@ import { Stack, useRouter } from 'expo-router';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
+// --- Helpers E.164 ---
+// Par défaut on ajoute +1 pour Canada/USA (ajuste selon ton pays, ex: '+509' pour Haïti)
+const DEFAULT_COUNTRY = '+1';
+const E164 = /^\+\d{8,15}$/;
+
+function normalizePhone(input) {
+  if (!input) return '';
+  const raw = String(input).trim();
+
+  if (raw.startsWith('+')) {
+    const digits = raw.replace(/[^\d+]/g, '');
+    return digits.replace(/\+(?=\+)/g, '');
+  }
+
+  const digitsOnly = raw.replace(/\D+/g, '');
+  if (digitsOnly.length === 10) return `${DEFAULT_COUNTRY}${digitsOnly}`;
+  if (digitsOnly.length > 0) return `+${digitsOnly}`;
+  return '';
+}
+
 function sanitizeDisplayName(s) {
   return String(s || '').replace(/\s+/g, ' ').replace(/[<>]/g, '').trim().slice(0, 48);
 }
@@ -28,7 +48,6 @@ async function ensureParticipantDoc(displayNameRaw) {
     photoURL: user.photoURL ?? null,
     createdAt: now,
     updatedAt: now,
-    // ne pas toucher à credits/balance côté client (tes règles l’interdisent)
   });
 
   await firestore().collection('participants').doc(user.uid).set(payload, { merge: true });
@@ -38,12 +57,13 @@ export default function PhoneSignUpScreen() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [displayName, setDisplayName] = useState('');
-  const [phone, setPhone] = useState(''); // e.g. +15145551234
+  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const confirmationRef = useRef(null);
 
-  const normalizePhone = (raw) => raw.replace(/\s+/g, '');
+  const normalized = normalizePhone(phone);
+  const canSend = E164.test(normalized);
 
   const requestCode = async () => {
     try {
@@ -51,25 +71,19 @@ export default function PhoneSignUpScreen() {
         Alert.alert('Nom requis', 'Entre un nom d’affichage.');
         return;
       }
-      const p = normalizePhone(phone);
-      if (!/^\+\d{8,15}$/.test(p)) {
-        Alert.alert('Numéro invalide', 'Utilise le format international E.164, ex. +15145551234');
+      if (!canSend) {
+        Alert.alert('Numéro invalide', 'Entre un numéro valide (ex. 5145551234).');
         return;
       }
+
       setBusy(true);
-      const confirmation = await auth().signInWithPhoneNumber(p); // recaptcha natif par RNFirebase
+      const confirmation = await auth().signInWithPhoneNumber(normalized, true);
       confirmationRef.current = confirmation;
       setStep(2);
-      Alert.alert('Code envoyé', 'Vérifie tes SMS et entre le code.');
+      setPhone(normalized); // reflète la normalisation dans l’UI
+      Alert.alert('Code envoyé', `Vérifie tes SMS au ${normalized}.`);
     } catch (e) {
-      const msg = String(e?.message || e);
-      if (msg.includes('not authorized')) {
-        Alert.alert('Configuration requise', 'Vérifie la configuration Firebase Phone Auth.');
-      } else if (msg.includes('TOO_SHORT') || msg.includes('format')) {
-        Alert.alert('Numéro invalide', 'Le numéro semble invalide.');
-      } else {
-        Alert.alert('Échec de l’envoi', msg);
-      }
+      Alert.alert('Échec de l’envoi', e?.message || String(e));
     } finally {
       setBusy(false);
     }
@@ -90,7 +104,7 @@ export default function PhoneSignUpScreen() {
         return;
       }
 
-      const cred = await confirmation.confirm(code.trim()); // connecte l’utilisateur
+      const cred = await confirmation.confirm(code.trim());
       const user = cred?.user || auth().currentUser;
       if (!user) throw new Error('Utilisateur non disponible après confirmation.');
 
@@ -100,7 +114,6 @@ export default function PhoneSignUpScreen() {
         await auth().currentUser?.reload().catch(() => {});
       }
 
-      // ✅ IMPORTANT: appeler avec un seul argument (displayName)
       await ensureParticipantDoc(cleanName);
 
       Alert.alert('Bienvenue!', 'Ton compte a été créé.');
@@ -130,7 +143,7 @@ export default function PhoneSignUpScreen() {
             <View style={{ gap: 14 }}>
               <Text style={{ fontSize: 22, fontWeight: '800' }}>Inscription par SMS</Text>
               <Text style={{ color: '#6B7280' }}>
-                Entre un nom d’affichage et ton numéro (format international, ex. +15145551234).
+                Entre un nom d’affichage et ton numéro (ex. 5145551234 ou +15145551234).
               </Text>
 
               <View style={{ gap: 6 }}>
@@ -145,30 +158,43 @@ export default function PhoneSignUpScreen() {
               </View>
 
               <View style={{ gap: 6 }}>
-                <Text>Téléphone (E.164)</Text>
+                <Text>Téléphone</Text>
                 <TextInput
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
-                  placeholder="+15145551234"
+                  placeholder="5145551234"
                   autoCapitalize="none"
                   style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12 }}
                 />
+                {!!normalized && (
+                  <Text style={{ color: '#6B7280' }}>Envoi comme : {normalized}</Text>
+                )}
               </View>
 
               <TouchableOpacity
+                disabled={busy || !canSend}
                 onPress={requestCode}
-                disabled={busy}
-                style={{ backgroundColor: '#111', padding: 14, borderRadius: 10, alignItems: 'center', opacity: busy ? 0.7 : 1 }}
+                style={{
+                  backgroundColor: '#111',
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  opacity: busy || !canSend ? 0.7 : 1,
+                }}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Envoyer le code</Text>}
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>Envoyer le code</Text>
+                )}
               </TouchableOpacity>
             </View>
           ) : (
             <View style={{ gap: 14 }}>
               <Text style={{ fontSize: 22, fontWeight: '800' }}>Vérification du code</Text>
               <Text style={{ color: '#6B7280' }}>
-                Un code SMS a été envoyé à <Text style={{ fontWeight: '700' }}>{normalizePhone(phone)}</Text>.
+                Un code SMS a été envoyé à <Text style={{ fontWeight: '700' }}>{phone}</Text>.
               </Text>
 
               <View style={{ gap: 6 }}>
@@ -194,7 +220,7 @@ export default function PhoneSignUpScreen() {
               <TouchableOpacity
                 onPress={() => { setStep(1); setCode(''); }}
                 disabled={busy}
-                style={{ padding: 12, alignItems: 'center' }}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
               >
                 <Text style={{ color: '#111' }}>Changer de numéro / Renvoyer un code</Text>
               </TouchableOpacity>

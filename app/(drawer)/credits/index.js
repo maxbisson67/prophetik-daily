@@ -3,14 +3,11 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ActivityIndicator, FlatList } from 'react-native';
 import { Stack } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import firestore from '@react-native-firebase/firestore'; // ✅ RNFirebase
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
-import { db } from '@src/lib/firebase';
-import {
-  doc, onSnapshot, collection, query, where, orderBy, limit,
-  getDoc, getDocs
-} from 'firebase/firestore';
+import CreditsWallet from "@src/credits/CreditsWallet";
 
 /* ---------- Helpers ---------- */
 
@@ -77,19 +74,27 @@ export default function CreditsScreen() {
 
   // Profil + logs + groups où je suis membre/owner (pour classements simples)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
 
-    const unsub1 = onSnapshot(doc(db, 'participants', user.uid), (snap) => {
-      setMe(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null);
-    });
+    // participant
+    const unsub1 = firestore()
+      .doc(`participants/${user.uid}`)
+      .onSnapshot((snap) => {
+        setMe(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+      });
 
-    const unsub2 = onSnapshot(
-      query(collection(db, 'participants', user.uid, 'credit_logs'), orderBy('createdAt', 'desc'), limit(50)),
-      (snap) => setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    // credit logs
+    const unsub2 = firestore()
+      .collection(`participants/${user.uid}/credit_logs`)
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .onSnapshot((snap) => {
+        setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-    const q1 = query(collection(db, 'group_memberships'), where('uid', '==', user.uid));
-    const q2 = query(collection(db, 'group_memberships'), where('userId', '==', user.uid));
+    // group memberships (2 variantes de clé)
+    const q1 = firestore().collection('group_memberships').where('uid', '==', user.uid);
+    const q2 = firestore().collection('group_memberships').where('userId', '==', user.uid);
     const found = new Set();
 
     const handle = async (snap) => {
@@ -100,18 +105,24 @@ export default function CreditsScreen() {
 
       const arr = await Promise.all(
         Array.from(found).map(async (gid) => {
+          // nom de groupe
           let name = gid;
           try {
-            const g = await getDoc(doc(db, 'groups', gid));
-            if (g.exists()) name = g.data()?.name || gid;
+            const g = await firestore().doc(`groups/${gid}`).get();
+            if (g.exists) name = g.data()?.name || gid;
           } catch {}
 
+          // leaderboard top 10
           let entries = [];
           try {
-            const lbSnap = await getDocs(query(collection(db, 'groups', gid, 'leaderboard'), orderBy('balance', 'desc'), limit(10)));
+            const lbSnap = await firestore()
+              .collection(`groups/${gid}/leaderboard`)
+              .orderBy('balance', 'desc')
+              .limit(10)
+              .get();
             entries = lbSnap.docs.map(x => ({ id: x.id, ...x.data() }));
           } catch {
-            const lbSnap = await getDocs(collection(db, 'groups', gid, 'leaderboard'));
+            const lbSnap = await firestore().collection(`groups/${gid}/leaderboard`).get();
             entries = lbSnap.docs.map(x => ({ id: x.id, ...x.data() }));
             entries.sort((a,b) => (b.balance||0)-(a.balance||0));
             entries = entries.slice(0,10);
@@ -123,8 +134,8 @@ export default function CreditsScreen() {
       setGroupsLB(arr);
     };
 
-    const unsub3 = onSnapshot(q1, handle);
-    const unsub4 = onSnapshot(q2, handle);
+    const unsub3 = q1.onSnapshot(handle);
+    const unsub4 = q2.onSnapshot(handle);
 
     setLoading(false);
     return () => { unsub1?.(); unsub2?.(); unsub3?.(); unsub4?.(); };
@@ -163,135 +174,101 @@ export default function CreditsScreen() {
   ];
 
   function ActivitiesCard({ logs }) {
-  return (
-    <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff' }}>
-      <Text style={{ fontWeight: '800', fontSize: 16, marginBottom: 8 }}>Activités</Text>
-
-      {logs.length === 0 ? (
-        <Text style={{ color: '#6B7280' }}>Aucun mouvement de crédits pour l’instant.</Text>
-      ) : (
-        <View style={{ borderTopWidth: 1, borderColor: '#F3F4F6' }}>
-          {logs.map((item) => {
-            const meta = typeMeta(item.type, item.amount);
-            const when = fmtDateTime(item.createdAt);
-            const subtitleParts = [];
-            if (when) subtitleParts.push(when);
-            if (typeof item.fromBalance === 'number' && typeof item.toBalance === 'number') {
-              subtitleParts.push(`${item.fromBalance} → ${item.toBalance}`);
-            }
-           
-
-            return (
-              <View
-                key={item.id}
-                style={{
-                  paddingVertical: 10,
-                  borderBottomWidth: 1,
-                  borderColor: '#F3F4F6',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
-                <RowIcon name={meta.icon} tint={meta.tint} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontWeight: '700' }}>{meta.label}</Text>
-                    <AmountPill amount={item.amount} />
-                  </View>
-                  {!!subtitleParts.length && (
-                    <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>
-                      {subtitleParts.join(' · ')}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
-}
-
-  const renderLogItem = ({ item }) => {
-    const meta = typeMeta(item.type, item.amount);
-    const title = meta.label;
-    const subtitleParts = [];
-    const when = fmtDateTime(item.createdAt);
-    if (when) subtitleParts.push(when);
-    if (typeof item.fromBalance === 'number' && typeof item.toBalance === 'number') {
-      subtitleParts.push(`${item.fromBalance} → ${item.toBalance}`);
-    }
-    if (item.defiId) subtitleParts.push(`défi: ${item.defiId}`);
-
     return (
-      <View style={{ paddingHorizontal:16, paddingVertical:10, borderBottomWidth:1, borderColor:'#f0f0f0', flexDirection:'row', alignItems:'center', gap:12 }}>
-        <RowIcon name={meta.icon} tint={meta.tint} />
-        <View style={{ flex:1 }}>
-          <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-            <Text style={{ fontWeight:'700' }}>{title}</Text>
-            <AmountPill amount={item.amount} />
+      <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff' }}>
+        <Text style={{ fontWeight: '800', fontSize: 16, marginBottom: 8 }}>Activités</Text>
+
+        {logs.length === 0 ? (
+          <Text style={{ color: '#6B7280' }}>Aucun mouvement de crédits pour l’instant.</Text>
+        ) : (
+          <View style={{ borderTopWidth: 1, borderColor: '#F3F4F6' }}>
+            {logs.map((item) => {
+              const meta = typeMeta(item.type, item.amount);
+              const when = fmtDateTime(item.createdAt);
+              const subtitleParts = [];
+              if (when) subtitleParts.push(when);
+              if (typeof item.fromBalance === 'number' && typeof item.toBalance === 'number') {
+                subtitleParts.push(`${item.fromBalance} → ${item.toBalance}`);
+              }
+              return (
+                <View
+                  key={item.id}
+                  style={{
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderColor: '#F3F4F6',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <RowIcon name={meta.icon} tint={meta.tint} />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontWeight: '700' }}>{meta.label}</Text>
+                      <AmountPill amount={item.amount} />
+                    </View>
+                    {!!subtitleParts.length && (
+                      <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>
+                        {subtitleParts.join(' · ')}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
           </View>
-          {!!subtitleParts.length && (
-            <Text style={{ color:'#6B7280', fontSize:12, marginTop:2 }}>
-              {subtitleParts.join(' · ')}
-            </Text>
-          )}
-        </View>
+        )}
       </View>
     );
-  };
+  }
 
   return (
-  <>
-    <Stack.Screen options={{ title: 'Crédits' }} />
-    <FlatList
-      // On n’utilise plus FlatList pour lister les logs ligne par ligne,
-      // on rend tout dans l’en-tête sous forme de 3 cartes.
-      data={[]}
-      keyExtractor={() => 'noop'}
-      ListHeaderComponent={
-        <View style={{ padding: 16, gap: 16 }}>
-          {/* Solde */}
-          <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff' }}>
-            <Text style={{ fontWeight: '800', fontSize: 18 }}>Mon solde</Text>
-            <Text style={{ fontSize: 34, fontWeight: '900', marginTop: 4 }}>
-              {me?.credits?.balance ?? 0}
-            </Text>
-          </View>
+    <>
+      <Stack.Screen options={{ title: 'Crédits' }} />
+      <FlatList
+        data={[]}
+        keyExtractor={() => 'noop'}
+        ListHeaderComponent={
+          <View style={{ padding: 16, gap: 16 }}>
+            {/* Solde */}
+            <CreditsWallet credits={balance} />
 
-          {/* Objectifs */}
-          <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff' }}>
-            <Text style={{ fontWeight: '800', fontSize: 16, marginBottom: 8 }}>Objectifs</Text>
-            {nextGoals.map((g) => (
-              <View
-                key={g.key}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 6,
-                }}
-              >
-                <Text>
-                  {g.done ? '✅ ' : ''}
-                  {g.label}
-                  {g.progress ? `  (${g.progress})` : ''}
-                </Text>
-                <Text style={{ fontWeight: '800', color: g.done ? '#059669' : '#111827' }}>
-                  {g.reward}
-                </Text>
-              </View>
-            ))}
-          </View>
+            {/* Objectifs */}
+            <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff' }}>
+              <Text style={{ fontWeight: '800', fontSize: 16, marginBottom: 8 }}>Objectifs</Text>
+              {[
+                { key: 'first_defi', label: 'Premier défi créé', done: !!ach.firstDefiCreated, reward: '+1' },
+                { key: 'first_group', label: 'Premier groupe créé', done: !!ach.firstGroupCreated, reward: '+1' },
+                { key: '5_participations', label: 'Participer à 5 défis', done: !!ach.fiveParticipationsAny, reward: '+2', progress: `${st.totalParticipations||0}/5` },
+                { key: '3_consecutive_days', label: '3 jours consécutifs', done: !!ach.threeConsecutiveDays, reward: '+2', progress: `${st.currentStreakDays||0}/3` },
+              ].map((g) => (
+                <View
+                  key={g.key}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text>
+                    {g.done ? '✅ ' : ''}
+                    {g.label}
+                    {g.progress ? `  (${g.progress})` : ''}
+                  </Text>
+                  <Text style={{ fontWeight: '800', color: g.done ? '#059669' : '#111827' }}>
+                    {g.reward}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
-          {/* Activités (logs) */}
-          <ActivitiesCard logs={logs} />
-        </View>
-      }
-      // plus de renderItem / ListEmptyComponent ici
-    />
-  </>
-);
+            {/* Activités (logs) */}
+            <ActivitiesCard logs={logs} />
+          </View>
+        }
+      />
+    </>
+  );
 }

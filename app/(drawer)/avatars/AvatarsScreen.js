@@ -1,13 +1,12 @@
-// app/(tabs)/AvatarsScreen.js
+// app/(drawer)/AvatarsScreen.js
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, orderBy, query, setDoc, serverTimestamp } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '@src/lib/firebase';
+import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons,MaterialCommunityIcons } from '@expo/vector-icons';
 
 const DEFAULT_PRICE = 5;
 
@@ -74,26 +73,32 @@ export default function AvatarsScreen() {
   useEffect(() => {
     if (!user?.uid) { setMe(null); setLoadingMe(false); return; }
     setLoadingMe(true);
-    const ref = doc(db, 'participants', user.uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      setMe(snap.exists() ? ({ uid: snap.id, ...snap.data() }) : null);
-      setLoadingMe(false);
-    }, () => setLoadingMe(false));
+    const ref = firestore().doc(`participants/${user.uid}`);
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        setMe(snap.exists ? ({ uid: snap.id, ...snap.data() }) : null);
+        setLoadingMe(false);
+      },
+      () => setLoadingMe(false)
+    );
     return () => { try { unsub(); } catch {} };
   }, [user?.uid]);
 
   // Avatars store
   useEffect(() => {
     setLoadingAvatars(true);
-    const qRef = query(collection(db, 'catalog_avatars'), orderBy('sort', 'asc'));
-    const unsub = onSnapshot(qRef, (snap) => {
-      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setStoreAvatars(rows.length ? rows : FALLBACK_AVATARS);
-      setLoadingAvatars(false);
-    }, () => {
-      setStoreAvatars(FALLBACK_AVATARS);
-      setLoadingAvatars(false);
-    });
+    const qRef = firestore().collection('catalog_avatars').orderBy('sort', 'asc');
+    const unsub = qRef.onSnapshot(
+      (snap) => {
+        const rows = snap?.docs?.map(d => ({ id: d.id, ...d.data() })) || [];
+        setStoreAvatars(rows.length ? rows : FALLBACK_AVATARS);
+        setLoadingAvatars(false);
+      },
+      () => {
+        setStoreAvatars(FALLBACK_AVATARS);
+        setLoadingAvatars(false);
+      }
+    );
     return () => { try { unsub(); } catch {} };
   }, []);
 
@@ -110,23 +115,22 @@ export default function AvatarsScreen() {
 
     try {
       // 1) Débit & droit d’activer via CF (serveur fait foi)
-      const call = httpsCallable(functions, 'purchaseAvatar');
+      const callPurchase = functions().httpsCallable('purchaseAvatar');
       const payload = {
         avatarId: selectedItem.id,
         price: effectivePrice,
-        // (photoURL côté client est optionnel et peut être ignoré par la CF)
-        photoURL: selectedItem.url,
+        photoURL: selectedItem.url, // optionnel côté serveur
       };
-      const res = await call(payload);
+      const res = await callPurchase(payload);
       if (!res?.data?.ok) throw new Error(res?.data?.error || 'Erreur inconnue');
 
-      // 2) Déclenche l’Option B: on écrit UNIQUEMENT avatarId (+ updatedAt)
-      //    -> la Cloud Function onAvatarIdChange copiera l’image & mettra avatarUrl.
-      await setDoc(
-        doc(db, 'profiles_public', user.uid),
-        { avatarId: selectedItem.id, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
+      // 2) Option B: écrire uniquement avatarId (+ updatedAt) → CF onAvatarIdChange mettra avatarUrl
+      await firestore()
+        .doc(`profiles_public/${user.uid}`)
+        .set(
+          { avatarId: selectedItem.id, updatedAt: firestore.FieldValue.serverTimestamp() },
+          { merge: true }
+        );
 
       const wasSwitch = effectivePrice === 1;
       Alert.alert(
@@ -158,7 +162,19 @@ export default function AvatarsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Boutique' }} />
+      <Stack.Screen
+        options={{
+          title: 'Mon avatar',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => r.replace('/(drawer)/boutique')}
+              style={{ paddingHorizontal: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#111827" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <FlatList
         data={storeAvatars || []}
         keyExtractor={(item) => item.id}

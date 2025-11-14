@@ -12,11 +12,8 @@ import {
 import { SvgUri } from 'react-native-svg';
 import Toast from 'react-native-toast-message';
 import { Stack, useLocalSearchParams, useFocusEffect , useRouter} from 'expo-router';
-import {
-  collection, doc, getDocs, query, where, documentId, onSnapshot
-} from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { db } from '@src/lib/firebase';
+import firestore from '@react-native-firebase/firestore'; // ✅ RNFirebase
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
@@ -30,10 +27,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerToggleButton } from '@react-navigation/drawer';
 import { HeaderBackButton } from '@react-navigation/elements';
 
-
 import FinalRevealModal from './FinalRevealModal';
 import WinnerSurprise from './WinnerSurprise';
-
 
 /* ----------------------------- Utils ----------------------------- */
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
@@ -160,7 +155,7 @@ export default function DefiResultsScreen() {
 
   const [loadingDefi, setLoadingDefi] = useState(true);
   const [parts, setParts] = useState([]); // [{uid, livePoints, picks, updatedAt, _raw}]
-  const [namesMap, setNamesMap] = useState({}); // ✅ uid -> displayName (depuis profiles_public)
+  const [namesMap, setNamesMap] = useState({}); // ✅ uid -> displayName
   const [participantInfoMap, setParticipantInfoMap] = useState({}); // ✅ uid -> {photoURL}
 
   const [liveStats, setLiveStats] = useState({
@@ -196,14 +191,12 @@ export default function DefiResultsScreen() {
       : { useCollectionGroup: false }
   );
 
-
   const [showReveal, setShowReveal] = React.useState(false);
   const [celebrateNow, setCelebrateNow] = React.useState(false);
   const hasShownRevealRef = React.useRef(false);
   const hasCelebratedRef  = React.useRef(false);
 
   const handleCloseReveal = React.useCallback(() => setShowReveal(false), []);
- 
 
   function computeCreditDelta(defi, winnersArr) {
     const pot = Number(defi?.pot ?? 0);
@@ -222,12 +215,12 @@ export default function DefiResultsScreen() {
 
   const chip = statusStyleBase(defi?.status);
 
-  // construit les 3 finalistes (points déjà calculés dans leaderboard)
+  // construit les 3 finalistes
   const finalists = React.useMemo(() => {
     const src = Array.isArray(leaderboard) ? leaderboard : [];
     return src
-      .filter(Boolean) // évite {...r} sur undefined
-      .slice()         // copie avant tri
+      .filter(Boolean)
+      .slice()
       .sort((a, b) => Number(b.livePoints || 0) - Number(a.livePoints || 0))
       .slice(0, 3)
       .map((r) => {
@@ -243,7 +236,7 @@ export default function DefiResultsScreen() {
       });
   }, [leaderboard, namesMap, participantInfoMap]);
 
-  /* ----- Gagnants (ex-aequo compris) ----- */
+  /* ----- Gagnants (ex-aequo) ----- */
   const winners = useMemo(() => {
     const rows = Array.isArray(leaderboard) ? leaderboard : [];
     if (!rows.length) return [];
@@ -251,58 +244,40 @@ export default function DefiResultsScreen() {
     return rows.filter(r => Number(r.livePoints || 0) === top);
   }, [leaderboard]);
 
-// Quand la modale se ferme, si on est gagnant et pas encore célébré, déclenche la confetti
-React.useEffect(() => {
-  const iAmWinner = Array.isArray(winners) && winners.some(w => w.uid === user?.uid);
-  if (!showReveal && iAmWinner && !hasCelebratedRef.current) {
-    console.log('[Reveal] Fallback celebrate (modal closed)');
-    hasCelebratedRef.current = true;
-    handleCelebrate(); // -> affiche WinnerSurprise pendant ~2.4s
-  }
-}, [showReveal, winners, user?.uid, handleCelebrate]);
-
-// Quand celebrateNow retombe à false (fin de l’anim), on laisse la possibilité d’une nouvelle célébration à l’avenir
-React.useEffect(() => {
-  if (!celebrateNow) {
-    hasCelebratedRef.current = false;
-  }
-}, [celebrateNow]);
-
-// --- auto open du reveal quand le défi est fermé et que l'utilisateur est gagnant
-React.useEffect(() => {
-  const closed = String(defi?.status || '').toLowerCase() === 'closed';
-  if (!closed) return;
-  if (!user?.uid) return;
-
-  const storageKey = `finalReveal:${defi?.id}:${user?.uid}`;
-  const iAmWinner = Array.isArray(winners) && winners.some(w => w.uid === user.uid);
-
-  console.log('[Reveal] closed=', closed, 'iAmWinner=', iAmWinner, 'defiId=', defi?.id);
-
-  (async () => {
-    try {
-      if (hasShownRevealRef.current) return;
-      const done = await AsyncStorage.getItem(storageKey);
-
-      // Ouvre la modale si pas encore vue et que tu fais partie des gagnants
-      if (!done && iAmWinner) {
-        hasShownRevealRef.current = true;
-        console.log('[Reveal] Opening FinalRevealModal');
-        setShowReveal(true);
-        await AsyncStorage.setItem(storageKey, '1');
-      }
-    } catch (e) {
-      console.log('[Reveal] error', e?.message || e);
+  // Révélation / célébration (identique à ta logique)
+  React.useEffect(() => {
+    const iAmWinner = Array.isArray(winners) && winners.some(w => w.uid === user?.uid);
+    if (!showReveal && iAmWinner && !hasCelebratedRef.current) {
+      hasCelebratedRef.current = true;
+      handleCelebrate();
     }
-  })();
-}, [defi?.status, defi?.id, user?.uid, winners]);
+  }, [showReveal, winners, user?.uid]);
 
-  // Trigger auto quand défi fermé, on n’a pas déjà célébré, et user fait partie du top3
+  React.useEffect(() => {
+    if (!celebrateNow) hasCelebratedRef.current = false;
+  }, [celebrateNow]);
+
   React.useEffect(() => {
     const closed = String(defi?.status || '').toLowerCase() === 'closed';
-    if (!closed) return;
-    if (!user?.uid || finalists.length === 0) return;
+    if (!closed || !user?.uid) return;
+    const storageKey = `finalReveal:${defi?.id}:${user?.uid}`;
+    const iAmWinner = Array.isArray(winners) && winners.some(w => w.uid === user.uid);
+    (async () => {
+      try {
+        if (hasShownRevealRef.current) return;
+        const done = await AsyncStorage.getItem(storageKey);
+        if (!done && iAmWinner) {
+          hasShownRevealRef.current = true;
+          setShowReveal(true);
+          await AsyncStorage.setItem(storageKey, '1');
+        }
+      } catch {}
+    })();
+  }, [defi?.status, defi?.id, user?.uid, winners]);
 
+  React.useEffect(() => {
+    const closed = String(defi?.status || '').toLowerCase() === 'closed';
+    if (!closed || !user?.uid || !finalists.length) return;
     const storageKey = `finalReveal:${defi.id}:${user.uid}`;
     (async () => {
       try {
@@ -318,13 +293,10 @@ React.useEffect(() => {
     })();
   }, [defi?.status, defi?.id, user?.uid, finalists]);
 
-  // callback célébration (déjà fourni par WinnerSurprise)
   const handleCelebrate = React.useCallback(() => {
     setCelebrateNow(true);
-    // on coupe après 2.4s (durée de WinnerSurprise)
     setTimeout(() => setCelebrateNow(false), 2400);
   }, []);
-
 
   const headerTitle = React.useMemo(
     () => (defi?.title || (defi?.type ? `Défi ${defi.type}x${defi.type}` : 'Résultats')),
@@ -347,33 +319,36 @@ React.useEffect(() => {
     setParticipantInfoMap({ ...memNames.info });
   }); }, []);
 
-  /* ----- Defi doc ----- */
+  /* ----- Defi doc (RNFirebase) ----- */
   useEffect(() => {
     if (!defiId) return;
     setLoadingDefi(true);
-    const ref = doc(db, 'defis', String(defiId));
-    const un = onSnapshot(ref, (snap) => {
-      setDefi(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null);
-      setLoadingDefi(false);
-    }, () => setLoadingDefi(false));
+    const ref = firestore().doc(`defis/${String(defiId)}`);
+    const un = ref.onSnapshot(
+      (snap) => {
+        setDefi(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+        setLoadingDefi(false);
+      },
+      () => setLoadingDefi(false)
+    );
     return () => un();
   }, [defiId]);
 
   // Group doc
   useEffect(() => {
     if (!defi?.groupId) return;
-    const ref = doc(db, 'groups', String(defi.groupId));
-    const un = onSnapshot(ref, (snap) => {
-      setGroup(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null);
+    const ref = firestore().doc(`groups/${String(defi.groupId)}`);
+    const un = ref.onSnapshot((snap) => {
+      setGroup(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
     });
     return () => un();
   }, [defi?.groupId]);
 
-  /* ----- Participations ----- */
+  /* ----- Participations (RNFirebase chain) ----- */
   useEffect(() => {
     if (!defi?.id) return;
-    const qParts = query(collection(db, 'defis', String(defi.id), 'participations'));
-    const un = onSnapshot(qParts, (snap) => {
+    const colRef = firestore().collection(`defis/${String(defi.id)}/participations`);
+    const un = colRef.onSnapshot((snap) => {
       const next = [];
       snap.forEach((docSnap) => {
         const v = docSnap.data() || {};
@@ -405,14 +380,18 @@ React.useEffect(() => {
     neededUids.forEach((uid) => {
       if (profilesUnsubsRef.current.has(uid)) return;
 
-      const ref = doc(db, 'profiles_public', uid);
-      const un = onSnapshot(
-        ref,
+      const ref = firestore().doc(`profiles_public/${uid}`);
+      const un = ref.onSnapshot(
         (snap) => {
-          const v = snap.exists() ? (snap.data() || {}) : {};
+          const v = snap.exists ? (snap.data() || {}) : {};
           const displayName = v.displayName || v.name || v.username || v.email || uid;
           const avatarUrl   = v.avatarUrl || v.photoURL || null;
-          const version     = v.updatedAt?.toMillis?.() ? v.updatedAt.toMillis() : Date.now();
+
+          // RNFirebase Timestamp → toMillis() ok; sinon fallback
+          const version =
+            v.updatedAt?.toMillis?.()
+              ? v.updatedAt.toMillis()
+              : (v.updatedAt?.toDate?.() ? v.updatedAt.toDate().getTime() : Date.now());
 
           const changed = mergeNames(
             { [uid]: displayName },
@@ -441,8 +420,7 @@ React.useEffect(() => {
 
       profilesUnsubsRef.current.set(uid, un);
     });
-
-    // pas de cleanup global ici (conservé jusqu’au démontage écran)
+    // pas de cleanup ici (géré au démontage)
   }, [parts]);
 
   // Cleanup global des listeners profiles_public au démontage
@@ -456,9 +434,9 @@ React.useEffect(() => {
   /* ----- Live tallies ----- */
   useEffect(() => {
     if (!defi?.id) return;
-    const ref = doc(db, 'defis', String(defi.id), 'live', 'stats');
-    const un = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
+    const ref = firestore().doc(`defis/${String(defi.id)}/live/stats`);
+    const un = ref.onSnapshot((snap) => {
+      if (snap.exists) {
         const d = snap.data() || {};
         setLiveStats({
           playerGoals: d.playerGoals || {},
@@ -497,12 +475,11 @@ React.useEffect(() => {
         const updates = {};
         const CHUNK = 10;
         for (let i = 0; i < missingPlayerMeta.length; i += CHUNK) {
-          const idsChunk = missingPlayerMeta.slice(i, i + CHUNK);
-          const qPlayers = query(
-            collection(db, 'nhl_players'),
-            where(documentId(), 'in', idsChunk.map(String))
-          );
-          const s = await getDocs(qPlayers);
+          const idsChunk = missingPlayerMeta.slice(i, i + CHUNK).map(String);
+          const qRef = firestore()
+            .collection('nhl_players')
+            .where(firestore.FieldPath.documentId(), 'in', idsChunk);
+          const s = await qRef.get();
           if (cancelled) return;
           s.forEach((docSnap) => {
             const v = docSnap.data() || {};
@@ -518,8 +495,6 @@ React.useEffect(() => {
     })();
     return () => { cancelled = true; };
   }, [missingPlayerMeta.join(','), nhlPlayersReadable]);
-
-  
 
   /* ----------------------------- UI ----------------------------- */
   if (loadingDefi) {
@@ -548,15 +523,12 @@ React.useEffect(() => {
     <>
       <Stack.Screen
         options={{
-          // dynamic title
           title: headerTitle,
-          // LEFT SIDE: back-to-list (forced) + hamburger
           headerLeft: ({ tintColor }) => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <HeaderBackButton
                 tintColor={tintColor}
                 onPress={() => {
-                  // Always return to the Défis list tab (not previous detail)
                   if (defi?.groupId) {
                     router.replace({ pathname: '/(drawer)/(tabs)/ChallengesScreen', params: { groupId: defi.groupId } });
                   } else {
@@ -567,7 +539,6 @@ React.useEffect(() => {
               <DrawerToggleButton tintColor={tintColor} />
             </View>
           ),
-          // RIGHT SIDE: unread bubble you already had
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="chatbubble-ellipses" size={18} color={colors.text} />
@@ -718,28 +689,6 @@ React.useEffect(() => {
       {/* Toast en haut */}
       <Toast position="top" config={toastConfig} topOffset={60} />
 
-      {/* Célébration si utilisateur gagnant */}
-   {celebrateNow && (
-      <WinnerSurprise
-        defiId={defi.id}
-        show
-        avatarUri={participantInfoMap?.[user?.uid]?.photoURL || null}
-        onDone={() => setCelebrateNow(false)}
-      />
-    )}
-
-    {/* Modale suspense */}
-    {Array.isArray(finalists) && finalists.length > 0 && (
-      <FinalRevealModal
-        visible={showReveal}
-        finalists={finalists}
-        onClose={handleCloseReveal}
-        celebrate={handleCelebrate}
-        currentCredits={null}                      // visuel only
-        creditDelta={computeCreditDelta(defi, winners)}
-        splitRule={defi?.splitRule ?? 'winner_takes_all'}
-      />
-    )}
     </>
   );
 }
@@ -750,11 +699,11 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
   const INPUT_BAR_HEIGHT = 56;
   const OPEN_HEIGHT = 360;
 
-  // tri sûr même si createdAt est un Timestamp Firestore
+  // tri sûr même si createdAt est un Timestamp Firestore RNFirebase
   const data = React.useMemo(() => {
     const millis = (v) =>
       v?.toMillis?.() ? v.toMillis() :
-      (typeof v === 'number' ? v : 0);
+      (v?.toDate?.() ? v.toDate().getTime() : (typeof v === 'number' ? v : 0));
     return [...messages].sort((a, b) => millis(a?.createdAt) - millis(b?.createdAt));
   }, [messages]);
 

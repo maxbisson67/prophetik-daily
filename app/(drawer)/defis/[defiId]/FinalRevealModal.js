@@ -1,8 +1,7 @@
 // app/defis/[defiId]/FinalRevealModal.js
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, View, Text, Image, TouchableOpacity, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedProps, withTiming, Easing } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import{ useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 // ===== Simple AnimatedNumber (entier) =====
