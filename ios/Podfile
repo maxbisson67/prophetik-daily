@@ -1,0 +1,53 @@
+platform :ios, '15.1'
+
+# Expo + React Native scripts
+require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
+require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+
+require 'json'
+podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
+
+def ccache_enabled?(podfile_properties)
+  return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
+  podfile_properties['apple.ccacheEnabled'] == 'true'
+end
+
+prepare_react_native_project!
+
+# ✅ On suit exactement ce que CocoaPods recommande pour ce cas :
+#    - Pods Swift + dépendances ObjC non modulaires → frameworks + modular headers
+use_modular_headers!
+
+target 'Prophetik' do
+  # Expo modules (expo-notifications, etc.)
+  use_expo_modules!
+
+  # ✅ Tous les pods (dont Firebase) seront intégrés en FRAMEWORKS dynamiques
+  use_frameworks!
+
+  # ----- Autolinking des modules natifs -----
+  config = use_native_modules!
+
+  # ----- React Native -----
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => podfile_properties['expo.jsEngine'].nil? || podfile_properties['expo.jsEngine'] == 'hermes',
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
+  )
+
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      :ccache_enabled => ccache_enabled?(podfile_properties),
+    )
+
+    installer.pods_project.targets.each do |t|
+      t.build_configurations.each do |config|
+        config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      end
+    end
+  end
+end

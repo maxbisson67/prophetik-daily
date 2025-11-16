@@ -1,0 +1,6 @@
+framework module React_RCTFBReactNativeSpec {
+  umbrella header "React-RCTFBReactNativeSpec-umbrella.h"
+
+  export *
+  module * { export * }
+}
