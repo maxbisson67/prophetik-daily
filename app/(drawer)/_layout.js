@@ -199,6 +199,11 @@ function CustomDrawerContent(props) {
         onPress={() => goTab('ChallengesScreen')}
         icon={({ color, size }) => <Ionicons name="trophy" size={size} color={color} />}
       />
+         <DrawerItem
+        label="Classement"
+        onPress={() => goTab('ClassementScreen')}
+        icon={({ color, size }) => <Ionicons name="podium" size={size} color={color} />}
+      />
       <Separator />
 
       <SectionLabel>Espace perso</SectionLabel>

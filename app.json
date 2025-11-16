@@ -4,7 +4,7 @@
     "name": "Prophetik",
     "slug": "prophetik-daily",
     "scheme": "prophetik-daily",
-    "version": "1.0.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/prophetik_icon_1024.png",
     "backgroundColor": "#ffffff",
@@ -17,7 +17,6 @@
     "updates": {
       "checkAutomatically": "ON_ERROR_RECOVERY",
       "fallbackToCacheTimeout": 0,
-      "reloadOnForeground": false
     },
     "notification": {
       "icon": "./assets/notification-icon.png"
@@ -53,13 +52,14 @@
       "icon": "./assets/prophetik_icon_1024.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.prophetik",
+      "buildNumber": "1.0.0",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 3,
       "backgroundColor": "#0B1020",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive_foreground_432_transparent_padded.png",

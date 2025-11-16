@@ -51,11 +51,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "502697214487-lqbsu6d0lasvotji9khsnkf51s2ufb3a.apps.googleusercontent.com",
+          "client_id": "502697214487-une86m30k1lr87sjpsj1rmg29e47ri1c.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.prophetik",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+            "certificate_hash": "696503f6a4438160a90e59a7a3a4d87fc1ebab18"
           }
         },
         {

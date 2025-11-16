@@ -293,6 +293,10 @@ export default function AccueilScreen() {
     };
   }, []);
 
+
+
+ 
+
   /* ----------------------------- Derived UI data ----------------------------- */
   const credits =
     typeof meDoc?.credits === 'number'
@@ -307,6 +311,14 @@ export default function AccueilScreen() {
   const ach = meDoc?.achievements || {};
   const streak = Number(st.currentStreakDays ?? 0);
   const totalParticipations = Number(st.totalParticipations ?? 0);
+
+     console.log('DEBUG STATS', {
+      uidFromAuth: user?.uid,
+      uidFromDoc: meDoc?.uid,
+      statsFromDoc: meDoc?.stats,
+      streak,
+      totalParticipations,
+    });
 
   const RED = '#ef4444';
   const RED_LIGHT = '#fecaca';
@@ -333,6 +345,8 @@ export default function AccueilScreen() {
     }
     setShowGroupPicker(true);
   }
+
+
 
   /* ----------------------------- UI ----------------------------- */
   return (
@@ -575,6 +589,7 @@ export default function AccueilScreen() {
               </View>
             </View>
           </View>
+
 
           {/* Modal sélection de groupe */}
           <Modal visible={showGroupPicker} transparent animationType="fade" onRequestClose={() => setShowGroupPicker(false)}>

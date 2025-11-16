@@ -89,50 +89,65 @@ export default function PhoneSignUpScreen() {
     }
   };
 
-  const confirmCode = async () => {
-    try {
-      if (!code.trim() || code.trim().length < 4) {
-        Alert.alert('Code requis', 'Entre le code reçu par SMS.');
-        return;
-      }
-      setBusy(true);
-
-      const confirmation = confirmationRef.current;
-      if (!confirmation) {
-        Alert.alert('Session expirée', 'Réessaie l’envoi du code.');
-        setStep(1);
-        return;
-      }
-
-      const cred = await confirmation.confirm(code.trim());
-      const user = cred?.user || auth().currentUser;
-      if (!user) throw new Error('Utilisateur non disponible après confirmation.');
-
-      const cleanName = sanitizeDisplayName(displayName);
-      if (cleanName && user.displayName !== cleanName) {
-        await user.updateProfile({ displayName: cleanName }).catch(() => {});
-        await auth().currentUser?.reload().catch(() => {});
-      }
-
-      await ensureParticipantDoc(cleanName);
-
-      Alert.alert('Bienvenue!', 'Ton compte a été créé.');
-      router.replace('/(drawer)/(tabs)/AccueilScreen');
-    } catch (e) {
-      const msg = String(e?.message || e);
-      if (msg.includes('invalid-verification-code')) {
-        Alert.alert('Code invalide', 'Vérifie le code et réessaie.');
-      } else if (msg.includes('session-expired')) {
-        Alert.alert('Session expirée', 'Redemande un nouveau code.');
-        setStep(1);
-        confirmationRef.current = null;
-      } else {
-        Alert.alert('Échec de vérification', msg);
-      }
-    } finally {
-      setBusy(false);
+ const confirmCode = async () => {
+  try {
+    if (!code.trim() || code.trim().length < 4) {
+      Alert.alert('Code requis', 'Entre le code reçu par SMS.');
+      return;
     }
-  };
+    setBusy(true);
+
+    const confirmation = confirmationRef.current;
+    if (!confirmation) {
+      Alert.alert('Session expirée', 'Réessaie l’envoi du code.');
+      setStep(1);
+      return;
+    }
+
+    const cred = await confirmation.confirm(code.trim());
+    const user = cred?.user || auth().currentUser;
+    if (!user) throw new Error('Utilisateur non disponible après confirmation.');
+
+    const cleanName = sanitizeDisplayName(displayName);
+    if (cleanName && user.displayName !== cleanName) {
+      await user.updateProfile({ displayName: cleanName }).catch(() => {});
+      await auth().currentUser?.reload().catch(() => {});
+    }
+
+    // 1) Crée / met à jour le doc participant de base
+    await ensureParticipantDoc(cleanName);
+
+    // 2) Initialise l'onboarding si pas encore fait
+    await firestore()
+      .collection('participants')
+      .doc(user.uid)
+      .set(
+        {
+          onboarding: { welcomeSeen: false },
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    Alert.alert('Bienvenue!', 'Ton compte a été créé.');
+
+    // 3) Envoie directement vers l'onboarding
+    router.replace('/onboarding/welcome');
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg.includes('invalid-verification-code')) {
+      Alert.alert('Code invalide', 'Vérifie le code et réessaie.');
+    } else if (msg.includes('session-expired')) {
+      Alert.alert('Session expirée', 'Redemande un nouveau code.');
+      setStep(1);
+      confirmationRef.current = null;
+    } else {
+      Alert.alert('Échec de vérification', msg);
+    }
+  } finally {
+    setBusy(false);
+  }
+};
 
   return (
     <>

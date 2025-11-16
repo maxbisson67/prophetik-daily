@@ -72,20 +72,51 @@ function AuthGateMount() {
   useEffect(() => {
     if (!authReady || !navReady) return;
 
-    const isRoot = !pathname || pathname === "/";
-    const authPaths = new Set(["/auth-choice", "/sign-in", "/phone-login"]);
-    const inAuthByPath = authPaths.has(pathname);
-    const inAuthByGroup = Array.isArray(segments) && segments[0] === "(auth)";
-    const isInAuth = inAuthByPath || inAuthByGroup;
+    const currentPath = pathname || "";
+
+    // 🧯 HOTFIX : NE *JAMAIS* REDIRIGER DEPUIS L'ÉCRAN PHONE-LOGIN
+    // (peu importe comment expo-router construit le path)
+    if (
+      currentPath === "/phone-login" ||
+      currentPath === "/(auth)/phone-login"
+    ) {
+      // On laisse l’utilisateur entrer son numéro puis son code
+      // sans aucune redirection automatique.
+      return;
+    }
+
+    const isRoot = currentPath === "/" || currentPath === "";
+
+    // 👉 On liste tous les écrans d’auth connus, avec ou sans le groupe dans le path
+    const authPaths = new Set([
+      "/auth-choice",
+      "/(auth)/auth-choice",
+      "/sign-in",
+      "/(auth)/sign-in",
+      "/phone-login",
+      "/(auth)/phone-login",
+    ]);
+
+    const inAuthByPath = authPaths.has(currentPath);
+
+    const firstSegment = Array.isArray(segments) ? segments[0] : null;
+    const inAuthByGroup =
+      firstSegment === "(auth)" || firstSegment === "auth";
+
+    const inAuthByPrefix = currentPath.startsWith("/(auth)/");
+
+    const isInAuth = inAuthByPath || inAuthByGroup || inAuthByPrefix;
 
     if (isRoot) {
       router.replace(user ? "/(drawer)" : "/(auth)/auth-choice");
       return;
     }
+
     if (!user && !isInAuth) {
       router.replace("/(auth)/auth-choice");
       return;
     }
+
     if (user && isInAuth) {
       router.replace("/(drawer)");
       return;
