@@ -123,20 +123,23 @@ function useOwnedGroups(uid) {
   React.useEffect(() => {
     if (!uid) { setOwned([]); setLoading(false); return; }
 
-    const results = {
-      ownerId: [],
-      createdBy: [],
-    };
-
+    const results = { ownerId: [], createdBy: [] };
     const unsubs = [];
 
     function attach(qRef, key) {
       const un = qRef.onSnapshot((snap) => {
         results[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
         const merged = dedupeById([
           ...results.ownerId,
           ...results.createdBy,
-        ]);
+        ]).filter((g) => {
+          const status = String(g?.status || '').toLowerCase();
+          if (g?.active === false) return false;
+          if (status === 'archived' || status === 'deleted') return false;
+          return true;
+        });
+
         setOwned(merged);
         setLoading(false);
       }, () => setLoading(false));
@@ -144,7 +147,6 @@ function useOwnedGroups(uid) {
     }
 
     try {
-      // ownerId == uid
       attach(
         firestore().collection('groups').where('ownerId', '==', String(uid)),
         'ownerId'
@@ -152,7 +154,6 @@ function useOwnedGroups(uid) {
     } catch (e) {}
 
     try {
-      // createdBy == uid
       attach(
         firestore().collection('groups').where('createdBy', '==', String(uid)),
         'createdBy'
@@ -414,9 +415,16 @@ export default function ClassementScreen() {
   // 2) Groupes dont je suis OWNER (tous schémas couverts)
   const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(user?.uid);
 
-  // 3) Fusion dédupliquée
+ // 3) Fusion dédupliquée
   const groups = useMemo(
-    () => dedupeById([...(memberGroups || []), ...(ownedGroups || [])]),
+    () =>
+      dedupeById([...(memberGroups || []), ...(ownedGroups || [])]).filter((g) => {
+        const status = String(g?.status || '').toLowerCase();
+        // On garde seulement les groupes actifs / non archivés
+        if (g?.active === false) return false;
+        if (status === 'archived' || status === 'deleted') return false;
+        return true;
+      }),
     [memberGroups, ownedGroups]
   );
 

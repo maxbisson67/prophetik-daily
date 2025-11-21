@@ -4,7 +4,7 @@
     "name": "Prophetik",
     "slug": "prophetik-daily",
     "scheme": "prophetik-daily",
-    "version": "3.0.0",
+    "version": "3.0.2",
     "orientation": "portrait",
     "icon": "./assets/prophetik_icon_1024.png",
     "backgroundColor": "#ffffff",
@@ -16,21 +16,12 @@
     },
     "updates": {
       "checkAutomatically": "ON_ERROR_RECOVERY",
-      "fallbackToCacheTimeout": 0,
+      "fallbackToCacheTimeout": 0
     },
     "notification": {
       "icon": "./assets/notification-icon.png"
     },
     "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "deploymentTarget": "16.0",
-            "swiftVersion": "5.0"
-          }
-        }
-      ],
       "@react-native-firebase/app",
       "expo-router",
       "expo-notifications",
@@ -52,14 +43,14 @@
       "icon": "./assets/prophetik_icon_1024.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.prophetik",
-      "buildNumber": "1.0.0",
+      "buildNumber": "2.0.0",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 5,
       "backgroundColor": "#0B1020",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive_foreground_432_transparent_padded.png",

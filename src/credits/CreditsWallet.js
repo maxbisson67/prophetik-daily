@@ -1,9 +1,8 @@
 // src/credits/CreditsWallet.js
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Pressable,Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Pressable, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-//import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '@src/lib/firebase';
 
 const PACKS = [
@@ -12,7 +11,8 @@ const PACKS = [
   { id: 'p140', credits: 140, priceCents: 2500, tag: 'Meilleure valeur' },
 ];
 
-const fmtPrice = (cents) => (cents/100).toLocaleString('fr-CA', { style:'currency', currency:'CAD' });
+const fmtPrice = (cents) =>
+  (cents / 100).toLocaleString('fr-CA', { style: 'currency', currency: 'CAD' });
 
 export default function CreditsWallet({ credits }) {
   const balance = useMemo(
@@ -24,16 +24,14 @@ export default function CreditsWallet({ credits }) {
   const [buying, setBuying] = useState(false);
   const [selectedPack, setSelectedPack] = useState(PACKS[0]);
 
- 
-   async function callFreeTopUp(payload) {
+  // Appel cross-platform de la CF freeTopUp
+  async function callFreeTopUp(payload) {
     if (Platform.OS === 'web') {
-      // Web → SDK Web (auth web requise !)
       const { getFunctions, httpsCallable } = await import('firebase/functions');
       const f = getFunctions(app, 'us-central1');
       const fn = httpsCallable(f, 'freeTopUp');
       return fn(payload);
     } else {
-      // iOS/Android → RNFirebase (auth native transmise automatiquement)
       const functions = (await import('@react-native-firebase/functions')).default;
       const fn = functions().httpsCallable('freeTopUp');
       return fn(payload);
@@ -43,11 +41,48 @@ export default function CreditsWallet({ credits }) {
   const onFreeTopUp = async () => {
     try {
       setLoadingTopUp(true);
-      const res = await callFreeTopUp({ delta: 25, reason: 'bonus_daily' });
-      Alert.alert('🎉 Bonus crédité', `Nouveau solde: ${res?.data?.newBalance ?? 'mis à jour'}`);
+
+      // La CF gère maintenant la règle "1 bonus / 10 jours"
+      const res = await callFreeTopUp({
+        delta: 25,
+        reason: 'bonus_10days',
+      });
+
+      const awarded = res?.data?.amount ?? 25;
+
+      Alert.alert(
+        '🎉 Bonus crédité',
+        `Tu viens de recevoir +${awarded} crédits.\nTon solde va se mettre à jour.`
+      );
     } catch (e) {
-      Alert.alert('Oups', String(e?.message || e));
       console.log('[freeTopUp] error:', e);
+
+      const code = e?.code || '';
+      const message = e?.message || String(e);
+      const details = e?.details || {};
+
+      // Cas "cooldown 10 jours" -> failed-precondition + nextAvailableDay
+      if (code === 'failed-precondition' && details.nextAvailableDay) {
+        const nextDay = details.nextAvailableDay; // ex: "2025-11-30"
+
+        Alert.alert(
+          'Bonus déjà utilisé',
+          `Tu as déjà utilisé ton bonus récemment.\nTu pourras en redemander à partir du ${nextDay}.`
+        );
+        setLoadingTopUp(false);
+        return;
+      }
+
+      if (code === 'unauthenticated') {
+        Alert.alert(
+          'Connexion requise',
+          "Tu dois être connecté pour demander un bonus de crédits."
+        );
+        setLoadingTopUp(false);
+        return;
+      }
+
+      Alert.alert('Oups', message);
     } finally {
       setLoadingTopUp(false);
     }
@@ -56,14 +91,11 @@ export default function CreditsWallet({ credits }) {
   const onBuy = async () => {
     try {
       setBuying(true);
-      // Branche ici ta CF checkout ex: createCreditCheckout({ packId,... })
-      // const url = (await httpsCallable(getFunctions(app,'us-central1'),'createCreditCheckout')({
-      //   packId: selectedPack.id, credits: selectedPack.credits, priceCents: selectedPack.priceCents,
-      //   successUrl:'prophetik://credits/success', cancelUrl:'prophetik://credits/cancel'
-      // })).data?.url;
-      // if (url) Linking.openURL(url); else Alert.alert('Bientôt', 'Caisse non configurée.');
-
-      Alert.alert('Bientôt', `Achat de ${selectedPack.credits} crédits (${fmtPrice(selectedPack.priceCents)})`);
+      // TODO: branchement avec ta CF de checkout (Stripe / autre)
+      Alert.alert(
+        'Bientôt',
+        `Achat de ${selectedPack.credits} crédits (${fmtPrice(selectedPack.priceCents)})`
+      );
     } catch (e) {
       Alert.alert('Paiement', String(e?.message || e));
     } finally {
@@ -86,51 +118,69 @@ export default function CreditsWallet({ credits }) {
       {/* Bandeau solde */}
       <LinearGradient
         colors={['#111827', '#0f172a']}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={{ padding: 18 }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <View
             style={{
-              width: 42, height: 42, borderRadius: 12,
+              width: 42,
+              height: 42,
+              borderRadius: 12,
               backgroundColor: 'rgba(255,255,255,0.08)',
-              alignItems:'center', justifyContent:'center',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             <MaterialCommunityIcons name="credit-card-outline" size={26} color="#fff" />
           </View>
+
           <View style={{ flex: 1 }}>
-            <Text style={{ color:'#9CA3AF', fontWeight:'700', letterSpacing: 0.4 }}>MON SOLDE</Text>
-            <Text style={{ color:'#fff', fontWeight:'900', fontSize: 34, marginTop: 2 }}>
+            <Text style={{ color: '#9CA3AF', fontWeight: '700', letterSpacing: 0.4 }}>
+              MON SOLDE
+            </Text>
+            <Text
+              style={{
+                color: '#fff',
+                fontWeight: '900',
+                fontSize: 34,
+                marginTop: 2,
+              }}
+            >
               {balance}
             </Text>
           </View>
 
-          {/* Bonus gratuit */}
+          {/* Bonus gratuit (1 / 10 jours) */}
           <Pressable
             onPress={onFreeTopUp}
             disabled={loadingTopUp}
             style={({ pressed }) => ({
-              opacity: loadingTopUp ? 0.6 : (pressed ? 0.85 : 1),
+              opacity: loadingTopUp ? 0.6 : pressed ? 0.85 : 1,
               backgroundColor: '#22c55e',
               paddingHorizontal: 14,
               paddingVertical: 10,
               borderRadius: 12,
             })}
           >
-            {loadingTopUp
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={{ color:'#fff', fontWeight:'800' }}>+25 Bonus</Text>}
+            {loadingTopUp ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ color: '#fff', fontWeight: '800' }}>+25 Bonus</Text>
+            )}
           </Pressable>
         </View>
       </LinearGradient>
 
       {/* Corps : packs + action */}
-      <View style={{ backgroundColor:'#fff', padding: 16 }}>
-        <Text style={{ fontWeight:'900', fontSize:16, marginBottom: 10 }}>Acheter des crédits</Text>
+      <View style={{ backgroundColor: '#fff', padding: 16 }}>
+        <Text style={{ fontWeight: '900', fontSize: 16, marginBottom: 10 }}>
+          Acheter des crédits
+        </Text>
 
         {/* Packs (chips) */}
-        <View style={{ flexDirection:'row', gap:10, marginBottom: 14 }}>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
           {PACKS.map((p) => {
             const active = selectedPack?.id === p.id;
             return (
@@ -146,8 +196,8 @@ export default function CreditsWallet({ credits }) {
                   borderRadius: 12,
                 }}
               >
-                <Text style={{ fontWeight:'800' }}>{p.credits} crédits</Text>
-                <Text style={{ color:'#6B7280', fontSize:12 }}>{p.tag}</Text>
+                <Text style={{ fontWeight: '800' }}>{p.credits} crédits</Text>
+                <Text style={{ color: '#6B7280', fontSize: 12 }}>{p.tag}</Text>
               </TouchableOpacity>
             );
           })}
@@ -156,16 +206,19 @@ export default function CreditsWallet({ credits }) {
         {/* Résumé + bouton acheter */}
         <View
           style={{
-            borderWidth:1, borderColor:'#E5E7EB', borderRadius: 14,
-            padding: 12, backgroundColor:'#F9FAFB', flexDirection:'row',
-            alignItems:'center', justifyContent:'space-between'
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderRadius: 14,
+            padding: 12,
+            backgroundColor: '#F9FAFB',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
           <View>
-            <Text style={{ fontWeight:'800' }}>
-              {selectedPack.credits} crédits
-            </Text>
-            <Text style={{ color:'#6B7280', marginTop:2 }}>
+            <Text style={{ fontWeight: '800' }}>{selectedPack.credits} crédits</Text>
+            <Text style={{ color: '#6B7280', marginTop: 2 }}>
               {fmtPrice(selectedPack.priceCents)}
             </Text>
           </View>
@@ -174,21 +227,22 @@ export default function CreditsWallet({ credits }) {
             onPress={onBuy}
             disabled={buying}
             style={({ pressed }) => ({
-              backgroundColor:'#111827',
+              backgroundColor: '#111827',
               paddingVertical: 12,
               paddingHorizontal: 18,
               borderRadius: 12,
-              opacity: buying ? 0.6 : (pressed ? 0.85 : 1),
+              opacity: buying ? 0.6 : pressed ? 0.85 : 1,
             })}
           >
-            {buying
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={{ color:'#fff', fontWeight:'900' }}>Acheter</Text>}
+            {buying ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ color: '#fff', fontWeight: '900' }}>Acheter</Text>
+            )}
           </Pressable>
         </View>
 
-        {/* Note confiance */}
-        <Text style={{ color:'#6B7280', fontSize:12, marginTop:10 }}>
+        <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 10 }}>
           Paiements sécurisés • Reçus envoyés par courriel • Crédits livrés instantanément
         </Text>
       </View>

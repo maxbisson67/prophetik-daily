@@ -47,6 +47,15 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="podium" color={color} size={size} />,
         }}
       />
+      <Tabs.Screen
+        name="MatchLiveScreen"
+        options={{
+          title: 'Match Live',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="radio-outline" size={size} color={color} />
+          ),
+        }}
+      />
 
       {/* Hide the file-based route (tabs index) */}
       <Tabs.Screen

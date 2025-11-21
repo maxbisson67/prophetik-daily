@@ -1,5 +1,4 @@
 // src/groups/services.js (RNFB)
-// Conversion vers @react-native-firebase/firestore
 
 import firestore from '@react-native-firebase/firestore';
 
@@ -12,55 +11,58 @@ function generateCodeInvitation(length = 8) {
 }
 
 /**
- * Crée un groupe + membership owner (atomique).
+ * Crée un groupe + membership owner.
+ * ⚠️ IMPORTANT : on ne fait plus de batch pour que les règles puissent voir le groupe.
  * @param {{name: string, description?: string, uid: string}} params
  * @returns {Promise<{groupId: string, codeInvitation: string}>}
  */
 export async function createGroupService({ name, description = '', uid }) {
   if (!uid) throw new Error('uid manquant');
 
+  const db = firestore();
   const now = firestore.FieldValue.serverTimestamp();
 
   // 1) Profil participant (pour nom/avatar)
-  const pSnap = await firestore().doc(`participants/${uid}`).get();
+  const pSnap = await db.doc(`participants/${uid}`).get();
   const p = pSnap.exists ? (pSnap.data() || {}) : {};
+
   const displayName =
     p.displayName ||
     (p.email ? String(p.email).split('@')[0] : '') ||
     'Invité';
+
   const avatarUrl =
     p.photoURL || p.avatarUrl || p.photoUrl || p.avatar || null;
 
   // 2) Réfs & IDs
-  const groupRef = firestore().collection('groups').doc(); // auto-ID
+  const groupRef = db.collection('groups').doc(); // auto-ID
   const groupId = groupRef.id;
   const codeInvitation = generateCodeInvitation(8);
-  const gmRef = firestore().doc(`group_memberships/${groupId}_${uid}`);
+  const gmRef = db.doc(`group_memberships/${groupId}_${uid}`);
 
-  // 3) Batch (écriture atomique)
-  const batch = firestore().batch();
-
-  batch.set(groupRef, {
+  // 3) 1er write : création du groupe (règle /groups create)
+  await groupRef.set({
     name: String(name || '').trim(),
     description: String(description || '').trim(),
     avatarUrl: null,
     codeInvitation,
-    createdBy: uid,
+    createdBy: uid,            // ✅ exigé par la règle /groups create
     isPrivate: true,
     status: 'active',
     createdAt: now,
     updatedAt: now,
 
-    // 🧩 champs pratiques pour l’affichage & règles
+    // champs pratiques pour les règles/isGroupOwner
     ownerId: uid,
     ownerName: displayName,
     ownerAvatarUrl: avatarUrl || null,
   });
 
-  batch.set(gmRef, {
+  // 4) 2e write : membership owner (règle /group_memberships create)
+  await gmRef.set({
     groupId,
     uid,
-    role: 'owner',
+    role: 'owner',             // ✅ autorisé car groups/{groupId}.createdBy == uid maintenant
     active: true,
     status: 'active',
     displayName,
@@ -68,8 +70,6 @@ export async function createGroupService({ name, description = '', uid }) {
     createdAt: now,
     updatedAt: now,
   });
-
-  await batch.commit();
 
   return { groupId, codeInvitation };
 }

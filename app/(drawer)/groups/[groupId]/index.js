@@ -9,6 +9,8 @@ import { useFocusEffect } from '@react-navigation/native';
 // ✅ RNFirebase Firestore
 import firestore from '@react-native-firebase/firestore';
 
+import functions from '@react-native-firebase/functions';
+
 // Auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
@@ -166,6 +168,7 @@ function chooseNameAvatar(profile, membershipItem) {
   return { displayName: name, avatarUrl: avatar };
 }
 
+
 /* --------------------- Ligne membre (depuis profiles_public) --------------------- */
 function MemberRow({ uid, role, item }) {
   const pubRaw = usePublicProfile(uid);
@@ -245,6 +248,11 @@ export default function GroupDetailScreen() {
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // Pour le delete d'un groupe
+  const [hasActiveDefis, setHasActiveDefis] = useState(false);
+  const [checkingDefis, setCheckingDefis] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+
   // Options d’entête (titre dynamique + back vers l’onglet Groupes)
   useLayoutEffect(() => {
     const goToGroupsTab = () => r.replace('/(drawer)/(tabs)/GroupsScreen');
@@ -298,6 +306,31 @@ export default function GroupDetailScreen() {
       const norm = activeRows.map(m => ({ ...m, role: String(m.role || 'member').toLowerCase() }));
       setMemberships(norm);
     });
+    return () => { try { unsub(); } catch {} };
+  }, [id]);
+
+  // 🔴 Défis actifs de ce groupe (open / live / awaiting_result)
+  useEffect(() => {
+    if (!id) return;
+
+    setCheckingDefis(true);
+    const q = firestore()
+      .collection('defis')
+      .where('groupId', '==', id)
+      .where('status', 'in', ['open', 'live', 'awaiting_result']);
+
+    const unsub = q.onSnapshot(
+      (snap) => {
+        setHasActiveDefis(!snap.empty);
+        setCheckingDefis(false);
+      },
+      (e) => {
+        console.log('defis active/listen error', e);
+        setHasActiveDefis(false);
+        setCheckingDefis(false);
+      }
+    );
+
     return () => { try { unsub(); } catch {} };
   }, [id]);
 
@@ -469,6 +502,64 @@ export default function GroupDetailScreen() {
       })
     );
 
+  const handleLeaveGroup = async () => {
+    try {
+      console.log('handleLeaveGroup: user', user?.uid, 'groupId', id);
+      const leave = functions().httpsCallable('leaveGroup');
+      await leave({ groupId: group.id });
+      Alert.alert('Groupe quitté', 'Tu as quitté ce groupe.');
+      r.replace('/(drawer)/(tabs)/GroupsScreen');
+    } catch (e) {
+      console.log('leaveGroup error', e);
+      Alert.alert(
+        'Impossible de quitter',
+        e?.message || 'Une erreur est survenue.'
+      );
+    }
+  };
+
+    async function handleDeleteGroup() {
+    if (!group?.id) return;
+
+    if (hasActiveDefis) {
+      Alert.alert(
+        'Impossible de supprimer',
+        'Il reste des défis actifs ou en cours de calcul dans ce groupe.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Supprimer ce groupe ?',
+      'Cette action est définitive. Les membres ne verront plus ce groupe.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              const fn = functions().httpsCallable('deleteGroup');
+              await fn({ groupId: group.id });
+              Alert.alert('Groupe supprimé', 'Le groupe a été supprimé avec succès.');
+              r.replace('/(drawer)/(tabs)/GroupsScreen');
+            } catch (e) {
+              console.log('deleteGroup error', e);
+              Alert.alert(
+                'Suppression impossible',
+                e?.message ||
+                  'Une erreur est survenue lors de la suppression du groupe.'
+              );
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: group?.name || 'Groupe' }} />
@@ -564,11 +655,45 @@ export default function GroupDetailScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => Alert.alert('À venir', 'Quitter le groupe sera implémenté prochainement.')}
+            onPress ={handleLeaveGroup}
             style={{ backgroundColor:'#fff5f5', padding:14, borderRadius:10, alignItems:'center', borderWidth:1, borderColor:'#ffd6d6' }}
           >
             <Text style={{ fontWeight:'600', color:'#b00020' }}>Quitter ce groupe</Text>
           </TouchableOpacity>
+          {/* Supprimer le groupe (owner seulement) */}
+          {isOwner && (
+            <View style={{ marginTop: 8 }}>
+              <TouchableOpacity
+                onPress={handleDeleteGroup}
+                disabled={hasActiveDefis || deleting}
+                style={{
+                  backgroundColor: hasActiveDefis || deleting ? '#e5e7eb' : '#fef2f2',
+                  padding:14,
+                  borderRadius:10,
+                  alignItems:'center',
+                  borderWidth:1,
+                  borderColor:'#fecaca',
+                  opacity: hasActiveDefis || deleting ? 0.7 : 1,
+                }}
+              >
+                <Text style={{ fontWeight:'700', color:'#b91c1c' }}>
+                  {deleting ? 'Suppression…' : 'Supprimer ce groupe'}
+                </Text>
+              </TouchableOpacity>
+
+              {checkingDefis && (
+                <Text style={{ marginTop:4, fontSize:12, color:'#6b7280' }}>
+                  Vérification des défis actifs…
+                </Text>
+              )}
+
+              {hasActiveDefis && !checkingDefis && (
+                <Text style={{ marginTop:4, fontSize:12, color:'#b91c1c' }}>
+                  Tu ne peux pas supprimer ce groupe tant que des défis sont ouverts / en cours.
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
 

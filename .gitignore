@@ -9,8 +9,11 @@ web-build/
 .metro-health-check*
 
 # --- Native (ignore si tu n’as PAS un repo bare RN) ---
-android/
-ios/
+ios/Pods/
+ios/build/
+android/.gradle/
+android/build/
+android/app/build/
 .gradle/
 
 # --- OS / IDE / logs ---

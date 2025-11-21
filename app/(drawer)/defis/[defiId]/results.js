@@ -27,8 +27,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerToggleButton } from '@react-navigation/drawer';
 import { HeaderBackButton } from '@react-navigation/elements';
 
-import FinalRevealModal from './FinalRevealModal';
-import WinnerSurprise from './WinnerSurprise';
 
 /* ----------------------------- Utils ----------------------------- */
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');

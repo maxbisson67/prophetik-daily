@@ -45,6 +45,31 @@ function listenRNFB(refOrQuery, onNext, tag) {
   });
 }
 
+function periodLabelFromGame(game) {
+  const { period, periodType, clock, isLive, isFinal } = game || {};
+
+  if (period == null && !clock) return null;
+
+  let base = null;
+
+  const pt = (periodType || '').toUpperCase();
+  if (pt === 'OT') {
+    base = 'Prolongation';
+  } else if (pt === 'SO') {
+    base = 'Tirs de barrage';
+  } else if (period != null) {
+    base = `Période ${period}`;
+  }
+
+  // Si match en direct, on ajoute le temps restant
+  if (base && clock && isLive) {
+    return `${base} • ${clock}`;
+  }
+
+  // Si on n’a pas de base mais on a un clock (cas bizarre), on montre au moins le clock
+  return base || clock || null;
+}
+
 /* ----------------------------- Screen ----------------------------- */
 export default function AccueilScreen() {
   const { user, authReady } = useAuth();
@@ -311,14 +336,6 @@ export default function AccueilScreen() {
   const ach = meDoc?.achievements || {};
   const streak = Number(st.currentStreakDays ?? 0);
   const totalParticipations = Number(st.totalParticipations ?? 0);
-
-     console.log('DEBUG STATS', {
-      uidFromAuth: user?.uid,
-      uidFromDoc: meDoc?.uid,
-      statsFromDoc: meDoc?.stats,
-      streak,
-      totalParticipations,
-    });
 
   const RED = '#ef4444';
   const RED_LIGHT = '#fecaca';

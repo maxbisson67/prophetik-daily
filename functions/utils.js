@@ -54,6 +54,23 @@ export async function safeFetchJson(url, { method = "GET", headers = {}, timeout
   }
   throw lastErr || new Error("fetch failed");
 }
+ 
+// Date YYYY-MM-DD en fuseau America/Toronto
+export function torontoYMD(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = fmt.formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const d = parts.find((p) => p.type === "day")?.value;
+
+  return `${y}-${m}-${d}`;
+}
 
 // --- NHL helpers partagés ---
 export const apiWebSchedule = (ymd) => safeFetchJson(`https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`);
