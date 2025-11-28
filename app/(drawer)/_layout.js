@@ -240,6 +240,15 @@ function CustomDrawerContent(props) {
         )}
       />
 
+       <DrawerItem
+        {...itemCommonProps}
+        label="Match Live"
+        onPress={() => goTab('MatchLiveScreen')}
+        icon={({ size }) => (
+          <Ionicons name="pulse-outline" size={size} color={colors.text} />
+        )}
+      />
+
       <Separator />
       <SectionLabel>Espace perso</SectionLabel>
 
