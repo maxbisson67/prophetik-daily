@@ -93,16 +93,15 @@ function fmtTime(d) {
 }
 
 function isGameToday(doc, todayStr) {
-  // On ignore doc.date / doc.ymd pour éviter les problèmes UTC vs local
   const t = doc.startTimeUTC;
   if (!t) return false;
 
   let dt;
   try {
     if (t?.toDate) {
-      dt = t.toDate();        // Timestamp Firestore
+      dt = t.toDate(); // Timestamp Firestore
     } else {
-      dt = new Date(t);       // string ISO ou ms
+      dt = new Date(t); // string ISO ou ms
     }
   } catch {
     return false;
@@ -128,29 +127,44 @@ function gStartMillis(g) {
   }
 }
 
+function addDaysToYMD(baseYmd, delta) {
+  if (!baseYmd || typeof baseYmd !== 'string' || baseYmd.length < 10) return baseYmd;
+  const [y, m, d] = baseYmd.split('-').map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/**
+ * Période (sans temps)
+ * - Si isFinal → "Final", "Final (P)", "Final (TB)"
+ * - Si live → "Période X" / "Prolongation" / "Tirs de barrage"
+ * - Sinon → null (on affiche seulement l’heure de début)
+ */
 function periodLabelFromGame(game) {
-  const { period, periodType, clock, isLive, isFinal } = game || {};
-
-  if (period == null && !clock) return null;
-
-  let base = null;
+  const { period, periodType, isLive, isFinal } = game || {};
 
   const pt = (periodType || '').toUpperCase();
-  if (pt === 'OT') {
-    base = 'Prolongation';
-  } else if (pt === 'SO') {
-    base = 'Tirs de barrage';
-  } else if (period != null) {
-    base = `Période ${period}`;
+
+  // 🏁 Match terminé : Final / Final (P) / Final (TB)
+  if (isFinal) {
+    if (pt === 'SO' || period === 5) return 'Final (TB)';   // tirs de barrage
+    if (pt === 'OT' || period === 4) return 'Final (P)';    // prolongation
+    return 'Final';
   }
 
-  // Si match en direct, on ajoute le temps restant
-  if (base && clock && isLive) {
-    return `${base} • ${clock}`;
-  }
+  // Match pas live → pas d’info de période (pré-match)
+  if (!isLive) return null;
 
-  // Si on n’a pas de base mais on a un clock (cas bizarre), on montre au moins le clock
-  return base || clock || null;
+  // Match en cours → affiche seulement la période
+  if (pt === 'OT') return 'Prolongation';
+  if (pt === 'SO') return 'Tirs de barrage';
+  if (period != null) return `Période ${period}`;
+
+  return null;
 }
 
 function seasonCodeFromDate(d) {
@@ -173,11 +187,22 @@ function seasonCodeFromDate(d) {
   const year = date.getFullYear();
   const month = date.getMonth() + 1; // 1-12
 
-  // Saison NHL commence vers septembre (9)
   if (month >= 9) {
-    return `${year}${year + 1}`;     // ex: 2024 -> "20242025"
+    return `${year}${year + 1}`; // ex: 2024 -> "20242025"
   }
-  return `${year - 1}${year}`;       // ex: février 2025 -> "20242025"
+  return `${year - 1}${year}`;   // ex: février 2025 -> "20242025"
+}
+
+function shortName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return '';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+
+  const last = parts[parts.length - 1];
+  const first = parts[0];
+  const initial = first.charAt(0).toUpperCase();
+
+  return `${initial}. ${last}`;
 }
 
 /* ========================
@@ -196,12 +221,17 @@ function GameRow({ game, onPress, colors }) {
     isFinal,
   } = game;
 
- const seasonCode = useMemo(
+  const timeRemaining = game.timeRemaining ?? null;
+  const periodLabel = periodLabelFromGame(game);
+
+  // On n’affiche pas "Terminé" si le match est final (le "Final..." vient de periodLabel)
+  const displayStatusText = isFinal ? null : statusText;
+
+  // On garde seasonCode au cas où tu veux l'utiliser plus tard (mugs, etc.)
+  const seasonCode = useMemo(
     () => seasonCodeFromDate(startTimeUTC || new Date()),
     [startTimeUTC]
   );
-
- const periodLabel = periodLabelFromGame(game);
 
   return (
     <TouchableOpacity
@@ -215,19 +245,38 @@ function GameRow({ game, onPress, colors }) {
         marginBottom: 10,
       }}
     >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         {/* Infos gauche : équipes + score */}
         <View style={{ flex: 1 }}>
           {/* Away */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}
+          >
             {teamLogo(awayAbbr) && (
               <Image
                 source={teamLogo(awayAbbr)}
                 style={{ width: 26, height: 26, marginRight: 8 }}
               />
             )}
-            <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>{awayAbbr}</Text>
-            <Text style={{ color: colors.text, fontWeight: '700', width: 24, textAlign: 'right' }}>
+            <Text
+              style={{ color: colors.text, fontWeight: '600', flex: 1 }}
+            >
+              {awayAbbr}
+            </Text>
+            <Text
+              style={{
+                color: colors.text,
+                fontWeight: '700',
+                width: 24,
+                textAlign: 'right',
+              }}
+            >
               {awayScore}
             </Text>
           </View>
@@ -239,70 +288,99 @@ function GameRow({ game, onPress, colors }) {
                 style={{ width: 26, height: 26, marginRight: 8 }}
               />
             )}
-            <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>{homeAbbr}</Text>
-            <Text style={{ color: colors.text, fontWeight: '700', width: 24, textAlign: 'right' }}>
+            <Text
+              style={{ color: colors.text, fontWeight: '600', flex: 1 }}
+            >
+              {homeAbbr}
+            </Text>
+            <Text
+              style={{
+                color: colors.text,
+                fontWeight: '700',
+                width: 24,
+                textAlign: 'right',
+              }}
+            >
               {homeScore}
             </Text>
           </View>
         </View>
 
-        {/* Infos droite : statut + heure */}
-        <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginBottom: 4,
-            }}
-          >
-            {isLive && (
-              <View
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: '#dc2626',
-                  marginRight: 6,
-                }}
-              />
-            )}
-            <Text
-              style={{
-                color: isLive
-                  ? '#dc2626'
-                  : isFinal
-                  ? colors.subtext
-                  : colors.text,
-                fontWeight: '700',
-              }}
-            >
-              {statusText}
-            </Text>
-          </View>
+        {/* Infos droite : statut + période + heure/temps restant */}
+        {/* Colonne droite : LIVE + période + heure/temps */}
+<View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
 
-           {/* 🔹 Nouvelle ligne : période + horloge */}
-            {periodLabel && (
-                <Text
-                style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                    marginBottom: 2,
-                }}
-                >
-                {periodLabel}
-                </Text>
-            )}
+  {/* Indication LIVE centrée avec les équipes */}
+  {isLive && (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 2,
+    }}>
+      <View
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: '#dc2626',
+          marginRight: 6,
+        }}
+      />
+      <Text
+        style={{
+          color: '#dc2626',
+          fontWeight: '700',
+        }}
+      >
+        LIVE
+      </Text>
+    </View>
+  )}
 
+  {/* Période / Final */}
+  {periodLabel && (
+    <Text
+      style={{
+        color: colors.subtext,
+        fontSize: 12,
+        marginBottom: 2,
+      }}
+    >
+      {periodLabel}
+    </Text>
+  )}
 
-          <Text style={{ color: colors.subtext, fontSize: 12 }}>
-            {startTimeUTC ? `Début: ${fmtTime(startTimeUTC)}` : 'Heure inconnue'}
-          </Text>
-        </View>
+  {/* Temps restant ou heure de début */}
+  {isLive ? (
+    timeRemaining ? (
+      <Text style={{ color: colors.subtext, fontSize: 12 }}>
+        {timeRemaining}
+      </Text>
+    ) : null
+  ) : isFinal ? null : (
+    <Text style={{ color: colors.subtext, fontSize: 12 }}>
+      {startTimeUTC
+        ? `Début: ${fmtTime(startTimeUTC)}`
+        : 'Heure inconnue'}
+    </Text>
+  )}
+</View>
       </View>
 
       {/* Hint tap */}
-      <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-        <Ionicons name="information-circle-outline" size={16} color={colors.subtext} />
+      <View
+        style={{
+          marginTop: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Ionicons
+          name="information-circle-outline"
+          size={16}
+          color={colors.subtext}
+        />
         <Text style={{ marginLeft: 4, color: colors.subtext, fontSize: 12 }}>
           Touchez pour voir les détails
         </Text>
@@ -320,7 +398,6 @@ function GameDetailModal({ visible, onClose, game, colors }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔴 Écoute Firestore sur le match sélectionné + sa sous-collection "goals"
   useEffect(() => {
     if (!visible || !game?.id) {
       setGameDoc(null);
@@ -409,18 +486,31 @@ function GameDetailModal({ visible, onClose, game, colors }) {
     homeScore,
     awayScore,
     startTimeUTC,
-    venue,
     statusText,
     isLive,
     isFinal,
     period,
     periodType,
-    clock,
   } = g;
 
-  const periodLabel = period
-    ? `Période ${period}${periodType === 'OT' ? ' (Prolong.)' : periodType === 'SO' ? ' (TB)' : ''}`
-    : null;
+  const timeRemaining = g.timeRemaining ?? null;
+
+  let periodLabel = null;
+  const ptModal = (periodType || '').toUpperCase();
+
+  if (isFinal) {
+    if (ptModal === 'SO' || period === 5) {
+      periodLabel = 'Final (TB)';
+    } else if (ptModal === 'OT' || period === 4) {
+      periodLabel = 'Final (P)';
+    } else {
+      periodLabel = 'Final';
+    }
+  } else if (period != null) {
+    periodLabel = `Période ${period}${
+      ptModal === 'OT' ? ' (Prolong.)' : ptModal === 'SO' ? ' (TB)' : ''
+    }`;
+  }
 
   return (
     <Modal
@@ -557,19 +647,29 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                 </View>
               </View>
 
-              {periodLabel && (
+              {/* Ligne infos période / temps ou début */}
+              {isLive ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  {periodLabel} {clock ? `• Temps restant: ${clock}` : ''}
+                  {periodLabel
+                    ? `${periodLabel}${
+                        timeRemaining ? ` • Temps restant: ${timeRemaining}` : ''
+                      }`
+                    : timeRemaining
+                    ? `Temps restant: ${timeRemaining}`
+                    : 'En cours'}
                 </Text>
-              )}
-              {!periodLabel && clock && (
+              ) : isFinal ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  Temps restant: {clock}
+                  {periodLabel || 'Final'}
+                </Text>
+              ) : (
+                <Text style={{ color: colors.subtext, fontSize: 13 }}>
+                  {startTimeUTC
+                    ? `Début: ${fmtTime(startTimeUTC)}`
+                    : 'Heure de début inconnue'}
                 </Text>
               )}
             </View>
-
-           
 
             {/* Buts par période */}
             <View
@@ -593,7 +693,14 @@ function GameDetailModal({ visible, onClose, game, colors }) {
               </Text>
 
               {loading && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginTop: 4,
+                  }}
+                >
                   <ActivityIndicator size="small" color={colors.subtext} />
                   <Text style={{ color: colors.subtext, fontSize: 13 }}>
                     Chargement des buts…
@@ -621,107 +728,129 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                     </Text>
 
                     {group.goals.map((goal) => {
-                        const time = goal.timeInPeriod || '??:??';
+                      const time = goal.timeInPeriod || '??:??';
 
-                        // 🔹 Buteur
-                        const scorerShort = shortName(goal.scoringPlayerName || '');
-                        const scorerTotal =
-                            typeof goal.scoringPlayerTotal === 'number'
-                            ? goal.scoringPlayerTotal
-                            : (typeof goal.scoringPlayerTotal === 'string' && goal.scoringPlayerTotal !== ''
-                                ? goal.scoringPlayerTotal
-                                : null);
+                      const scorerShort = shortName(goal.scoringPlayerName || '');
+                      const scoringTotal =
+                        typeof goal.scoringPlayerTotal === 'number'
+                          ? goal.scoringPlayerTotal
+                          : typeof goal.scoringPlayerTotal === 'string' &&
+                            goal.scoringPlayerTotal !== ''
+                          ? goal.scoringPlayerTotal
+                          : null;
 
-                        // 🔹 Passeurs (0, 1 ou 2)
-                        const assists = [];
-                        if (goal.assist1PlayerName) assists.push(shortName(goal.assist1PlayerName));
-                        if (goal.assist2PlayerName) assists.push(shortName(goal.assist2PlayerName));
+                      const assists = [];
+                      if (goal.assist1PlayerName)
+                        assists.push(shortName(goal.assist1PlayerName));
+                      if (goal.assist2PlayerName)
+                        assists.push(shortName(goal.assist2PlayerName));
 
-                        let assistsText = '';
-                        if (assists.length === 1) {
-                            assistsText = `Assisté de ${assists[0]}`;
-                        } else if (assists.length === 2) {
-                            assistsText = `Assisté de ${assists[0]} et ${assists[1]}`;
-                        }
+                      let assistsText = '';
+                      if (assists.length === 1) {
+                        assistsText = `Assisté de ${assists[0]}`;
+                      } else if (assists.length === 2) {
+                        assistsText = `Assisté de ${assists[0]} et ${assists[1]}`;
+                      }
 
-                        const strength =
-                            goal.strength && goal.strength !== 'EV'
-                            ? ` • ${goal.strength}`
-                            : '';
+                      const strength =
+                        goal.strength && goal.strength !== 'EV'
+                          ? ` • ${goal.strength}`
+                          : '';
 
-                        const avatarUrl = goal.scoringPlayerAvatarUrl;
-                        
-                        return (
-                            <View
-                            key={goal.id}
+                      const avatarUrl = goal.scoringPlayerAvatarUrl;
+                      const smallLogo = teamLogo(
+                        goal.scoringPlayerTeamAbbr || goal.teamAbbr
+                      );
+
+                      return (
+                        <View
+                          key={goal.id}
+                          style={{
+                            flexDirection: 'row',
+                            paddingVertical: 6,
+                          }}
+                        >
+                          {/* Avatar joueur */}
+                          <View
                             style={{
-                                flexDirection: 'row',
-                                paddingVertical: 6,
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              overflow: 'hidden',
+                              marginRight: 8,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: colors.card,
+                              borderWidth: 1,
+                              borderColor: colors.border,
                             }}
-                            >
-                            {/* Avatar joueur */}
-                            <View
-                            style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: 16,
-                                backgroundColor: '#111827',
-                                overflow: 'hidden',
-                                marginRight: 8,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}
-                            >
+                          >
                             {avatarUrl ? (
-                                <Image
+                              <Image
                                 source={{ uri: avatarUrl }}
                                 style={{ width: 32, height: 32 }}
                                 resizeMode="cover"
-                                />
+                              />
                             ) : (
-                                <Text
+                              <Text
                                 style={{
-                                    fontSize: 10,
-                                    fontWeight: '700',
-                                    color: '#fff',
+                                  fontSize: 10,
+                                  fontWeight: '700',
+                                  color: colors.text,
                                 }}
-                                >
-                                { (goal.teamAbbr || '??') }
-                                </Text>
+                              >
+                                {goal.teamAbbr || '??'}
+                              </Text>
                             )}
-                            </View>
+                          </View>
 
-                            {/* Texte buteur + ligne des assists */}
-                            <View style={{ flex: 1 }}>
-                                {/* Ligne 1 : A. Ovechkin (7) en gras + strength */}
-                                <Text
+                          {/* Texte buteur + assists */}
+                          <View style={{ flex: 1 }}>
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                              }}
+                            >
+                              {smallLogo && (
+                                <Image
+                                  source={smallLogo}
+                                  style={{
+                                    width: 12,
+                                    height: 12,
+                                    marginRight: 4,
+                                    borderRadius: 2,
+                                  }}
+                                />
+                              )}
+                              <Text
                                 style={{
-                                    color: colors.text,
-                                    fontWeight: '700',
+                                  color: colors.text,
+                                  fontWeight: '700',
                                 }}
                                 numberOfLines={1}
-                                >
+                              >
                                 {scorerShort || 'But'}
-                                {scorerTotal != null ? ` (${scorerTotal})` : ''}
+                                {scoringTotal != null ? ` (${scoringTotal})` : ''}
                                 {strength}
-                                </Text>
+                              </Text>
+                            </View>
 
-                                {/* Ligne 2 : 2:17 - Assisté de ... */}
-                                <Text
-                                style={{
-                                    color: colors.subtext,
-                                    fontSize: 12,
-                                    marginTop: 2,
-                                }}
-                                numberOfLines={2}
-                                >
-                                {time}
-                                {assistsText ? ` - ${assistsText}` : ''}
-                                </Text>
-                            </View>
-                            </View>
-                        );
-                        })}
+                            <Text
+                              style={{
+                                color: colors.subtext,
+                                fontSize: 12,
+                                marginTop: 2,
+                              }}
+                              numberOfLines={2}
+                            >
+                              {time}
+                              {assistsText ? ` - ${assistsText}` : ''}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
                   </View>
                 ))}
             </View>
@@ -730,17 +859,6 @@ function GameDetailModal({ visible, onClose, game, colors }) {
       </View>
     </Modal>
   );
-}
-function shortName(fullName) {
-  if (!fullName || typeof fullName !== 'string') return '';
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0]; // ex: "McDavid"
-
-  const last = parts[parts.length - 1];
-  const first = parts[0];
-  const initial = first.charAt(0).toUpperCase();
-
-  return `${initial}. ${last}`;
 }
 
 /* ========================
@@ -761,77 +879,33 @@ export default function MatchLiveScreen() {
     const hour = now.getHours();
     const today = todayYMD();
 
-    // 👉 Entre 00:00 et 04:59, on affiche les matchs d'hier
-    if (hour < 5) {
-        return addDaysToYMD(today, -1);
+    if (hour < 9) {
+      return addDaysToYMD(today, -1);
     }
     return today;
-   }, []);
+  }, []);
 
+  useEffect(() => {
+    const ref = firestore().collection('nhl_live_games');
 
-function addDaysToYMD(baseYmd, delta) {
-  // baseYmd = 'YYYY-MM-DD'
-  if (!baseYmd || typeof baseYmd !== 'string' || baseYmd.length < 10) return baseYmd;
-  const [y, m, d] = baseYmd.split('-').map((x) => parseInt(x, 10));
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + delta);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${yy}-${mm}-${dd}`;
-}
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const todays = all.filter((g) => isGameToday(g, effectiveYmd));
+        setGames(todays);
+        setLoading(false);
+      },
+      (err) => {
+        console.log('[MatchLive] nhl_live_games error', err?.message || err);
+        setLoading(false);
+      }
+    );
 
-function periodLabelFromGame(game) {
-  const { period, periodType, clock, isLive, isFinal } = game || {};
+    return () => {
+      try { unsub(); } catch {}
+    };
+  }, [effectiveYmd]);
 
-  if (period == null && !clock) return null;
-
-  let base = null;
-
-  const pt = (periodType || '').toUpperCase();
-  if (pt === 'OT') {
-    base = 'Prolongation';
-  } else if (pt === 'SO') {
-    base = 'Tirs de barrage';
-  } else if (period != null) {
-    base = `Période ${period}`;
-  }
-
-  // Si match en direct, on ajoute le temps restant
-  if (base && clock && isLive) {
-    return `${base} • ${clock}`;
-  }
-
-  // Si on n’a pas de base mais on a un clock (cas bizarre), on montre au moins le clock
-  return base || clock || null;
-}
-
-// 🔴 Écoute Firestore UNIQUEMENT sur les matchs du jour via 'date'
-useEffect(() => {
-  const ref = firestore().collection('nhl_live_games');
-
-  const unsub = ref.onSnapshot(
-    (snap) => {
-      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const todays = all.filter((g) => isGameToday(g, effectiveYmd));
-
-      
-
-      setGames(todays);
-      setLoading(false);
-    },
-    (err) => {
-      console.log('[MatchLive] nhl_live_games error', err?.message || err);
-      setLoading(false);
-    }
-  );
-
-  return () => {
-    try { unsub(); } catch {}
-  };
-}, [effectiveYmd]);
-
-  // Tri: LIVE -> à venir -> final, puis par heure de début
   const sortedGames = useMemo(() => {
     const s = [...games];
     const weight = (g) => (g.isLive ? 0 : g.isFinal ? 2 : 1);
@@ -851,7 +925,6 @@ useEffect(() => {
     setModalVisible(true);
   }, []);
 
-  // Appelle la Cloud Function onCall pour forcer une mise à jour côté backend
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -867,62 +940,63 @@ useEffect(() => {
   return (
     <>
       <Stack.Screen options={{ title: 'Match Live' }} />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        {loading ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={{ marginTop: 8, color: colors.subtext }}>
+              Chargement des matchs…
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={sortedGames}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+              />
+            }
+            ListHeaderComponent={() => (
+              <View style={{ marginBottom: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: '800',
+                    color: colors.text,
+                    marginBottom: 4,
+                  }}
+                >
+                  Matchs NHL d’aujourd’hui
+                </Text>
+                <Text style={{ color: colors.subtext, fontSize: 13 }}>
+                  Touchez un match pour voir les buts et les buteurs en temps réel.
+                </Text>
+              </View>
+            )}
+            renderItem={({ item }) => (
+              <GameRow game={item} onPress={handlePressGame} colors={colors} />
+            )}
+            ListEmptyComponent={() => (
+              <View style={{ marginTop: 40, alignItems: 'center' }}>
+                <Text style={{ color: colors.subtext }}>
+                  Aucun match trouvé pour aujourd’hui.
+                </Text>
+              </View>
+            )}
+          />
+        )}
 
-      {loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator />
-          <Text style={{ marginTop: 8, color: colors.subtext }}>
-            Chargement des matchs…
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={sortedGames}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          ListHeaderComponent={() => (
-            <View style={{ marginBottom: 12 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: '800',
-                  color: colors.text,
-                  marginBottom: 4,
-                }}
-              >
-                Matchs NHL d’aujourd’hui
-              </Text>
-              <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                Touchez un match pour voir les buts et les buteurs en temps réel.
-              </Text>
-            </View>
-          )}
-          renderItem={({ item }) => (
-            <GameRow game={item} onPress={handlePressGame} colors={colors} />
-          )}
-          ListEmptyComponent={() => (
-            <View style={{ marginTop: 40, alignItems: 'center' }}>
-              <Text style={{ color: colors.subtext }}>
-                Aucun match trouvé pour aujourd’hui.
-              </Text>
-            </View>
-          )}
+        <GameDetailModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          game={selectedGame}
+          colors={colors}
         />
-      )}
-
-      <GameDetailModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        game={selectedGame}
-        colors={colors}
-      />
+      </View>
     </>
   );
 }

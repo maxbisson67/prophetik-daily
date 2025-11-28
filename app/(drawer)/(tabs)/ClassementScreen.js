@@ -1,8 +1,12 @@
-// app/(tabs)/ClassementScreen.js
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
-  View, Text, ActivityIndicator, TouchableOpacity,
-  FlatList, RefreshControl, Image
+  View,
+  Text,
+  ActivityIndicator,
+  TouchableOpacity,
+  FlatList,
+  RefreshControl,
+  Image,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
@@ -15,7 +19,7 @@ import { useTheme } from '@src/theme/ThemeProvider';
 import firestore from '@react-native-firebase/firestore';
 
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
-const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
+const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
 
 /* ---------------- Leaderboards hook ---------------- */
 function useLeaderboards(groupIds) {
@@ -32,19 +36,29 @@ function useLeaderboards(groupIds) {
     setLoading(true);
 
     groupIds.forEach((gid) => {
-      const ref = firestore().collection('groups').doc(String(gid)).collection('leaderboard');
-      const unsub = ref.onSnapshot((snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setAll((prev) => ({ ...prev, [gid]: rows }));
-      }, () => {
-        // en cas d'erreur de permissions, on laisse vide
-        setAll((prev) => ({ ...prev, [gid]: [] }));
-      });
+      const ref = firestore()
+        .collection('groups')
+        .doc(String(gid))
+        .collection('leaderboard');
+      const unsub = ref.onSnapshot(
+        (snap) => {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setAll((prev) => ({ ...prev, [gid]: rows }));
+        },
+        () => {
+          // en cas d'erreur de permissions, on laisse vide
+          setAll((prev) => ({ ...prev, [gid]: [] }));
+        }
+      );
       unsubs.push(unsub);
     });
 
     setLoading(false);
-    return () => unsubs.forEach((u) => { try { u(); } catch {} });
+    return () => unsubs.forEach((u) => {
+      try {
+        u();
+      } catch {}
+    });
   }, [JSON.stringify(groupIds)]);
 
   return { loading, all };
@@ -63,7 +77,10 @@ function usePublicProfilesFor(uids) {
 
   useEffect(() => {
     const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
-    if (ids.length === 0) { setMap({}); return; }
+    if (ids.length === 0) {
+      setMap({});
+      return;
+    }
 
     const unsubs = new Map();
 
@@ -101,7 +118,11 @@ function usePublicProfilesFor(uids) {
     });
 
     return () => {
-      for (const [, un] of unsubs) { try { un(); } catch {} }
+      for (const [, un] of unsubs) {
+        try {
+          un();
+        } catch {}
+      }
     };
   }, [JSON.stringify(uids || [])]);
 
@@ -111,7 +132,7 @@ function usePublicProfilesFor(uids) {
 // 🔧 util: dédupliquer par id
 function dedupeById(arr) {
   const map = new Map();
-  for (const g of (arr || [])) map.set(String(g.id), g);
+  for (const g of arr || []) map.set(String(g.id), g);
   return Array.from(map.values());
 }
 
@@ -121,28 +142,35 @@ function useOwnedGroups(uid) {
   const [loading, setLoading] = React.useState(!!uid);
 
   React.useEffect(() => {
-    if (!uid) { setOwned([]); setLoading(false); return; }
+    if (!uid) {
+      setOwned([]);
+      setLoading(false);
+      return;
+    }
 
     const results = { ownerId: [], createdBy: [] };
     const unsubs = [];
 
     function attach(qRef, key) {
-      const un = qRef.onSnapshot((snap) => {
-        results[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const un = qRef.onSnapshot(
+        (snap) => {
+          results[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-        const merged = dedupeById([
-          ...results.ownerId,
-          ...results.createdBy,
-        ]).filter((g) => {
-          const status = String(g?.status || '').toLowerCase();
-          if (g?.active === false) return false;
-          if (status === 'archived' || status === 'deleted') return false;
-          return true;
-        });
+          const merged = dedupeById([
+            ...results.ownerId,
+            ...results.createdBy,
+          ]).filter((g) => {
+            const status = String(g?.status || '').toLowerCase();
+            if (g?.active === false) return false;
+            if (status === 'archived' || status === 'deleted') return false;
+            return true;
+          });
 
-        setOwned(merged);
-        setLoading(false);
-      }, () => setLoading(false));
+          setOwned(merged);
+          setLoading(false);
+        },
+        () => setLoading(false)
+      );
       unsubs.push(un);
     }
 
@@ -160,7 +188,13 @@ function useOwnedGroups(uid) {
       );
     } catch (e) {}
 
-    return () => { unsubs.forEach(u => { try { u(); } catch {} }); };
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u && u();
+        } catch {}
+      });
+    };
   }, [uid]);
 
   return { owned, loading };
@@ -169,17 +203,55 @@ function useOwnedGroups(uid) {
 /* ---------------- Legend ---------------- */
 function Legend({ colors }) {
   const Item = ({ left, text }) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 16, marginBottom: 6 }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginRight: 16,
+        marginBottom: 6,
+      }}
+    >
       {left}
       <Text style={{ color: colors.subtext, fontSize: 12 }}>{text}</Text>
     </View>
   );
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 }}>
-      <Item left={<Ionicons name="person" size={14} color={colors.subtext} />} text="Nom" />
-      <Item left={<Ionicons name="trophy" size={14} color={colors.subtext} />} text="Défis gagnés" />
-      <Item left={<FontAwesome6 name="sack-dollar" size={14} color={colors.subtext} />} text="Gain" />
-      <Item left={<MaterialCommunityIcons name="sack-percent" size={18} color={colors.subtext} />} text="Gain moyen par défi" />
+    <View
+      style={{
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginBottom: 10,
+      }}
+    >
+      <Item
+        left={<Ionicons name="person" size={14} color={colors.subtext} />}
+        text="Nom"
+      />
+      <Item
+        left={<Ionicons name="trophy" size={14} color={colors.subtext} />}
+        text="Défis gagnés"
+      />
+      <Item
+        left={
+          <FontAwesome6
+            name="sack-dollar"
+            size={14}
+            color={colors.subtext}
+          />
+        }
+        text="Gain"
+      />
+      <Item
+        left={
+          <MaterialCommunityIcons
+            name="sack-percent"
+            size={18}
+            color={colors.subtext}
+          />
+        }
+        text="Gain moyen par défi"
+      />
     </View>
   );
 }
@@ -241,7 +313,7 @@ function HeaderCol({
 }
 
 /* ---------------- Leaderboard table ---------------- */
-function LeaderboardTable({ rows, colors, groupId }) {
+function LeaderboardTable({ rows, colors }) {
   const [sort, setSort] = useState({ key: 'wins', dir: 'desc' });
 
   // 🔁 Liste des uids visibles dans la table (ids des entries = uid des participants)
@@ -256,19 +328,24 @@ function LeaderboardTable({ rows, colors, groupId }) {
       const av = a?.[sort.key] ?? 0;
       const bv = b?.[sort.key] ?? 0;
       if (av === bv) return 0;
-      return sort.dir === 'asc' ? (av < bv ? -1 : 1) : (av > bv ? -1 : 1);
+      return sort.dir === 'asc'
+        ? av < bv
+          ? -1
+          : 1
+        : av > bv
+        ? -1
+        : 1;
     });
     return copy;
   }, [rows, sort]);
 
-  const toggleSort = useCallback(
-    (key) => {
-      setSort((s) =>
-        s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }
-      );
-    },
-    []
-  );
+  const toggleSort = useCallback((key) => {
+    setSort((s) =>
+      s.key === key
+        ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'desc' }
+    );
+  }, []);
 
   return (
     <View
@@ -332,11 +409,16 @@ function LeaderboardTable({ rows, colors, groupId }) {
       {/* rows */}
       {sorted.map((r, idx) => {
         const prof = publicProfiles[r.id] || {};
-        const version = prof?.updatedAt?.toMillis?.() ? prof.updatedAt.toMillis() : 0;
+        const version = prof?.updatedAt?.toMillis?.()
+          ? prof.updatedAt.toMillis()
+          : 0;
 
         const display = prof.displayName || r.displayName || r.id;
-        const shortName = display.length > 10 ? display.slice(0, 10) + '…' : display;
-        const uri = prof.avatarUrl ? withCacheBust(prof.avatarUrl, version) : null;
+        const shortName =
+          display.length > 10 ? display.slice(0, 10) + '…' : display;
+        const uri = prof.avatarUrl
+          ? withCacheBust(prof.avatarUrl, version)
+          : null;
 
         return (
           <View
@@ -364,16 +446,22 @@ function LeaderboardTable({ rows, colors, groupId }) {
                 borderColor: colors.border,
               }}
               onError={() => {
-                if (__DEV__) console.warn('[Classement] avatar load error:', uri);
+                if (__DEV__)
+                  console.warn('[Classement] avatar load error:', uri);
               }}
             />
             <View style={{ flex: 1.5 }}>
-              <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>
+              <Text
+                style={{ color: colors.text, fontWeight: '700' }}
+                numberOfLines={1}
+              >
                 {shortName}
               </Text>
             </View>
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: colors.text, textAlign: 'center' }}>{r.wins ?? 0}</Text>
+              <Text style={{ color: colors.text, textAlign: 'center' }}>
+                {r.wins ?? 0}
+              </Text>
             </View>
             <View style={{ flex: 1, alignItems: 'center' }}>
               <Text style={{ color: colors.text, textAlign: 'center' }}>
@@ -409,22 +497,25 @@ export default function ClassementScreen() {
   const {
     groups: memberGroups,
     loading: loadingMemberGroups,
-    error
+    error,
   } = useGroups(user?.uid);
 
   // 2) Groupes dont je suis OWNER (tous schémas couverts)
-  const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(user?.uid);
+  const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(
+    user?.uid
+  );
 
- // 3) Fusion dédupliquée
+  // 3) Fusion dédupliquée
   const groups = useMemo(
     () =>
-      dedupeById([...(memberGroups || []), ...(ownedGroups || [])]).filter((g) => {
-        const status = String(g?.status || '').toLowerCase();
-        // On garde seulement les groupes actifs / non archivés
-        if (g?.active === false) return false;
-        if (status === 'archived' || status === 'deleted') return false;
-        return true;
-      }),
+      dedupeById([...(memberGroups || []), ...(ownedGroups || [])]).filter(
+        (g) => {
+          const status = String(g?.status || '').toLowerCase();
+          if (g?.active === false) return false;
+          if (status === 'archived' || status === 'deleted') return false;
+          return true;
+        }
+      ),
     [memberGroups, ownedGroups]
   );
 
@@ -439,7 +530,9 @@ export default function ClassementScreen() {
   const handleRebuild = useCallback(async (gid) => {
     try {
       setRebuilding((s) => ({ ...s, [gid]: true }));
-      const res = await fetch(`${baseUrl}?groupId=${encodeURIComponent(gid)}`);
+      const res = await fetch(
+        `${baseUrl}?groupId=${encodeURIComponent(gid)}`
+      );
       if (!res.ok) throw new Error(await res.text());
     } catch (e) {
       console.log('rebuild leaderboard error:', e?.message || e);
@@ -452,7 +545,11 @@ export default function ClassementScreen() {
     if (!groupIds.length) return;
     try {
       setRefreshing(true);
-      await Promise.all(groupIds.map((gid) => fetch(`${baseUrl}?groupId=${encodeURIComponent(gid)}`)));
+      await Promise.all(
+        groupIds.map((gid) =>
+          fetch(`${baseUrl}?groupId=${encodeURIComponent(gid)}`)
+        )
+      );
     } catch (e) {
       console.log('refresh leaderboard error:', e?.message || e);
     } finally {
@@ -464,8 +561,18 @@ export default function ClassementScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Classement' }} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <Text style={{ color: colors.text }}>Connecte-toi pour voir les classements.</Text>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            backgroundColor: colors.background,
+          }}
+        >
+          <Text style={{ color: colors.text }}>
+            Connecte-toi pour voir les classements.
+          </Text>
         </View>
       </>
     );
@@ -475,9 +582,18 @@ export default function ClassementScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Classement' }} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator />
-          <Text style={{ marginTop: 8, color: colors.subtext }}>Chargement…</Text>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.background,
+          }}
+        >
+          <ActivityIndicator color={colors.primary} />
+          <Text style={{ marginTop: 8, color: colors.subtext }}>
+            Chargement…
+          </Text>
         </View>
       </>
     );
@@ -487,8 +603,18 @@ export default function ClassementScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Classement' }} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <Text style={{ color: colors.text }}>Erreur: {String(error)}</Text>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            backgroundColor: colors.background,
+          }}
+        >
+          <Text style={{ color: colors.text }}>
+            Erreur: {String(error)}
+          </Text>
         </View>
       </>
     );
@@ -497,87 +623,117 @@ export default function ClassementScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Classement' }} />
-      <FlatList
-        contentContainerStyle={{ padding: 16, gap: 16 }}
-        data={groups}
-        keyExtractor={(g) => String(g.id)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        ListHeaderComponent={<Legend colors={colors} />}
-        renderItem={({ item }) => {
-          const rows = all?.[item.id] || [];
-          return (
-            <View
-              style={{
-                padding: 14,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderWidth: 1,
-                borderColor: colors.border,
-                shadowColor: '#000',
-                shadowOpacity: 0.05,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 3 },
-                elevation: 2,
-              }}
-            >
-              {/* --- Header de la carte --- */}
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <FlatList
+          contentContainerStyle={{ padding: 16, gap: 16 }}
+          data={groups}
+          keyExtractor={(g) => String(g.id)}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          ListHeaderComponent={<Legend colors={colors} />}
+          renderItem={({ item }) => {
+            const rows = all?.[item.id] || [];
+            return (
               <View
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 8,
+                  padding: 14,
+                  borderRadius: 12,
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.05,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 2,
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Image
-                    source={item.avatarUrl ? { uri: item.avatarUrl } : GROUP_PLACEHOLDER}
+                {/* --- Header de la carte --- */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
+                  }}
+                >
+                  <View
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      marginRight: 8,
-                      backgroundColor: colors.border,
-                    }}
-                  />
-                  <Text style={{ fontWeight: '900', color: colors.text }}>
-                    {item.name || item.id}
-                  </Text>
-                </View>
-
-                {/* (optionnel) bouton rebuild si owner */}
-                {item?.role === 'owner' && (
-                  <TouchableOpacity
-                    onPress={() => handleRebuild(item.id)}
-                    disabled={!!rebuilding[item.id]}
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      borderRadius: 8,
-                      backgroundColor: rebuilding[item.id] ? '#9ca3af' : '#111827'
+                      flexDirection: 'row',
+                      alignItems: 'center',
                     }}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '700' }}>
-                      {rebuilding[item.id] ? '…' : 'Rebuilder'}
+                    <Image
+                      source={
+                        item.avatarUrl
+                          ? { uri: item.avatarUrl }
+                          : GROUP_PLACEHOLDER
+                      }
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        marginRight: 8,
+                        backgroundColor: colors.border,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        fontWeight: '900',
+                        color: colors.text,
+                      }}
+                    >
+                      {item.name || item.id}
                     </Text>
-                  </TouchableOpacity>
+                  </View>
+
+                  {/* (optionnel) bouton rebuild si owner */}
+                  {item?.role === 'owner' && (
+                    <TouchableOpacity
+                      onPress={() => handleRebuild(item.id)}
+                      disabled={!!rebuilding[item.id]}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: rebuilding[item.id]
+                          ? colors.subtext
+                          : colors.primary,
+                      }}
+                    >
+                      <Text
+                        style={{ color: '#fff', fontWeight: '700' }}
+                      >
+                        {rebuilding[item.id] ? '…' : 'Rebuilder'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {rows.length === 0 ? (
+                  <Text style={{ color: colors.subtext }}>
+                    Pas encore de stats pour ce groupe.
+                  </Text>
+                ) : (
+                  <LeaderboardTable rows={rows} colors={colors} />
                 )}
               </View>
-
-              {rows.length === 0 ? (
-                <Text style={{ color: colors.subtext }}>Pas encore de stats pour ce groupe.</Text>
-              ) : (
-                <LeaderboardTable rows={rows} colors={colors} groupId={item.id} />
-              )}
+            );
+          }}
+          ListEmptyComponent={() => (
+            <View style={{ alignItems: 'center', marginTop: 40 }}>
+              <Text style={{ color: colors.subtext }}>
+                Tu n’as pas encore de groupes.
+              </Text>
             </View>
-          );
-        }}
-        ListEmptyComponent={() => (
-          <View style={{ alignItems: 'center', marginTop: 40 }}>
-            <Text style={{ color: colors.subtext }}>Tu n’as pas encore de groupes.</Text>
-          </View>
-        )}
-      />
+          )}
+        />
+      </View>
     </>
   );
 }

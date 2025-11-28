@@ -6,12 +6,26 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, ActivityIndicator, Image, TouchableOpacity,
-  ScrollView, TextInput, KeyboardAvoidingView, Platform, Animated, Keyboard
+  View,
+  Text,
+  ActivityIndicator,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
+  Keyboard,
 } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 import Toast from 'react-native-toast-message';
-import { Stack, useLocalSearchParams, useFocusEffect , useRouter} from 'expo-router';
+import {
+  Stack,
+  useLocalSearchParams,
+  useFocusEffect,
+  useRouter,
+} from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore'; // ✅ RNFirebase
 // Safe auth
@@ -21,16 +35,14 @@ import { useTheme } from '@src/theme/ThemeProvider';
 import { useDefiChat } from '@src/defiChat/useDefiChat';
 import { useUnreadCount } from '@src/defiChat/useUnreadCount';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { useHeaderHeight, HeaderBackButton } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DrawerToggleButton } from '@react-navigation/drawer';
-import { HeaderBackButton } from '@react-navigation/elements';
-
 
 /* ----------------------------- Utils ----------------------------- */
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
-const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
+const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
 
 const CACHE_VERSION = 'v3_profiles_public_names';
 const PARTICIPANTS_CACHE_KEY = `${CACHE_VERSION}`;
@@ -38,26 +50,68 @@ const PARTICIPANTS_CACHE_KEY = `${CACHE_VERSION}`;
 /* ----- NHL helpers ----- */
 const teamLogoUrl = (abbr) => {
   const a = String(abbr || '').trim().toUpperCase();
-  return a ? `https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(a)}_light.svg` : null;
+  return a
+    ? `https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(
+        a
+      )}_light.svg`
+    : null;
 };
 
 function fmtTSLocalHM(v) {
   try {
-    const d = v?.toDate?.() ? v.toDate() : (v instanceof Date ? v : v ? new Date(v) : null);
+    const d = v?.toDate?.()
+      ? v.toDate()
+      : v instanceof Date
+      ? v
+      : v
+      ? new Date(v)
+      : null;
     if (!d) return '—';
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     return `${hh}:${mm}`;
-  } catch { return '—'; }
+  } catch {
+    return '—';
+  }
 }
 
 function statusStyleBase(status) {
   switch ((status || '').toLowerCase()) {
-    case 'open':     return { bg:'#ECFEFF', fg:'#0E7490', icon:'clock-outline', label:'Ouvert' };
-    case 'live':     return { bg:'#F0FDF4', fg:'#166534', icon:'broadcast',    label:'En cours' };
-    case 'awaiting_result': return { bg:'#FFF7ED', fg:'#9A3412', icon:'timer-sand', label:'Calcul en cours' };
-    case 'closed':   return { bg:'#FEF2F2', fg:'#991B1B', icon:'lock',          label:'Terminé' };
-    default:         return { bg:'#EFEFEF', fg:'#111827', icon:'help-circle',   label:String(status||'—') };
+    case 'open':
+      return {
+        bg: '#ECFEFF',
+        fg: '#0E7490',
+        icon: 'clock-outline',
+        label: 'Ouvert',
+      };
+    case 'live':
+      return {
+        bg: '#F0FDF4',
+        fg: '#166534',
+        icon: 'broadcast',
+        label: 'En cours',
+      };
+    case 'awaiting_result':
+      return {
+        bg: '#FFF7ED',
+        fg: '#9A3412',
+        icon: 'timer-sand',
+        label: 'Calcul en cours',
+      };
+    case 'closed':
+      return {
+        bg: '#FEF2F2',
+        fg: '#991B1B',
+        icon: 'lock',
+        label: 'Terminé',
+      };
+    default:
+      return {
+        bg: '#EFEFEF',
+        fg: '#111827',
+        icon: 'help-circle',
+        label: String(status || '—'),
+      };
   }
 }
 
@@ -75,7 +129,10 @@ async function readNamesCache() {
 }
 async function writeNamesCache() {
   try {
-    await AsyncStorage.setItem(PARTICIPANTS_CACHE_KEY, JSON.stringify(memNames));
+    await AsyncStorage.setItem(
+      PARTICIPANTS_CACHE_KEY,
+      JSON.stringify(memNames)
+    );
   } catch {}
 }
 function mergeNames(partialMap, partialInfo) {
@@ -84,7 +141,8 @@ function mergeNames(partialMap, partialInfo) {
     for (const [uid, nm] of Object.entries(partialMap)) {
       const nextName = typeof nm === 'string' && nm.trim() ? nm.trim() : null;
       if (nextName && memNames.map[uid] !== nextName) {
-        memNames.map[uid] = nextName; changed = true;
+        memNames.map[uid] = nextName;
+        changed = true;
       }
     }
   }
@@ -93,13 +151,17 @@ function mergeNames(partialMap, partialInfo) {
       const old = memNames.info[uid] || {};
       const next = { ...old };
       if (obj && typeof obj === 'object') {
-        if (typeof obj.photoURL === 'string' && obj.photoURL.trim()) next.photoURL = obj.photoURL.trim();
+        if (typeof obj.photoURL === 'string' && obj.photoURL.trim())
+          next.photoURL = obj.photoURL.trim();
         for (const k of Object.keys(obj)) {
           if (k === 'photoURL') continue;
           if (obj[k] != null) next[k] = obj[k];
         }
       }
-      if (JSON.stringify(old) !== JSON.stringify(next)) { memNames.info[uid] = next; changed = true; }
+      if (JSON.stringify(old) !== JSON.stringify(next)) {
+        memNames.info[uid] = next;
+        changed = true;
+      }
     }
   }
   if (changed) writeNamesCache();
@@ -122,12 +184,24 @@ export const toastConfig = {
           elevation: 6,
         }}
       >
-        <Text style={{ color: '#fff', fontWeight: '800', marginBottom: 8 }}>Mise à jour officielle</Text>
+        <Text
+          style={{
+            color: '#fff',
+            fontWeight: '800',
+            marginBottom: 8,
+          }}
+        >
+          Mise à jour officielle
+        </Text>
         {items.length === 0 ? (
-          <Text style={{ color: '#fff', opacity: 0.85 }}>Ajustement appliqué.</Text>
+          <Text style={{ color: '#fff', opacity: 0.85 }}>
+            Ajustement appliqué.
+          </Text>
         ) : (
           items.map((it, i) => (
-            <Text key={i} style={{ color: '#fff', marginVertical: 2 }}>{it}</Text>
+            <Text key={i} style={{ color: '#fff', marginVertical: 2 }}>
+              {it}
+            </Text>
           ))
         )}
       </View>
@@ -157,7 +231,11 @@ export default function DefiResultsScreen() {
   const [participantInfoMap, setParticipantInfoMap] = useState({}); // ✅ uid -> {photoURL}
 
   const [liveStats, setLiveStats] = useState({
-    playerGoals: {}, playerA1: {}, playerA2: {}, playerAssists: {}, playerPoints: {},
+    playerGoals: {},
+    playerA1: {},
+    playerA2: {},
+    playerAssists: {},
+    playerPoints: {},
   });
   const [playerMap, setPlayerMap] = useState({}); // { pid: {fullName, teamAbbr} }
 
@@ -173,7 +251,7 @@ export default function DefiResultsScreen() {
   const [nhlPlayersReadable, setNhlPlayersReadable] = useState(true);
 
   // 🔵 Chat (utilise les noms/avatars provenant de profiles_public via namesMap/participantInfoMap)
-  const { messages, send, busy, markRead , canSend } = useDefiChat(defiId, {
+  const { messages, send, busy, markRead, canSend } = useDefiChat(defiId, {
     pageSize: 50,
     groupId: group?.id,
     namesMap,
@@ -192,7 +270,7 @@ export default function DefiResultsScreen() {
   const [showReveal, setShowReveal] = React.useState(false);
   const [celebrateNow, setCelebrateNow] = React.useState(false);
   const hasShownRevealRef = React.useRef(false);
-  const hasCelebratedRef  = React.useRef(false);
+  const hasCelebratedRef = React.useRef(false);
 
   const handleCloseReveal = React.useCallback(() => setShowReveal(false), []);
 
@@ -205,10 +283,10 @@ export default function DefiResultsScreen() {
 
   /* ----- Leaderboard (mémo) ----- */
   const leaderboard = useMemo(() => {
-    const rows = [...parts].sort((a,b) => b.livePoints - a.livePoints);
+    const rows = [...parts].sort((a, b) => b.livePoints - a.livePoints);
     if (!rows.length) return [];
     const top = rows[0].livePoints;
-    return rows.map(r => ({ ...r, isTiedForFirst: r.livePoints === top }));
+    return rows.map((r) => ({ ...r, isTiedForFirst: r.livePoints === top }));
   }, [parts]);
 
   const chip = statusStyleBase(defi?.status);
@@ -223,7 +301,7 @@ export default function DefiResultsScreen() {
       .slice(0, 3)
       .map((r) => {
         const uid = String(r.uid || '');
-        const displayName = (namesMap?.[uid]) || r.displayName || uid;
+        const displayName = namesMap?.[uid] || r.displayName || uid;
         const info = participantInfoMap?.[uid] || {};
         return {
           ...r,
@@ -239,12 +317,13 @@ export default function DefiResultsScreen() {
     const rows = Array.isArray(leaderboard) ? leaderboard : [];
     if (!rows.length) return [];
     const top = Number(rows[0].livePoints || 0);
-    return rows.filter(r => Number(r.livePoints || 0) === top);
+    return rows.filter((r) => Number(r.livePoints || 0) === top);
   }, [leaderboard]);
 
-  // Révélation / célébration (identique à ta logique)
+  // Révélation / célébration
   React.useEffect(() => {
-    const iAmWinner = Array.isArray(winners) && winners.some(w => w.uid === user?.uid);
+    const iAmWinner =
+      Array.isArray(winners) && winners.some((w) => w.uid === user?.uid);
     if (!showReveal && iAmWinner && !hasCelebratedRef.current) {
       hasCelebratedRef.current = true;
       handleCelebrate();
@@ -259,7 +338,8 @@ export default function DefiResultsScreen() {
     const closed = String(defi?.status || '').toLowerCase() === 'closed';
     if (!closed || !user?.uid) return;
     const storageKey = `finalReveal:${defi?.id}:${user?.uid}`;
-    const iAmWinner = Array.isArray(winners) && winners.some(w => w.uid === user.uid);
+    const iAmWinner =
+      Array.isArray(winners) && winners.some((w) => w.uid === user.uid);
     (async () => {
       try {
         if (hasShownRevealRef.current) return;
@@ -281,7 +361,7 @@ export default function DefiResultsScreen() {
       try {
         if (hasShownRevealRef.current) return;
         const done = await AsyncStorage.getItem(storageKey);
-        const inTop = finalists.some(f => f.uid === user.uid);
+        const inTop = finalists.some((f) => f.uid === user.uid);
         if (!done && inTop) {
           hasShownRevealRef.current = true;
           setShowReveal(true);
@@ -297,25 +377,67 @@ export default function DefiResultsScreen() {
   }, []);
 
   const headerTitle = React.useMemo(
-    () => (defi?.title || (defi?.type ? `Défi ${defi.type}x${defi.type}` : 'Résultats')),
+    () =>
+      defi?.title ||
+      (defi?.type ? `Défi ${defi.type}x${defi.type}` : 'Résultats'),
     [defi]
   );
 
+  // 🔒 Caviardage : avant le début du premier match, on cache les picks des autres
+  const firstGameDate = React.useMemo(() => {
+    const v = defi?.firstGameUTC;
+    if (!v) return null;
+    if (v.toDate?.()) return v.toDate();
+    if (v instanceof Date) return v;
+    try {
+      return new Date(v);
+    } catch {
+      return null;
+    }
+  }, [defi?.firstGameUTC]);
+
+  const beforeFirstGame = React.useMemo(() => {
+    if (!firstGameDate) return false;
+    return Date.now() < firstGameDate.getTime();
+  }, [firstGameDate]);
+
+  const hideOthersPicks = React.useMemo(() => {
+    const status = String(defi?.status || '').toLowerCase();
+    // Caviardage seulement quand le défi est ouvert & 1er match pas commencé
+    return status === 'open' && beforeFirstGame;
+  }, [defi?.status, beforeFirstGame]);
+
+  const revealTimeLabel = React.useMemo(() => {
+    if (!firstGameDate) return null;
+    return fmtTSLocalHM(firstGameDate);
+  }, [firstGameDate]);
+
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    const sh = Keyboard.addListener('keyboardDidShow', (e) => setKbH(e.endCoordinates?.height ?? 0));
+    const sh = Keyboard.addListener('keyboardDidShow', (e) =>
+      setKbH(e.endCoordinates?.height ?? 0)
+    );
     const hd = Keyboard.addListener('keyboardDidHide', () => setKbH(0));
-    return () => { sh.remove(); hd.remove(); };
+    return () => {
+      sh.remove();
+      hd.remove();
+    };
   }, []);
 
   // Lu quand focus
-  useFocusEffect(React.useCallback(() => { if (defiId) markRead(); }, [defiId, markRead]));
+  useFocusEffect(
+    React.useCallback(() => {
+      if (defiId) markRead();
+    }, [defiId, markRead])
+  );
 
   // Charger cache noms au boot
-  useEffect(() => { readNamesCache().then(() => {
-    setNamesMap({ ...memNames.map });
-    setParticipantInfoMap({ ...memNames.info });
-  }); }, []);
+  useEffect(() => {
+    readNamesCache().then(() => {
+      setNamesMap({ ...memNames.map });
+      setParticipantInfoMap({ ...memNames.info });
+    });
+  }, []);
 
   /* ----- Defi doc (RNFirebase) ----- */
   useEffect(() => {
@@ -324,7 +446,7 @@ export default function DefiResultsScreen() {
     const ref = firestore().doc(`defis/${String(defiId)}`);
     const un = ref.onSnapshot(
       (snap) => {
-        setDefi(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+        setDefi(snap.exists ? { id: snap.id, ...snap.data() } : null);
         setLoadingDefi(false);
       },
       () => setLoadingDefi(false)
@@ -337,7 +459,7 @@ export default function DefiResultsScreen() {
     if (!defi?.groupId) return;
     const ref = firestore().doc(`groups/${String(defi.groupId)}`);
     const un = ref.onSnapshot((snap) => {
-      setGroup(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+      setGroup(snap.exists ? { id: snap.id, ...snap.data() } : null);
     });
     return () => un();
   }, [defi?.groupId]);
@@ -345,7 +467,9 @@ export default function DefiResultsScreen() {
   /* ----- Participations (RNFirebase chain) ----- */
   useEffect(() => {
     if (!defi?.id) return;
-    const colRef = firestore().collection(`defis/${String(defi.id)}/participations`);
+    const colRef = firestore().collection(
+      `defis/${String(defi.id)}/participations`
+    );
     const un = colRef.onSnapshot((snap) => {
       const next = [];
       snap.forEach((docSnap) => {
@@ -367,11 +491,18 @@ export default function DefiResultsScreen() {
   // ----- Résoudre noms/avatars via profiles_public/{uid} -----
   const profilesUnsubsRef = useRef(new Map()); // Map<uid, unsub>
   useEffect(() => {
-    const neededUids = Array.from(new Set(parts.map(p => p.uid).filter(Boolean)));
+    const neededUids = Array.from(
+      new Set(parts.map((p) => p.uid).filter(Boolean))
+    );
 
     // retire les listeners devenus inutiles
     for (const [uid, un] of profilesUnsubsRef.current) {
-      if (!neededUids.includes(uid)) { try { un(); } catch {} profilesUnsubsRef.current.delete(uid); }
+      if (!neededUids.includes(uid)) {
+        try {
+          un();
+        } catch {}
+        profilesUnsubsRef.current.delete(uid);
+      }
     }
 
     // ajoute les listeners manquants
@@ -381,29 +512,40 @@ export default function DefiResultsScreen() {
       const ref = firestore().doc(`profiles_public/${uid}`);
       const un = ref.onSnapshot(
         (snap) => {
-          const v = snap.exists ? (snap.data() || {}) : {};
-          const displayName = v.displayName || v.name || v.username || v.email || uid;
-          const avatarUrl   = v.avatarUrl || v.photoURL || null;
+          const v = snap.exists ? snap.data() || {} : {};
+          const displayName =
+            v.displayName || v.name || v.username || v.email || uid;
+          const avatarUrl = v.avatarUrl || v.photoURL || null;
 
           // RNFirebase Timestamp → toMillis() ok; sinon fallback
-          const version =
-            v.updatedAt?.toMillis?.()
-              ? v.updatedAt.toMillis()
-              : (v.updatedAt?.toDate?.() ? v.updatedAt.toDate().getTime() : Date.now());
+          const version = v.updatedAt?.toMillis?.()
+            ? v.updatedAt.toMillis()
+            : v.updatedAt?.toDate?.()
+            ? v.updatedAt.toDate().getTime()
+            : Date.now();
 
           const changed = mergeNames(
             { [uid]: displayName },
-            { [uid]: avatarUrl ? { photoURL: avatarUrl, version } : { version } }
+            {
+              [uid]: avatarUrl
+                ? { photoURL: avatarUrl, version }
+                : { version },
+            }
           );
 
           if (changed) {
             setNamesMap({ ...memNames.map });
             setParticipantInfoMap({ ...memNames.info });
           } else {
-            setNamesMap(prev => ({ ...prev, [uid]: memNames.map[uid] || displayName }));
-            setParticipantInfoMap(prev => ({
+            setNamesMap((prev) => ({
               ...prev,
-              [uid]: memNames.info[uid] || (avatarUrl ? { photoURL: avatarUrl, version } : { version })
+              [uid]: memNames.map[uid] || displayName,
+            }));
+            setParticipantInfoMap((prev) => ({
+              ...prev,
+              [uid]:
+                memNames.info[uid] ||
+                (avatarUrl ? { photoURL: avatarUrl, version } : { version }),
             }));
           }
         },
@@ -424,7 +566,11 @@ export default function DefiResultsScreen() {
   // Cleanup global des listeners profiles_public au démontage
   useEffect(() => {
     return () => {
-      for (const [, un] of profilesUnsubsRef.current) { try { un(); } catch {} }
+      for (const [, un] of profilesUnsubsRef.current) {
+        try {
+          un();
+        } catch {}
+      }
       profilesUnsubsRef.current.clear();
     };
   }, []);
@@ -444,7 +590,13 @@ export default function DefiResultsScreen() {
           playerPoints: d.playerPoints || {},
         });
       } else {
-        setLiveStats({ playerGoals:{}, playerA1:{}, playerA2:{}, playerAssists:{}, playerPoints:{} });
+        setLiveStats({
+          playerGoals: {},
+          playerA1: {},
+          playerA2: {},
+          playerAssists: {},
+          playerPoints: {},
+        });
       }
     });
     return () => un();
@@ -452,13 +604,15 @@ export default function DefiResultsScreen() {
 
   /* ----- Player meta (stabilisé) ----- */
   const allTalliedIds = useMemo(() => {
-    return Array.from(new Set([
-      ...Object.keys(liveStats.playerGoals || {}),
-      ...Object.keys(liveStats.playerA1 || {}),
-      ...Object.keys(liveStats.playerA2 || {}),
-      ...Object.keys(liveStats.playerAssists || {}),
-      ...Object.keys(liveStats.playerPoints || {}),
-    ]));
+    return Array.from(
+      new Set([
+        ...Object.keys(liveStats.playerGoals || {}),
+        ...Object.keys(liveStats.playerA1 || {}),
+        ...Object.keys(liveStats.playerA2 || {}),
+        ...Object.keys(liveStats.playerAssists || {}),
+        ...Object.keys(liveStats.playerPoints || {}),
+      ])
+    );
   }, [liveStats]);
 
   const missingPlayerMeta = useMemo(() => {
@@ -481,17 +635,22 @@ export default function DefiResultsScreen() {
           if (cancelled) return;
           s.forEach((docSnap) => {
             const v = docSnap.data() || {};
-            updates[docSnap.id] = { fullName: v.fullName || '—', teamAbbr: v.teamAbbr || '' };
+            updates[docSnap.id] = {
+              fullName: v.fullName || '—',
+              teamAbbr: v.teamAbbr || '',
+            };
           });
         }
         if (!cancelled && Object.keys(updates).length) {
           setPlayerMap((prev) => ({ ...prev, ...updates }));
         }
-      } catch (e){
+      } catch (e) {
         if (e?.code === 'permission-denied') setNhlPlayersReadable(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [missingPlayerMeta.join(','), nhlPlayersReadable]);
 
   /* ----------------------------- UI ----------------------------- */
@@ -499,9 +658,17 @@ export default function DefiResultsScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Résultats' }} />
-        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:16 }}>
-          <ActivityIndicator size="large" />
-          <Text style={{ marginTop:12 }}>Chargement…</Text>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            backgroundColor: colors.background,
+          }}
+        >
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ marginTop: 12, color: colors.text }}>Chargement…</Text>
         </View>
       </>
     );
@@ -510,8 +677,16 @@ export default function DefiResultsScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Résultats' }} />
-        <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:16 }}>
-          <Text>Aucun défi trouvé.</Text>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            backgroundColor: colors.background,
+          }}
+        >
+          <Text style={{ color: colors.text }}>Aucun défi trouvé.</Text>
         </View>
       </>
     );
@@ -528,7 +703,10 @@ export default function DefiResultsScreen() {
                 tintColor={tintColor}
                 onPress={() => {
                   if (defi?.groupId) {
-                    router.replace({ pathname: '/(drawer)/(tabs)/ChallengesScreen', params: { groupId: defi.groupId } });
+                    router.replace({
+                      pathname: '/(drawer)/(tabs)/ChallengesScreen',
+                      params: { groupId: defi.groupId },
+                    });
                   } else {
                     router.replace('/(drawer)/(tabs)/ChallengesScreen');
                   }
@@ -539,7 +717,11 @@ export default function DefiResultsScreen() {
           ),
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="chatbubble-ellipses" size={18} color={colors.text} />
+              <Ionicons
+                name="chatbubble-ellipses"
+                size={18}
+                color={colors.text}
+              />
               <View
                 style={{
                   minWidth: 18,
@@ -552,7 +734,13 @@ export default function DefiResultsScreen() {
                   paddingHorizontal: 4,
                 }}
               >
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: '800',
+                  }}
+                >
                   {unread > 99 ? '99+' : unread}
                 </Text>
               </View>
@@ -567,10 +755,10 @@ export default function DefiResultsScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
           {/* ====== CONTENU PRINCIPAL ====== */}
           <ScrollView
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: colors.background }}
             keyboardShouldPersistTaps="always"
             nestedScrollEnabled
             contentContainerStyle={{ paddingBottom: 24 }}
@@ -578,54 +766,165 @@ export default function DefiResultsScreen() {
             {/* ====== HEADER GROUPE / DÉFI ====== */}
             <View
               style={{
-                padding: 12, borderWidth: 1, borderRadius: 12, backgroundColor: '#fff',
-                elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4,
-                shadowOffset: { width: 0, height: 2 }, margin: 16, marginBottom: 8,
+                padding: 12,
+                borderWidth: 1,
+                borderRadius: 12,
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                elevation: 2,
+                shadowColor: '#000',
+                shadowOpacity: 0.06,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 2 },
+                margin: 16,
+                marginBottom: 8,
               }}
             >
               {/* Ligne 1 */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 10,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flex: 1,
+                  }}
+                >
                   <Image
-                    source={group?.avatarUrl ? { uri: group.avatarUrl } : GROUP_PLACEHOLDER}
-                    style={{ width: 40, height: 40, borderRadius: 20, marginRight: 10, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' }}
+                    source={
+                      group?.avatarUrl
+                        ? { uri: group.avatarUrl }
+                        : GROUP_PLACEHOLDER
+                    }
+                    style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: 20,
+                      marginRight: 10,
+                      backgroundColor: colors.card2,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: '800', fontSize: 16 }} numberOfLines={1}>
+                    <Text
+                      style={{
+                        fontWeight: '800',
+                        fontSize: 16,
+                        color: colors.text,
+                      }}
+                      numberOfLines={1}
+                    >
                       {group?.name || group?.title || group?.id || 'Groupe'}
                     </Text>
                     {!!defi?.title && (
-                      <Text style={{ color: '#6b7280' }} numberOfLines={1}>{defi.title}</Text>
+                      <Text
+                        style={{ color: colors.subtext }}
+                        numberOfLines={1}
+                      >
+                        {defi.title}
+                      </Text>
                     )}
                   </View>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
-                  <MaterialCommunityIcons name="account-group" size={20} color="#555" />
-                  <Text style={{ fontWeight: '700', marginLeft: 4 }}>{defi?.participantsCount ?? 0}</Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginLeft: 8,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="account-group"
+                    size={20}
+                    color={colors.subtext}
+                  />
+                  <Text
+                    style={{
+                      fontWeight: '700',
+                      marginLeft: 4,
+                      color: colors.text,
+                    }}
+                  >
+                    {defi?.participantsCount ?? 0}
+                  </Text>
                 </View>
               </View>
 
               {/* Ligne 2 */}
               <View style={{ marginTop: 4 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                  <MaterialCommunityIcons name="treasure-chest" size={20} color="#111" />
-                  <Text style={{ fontSize: 16, fontWeight: '800', marginLeft: 6 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="treasure-chest"
+                    size={20}
+                    color={colors.text}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: '800',
+                      marginLeft: 6,
+                      color: colors.text,
+                    }}
+                  >
                     Cagnotte de {Number(defi?.pot ?? 0)} crédits
                   </Text>
                 </View>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999, backgroundColor: statusStyleBase(defi?.status).bg }}>
-                  <MaterialCommunityIcons name={statusStyleBase(defi?.status).icon} size={14} color={statusStyleBase(defi?.status).fg} />
-                  <Text style={{ color: statusStyleBase(defi?.status).fg, marginLeft: 6, fontWeight: '700' }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    alignSelf: 'flex-start',
+                    paddingVertical: 4,
+                    paddingHorizontal: 8,
+                    borderRadius: 10,
+                    backgroundColor: statusStyleBase(defi?.status).bg,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name={statusStyleBase(defi?.status).icon}
+                    size={14}
+                    color={statusStyleBase(defi?.status).fg}
+                  />
+                  <Text
+                    style={{
+                      color: statusStyleBase(defi?.status).fg,
+                      marginLeft: 6,
+                      fontWeight: '700',
+                    }}
+                  >
                     {statusStyleBase(defi?.status).label}
                   </Text>
                 </View>
 
                 <View style={{ marginTop: 8 }}>
-                  <Text style={{ color: '#555' }}>
-                    Débute à <Text style={{ fontWeight: '700' }}>{fmtTSLocalHM(defi?.firstGameUTC)}</Text>
+                  <Text style={{ color: colors.subtext }}>
+                    Débute à{' '}
+                    <Text
+                      style={{
+                        fontWeight: '700',
+                        color: colors.text,
+                      }}
+                    >
+                      {fmtTSLocalHM(defi?.firstGameUTC)}
+                    </Text>
                   </Text>
-                  <Text style={{ color: '#555' }}>Barème : Buteur = +1 • Passe = +1</Text>
+                  <Text style={{ color: colors.subtext }}>
+                    Barème : Buteur = +1 • Passe = +1
+                  </Text>
                 </View>
               </View>
             </View>
@@ -639,6 +938,8 @@ export default function DefiResultsScreen() {
               liveStats={liveStats}
               playerMap={playerMap}
               currentUid={user?.uid}
+              hideOthersPicks={hideOthersPicks}
+              revealTimeLabel={revealTimeLabel}
             />
           </ScrollView>
 
@@ -647,37 +948,80 @@ export default function DefiResultsScreen() {
             style={{
               marginHorizontal: 16,
               marginBottom: 16 + insets.bottom,
-              paddingBottom: Platform.OS === 'android' ? Math.max(kbH, 8) : 0,
-              borderWidth: 1, borderColor: colors.border, borderRadius: 12,
-              overflow: 'hidden', backgroundColor: colors.card,
+              paddingBottom:
+                Platform.OS === 'android' ? Math.max(kbH, 8) : 0,
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 12,
+              overflow: 'hidden',
+              backgroundColor: colors.card,
             }}
           >
             {/* Header accordéon */}
             <TouchableOpacity
               onPress={() => setChatCollapsed((v) => !v)}
               style={{
-                paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.card,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                backgroundColor: colors.card,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="chatbubble-ellipses" size={16} color={colors.text} />
-                <Text style={{ fontWeight: '800', color: colors.text }}>Chat du défi</Text>
-                <Text style={{ color: colors.subtext, fontSize: 12 }}>{messages.length} messages</Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses"
+                  size={16}
+                  color={colors.text}
+                />
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    color: colors.text,
+                  }}
+                >
+                  Chat du défi
+                </Text>
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    fontSize: 12,
+                  }}
+                >
+                  {messages.length} messages
+                </Text>
               </View>
-              <Ionicons name={chatCollapsed ? 'chevron-down' : 'chevron-up'} size={18} color={colors.text} />
+              <Ionicons
+                name={chatCollapsed ? 'chevron-down' : 'chevron-up'}
+                size={18}
+                color={colors.text}
+              />
             </TouchableOpacity>
 
             {/* Corps */}
             {!chatCollapsed && (
-              <View style={{ maxHeight: 360, backgroundColor: colors.card }}>
-                <InlineChat  colors={colors}
+              <View
+                style={{
+                  maxHeight: 360,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <InlineChat
+                  colors={colors}
                   messages={messages}
                   busy={busy}
                   onSend={send}
                   canSend={canSend}
                   namesMap={namesMap}
-                  participantInfoMap={participantInfoMap}/>
+                  participantInfoMap={participantInfoMap}
+                />
               </View>
             )}
           </View>
@@ -686,12 +1030,19 @@ export default function DefiResultsScreen() {
 
       {/* Toast en haut */}
       <Toast position="top" config={toastConfig} topOffset={60} />
-
     </>
   );
 }
 
-function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, participantInfoMap }) {
+function InlineChat({
+  colors,
+  messages,
+  onSend,
+  busy,
+  canSend,
+  namesMap,
+  participantInfoMap,
+}) {
   const [text, setText] = React.useState('');
 
   const INPUT_BAR_HEIGHT = 56;
@@ -700,9 +1051,16 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
   // tri sûr même si createdAt est un Timestamp Firestore RNFirebase
   const data = React.useMemo(() => {
     const millis = (v) =>
-      v?.toMillis?.() ? v.toMillis() :
-      (v?.toDate?.() ? v.toDate().getTime() : (typeof v === 'number' ? v : 0));
-    return [...messages].sort((a, b) => millis(a?.createdAt) - millis(b?.createdAt));
+      v?.toMillis?.()
+        ? v.toMillis()
+        : v?.toDate?.()
+        ? v.toDate().getTime()
+        : typeof v === 'number'
+        ? v
+        : 0;
+    return [...messages].sort(
+      (a, b) => millis(a?.createdAt) - millis(b?.createdAt)
+    );
   }, [messages]);
 
   const scrollRef = React.useRef(null);
@@ -710,8 +1068,11 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
   const [autoStick, setAutoStick] = React.useState(true);
 
   const handleScroll = React.useCallback((e) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const dist = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    const { contentOffset, contentSize, layoutMeasurement } =
+      e.nativeEvent;
+    const dist =
+      contentSize.height -
+      (contentOffset.y + layoutMeasurement.height);
     const next = dist < 80;
     if (atBottomRef.current !== next) {
       atBottomRef.current = next;
@@ -727,13 +1088,14 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
     if (autoStick) requestAnimationFrame(() => scrollToEnd(true));
   }, [autoStick, scrollToEnd]);
 
-  const last = data[data.length - 1];
-  const preview = last?.text
-    ? (String(last.text).length > 48 ? String(last.text).slice(0, 48) + '…' : String(last.text))
-    : 'Aucun message';
-
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card }}>
+    <View
+      style={{
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        backgroundColor: colors.card,
+      }}
+    >
       {/* Liste des messages */}
       <View style={{ height: OPEN_HEIGHT - INPUT_BAR_HEIGHT }}>
         <ScrollView
@@ -749,7 +1111,7 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
         >
           {data.length === 0 ? (
             <Text style={{ color: colors.subtext }}>
-              {`Aucun message. ${preview}`}
+              Aucun message.
             </Text>
           ) : (
             <View>
@@ -757,26 +1119,48 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
                 if (!item || typeof item !== 'object') return null;
 
                 const uid = String(item.uid || '');
-                const name = namesMap?.[uid] || item.displayName || uid;
+                const name =
+                  namesMap?.[uid] || item.displayName || uid;
 
                 const info = participantInfoMap?.[uid] || {};
-                const uri  = info.photoURL ? withCacheBust(info.photoURL, info.version) : null;
+                const uri = info.photoURL
+                  ? withCacheBust(info.photoURL, info.version)
+                  : null;
                 const imgKey = `${uid}:${info.version || 0}`;
 
                 return (
                   <View key={item.id} style={{ marginBottom: 10 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        marginBottom: 2,
+                      }}
+                    >
                       <Image
                         key={imgKey}
                         source={uri ? { uri } : AVATAR_PLACEHOLDER}
-                        style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border, marginRight: 6 }}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: colors.border,
+                          marginRight: 6,
+                        }}
                         onError={() => {}}
                       />
-                      <Text style={{ fontWeight: '700', color: colors.text }}>
+                      <Text
+                        style={{
+                          fontWeight: '700',
+                          color: colors.text,
+                        }}
+                      >
                         {name}
                       </Text>
                     </View>
-                    <Text style={{ color: colors.text }}>{String(item.text ?? '')}</Text>
+                    <Text style={{ color: colors.text }}>
+                      {String(item.text ?? '')}
+                    </Text>
                   </View>
                 );
               })}
@@ -788,9 +1172,13 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
       {/* Barre d'entrée */}
       <View
         style={{
-          flexDirection: 'row', padding: 8, gap: 8,
-          borderTopWidth: 1, borderTopColor: colors.border,
-          height: INPUT_BAR_HEIGHT, backgroundColor: colors.card
+          flexDirection: 'row',
+          padding: 8,
+          gap: 8,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          height: INPUT_BAR_HEIGHT,
+          backgroundColor: colors.card,
         }}
       >
         <TextInput
@@ -798,7 +1186,13 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
           onChangeText={setText}
           placeholder="Écrire un message…"
           placeholderTextColor={colors.subtext}
-          style={{ flex: 1, padding: 12, backgroundColor: colors.card2, color: colors.text, borderRadius: 10 }}
+          style={{
+            flex: 1,
+            padding: 12,
+            backgroundColor: colors.card2,
+            color: colors.text,
+            borderRadius: 10,
+          }}
           textAlignVertical="center"
           returnKeyType="send"
           underlineColorAndroid="transparent"
@@ -820,11 +1214,18 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
           }}
           disabled={busy || !text.trim() || !canSend}
           style={{
-            paddingHorizontal: 14, justifyContent: 'center', borderRadius: 10,
-            backgroundColor: busy || !text.trim() || !canSend ? colors.border : colors.primary
+            paddingHorizontal: 14,
+            justifyContent: 'center',
+            borderRadius: 10,
+            backgroundColor:
+              busy || !text.trim() || !canSend
+                ? colors.border
+                : colors.primary,
           }}
         >
-          <Text style={{ color: '#fff', fontWeight: '800' }}>Envoyer</Text>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>
+            Envoyer
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -833,26 +1234,52 @@ function InlineChat({ colors, messages, onSend, busy, canSend, namesMap, partici
 
 function Avatar({ uri, size = 44 }) {
   const [ok, setOk] = React.useState(!!uri);
-  const showUri = ok && typeof uri === 'string' && /^https?:\/\//i.test(uri);
+  const showUri =
+    ok && typeof uri === 'string' && /^https?:\/\//i.test(uri);
+  const { colors } = useTheme();
 
   return showUri ? (
     <Image
       source={{ uri }}
-      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#e5e7eb', marginRight: 10 }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: colors.card2,
+        marginRight: 10,
+      }}
       onError={() => setOk(false)}
     />
   ) : (
     <Image
       source={AVATAR_PLACEHOLDER}
-      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#e5e7eb', marginRight: 10 }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: colors.card2,
+        marginRight: 10,
+      }}
     />
   );
 }
 
 /* Helpers */
-function pluralFR(n, sing, plur) { return `${n} ${n > 1 ? plur : sing}`; }
-function normId(v) { if (v == null) return null; const s = String(v).trim(); return /^\d+$/.test(s) ? String(Number(s)) : s; }
-function formatGA(goals, assists) { return `${pluralFR(goals, 'but', 'buts')}, ${pluralFR(assists, 'passe', 'passes')}`; }
+function pluralFR(n, sing, plur) {
+  return `${n} ${n > 1 ? plur : sing}`;
+}
+function normId(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return /^\d+$/.test(s) ? String(Number(s)) : s;
+}
+function formatGA(goals, assists) {
+  return `${pluralFR(goals, 'but', 'buts')}, ${pluralFR(
+    assists,
+    'passe',
+    'passes'
+  )}`;
+}
 
 function ParticipantsCard({
   leaderboard,
@@ -862,11 +1289,17 @@ function ParticipantsCard({
   liveStats,
   playerMap,
   currentUid,
+  hideOthersPicks,
+  revealTimeLabel,
 }) {
   if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
     return (
       <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
-        <Text style={{ color: '#666', textAlign: 'center' }}>Aucune participation.</Text>
+        <Text
+          style={{ color: colors.subtext, textAlign: 'center' }}
+        >
+          Aucune participation.
+        </Text>
       </View>
     );
   }
@@ -879,7 +1312,8 @@ function ParticipantsCard({
         padding: 12,
         borderWidth: 1,
         borderRadius: 12,
-        backgroundColor: '#fff',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
         elevation: 2,
         shadowColor: '#000',
         shadowOpacity: 0.06,
@@ -887,9 +1321,28 @@ function ParticipantsCard({
         shadowOffset: { width: 0, height: 2 },
       }}
     >
+      {/* 🔸 Info caviardage */}
+      {hideOthersPicks && (
+        <View style={{ marginBottom: 8 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              color: colors.subtext,
+              textAlign: 'center',
+            }}
+          >
+            Les choix des autres participants sont cachés
+            jusqu’au début du premier match
+            {revealTimeLabel ? ` (${revealTimeLabel})` : ''}.
+          </Text>
+        </View>
+      )}
+
       {/* 🔸 LÉGENDE */}
       <View style={{ alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ fontSize: 12, color: '#555' }}>Format : buts – passes = total</Text>
+        <Text style={{ fontSize: 12, color: colors.subtext }}>
+          Format : buts – passes = total
+        </Text>
       </View>
 
       {leaderboard.map((item) => {
@@ -902,7 +1355,9 @@ function ParticipantsCard({
         const seen = new Set();
 
         for (const p of picks) {
-          const pid = normId(p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id);
+          const pid = normId(
+            p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id
+          );
           if (!pid || seen.has(pid)) continue;
           seen.add(pid);
 
@@ -916,7 +1371,11 @@ function ParticipantsCard({
 
           rows.push({
             playerId: pid,
-            playerName: playerMap[pid]?.fullName ?? p?.fullName ?? p?.name ?? 'Joueur',
+            playerName:
+              playerMap[pid]?.fullName ??
+              p?.fullName ??
+              p?.name ??
+              'Joueur',
             teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
             goals: g,
             assists,
@@ -925,14 +1384,14 @@ function ParticipantsCard({
 
         rows.sort(
           (a, b) =>
-            (b.goals + b.assists) - (a.goals + a.assists) ||
+            b.goals + b.assists - (a.goals + a.assists) ||
             b.goals - a.goals ||
             a.playerName.localeCompare(b.playerName)
         );
 
         const isSelf = currentUid && item.uid === currentUid;
-        const cardBg = isSelf ? '#E0ECFF' : '#F7F9FB';
-        const cardBorder = isSelf ? '#3B82F6' : '#D1D5DB';
+        const cardBg = isSelf ? colors.card2 : colors.card;
+        const cardBorder = isSelf ? colors.primary : colors.border;
 
         return (
           <View
@@ -951,11 +1410,34 @@ function ParticipantsCard({
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Avatar uri={photo} size={48} />
               <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={{ fontWeight: '700' }}>{name}</Text>
+                <Text
+                  numberOfLines={1}
+                  style={{ fontWeight: '700', color: colors.text }}
+                >
+                  {name}
+                </Text>
               </View>
-              <View style={{ width: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                <MaterialCommunityIcons name="star-circle" size={24} color="#111" />
-                <Text style={{ fontSize: 20, fontWeight: '800' }}>
+              <View
+                style={{
+                  width: 72,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 6,
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="star-circle"
+                  size={24}
+                  color={colors.text}
+                />
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: '800',
+                    color: colors.text,
+                  }}
+                >
                   {Number(item.livePoints || 0).toFixed(1)}
                 </Text>
               </View>
@@ -963,30 +1445,88 @@ function ParticipantsCard({
 
             {/* Liste joueurs */}
             {rows.length > 0 ? (
-              <View style={{ marginTop: 8, gap: 6 }}>
-                {rows.map((row) => {
-                  const total = row.goals + row.assists;
-                  return (
-                    <View key={row.playerId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
-                      <View style={{ width: 28, height: 28, marginRight: 10, alignItems: 'center', justifyContent: 'center' }}>
-                        {row.teamAbbr ? (
-                          <SvgUri uri={teamLogoUrl(row.teamAbbr)} width={28} height={28} />
-                        ) : (
-                          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#eee' }} />
-                        )}
+              hideOthersPicks && !isSelf ? (
+                // 🔒 Caviardé pour les autres participants
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    marginTop: 6,
+                    fontStyle: 'italic',
+                  }}
+                >
+                  Sélections cachées jusqu’au début du premier match.
+                </Text>
+              ) : (
+                <View style={{ marginTop: 8, gap: 6 }}>
+                  {rows.map((row) => {
+                    const total = row.goals + row.assists;
+                    return (
+                      <View
+                        key={row.playerId}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingVertical: 6,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 28,
+                            height: 28,
+                            marginRight: 10,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {row.teamAbbr ? (
+                            <SvgUri
+                              uri={teamLogoUrl(row.teamAbbr)}
+                              width={28}
+                              height={28}
+                            />
+                          ) : (
+                            <View
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 14,
+                                backgroundColor: colors.card2,
+                              }}
+                            />
+                          )}
+                        </View>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: colors.text }}
+                          >
+                            {row.playerName}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontWeight: '700',
+                            color: colors.text,
+                            minWidth: 72,
+                            textAlign: 'right',
+                          }}
+                        >
+                          {`${row.goals} – ${row.assists} = ${total}`}
+                        </Text>
                       </View>
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text numberOfLines={1}>{row.playerName}</Text>
-                      </View>
-                      <Text style={{ fontWeight: '700', color: '#111', minWidth: 72, textAlign: 'right' }}>
-                        {`${row.goals} – ${row.assists} = ${total}`}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
+                    );
+                  })}
+                </View>
+              )
             ) : (
-              <Text style={{ color: '#666', marginTop: 6 }}>Aucun joueur sélectionné.</Text>
+              <Text
+                style={{
+                  color: colors.subtext,
+                  marginTop: 6,
+                }}
+              >
+                Aucun joueur sélectionné.
+              </Text>
             )}
           </View>
         );

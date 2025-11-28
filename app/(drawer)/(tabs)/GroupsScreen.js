@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { createGroupService } from '@src/groups/services';
+import { useTheme } from '@src/theme/ThemeProvider'; // 🎨 thème clair/sombre
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)
@@ -120,6 +121,7 @@ function uniq(arr) {
 export default function GroupsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme(); // 🌗
 
   // Création
   const [createOpen, setCreateOpen] = useState(false);
@@ -145,7 +147,7 @@ export default function GroupsScreen() {
   useEffect(() => {
     if (!user?.uid) { setFavoriteGroupId(null); setLoadingFavorite(false); return; }
     setLoadingFavorite(true);
-   const unsub = subParticipant(
+    const unsub = subParticipant(
       user.uid,
       (snap) => {
         const d = snapExists(snap) ? (snapData(snap) || {}) : {};
@@ -195,7 +197,6 @@ export default function GroupsScreen() {
           field,
           user.uid,
           (snap) => {
-            // web: snap.docs ; natif: snap.docs aussi (API équivalente)
             const docs = snap?.docs || [];
             const rows = docs.map((d) => {
               const x = d.data() || {};
@@ -237,7 +238,6 @@ export default function GroupsScreen() {
         const un = subGroupDoc(
           gid,
           (snap) => {
-            // web: snap.exists() ; natif: snap.exists
             const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
             if (exists) {
               const data = typeof snap.data === 'function' ? snap.data() : snap.data;
@@ -278,18 +278,17 @@ export default function GroupsScreen() {
     });
   }, [rolesByGroupId, groupsMap]);
 
-
   const myOwnerGroups = useMemo(() => allGroups.filter((g) => g.role === 'owner'), [allGroups]);
   const myMemberGroups = useMemo(() => allGroups.filter((g) => g.role !== 'owner'), [allGroups]);
 
   const ownedEmpty = myOwnerGroups.length === 0;
   const memberEmpty = myMemberGroups.length === 0;
   const allEmpty = ownedEmpty && memberEmpty;
+
   /* -------------------------
      Actions
   ------------------------- */
   function openGroup(g) {
-    // garde l’URL drawer cohérente avec ton app
     router.push({ pathname: `/(drawer)/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) } });
   }
 
@@ -322,7 +321,6 @@ export default function GroupsScreen() {
 
     try {
       const snap = await readParticipant(user.uid);
-      // web: snap.exists() ; natif: snap.exists
       const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
       const data = exists ? (typeof snap.data === 'function' ? snap.data() : snap.data()) : {};
 
@@ -337,7 +335,6 @@ export default function GroupsScreen() {
             updatedAt: w.serverTimestamp(),
           });
         } catch (e) {
-          // Si “No document to update”, on crée un shell puis on update
           const msg = String(e?.message || e).toLowerCase();
           if (msg.includes('no document to update')) {
             await setParticipant(user.uid, { updatedAt: w.serverTimestamp() }, true);
@@ -355,11 +352,15 @@ export default function GroupsScreen() {
       }
 
       // SET FAVORITE
-      await setParticipant(user.uid, {
-        favoriteGroupId: gid,
-        favoriteGroupAt: w.serverTimestamp(),
-        updatedAt: w.serverTimestamp(),
-      }, true);
+      await setParticipant(
+        user.uid,
+        {
+          favoriteGroupId: gid,
+          favoriteGroupAt: w.serverTimestamp(),
+          updatedAt: w.serverTimestamp(),
+        },
+        true
+      );
 
       setFavoriteGroupId(gid);
     } catch (e) {
@@ -373,11 +374,25 @@ export default function GroupsScreen() {
   ------------------------- */
   if (!user) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
-        <Text>Connecte-toi pour voir tes groupes.</Text>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          gap: 12,
+          backgroundColor: colors.background,
+        }}
+      >
+        <Text style={{ color: colors.text }}>Connecte-toi pour voir tes groupes.</Text>
         <TouchableOpacity
           onPress={() => router.push('/(auth)/auth-choice')}
-          style={{ backgroundColor: '#111827', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12 }}
+          style={{
+            backgroundColor: colors.primary,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderRadius: 12,
+          }}
         >
           <Text style={{ color: 'white', fontWeight: '600' }}>Se connecter</Text>
         </TouchableOpacity>
@@ -388,55 +403,115 @@ export default function GroupsScreen() {
   const isLoading = loadingMemberships || loadingFavorite;
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
-        
-        <Text style={{ fontSize: 22, fontWeight: '700' }}>Mes groupes</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header */}
+      <View
+        style={{
+          padding: 16,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>
+          Mes groupes
+        </Text>
+
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
             onPress={() => setCreateOpen(true)}
-            style={{ backgroundColor: '#111827', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 }}
+            style={{
+              backgroundColor: colors.primary,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 12,
+            }}
           >
             <Text style={{ color: 'white', fontWeight: '600' }}>Créer</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => router.push('/groups/join')}
-            style={{ borderWidth: 1, borderColor: '#111827', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 }}
+            style={{
+              borderWidth: 1,
+              borderColor: colors.primary,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 12,
+            }}
           >
-            <Text style={{ fontWeight: '600' }}>Joindre</Text>
+            <Text style={{ fontWeight: '600', color: colors.primary }}>Joindre</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-        {allEmpty && (
-          <View style={{ marginHorizontal:16, marginTop:6, padding:12, borderRadius:12, backgroundColor:'#F9FAFB', borderWidth:1, borderColor:'#E5E7EB' }}>
-            <Text style={{ fontWeight:'700' }}>Bienvenue 👋</Text>
-            <Text style={{ color:'#6B7280', marginTop:4 }}>
-              Commence par créer un groupe avec tes amis ou rejoins-en un avec un code d’invitation.
-            </Text>
-          </View>
-        )}
+      {/* Bandeau bienvenue */}
+      {allEmpty && (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginTop: 6,
+            padding: 12,
+            borderRadius: 12,
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
+          <Text style={{ fontWeight: '700', color: colors.text }}>Bienvenue 👋</Text>
+          <Text style={{ color: colors.subtext, marginTop: 4 }}>
+            Commence par créer un groupe avec tes amis ou rejoins-en un avec un code d’invitation.
+          </Text>
+        </View>
+      )}
+
       {isLoading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator />
-          <Text style={{ marginTop: 8 }}>Chargement…</Text>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.background,
+          }}
+        >
+          <ActivityIndicator color={colors.primary} />
+          <Text style={{ marginTop: 8, color: colors.subtext }}>Chargement…</Text>
         </View>
       ) : (
         <FlatList
           data={[
-            { header: true, title: 'Groupes que je gère', subtitle: ownedEmpty ? "Aucun groupe pour l’instant." : null },
+            {
+              header: true,
+              title: 'Groupes que je gère',
+              subtitle: ownedEmpty ? "Aucun groupe pour l’instant." : null,
+            },
             ...myOwnerGroups,
-            { header: true, title: 'Groupes où je suis membre', subtitle: memberEmpty ? "Tu n’as rejoint aucun groupe pour le moment." : null },
+            {
+              header: true,
+              title: 'Groupes où je suis membre',
+              subtitle: memberEmpty ? "Tu n’as rejoint aucun groupe pour le moment." : null,
+            },
             ...myMemberGroups,
           ]}
           keyExtractor={(item, idx) => (item.header ? `h-${idx}` : String(item.id))}
           renderItem={({ item }) =>
             item.header ? (
               <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-                <Text style={{ fontSize: 16, fontWeight: '700' }}>{item.title}</Text>
+                <Text
+                  style={{ fontSize: 16, fontWeight: '700', color: colors.text }}
+                >
+                  {item.title}
+                </Text>
                 {!!item.subtitle && (
-                  <Text style={{ marginTop: 2, fontStyle: 'italic', color: '#6B7280' }}>{item.subtitle}</Text>
+                  <Text
+                    style={{
+                      marginTop: 2,
+                      fontStyle: 'italic',
+                      color: colors.subtext,
+                    }}
+                  >
+                    {item.subtitle}
+                  </Text>
                 )}
               </View>
             ) : (
@@ -447,13 +522,15 @@ export default function GroupsScreen() {
                   marginVertical: 6,
                   padding: 14,
                   borderRadius: 14,
-                  backgroundColor: '#fff',
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
                   shadowColor: '#000',
                   shadowOpacity: 0.1,
                   shadowRadius: 6,
                   shadowOffset: { width: 0, height: 3 },
                   elevation: 3,
-                  position: 'relative'
+                  position: 'relative',
                 }}
               >
                 {/* Favori */}
@@ -468,33 +545,62 @@ export default function GroupsScreen() {
                   <MaterialCommunityIcons
                     name={favoriteGroupId === item.id ? 'star' : 'star-outline'}
                     size={22}
-                    color={'#111827'}
+                    color={favoriteGroupId === item.id ? colors.primary : colors.subtext}
                   />
                 </TouchableOpacity>
 
-                <View style={{ flexDirection:'row', alignItems:'center', paddingRight:28 }}>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingRight: 28 }}
+                >
                   <Image
-                    source={item.avatarUrl ? { uri: item.avatarUrl } : require('@src/assets/group-placeholder.png')}
+                    source={
+                      item.avatarUrl
+                        ? { uri: item.avatarUrl }
+                        : require('@src/assets/group-placeholder.png')
+                    }
                     style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: '#f3f4f6', marginRight: 10, borderWidth:1, borderColor:'#eee'
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: colors.background,
+                      marginRight: 10,
+                      borderWidth: 1,
+                      borderColor: colors.border,
                     }}
                   />
-                  <View style={{ flex:1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '600' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: 16,
+                        fontWeight: '600',
+                        color: colors.text,
+                      }}
+                    >
                       {item.name || item.id}
                     </Text>
                     {!!item.description && (
-                      <Text style={{ marginTop: 2 }} numberOfLines={1}>
+                      <Text
+                        style={{ marginTop: 2, color: colors.subtext }}
+                        numberOfLines={1}
+                      >
                         {item.description}
                       </Text>
                     )}
                   </View>
                 </View>
 
-                <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text>Code invitation: {item.codeInvitation || '—'}</Text>
-                  <Text style={{ fontWeight: '700' }}>
+                <View
+                  style={{
+                    marginTop: 8,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: colors.subtext }}>
+                    Code invitation: {item.codeInvitation || '—'}
+                  </Text>
+                  <Text style={{ fontWeight: '700', color: colors.text }}>
                     {item.role === 'owner' ? 'Propriétaire' : 'Membre'}
                   </Text>
                 </View>
@@ -502,35 +608,85 @@ export default function GroupsScreen() {
             )
           }
           ListEmptyComponent={() => (
-            <View style={{ alignItems: 'center', marginTop: 48, paddingHorizontal: 24 }}>
+            <View
+              style={{
+                alignItems: 'center',
+                marginTop: 48,
+                paddingHorizontal: 24,
+              }}
+            >
               <Image
                 source={require('@src/assets/group-placeholder.png')}
-                style={{ width: 120, height: 120, borderRadius: 60, opacity: 0.9, marginBottom: 14, backgroundColor: '#F3F4F6' }}
+                style={{
+                  width: 120,
+                  height: 120,
+                  borderRadius: 60,
+                  opacity: 0.9,
+                  marginBottom: 14,
+                  backgroundColor: colors.card,
+                }}
               />
-              <Text style={{ fontSize: 18, fontWeight: '800', textAlign: 'center' }}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: '800',
+                  textAlign: 'center',
+                  color: colors.text,
+                }}
+              >
                 Crée ton premier groupe ou rejoins tes amis
               </Text>
-              <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>
+              <Text
+                style={{
+                  marginTop: 6,
+                  color: colors.subtext,
+                  textAlign: 'center',
+                }}
+              >
                 Organise vos défis, invite tes amis et commence à gagner des crédits.
               </Text>
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                 <TouchableOpacity
                   onPress={() => setCreateOpen(true)}
-                  style={{ backgroundColor: '#111827', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12 }}
+                  style={{
+                    backgroundColor: colors.primary,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                  }}
                 >
-                  <Text style={{ color: 'white', fontWeight: '700' }}>Créer un groupe</Text>
+                  <Text
+                    style={{ color: 'white', fontWeight: '700' }}
+                  >
+                    Créer un groupe
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => router.push('/groups/join')}
-                  style={{ borderWidth: 1, borderColor: '#111827', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12 }}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors.primary,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                  }}
                 >
-                  <Text style={{ fontWeight: '700' }}>Rejoindre</Text>
+                  <Text
+                    style={{ fontWeight: '700', color: colors.primary }}
+                  >
+                    Rejoindre
+                  </Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Petit rappel utile */}
-              <Text style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF' }}>
+              <Text
+                style={{
+                  marginTop: 10,
+                  fontSize: 12,
+                  color: colors.subtext,
+                }}
+              >
                 Astuce : tu peux définir un groupe favori avec l’icône ★
               </Text>
             </View>
@@ -546,77 +702,185 @@ export default function GroupsScreen() {
         transparent
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={{ flex: 1,paddingTop: 60, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'flex-start' }}>
+          <View
+            style={{
+              flex: 1,
+              paddingTop: 60,
+              backgroundColor: 'rgba(0,0,0,0.25)',
+              justifyContent: 'flex-start',
+            }}
+          >
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
               keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
             >
-              <SafeAreaView style={{
-                backgroundColor: '#fff',
-                borderBottomLeftRadius: 18,
-                borderBottomRightRadius: 18,
-                paddingBottom: 16,
-                maxHeight: '92%',
-                marginBottom: 12 
-              }}>
-                <View style={{ paddingHorizontal:16, paddingTop:12, paddingBottom:8 }}>
-                  <View style={{ flexDirection:'row', alignItems:'center', gap:10, marginBottom:6 }}>
-                    <MaterialCommunityIcons name="rocket-launch-outline" size={22} />
-                    <Text style={{ fontSize:20, fontWeight:'900' }}>Nouveau groupe</Text>
+              <SafeAreaView
+                style={{
+                  backgroundColor: colors.card,
+                  borderBottomLeftRadius: 18,
+                  borderBottomRightRadius: 18,
+                  paddingBottom: 16,
+                  maxHeight: '92%',
+                  marginBottom: 12,
+                }}
+              >
+                <View
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingTop: 12,
+                    paddingBottom: 8,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="rocket-launch-outline"
+                      size={22}
+                      color={colors.text}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: '900',
+                        color: colors.text,
+                      }}
+                    >
+                      Nouveau groupe
+                    </Text>
                   </View>
-                  <Text>Rassemble ton crew et dominez les défis.</Text>
+                  <Text style={{ color: colors.subtext }}>
+                    Rassemble ton crew et dominez les défis.
+                  </Text>
                 </View>
 
-                <View style={{ paddingHorizontal:16, paddingTop:12, gap:12 }}>
+                <View
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingTop: 12,
+                    gap: 12,
+                  }}
+                >
                   <View>
-                    <Text style={{ fontWeight:'700', marginBottom:6 }}>Nom du groupe</Text>
+                    <Text
+                      style={{
+                        fontWeight: '700',
+                        marginBottom: 6,
+                        color: colors.text,
+                      }}
+                    >
+                      Nom du groupe
+                    </Text>
                     <TextInput
                       placeholder="Ex. Les Snipers du Nord"
+                      placeholderTextColor={colors.subtext}
                       value={name}
                       onChangeText={setName}
                       autoCorrect={false}
                       style={{
-                        borderWidth:1, borderColor:'#e5e7eb', borderRadius:12,
-                        paddingHorizontal:12, paddingVertical:12, backgroundColor:'#fafafa'
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 12,
+                        backgroundColor: colors.background,
+                        color: colors.text,
                       }}
                     />
-                    <Text style={{ marginTop:4, fontSize:12 }}>
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: colors.subtext,
+                      }}
+                    >
                       {name.length}/40
                     </Text>
                   </View>
 
                   <View>
-                    <Text style={{ fontWeight:'700', marginBottom:6 }}>Description (optionnel)</Text>
+                    <Text
+                      style={{
+                        fontWeight: '700',
+                        marginBottom: 6,
+                        color: colors.text,
+                      }}
+                    >
+                      Description (optionnel)
+                    </Text>
                     <TextInput
                       placeholder="Ex. Notre pool du samedi entre amis"
+                      placeholderTextColor={colors.subtext}
                       value={description}
                       onChangeText={setDescription}
                       multiline
                       style={{
-                        borderWidth:1, borderColor:'#e5e7eb', borderRadius:12,
-                        paddingHorizontal:12, paddingVertical:12, minHeight:70, backgroundColor:'#fafafa'
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 12,
+                        minHeight: 70,
+                        backgroundColor: colors.background,
+                        color: colors.text,
                       }}
                     />
                   </View>
                 </View>
 
-                <View style={{ paddingHorizontal:16, paddingVertical:16, flexDirection:'row', gap:10 }}>
+                <View
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 16,
+                    flexDirection: 'row',
+                    gap: 10,
+                  }}
+                >
                   <TouchableOpacity
                     onPress={() => setCreateOpen(false)}
-                    style={{ flex:1, paddingVertical:14, borderRadius:12, borderWidth:1, alignItems:'center' }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      alignItems: 'center',
+                    }}
                     disabled={creating}
                   >
-                    <Text style={{ fontWeight:'700' }}>Annuler</Text>
+                    <Text
+                      style={{ fontWeight: '700', color: colors.text }}
+                    >
+                      Annuler
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     onPress={onCreateGroup}
                     disabled={creating || !name.trim()}
-                    style={{ flex:1, paddingVertical:14, borderRadius:12, alignItems:'center',
-                      backgroundColor: (!name.trim() || creating) ? '#9ca3af' : '#111827'
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      backgroundColor:
+                        !name.trim() || creating ? colors.subtext : colors.primary,
                     }}
                   >
-                    {creating ? <ActivityIndicator color="#fff" /> : <Text style={{ color:'#fff', fontWeight:'700' }}>Créer</Text>}
+                    {creating ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text
+                        style={{ color: '#fff', fontWeight: '700' }}
+                      >
+                        Créer
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </SafeAreaView>

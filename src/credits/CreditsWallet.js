@@ -1,12 +1,21 @@
 // src/credits/CreditsWallet.js
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Pressable, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Platform,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { app } from '@src/lib/firebase';
+import { useTheme } from '@src/theme/ThemeProvider';
 
 const PACKS = [
-  { id: 'p25', credits: 25, priceCents: 500,  tag: 'Starter' },
+  { id: 'p25', credits: 25, priceCents: 500, tag: 'Starter' },
   { id: 'p60', credits: 60, priceCents: 1200, tag: 'Populaire' },
   { id: 'p140', credits: 140, priceCents: 2500, tag: 'Meilleure valeur' },
 ];
@@ -14,9 +23,61 @@ const PACKS = [
 const fmtPrice = (cents) =>
   (cents / 100).toLocaleString('fr-CA', { style: 'currency', currency: 'CAD' });
 
+function AmountPill({ amount }) {
+  const { colors } = useTheme();
+  const n = Number(amount) || 0;
+  const isPlus = n > 0;
+  const isMinus = n < 0;
+
+  const isDark = colors.background === '#111827';
+
+  let bg, fg;
+  if (isPlus) {
+    bg = isDark ? '#022c22' : '#ECFDF5';
+    fg = isDark ? '#6ee7b7' : '#065F46';
+  } else if (isMinus) {
+    bg = isDark ? '#7f1d1d' : '#FEF2F2';
+    fg = isDark ? '#fecaca' : '#991B1B';
+  } else {
+    bg = isDark ? '#111827' : '#F3F4F6';
+    fg = isDark ? colors.text : '#374151';
+  }
+
+  return (
+    <View
+      style={{
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: bg,
+      }}
+    >
+      <Text style={{ color: fg, fontWeight: '800' }}>{n > 0 ? `+${n}` : n}</Text>
+    </View>
+  );
+}
+
+function RowIcon({ name, tint }) {
+  const { colors } = useTheme();
+  const isDark = colors.background === '#111827';
+
+  let color;
+  if (tint === 'in') {
+    color = isDark ? '#6ee7b7' : '#047857';
+  } else if (tint === 'out') {
+    color = isDark ? '#fecaca' : '#B91C1C';
+  } else {
+    color = isDark ? '#9ca3af' : '#6B7280';
+  }
+
+  return <MaterialCommunityIcons name={name} size={20} color={color} />;
+}
+
 export default function CreditsWallet({ credits }) {
+  const { colors } = useTheme();
+
   const balance = useMemo(
-    () => (typeof credits === 'number' ? credits : (credits?.balance ?? 0)),
+    () => (typeof credits === 'number' ? credits : credits?.balance ?? 0),
     [credits]
   );
 
@@ -61,7 +122,6 @@ export default function CreditsWallet({ credits }) {
       const message = e?.message || String(e);
       const details = e?.details || {};
 
-      // Cas "cooldown 10 jours" -> failed-precondition + nextAvailableDay
       if (code === 'failed-precondition' && details.nextAvailableDay) {
         const nextDay = details.nextAvailableDay; // ex: "2025-11-30"
 
@@ -103,6 +163,8 @@ export default function CreditsWallet({ credits }) {
     }
   };
 
+  const isDark = colors.background === '#111827';
+
   return (
     <View
       style={{
@@ -113,11 +175,12 @@ export default function CreditsWallet({ credits }) {
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 8 },
         elevation: 6,
+        backgroundColor: colors.card,
       }}
     >
       {/* Bandeau solde */}
       <LinearGradient
-        colors={['#111827', '#0f172a']}
+        colors={['#020617', '#0f172a']} // bandeau sombre, OK dans les 2 thèmes
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ padding: 18 }}
@@ -137,7 +200,13 @@ export default function CreditsWallet({ credits }) {
           </View>
 
           <View style={{ flex: 1 }}>
-            <Text style={{ color: '#9CA3AF', fontWeight: '700', letterSpacing: 0.4 }}>
+            <Text
+              style={{
+                color: '#9CA3AF',
+                fontWeight: '700',
+                letterSpacing: 0.4,
+              }}
+            >
               MON SOLDE
             </Text>
             <Text
@@ -174,8 +243,15 @@ export default function CreditsWallet({ credits }) {
       </LinearGradient>
 
       {/* Corps : packs + action */}
-      <View style={{ backgroundColor: '#fff', padding: 16 }}>
-        <Text style={{ fontWeight: '900', fontSize: 16, marginBottom: 10 }}>
+      <View style={{ backgroundColor: colors.card, padding: 16 }}>
+        <Text
+          style={{
+            fontWeight: '900',
+            fontSize: 16,
+            marginBottom: 10,
+            color: colors.text,
+          }}
+        >
           Acheter des crédits
         </Text>
 
@@ -183,21 +259,26 @@ export default function CreditsWallet({ credits }) {
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
           {PACKS.map((p) => {
             const active = selectedPack?.id === p.id;
+            const borderColor = active ? colors.text : colors.border;
+            const bg = active ? (isDark ? '#111827' : colors.card2) : colors.card;
+
             return (
               <TouchableOpacity
                 key={p.id}
                 onPress={() => setSelectedPack(p)}
                 style={{
                   borderWidth: active ? 2 : 1,
-                  borderColor: active ? '#111827' : '#E5E7EB',
-                  backgroundColor: active ? '#F3F4F6' : '#FAFAFA',
+                  borderColor,
+                  backgroundColor: bg,
                   paddingVertical: 10,
                   paddingHorizontal: 12,
                   borderRadius: 12,
                 }}
               >
-                <Text style={{ fontWeight: '800' }}>{p.credits} crédits</Text>
-                <Text style={{ color: '#6B7280', fontSize: 12 }}>{p.tag}</Text>
+                <Text style={{ fontWeight: '800', color: colors.text }}>
+                  {p.credits} crédits
+                </Text>
+                <Text style={{ color: colors.subtext, fontSize: 12 }}>{p.tag}</Text>
               </TouchableOpacity>
             );
           })}
@@ -207,18 +288,20 @@ export default function CreditsWallet({ credits }) {
         <View
           style={{
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.border,
             borderRadius: 14,
             padding: 12,
-            backgroundColor: '#F9FAFB',
+            backgroundColor: colors.card2,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
           <View>
-            <Text style={{ fontWeight: '800' }}>{selectedPack.credits} crédits</Text>
-            <Text style={{ color: '#6B7280', marginTop: 2 }}>
+            <Text style={{ fontWeight: '800', color: colors.text }}>
+              {selectedPack.credits} crédits
+            </Text>
+            <Text style={{ color: colors.subtext, marginTop: 2 }}>
               {fmtPrice(selectedPack.priceCents)}
             </Text>
           </View>
@@ -242,7 +325,13 @@ export default function CreditsWallet({ credits }) {
           </Pressable>
         </View>
 
-        <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 10 }}>
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 12,
+            marginTop: 10,
+          }}
+        >
           Paiements sécurisés • Reçus envoyés par courriel • Crédits livrés instantanément
         </Text>
       </View>

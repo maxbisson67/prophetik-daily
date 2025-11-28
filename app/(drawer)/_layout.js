@@ -14,8 +14,9 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@src/auth/SafeAuthProvider';
+import { useTheme } from '@src/theme/ThemeProvider';
 
-// ✅ expo-image pour contrôler le cache
+// ✅ expo-image pour contrôler le cache (ici: Image RN standard)
 import { Image } from 'react-native';
 
 // 🔽 profil public (displayName, avatarUrl, updatedAt)
@@ -36,7 +37,7 @@ function getHeaderTitle(route) {
     case 'boutique/index':
       return 'Boutique';
     case 'profile/index':
-      return 'Profile';  
+      return 'Profile';
     case 'settings/index':
       return 'Réglages';
     case 'ClassementScreen':
@@ -47,13 +48,14 @@ function getHeaderTitle(route) {
 }
 
 function SectionLabel({ children }) {
+  const { colors } = useTheme();
   return (
     <Text
       style={{
         marginTop: 18,
         marginBottom: 6,
         marginHorizontal: 16,
-        color: '#6b7280',
+        color: colors.subtext,
         fontWeight: '700',
       }}
     >
@@ -62,11 +64,12 @@ function SectionLabel({ children }) {
   );
 }
 function Separator() {
+  const { colors } = useTheme();
   return (
     <View
       style={{
         height: 1,
-        backgroundColor: '#e5e7eb',
+        backgroundColor: colors.border,
         marginVertical: 8,
         marginHorizontal: 12,
       }}
@@ -77,15 +80,16 @@ function Separator() {
 function tsToMillis(ts) {
   if (!ts) return 0;
   if (typeof ts.toMillis === 'function') return ts.toMillis();
-  // Firestore Timestamp-like object
-  if (typeof ts.seconds === 'number') return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds / 1e6) : 0);
+  if (typeof ts.seconds === 'number') {
+    return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds / 1e6) : 0);
+  }
   if (typeof ts === 'number') return ts;
   return 0;
 }
 
 function withCacheBust(url, updatedAt) {
   if (!url) return null;
-  const v = tsToMillis(updatedAt) || Date.now(); // ⚠️ si updatedAt absent → nonce
+  const v = tsToMillis(updatedAt) || Date.now();
   return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
 }
 
@@ -93,6 +97,7 @@ function withCacheBust(url, updatedAt) {
 /* DrawerHeader: lit profiles_public/{uid} pour afficher nom + avatar  */
 /* ------------------------------------------------------------------ */
 function DrawerHeader() {
+  const { colors } = useTheme();
   const { user } = useAuth();
   const { profile: pub, loading: loadingPub } = usePublicProfile(user?.uid);
 
@@ -103,28 +108,23 @@ function DrawerHeader() {
 
   const email = user?.email || '';
 
-  //  A) Avatar: UNIQUEMENT profiles_public.avatarUrl (fallback auth.photoURL)
   const rawAvatar = pub?.avatarUrl || user?.photoURL || null;
-
-  //  B) Version basée sur updatedAt (ou nonce si absent)
   const avatarUri = useMemo(
     () => withCacheBust(rawAvatar, pub?.updatedAt),
     [rawAvatar, pub?.updatedAt]
   );
 
-  //  C) Remount forcé quand l'URL change — et “bump” si on détecte un onError (cache récalcitrant)
   const [bump, setBump] = React.useState(0);
   const [lastKey, setLastKey] = React.useState('');
   const imageKey = `${avatarUri || 'placeholder'}#${bump}`;
 
-  // si l’URL change, on remonte le composant pour éviter toute mémoisation interne
   React.useEffect(() => {
     if (imageKey !== lastKey) setLastKey(imageKey);
   }, [imageKey, lastKey]);
 
   return (
     <View
-      key={lastKey} // ← remount du header quand l'URL (avec _cb) change
+      key={lastKey}
       style={{
         paddingHorizontal: 16,
         paddingTop: 16,
@@ -135,7 +135,7 @@ function DrawerHeader() {
       }}
     >
       <Image
-        key={imageKey} // ← remount de l'image elle-même
+        key={imageKey}
         source={
           avatarUri
             ? { uri: avatarUri }
@@ -143,19 +143,20 @@ function DrawerHeader() {
         }
         onError={() => {
           if (__DEV__) console.warn('[DrawerHeader] avatar load error:', avatarUri);
-          // Dernier recours: on force un nouveau key avec un nonce
           setBump((n) => n + 1);
         }}
-        onLoadEnd={() => {
-          
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: colors.card,
         }}
-        style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#e5e7eb' }}
       />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 16, fontWeight: '800' }}>
+        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
           {loadingPub ? 'Chargement…' : displayName}
         </Text>
-        <Text style={{ color: '#6b7280', fontSize: 12 }}>
+        <Text style={{ color: colors.subtext, fontSize: 12 }}>
           {email || (user ? 'Connecté' : 'Hors ligne')}
         </Text>
       </View>
@@ -167,6 +168,7 @@ function DrawerHeader() {
 /* Drawer content                       */
 /* ------------------------------------ */
 function CustomDrawerContent(props) {
+  const { colors } = useTheme();
   const router = useRouter();
   const { signOut } = useAuth();
 
@@ -178,36 +180,71 @@ function CustomDrawerContent(props) {
     [props.navigation]
   );
 
+  const itemCommonProps = {
+    // ✅ style du conteneur
+    style: { marginHorizontal: 4, borderRadius: 10 },
+    // ✅ style du label (texte)
+    labelStyle: {
+      color: colors.text,
+      fontWeight: '600',
+    },
+    // ✅ couleur de l’icône (on ignore le "color" automatique)
+    activeTintColor: colors.primary,
+    inactiveTintColor: colors.subtext,
+  };
+
   return (
-    <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }}>
+    <DrawerContentScrollView
+      {...props}
+      contentContainerStyle={{ paddingTop: 0 }}
+      style={{ backgroundColor: colors.background }}
+    >
       <DrawerHeader />
       <Separator />
 
       <SectionLabel>Navigation</SectionLabel>
+
       <DrawerItem
+        {...itemCommonProps}
         label="Accueil"
         onPress={() => goTab('AccueilScreen')}
-        icon={({ color, size }) => <Ionicons name="home" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="home" size={size} color={colors.text} />
+        )}
       />
+
       <DrawerItem
+        {...itemCommonProps}
         label="Groupes"
         onPress={() => goTab('GroupsScreen')}
-        icon={({ color, size }) => <Ionicons name="people" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="people" size={size} color={colors.text} />
+        )}
       />
+
       <DrawerItem
+        {...itemCommonProps}
         label="Défis"
         onPress={() => goTab('ChallengesScreen')}
-        icon={({ color, size }) => <Ionicons name="trophy" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="trophy" size={size} color={colors.text} />
+        )}
       />
-         <DrawerItem
+
+      <DrawerItem
+        {...itemCommonProps}
         label="Classement"
         onPress={() => goTab('ClassementScreen')}
-        icon={({ color, size }) => <Ionicons name="podium" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="podium" size={size} color={colors.text} />
+        )}
       />
-      <Separator />
 
+      <Separator />
       <SectionLabel>Espace perso</SectionLabel>
-       <DrawerItem
+
+      <DrawerItem
+        {...itemCommonProps}
         label="Boutique"
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
@@ -215,11 +252,17 @@ function CustomDrawerContent(props) {
             router.push('/(drawer)/boutique');
           });
         }}
-       icon={({ color, size }) => (
-          <MaterialCommunityIcons name="shopping" size={size} color={color} />
+        icon={({ size }) => (
+          <MaterialCommunityIcons
+            name="shopping"
+            size={size}
+            color={colors.text}
+          />
         )}
       />
-       <DrawerItem
+
+      <DrawerItem
+        {...itemCommonProps}
         label="Crédits"
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
@@ -227,10 +270,13 @@ function CustomDrawerContent(props) {
             router.push('/(drawer)/credits');
           });
         }}
-        icon={({ color, size }) => <Ionicons name="card" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="card" size={size} color={colors.text} />
+        )}
       />
-     
-       <DrawerItem
+
+      <DrawerItem
+        {...itemCommonProps}
         label="Profil"
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
@@ -238,10 +284,13 @@ function CustomDrawerContent(props) {
             router.push('/(drawer)/profile');
           });
         }}
-        icon={({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="person-circle" size={size} color={colors.text} />
+        )}
       />
-     
+
       <DrawerItem
+        {...itemCommonProps}
         label="Réglages"
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
@@ -249,24 +298,31 @@ function CustomDrawerContent(props) {
             router.push('/(drawer)/settings');
           });
         }}
-        icon={({ color, size }) => <Ionicons name="settings" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="settings" size={size} color={colors.text} />
+        )}
       />
 
       <Separator />
 
       <DrawerItem
+        {...itemCommonProps}
         label="Se déconnecter"
         onPress={async () => {
           await signOut().catch(() => {});
           router.replace('/(auth)/auth-choice');
         }}
-        icon={({ color, size }) => <Ionicons name="log-out" size={size} color={color} />}
+        icon={({ size }) => (
+          <Ionicons name="log-out" size={size} color={colors.text} />
+        )}
       />
     </DrawerContentScrollView>
   );
 }
 
 export default function DrawerLayout() {
+  const { colors } = useTheme();
+
   return (
     <Drawer
       id="rootDrawer"
@@ -276,9 +332,13 @@ export default function DrawerLayout() {
         drawerType: 'slide',
         drawerHideStatusBarOnOpen: true,
         headerLeft: (props) => <DrawerToggleButton {...props} />,
-        headerStyle: { backgroundColor: '#fff' },
-        drawerActiveTintColor: '#ef4444',
-        drawerInactiveTintColor: '#6b7280',
+        headerStyle: { backgroundColor: colors.card },
+        headerTintColor: colors.text,
+        drawerStyle: {
+          backgroundColor: colors.background,
+        },
+        drawerActiveTintColor: colors.primary,
+        drawerInactiveTintColor: colors.subtext,
         drawerLabelStyle: { fontWeight: '700' },
       }}
     >
@@ -289,8 +349,6 @@ export default function DrawerLayout() {
           headerTitle: getHeaderTitle(route),
         })}
       />
-
-
     </Drawer>
   );
 }

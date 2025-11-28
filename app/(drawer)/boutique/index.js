@@ -157,7 +157,7 @@ function useParticipantAvatarLive(uid) {
         }
       );
 
-  return () => { try { unsub(); } catch {} };
+    return () => { try { unsub(); } catch {} };
   }, [uid]);
 
   return participant;
@@ -184,7 +184,6 @@ export default function BoutiqueScreen() {
     ));
     return dedupeById([...(ownedGroups || []), ...ownedFromMembership]);
   }, [groups, ownedGroups, user?.uid]);
-
 
   // 👂 Participant live (réagit aux changements d’avatar)
   const participantDoc = useParticipantAvatarLive(user?.uid);
@@ -275,89 +274,93 @@ export default function BoutiqueScreen() {
      Affichage principal
   ========================================================= */
   return (
-    <>
-      <Stack.Screen options={{ title: 'Boutique' }} />
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* 1️⃣ Carte : Avatar de profil */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Avatar de profil</Text>
+  <>
+    <Stack.Screen options={{ title: 'Boutique' }} />
+    <ScrollView
+      style={styles.screen}                // 👈 fond de tout le ScrollView
+      contentContainerStyle={styles.container}  // 👈 fond + padding pour le contenu
+    >
+      {/* 1️⃣ Carte : Avatar de profil */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Avatar de profil</Text>
 
-          <View style={styles.rowCenter}>
-            <Image
-              key={avatarUri || 'placeholder'}
-              source={avatarUri ? { uri: avatarUri, cache: 'reload' } : AVATAR_PLACEHOLDER}
-              onError={() => setAvatarUri(null)}
-              style={[styles.avatarXL, { backgroundColor: colors.border }]}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.textSubtle}>
-                Personnalise ton identité dans l’app.
-              </Text>
+        <View style={styles.rowCenter}>
+          <Image
+            key={avatarUri || 'placeholder'}
+            source={avatarUri ? { uri: avatarUri, cache: 'reload' } : AVATAR_PLACEHOLDER}
+            onError={() => setAvatarUri(null)}
+            style={[styles.avatarXL, { backgroundColor: colors.border }]}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.textSubtle}>
+              Personnalise ton identité dans l’app.
+            </Text>
 
-              <TouchableOpacity
-                onPress={() => router.push('/avatars/AvatarsScreen')}
-                style={[styles.btnPrimary, styles.btnWithIcon, { marginTop: 10 }]}
-              >
-                <MaterialCommunityIcons name="account-edit" size={18} color="#fff" />
-                <Text style={styles.btnPrimaryText}>Changer d’avatar (1 crédit)</Text>
-              </TouchableOpacity>
-
-              
-            </View>
+            <TouchableOpacity
+              onPress={() => router.push('/avatars/AvatarsScreen')}
+              style={[styles.btnPrimary, styles.btnWithIcon, { marginTop: 10 }]}
+            >
+              <MaterialCommunityIcons name="account-edit" size={18} color="#fff" />
+              <Text style={styles.btnPrimaryText}>Changer d’avatar (1 crédit)</Text>
+            </TouchableOpacity>
           </View>
         </View>
+      </View>
 
-        {/* 2️⃣ Carte : Avatars de groupes */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Avatars de groupes</Text>
+      {/* 2️⃣ Carte : Avatars de groupes */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Avatars de groupes</Text>
 
-          {groupsOwned.length === 0 ? (
-            <Text style={styles.textSubtle}>
-              Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.
+        {groupsOwned.length === 0 ? (
+          <Text style={styles.textSubtle}>
+            Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.
+          </Text>
+        ) : (
+          <>
+            <Text style={[styles.textSubtle, { marginBottom: 10 }]}>
+              Change l’avatar des groupes que tu gères :
             </Text>
-          ) : (
-            <>
-              <Text style={[styles.textSubtle, { marginBottom: 10 }]}>
-                Change l’avatar des groupes que tu gères :
-              </Text>
 
-              {groupsOwned.map((item) => (
-                <View key={item.id} style={styles.groupRow}>
-                  <View style={[styles.rowCenter, { flex: 1 }]}>
-                    <Image
-                      source={item.avatarUrl ? { uri: item.avatarUrl } : GROUP_PLACEHOLDER}
-                      style={[
-                        styles.avatarLG,
-                        { backgroundColor: colors.background, borderColor: colors.border },
-                      ]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.textBold}>{item.name || item.id}</Text>
-                      {!!item.description && (
-                        <Text numberOfLines={1} style={styles.textMicro}>
-                          {item.description}
-                        </Text>
-                      )}
-                    </View>
+            {groupsOwned.map((item) => (
+              <View key={item.id} style={styles.groupRow}>
+                <View style={[styles.rowCenter, { flex: 1 }]}>
+                  <Image
+                    source={item.avatarUrl ? { uri: item.avatarUrl } : GROUP_PLACEHOLDER}
+                    style={[
+                      styles.avatarLG,
+                      { backgroundColor: colors.background, borderColor: colors.border },
+                    ]}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.textBold}>{item.name || item.id}</Text>
+                    {!!item.description && (
+                      <Text numberOfLines={1} style={styles.textMicro}>
+                        {item.description}
+                      </Text>
+                    )}
                   </View>
-
-                 <TouchableOpacity
-                    onPress={() =>
-                      router.push({ pathname: '/avatars/GroupAvatarsScreen', params: { groupId: item.id } })
-                    }
-                    style={[styles.btnDark, styles.btnWithIcon]}
-                  >
-                    <Ionicons name="create" size={16} color="#fff" />
-                    <Text style={styles.btnDarkText}>Modifier</Text>
-                  </TouchableOpacity>
                 </View>
-              ))}
-            </>
-          )}
-        </View>
-      </ScrollView>
-    </>
-  );
+
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: '/avatars/GroupAvatarsScreen',
+                      params: { groupId: item.id },
+                    })
+                  }
+                  style={[styles.btnDark, styles.btnWithIcon]}
+                >
+                  <Ionicons name="create" size={16} color="#fff" />
+                  <Text style={styles.btnDarkText}>Modifier</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </>
+        )}
+      </View>
+    </ScrollView>
+  </>
+);
 }
 
 /* =========================================================
@@ -419,6 +422,10 @@ function makeStyles(colors) {
   });
 }
 
+// 🎨 Version theme-aware : utilise les surfaces du thème plutôt que des hex statiques
 function themeAwareListBG(colors) {
-  return colors.background === '#111827' ? '#1f2937' : '#fafafa';
+  // surface secondaire si dispo, sinon on retombe sur la carte / background
+  if (colors.card2) return colors.card2;
+  if (colors.card) return colors.card;
+  return colors.background;
 }

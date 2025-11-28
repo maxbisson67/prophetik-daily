@@ -90,6 +90,38 @@ function createPlayerResolver() {
   };
 }
 
+
+function addDaysToYMD(baseYmd, delta) {
+  if (!baseYmd || typeof baseYmd !== "string" || baseYmd.length < 10) {
+    return baseYmd;
+  }
+  const [y, m, d] = baseYmd.split("-").map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function torontoCurrentHour() {
+  try {
+    const now = new Date();
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      hour12: false,
+      hour: "2-digit",
+    });
+    const parts = fmt.formatToParts(now);
+    const hStr = parts.find((p) => p.type === "hour")?.value;
+    const hNum = hStr ? parseInt(hStr, 10) : now.getUTCHours();
+    return Number.isNaN(hNum) ? 0 : hNum;
+  } catch (e) {
+    // fallback très safe
+    return 0;
+  }
+}
+
 /**
  * Tâche principale : va chercher le schedule NHL + PBP
  * et met à jour:
@@ -122,8 +154,12 @@ async function runUpdateNhlLiveGames(forYmd) {
     if (!gameId) continue;
 
     // --- Infos de base du match ---
-    const homeAbbr = normTeamAbbr(g.homeTeam?.abbrev || g.homeTeamAbbrev || g.homeTeam);
-    const awayAbbr = normTeamAbbr(g.awayTeam?.abbrev || g.awayTeamAbbrev || g.awayTeam);
+    const homeAbbr = normTeamAbbr(
+      g.homeTeam?.abbrev || g.homeTeamAbbrev || g.homeTeam
+    );
+    const awayAbbr = normTeamAbbr(
+      g.awayTeam?.abbrev || g.awayTeamAbbrev || g.awayTeam
+    );
 
     const homeScore = g.homeTeam?.score ?? g.homeScore ?? 0;
     const awayScore = g.awayTeam?.score ?? g.awayScore ?? 0;
@@ -134,16 +170,25 @@ async function runUpdateNhlLiveGames(forYmd) {
 
     const period = g.periodDescriptor?.number ?? null;
     const periodType = g.periodDescriptor?.periodType ?? null;
-    const clock = g.clock ?? null;
+
+    // ⏱ clock du schedule (souvent incomplet / absent)
+    const clock = g.clock && typeof g.clock === "object" ? g.clock : null;
+
+    // 🕒 version "schedule" de timeRemaining (souvent null)
+    let timeRemainingSchedule = null;
+    if (clock && "timeRemaining" in clock) {
+      timeRemainingSchedule =
+        clock.timeRemaining != null ? clock.timeRemaining : null;
+    }
 
     const venue = g.venue?.default || g.venueName || null;
 
     const gameRef = db.collection("nhl_live_games").doc(gameId);
 
-    // 2) Écrire / mettre à jour le doc principal du match
+    // 2) Écrire / mettre à jour le doc principal du match (version schedule only)
     await gameRef.set(
       {
-        date: ymd, // ✅ bien aligné sur Toronto
+        date: ymd,
         homeAbbr,
         awayAbbr,
         homeScore,
@@ -154,17 +199,17 @@ async function runUpdateNhlLiveGames(forYmd) {
         isFinal,
         period,
         periodType,
-        clock,
+        timeRemaining: timeRemainingSchedule, // 🔒 jamais undefined
         venue,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
 
-    // Si le match n'est pas live ni final, on peut s’arrêter là
+    // Si le match n'est pas live ni final, on n'a pas besoin du PBP
     if (!isLive && !isFinal) continue;
 
-    // 3) PBP: pour aller chercher les buts détaillés
+    // 3) PBP: pour aller chercher les buts détaillés + clock live
     let pbp;
     try {
       pbp = await apiWebPbp(gameId);
@@ -179,6 +224,47 @@ async function runUpdateNhlLiveGames(forYmd) {
     const plays = Array.isArray(pbp?.plays) ? pbp.plays : [];
     logger.info("[updateNhlLiveGames] plays", { gameId, count: plays.length });
 
+    // 🕒 timeRemaining calculé à partir du PBP
+    // On part de la valeur "schedule"
+    let pbpTimeRemaining = timeRemainingSchedule;
+
+    // 3a) Si le PBP expose un clock global avec timeRemaining, on le prend
+    if (
+      pbp &&
+      typeof pbp === "object" &&
+      pbp.clock &&
+      typeof pbp.clock === "object" &&
+      typeof pbp.clock.timeRemaining === "string" &&
+      pbp.clock.timeRemaining.trim() !== ""
+    ) {
+      pbpTimeRemaining = pbp.clock.timeRemaining.trim();
+    } else if (isLive && plays.length > 0) {
+      // 3b) Sinon, on essaie de déduire le dernier timeRemaining des plays
+      let lastTime = null;
+      for (const play of plays) {
+        const det = play?.details || {};
+        const t =
+          (typeof det.timeRemaining === "string" && det.timeRemaining.trim()) ||
+          (typeof play.timeRemaining === "string" && play.timeRemaining.trim()) ||
+          null;
+        if (t) {
+          lastTime = t;
+        }
+      }
+      if (lastTime) {
+        pbpTimeRemaining = lastTime;
+      }
+    }
+
+    // 3c) Si on a trouvé mieux que la valeur "schedule", on réécrit timeRemaining
+    if (pbpTimeRemaining !== timeRemainingSchedule) {
+      await gameRef.set(
+        { timeRemaining: pbpTimeRemaining ?? null },
+        { merge: true }
+      );
+    }
+
+    // 4) Traitement des buts (comme avant)
     for (const play of plays) {
       const typeKey = String(play?.typeDescKey || "").toLowerCase();
       const typeCode = Number(play?.typeCode || 0);
@@ -238,7 +324,7 @@ async function runUpdateNhlLiveGames(forYmd) {
 
       const periodNumber = play.periodDescriptor?.number ?? null;
 
-      // Essayer plusieurs champs pour le temps dans la période
+      // Essayer plusieurs champs pour le temps dans la période (pour l’affichage des buts)
       const timeInPeriod =
         det.timeInPeriod ||
         det.timeInPeriod?.default ||
@@ -297,7 +383,10 @@ async function runUpdateNhlLiveGames(forYmd) {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
-      await gameRef.collection("goals").doc(eventId).set(goalDoc, { merge: true });
+      await gameRef
+        .collection("goals")
+        .doc(eventId)
+        .set(goalDoc, { merge: true });
     }
   }
 
@@ -327,6 +416,16 @@ export const updateNhlLiveGamesCron = onSchedule(
     region: "us-central1",
   },
   async () => {
-    await runUpdateNhlLiveGames();
+    const todayYmd = torontoYMD();
+    const hour = torontoCurrentHour();
+
+    // 🔁 Jusqu'à 3h du matin (heure Toronto), on continue aussi d’updater la veille
+    if (hour < 3) {
+      const yesterdayYmd = addDaysToYMD(todayYmd, -1);
+      await runUpdateNhlLiveGames(yesterdayYmd);
+    }
+
+    // Dans tous les cas, on update le jour courant
+    await runUpdateNhlLiveGames(todayYmd);
   }
 );

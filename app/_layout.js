@@ -12,7 +12,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@src/auth/SafeAuthProvider";
 import { AppVisibilityProvider } from "@src/providers/AppVisibilityProvider";
 import "@src/lib/safeAsyncStorage";
-import { ThemeProvider } from "@src/theme/ThemeProvider";
+import { ThemeProvider, useTheme  } from "@src/theme/ThemeProvider";
 
 import {
   attachNotificationListeners,
@@ -180,6 +180,7 @@ function RootLayoutInner() {
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
   const fade = useRef(new Animated.Value(1)).current;
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const hasRoutedOnboarding = useRef(false);
@@ -254,22 +255,24 @@ function RootLayoutInner() {
         style={styles.bg}
         resizeMode="cover"
       >
-        <Stack
-          screenOptions={{
-            contentStyle: { backgroundColor: "#ffffff" },
-            headerStyle: { backgroundColor: "#fff" },
-            headerShadowVisible: true,
-          }}
-        >
-          {/* Section principale : drawer */}
-          <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+      <Stack
+      screenOptions={{
+        contentStyle: { backgroundColor: colors.background }, // 👈 fond de l’écran
+        headerStyle: { backgroundColor: colors.header },      // 👈 fond du header
+        headerTintColor: colors.headerTint,                   // 👈 texte + icônes du header
+        headerTitleStyle: { color: colors.headerTint },
+        headerShadowVisible: !isDark,                         // optionnel : pas d’ombre en dark
+      }}
+    >
+      {/* Section principale : drawer */}
+      <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
 
-          {/* Auth (login, signup) */}
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      {/* Auth (login, signup) */}
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
 
-          {/* Onboarding global */}
-          <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
-        </Stack>
+      {/* Onboarding global */}
+      <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
+    </Stack>
 
         <AuthGateMount />
         <NotificationsMount />

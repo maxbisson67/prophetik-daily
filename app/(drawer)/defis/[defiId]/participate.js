@@ -1,19 +1,41 @@
 // app/defis/[defiId]/participate-rnfirebase.js
-import React, { useEffect, useMemo, useState, useLayoutEffect } from "react";
-import { View, Text, ActivityIndicator, TextInput, FlatList, TouchableOpacity, Alert } from "react-native";
-import { Stack, useLocalSearchParams, useRouter, useNavigation } from "expo-router";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useLayoutEffect,
+} from "react";
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+} from "react-native";
+import {
+  Stack,
+  useLocalSearchParams,
+  useRouter,
+  useNavigation,
+} from "expo-router";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { HeaderBackButton } from "@react-navigation/elements";
-import { Ionicons } from "@expo/vector-icons";
 import firestore from "@react-native-firebase/firestore";
+
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { getPlayersForDate } from "@src/nhl/api";
+import { useTheme } from "@src/theme/ThemeProvider";
 
 export default function ParticipateScreen() {
   const { user } = useAuth();
   const { defiId } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const [loading, setLoading] = useState(true);
   const [defi, setDefi] = useState(null);
@@ -30,16 +52,22 @@ export default function ParticipateScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Participer",
+      headerStyle: { backgroundColor: colors.card },
+      headerTitleStyle: { color: colors.text },
+      headerTintColor: colors.text,
       headerLeft: ({ tintColor }) => (
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={styles.headerLeftContainer}>
           {navigation.canGoBack() && (
-            <HeaderBackButton tintColor={tintColor} onPress={() => navigation.goBack()} />
+            <HeaderBackButton
+              tintColor={tintColor ?? colors.text}
+              onPress={() => navigation.goBack()}
+            />
           )}
-          <DrawerToggleButton tintColor={tintColor} />
+          <DrawerToggleButton tintColor={tintColor ?? colors.text} />
         </View>
       ),
     });
-  }, [navigation]);
+  }, [navigation, colors.card, colors.text, styles.headerLeftContainer]);
 
   // Charge défi + roster (RNFirebase)
   useEffect(() => {
@@ -47,11 +75,17 @@ export default function ParticipateScreen() {
       try {
         const ref = firestore().doc(`defis/${String(defiId)}`);
         const snap = await ref.get();
-        if (!snap.exists) { setError("Défi introuvable"); setLoading(false); return; }
+        if (!snap.exists) {
+          setError("Défi introuvable");
+          setLoading(false);
+          return;
+        }
         const d = { id: snap.id, ...snap.data() };
         setDefi(d);
 
-        const { players, games, firstGameAtUTC } = await getPlayersForDate(d.gameDate);
+        const { players, games, firstGameAtUTC } = await getPlayersForDate(
+          d.gameDate
+        );
         setAllPlayers(players || []);
         setGamesCount(games || 0);
         setFirstISO(firstGameAtUTC || null);
@@ -77,51 +111,70 @@ export default function ParticipateScreen() {
 
   // Met à jour le titre quand le défi arrive
   useLayoutEffect(() => {
-    const title = defi?.title || (defi?.type ? `Défi ${defi.type}` : "Participer");
+    const title =
+      defi?.title || (defi?.type ? `Défi ${defi.type}` : "Participer");
     navigation.setOptions({
       title,
+      headerStyle: { backgroundColor: colors.card },
+      headerTitleStyle: { color: colors.text },
+      headerTintColor: colors.text,
       headerLeft: ({ tintColor }) => (
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={styles.headerLeftContainer}>
           {navigation.canGoBack() ? (
-            <HeaderBackButton tintColor={tintColor} onPress={() => navigation.goBack()} />
+            <HeaderBackButton
+              tintColor={tintColor ?? colors.text}
+              onPress={() => navigation.goBack()}
+            />
           ) : (
             <TouchableOpacity
               onPress={() => router.replace("/(drawer)/(tabs)/ChallengesScreen")}
-              style={{ paddingHorizontal: 8 }}
+              style={styles.headerBackTouchable}
             >
-              <Text style={{ color: tintColor ?? "#111" }}>Retour</Text>
+              <Text style={[styles.headerBackText, { color: tintColor ?? colors.text }]}>
+                Retour
+              </Text>
             </TouchableOpacity>
           )}
-          <DrawerToggleButton tintColor={tintColor} />
+          <DrawerToggleButton tintColor={tintColor ?? colors.text} />
         </View>
       ),
     });
-  }, [navigation, router, defi?.title, defi?.type]);
+  }, [navigation, router, defi?.title, defi?.type, colors.card, colors.text, styles.headerLeftContainer, styles.headerBackText, styles.headerBackTouchable]);
 
-  const maxPick = useMemo(() => Number(defi?.type || 1), [defi?.type]);
+  const maxPick = useMemo(
+    () => Number(defi?.type || 1),
+    [defi?.type]
+  );
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     if (!qq) return allPlayers;
-    return allPlayers.filter(p =>
-      (p.fullName || "").toLowerCase().includes(qq) ||
-      (p.tri || "").toLowerCase().includes(qq) ||
-      (p.pos || "").toLowerCase().includes(qq)
+    return allPlayers.filter(
+      (p) =>
+        (p.fullName || "").toLowerCase().includes(qq) ||
+        (p.tri || "").toLowerCase().includes(qq) ||
+        (p.pos || "").toLowerCase().includes(qq)
     );
   }, [q, allPlayers]);
 
   function togglePick(id) {
-    setSelected(prev => {
-      if (prev.includes(id)) return prev.filter(x => x !== id);
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
       if (prev.length >= maxPick) return prev; // pas plus que N
       return [...prev, id];
     });
   }
 
   async function save() {
-    if (!user?.uid) { Alert.alert("Connexion requise"); return; }
+    if (!user?.uid) {
+      Alert.alert("Connexion requise");
+      return;
+    }
     if (selected.length !== maxPick) {
-      Alert.alert("Sélection incomplète", `Choisis exactement ${maxPick} joueur(s).`);
+      Alert.alert(
+        "Sélection incomplète",
+        `Choisis exactement ${maxPick} joueur(s).`
+      );
       return;
     }
     // deadline respectée ?
@@ -134,15 +187,18 @@ export default function ParticipateScreen() {
 
     const choiceId = `${defi.id}_${user.uid}`;
     const cRef = firestore().doc(`defi_choices/${choiceId}`);
-    await cRef.set({
-      id: choiceId,
-      defiId: defi.id,
-      groupId: defi.groupId,
-      userId: user.uid,
-      players: selected, // uniquement les playerId !
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      updatedAt: firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    await cRef.set(
+      {
+        id: choiceId,
+        defiId: defi.id,
+        groupId: defi.groupId,
+        userId: user.uid,
+        players: selected,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     Alert.alert("Sauvegardé", "Tes choix ont été enregistrés.");
     router.replace("/(drawer)/(tabs)/ChallengesScreen");
@@ -151,9 +207,19 @@ export default function ParticipateScreen() {
   if (loading) {
     return (
       <>
-        <Stack.Screen options={{ title: "Chargement…" }} />
-        <View style={{ flex:1, alignItems:"center", justifyContent:"center" }}>
-          <ActivityIndicator/><Text>Chargement…</Text>
+        <Stack.Screen
+          options={{
+            title: "Chargement…",
+            headerStyle: { backgroundColor: colors.card },
+            headerTitleStyle: { color: colors.text },
+            headerTintColor: colors.text,
+          }}
+        />
+        <View style={[styles.screen, styles.center]}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.subtext, { marginTop: 8 }]}>
+            Chargement…
+          </Text>
         </View>
       </>
     );
@@ -162,9 +228,18 @@ export default function ParticipateScreen() {
   if (error) {
     return (
       <>
-        <Stack.Screen options={{ title: "Erreur" }} />
-        <View style={{ flex:1, alignItems:"center", justifyContent:"center", padding:16 }}>
-          <Text>Erreur: {String(error)}</Text>
+        <Stack.Screen
+          options={{
+            title: "Erreur",
+            headerStyle: { backgroundColor: colors.card },
+            headerTitleStyle: { color: colors.text },
+            headerTintColor: colors.text,
+          }}
+        />
+        <View style={[styles.screen, styles.center, { padding: 16 }]}>
+          <Text style={styles.text}>
+            Erreur: {String(error)}
+          </Text>
         </View>
       </>
     );
@@ -174,35 +249,49 @@ export default function ParticipateScreen() {
     <>
       <Stack.Screen
         options={{
-          title: defi?.title || (defi?.type ? `Défi ${defi.type}` : "Participer"),
+          title:
+            defi?.title || (defi?.type ? `Défi ${defi.type}` : "Participer"),
+          headerStyle: { backgroundColor: colors.card },
+          headerTitleStyle: { color: colors.text },
+          headerTintColor: colors.text,
           headerLeft: ({ tintColor }) => (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={styles.headerLeftContainer}>
               <HeaderBackButton
-                tintColor={tintColor}
-                onPress={() => router.replace("/(drawer)/(tabs)/ChallengesScreen")}
+                tintColor={tintColor ?? colors.text}
+                onPress={() =>
+                  router.replace("/(drawer)/(tabs)/ChallengesScreen")
+                }
               />
-              <DrawerToggleButton tintColor={tintColor} />
+              <DrawerToggleButton tintColor={tintColor ?? colors.text} />
             </View>
           ),
         }}
       />
-      <View style={{ flex:1, padding:16 }}>
-        <Text style={{ fontSize:18, fontWeight:"700" }}>
+      <View style={styles.screen}>
+        <Text style={styles.title}>
           {defi?.title || `Défi ${defi?.type}x${defi?.type}`}
         </Text>
-        <Text style={{ color:"#555", marginBottom:8 }}>
+        <Text style={[styles.subtext, { marginBottom: 8 }]}>
           Date {defi?.gameDate} • {gamesCount} match(s)
-          {firstISO ? ` • 1er match ${new Date(firstISO).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}` : ""}
+          {firstISO
+            ? ` • 1er match ${new Date(firstISO).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : ""}
         </Text>
 
         <TextInput
           placeholder="Rechercher (nom, équipe, pos)…"
+          placeholderTextColor={colors.subtext}
           value={q}
           onChangeText={setQ}
-          style={{ borderWidth:1, borderRadius:10, padding:10, marginBottom:10 }}
+          style={styles.searchInput}
         />
 
-        <Text style={{ marginBottom:6 }}>Sélection: {selected.length}/{maxPick}</Text>
+        <Text style={[styles.text, { marginBottom: 6 }]}>
+          Sélection: {selected.length}/{maxPick}
+        </Text>
 
         <FlatList
           data={filtered}
@@ -213,32 +302,146 @@ export default function ParticipateScreen() {
             return (
               <TouchableOpacity
                 onPress={() => togglePick(id)}
-                style={{
-                  padding:12, borderWidth:1, borderRadius:10, marginBottom:8,
-                  backgroundColor: active ? "#111" : "#fff", borderColor: active ? "#111" : "#ddd"
-                }}
+                style={[
+                  styles.playerItem,
+                  active && styles.playerItemActive,
+                ]}
               >
-                <Text style={{ color: active ? "#fff" : "#111", fontWeight:"700" }}>
-                  {item.fullName} <Text style={{ fontWeight:"400" }}>({item.pos} • {item.tri})</Text>
+                <Text
+                  style={[
+                    styles.playerName,
+                    active && styles.playerNameActive,
+                  ]}
+                >
+                  {item.fullName}{" "}
+                  <Text
+                    style={[
+                      styles.playerMeta,
+                      active && styles.playerMetaActive,
+                    ]}
+                  >
+                    ({item.pos} • {item.tri})
+                  </Text>
                 </Text>
-                {active && <Text style={{ color:"#fff" }}>Sélectionné</Text>}
+                {active && (
+                  <Text style={styles.playerSelectedText}>
+                    Sélectionné
+                  </Text>
+                )}
               </TouchableOpacity>
             );
           }}
-          ListEmptyComponent={<Text style={{ color:"#666" }}>Aucun joueur trouvé.</Text>}
+          ListEmptyComponent={
+            <Text style={styles.subtext}>
+              Aucun joueur trouvé.
+            </Text>
+          }
         />
 
         <TouchableOpacity
           onPress={save}
           disabled={selected.length !== maxPick}
-          style={{
-            marginTop:12, padding:14, borderRadius:12, alignItems:"center",
-            backgroundColor: selected.length !== maxPick ? "#9ca3af" : "#111"
-          }}
+          style={[
+            styles.validateButton,
+            selected.length !== maxPick && styles.validateButtonDisabled,
+          ]}
         >
-          <Text style={{ color:"#fff", fontWeight:"700" }}>Valider mes {maxPick} choix</Text>
+          <Text style={styles.validateButtonText}>
+            Valider mes {maxPick} choix
+          </Text>
         </TouchableOpacity>
       </View>
     </>
   );
+}
+
+/* ============================
+   Styles thème-aware
+============================ */
+function makeStyles(colors) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: colors.background,
+    },
+    center: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    headerLeftContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    headerBackTouchable: {
+      paddingHorizontal: 8,
+    },
+    headerBackText: {
+      fontWeight: "600",
+    },
+    text: {
+      color: colors.text,
+    },
+    subtext: {
+      color: colors.subtext,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    searchInput: {
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 10,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      color: colors.text,
+    },
+    playerItem: {
+      padding: 12,
+      borderWidth: 1,
+      borderRadius: 10,
+      marginBottom: 8,
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+    },
+    playerItemActive: {
+      backgroundColor: "#ef4444",
+      borderColor: "#ef4444",
+    },
+    playerName: {
+      fontWeight: "700",
+      color: colors.text,
+    },
+    playerNameActive: {
+      color: "#fff",
+    },
+    playerMeta: {
+      fontWeight: "400",
+      color: colors.subtext,
+    },
+    playerMetaActive: {
+      color: "#e5e7eb",
+    },
+    playerSelectedText: {
+      color: "#fee2e2",
+      marginTop: 2,
+    },
+    validateButton: {
+      marginTop: 12,
+      padding: 14,
+      borderRadius: 12,
+      alignItems: "center",
+      backgroundColor: "#ef4444",
+    },
+    validateButtonDisabled: {
+      backgroundColor: colors.subtext,
+    },
+    validateButtonText: {
+      color: "#fff",
+      fontWeight: "700",
+    },
+  });
 }

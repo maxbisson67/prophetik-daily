@@ -1,31 +1,44 @@
 // app/profile/index.js
-import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 
 // 🔁 RN Firebase Firestore
 import firestore from '@react-native-firebase/firestore';
 
 // Auth (tu peux garder ton provider actuel)
-import { signInAnonymously, updateProfile } from "firebase/auth";
+import { signInAnonymously, updateProfile } from 'firebase/auth';
 
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
 // crédits
-import CreditsWallet from "@src/credits/CreditsWallet";
-import { useCredits } from "@src/credits/useCredits";
+import CreditsWallet from '@src/credits/CreditsWallet';
+import { useCredits } from '@src/credits/useCredits';
 
 // Si tu utilises encore auth web dans ton SafeAuthProvider :
-import { auth } from "@src/lib/firebase";
+import { auth } from '@src/lib/firebase';
+
+// Thème
+import { useTheme } from '@src/theme/ThemeProvider';
 
 export default function ProfileScreen() {
   const { user, authReady, signOut } = useAuth();
   const router = useRouter();
   const { loading: creditsLoading, topUpFree } = useCredits();
+  const { colors } = useTheme();
+  const isDark = colors.background === '#111827';
 
-  const [displayName, setDisplayName] = useState(user?.displayName || "");
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [photoURL, setPhotoURL] = useState(user?.photoURL || null);
   const [busy, setBusy] = useState(false);
   const [participant, setParticipant] = useState(null);
@@ -35,7 +48,7 @@ export default function ProfileScreen() {
 
   // --- sync visuel sur changement d'UID
   useEffect(() => {
-    setDisplayName(user?.displayName || "");
+    setDisplayName(user?.displayName || '');
     setPhotoURL(user?.photoURL ?? null);
   }, [user?.uid]);
 
@@ -54,8 +67,10 @@ export default function ProfileScreen() {
         if (cancelled) return;
         if (snap.exists) {
           const p = snap.data() || {};
-          setDisplayName(p?.displayName || user.displayName || "");
-          setPhotoURL(p?.photoURL ?? p?.avatarUrl ?? user.photoURL ?? null);
+          setDisplayName(p?.displayName || user.displayName || '');
+          setPhotoURL(
+            p?.photoURL ?? p?.avatarUrl ?? user.photoURL ?? null
+          );
           setParticipant({ id: snap.id, ...p });
         } else {
           setParticipant(null);
@@ -64,13 +79,16 @@ export default function ProfileScreen() {
         if (!cancelled) setParticipantLoaded(true);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user?.uid]);
 
   const needsOnboardingFlag =
     !!user?.uid &&
     participantLoaded &&
-    (!participant?.onboarding || typeof participant?.onboarding?.welcomeSeen !== 'boolean');
+    (!participant?.onboarding ||
+      typeof participant?.onboarding?.welcomeSeen !== 'boolean');
 
   // --- patch onboarding (une seule fois)
   useEffect(() => {
@@ -82,11 +100,20 @@ export default function ProfileScreen() {
     didPatchOnboardingRef.current = true;
     firestore()
       .doc(`participants/${user.uid}`)
-      .set({ onboarding: { welcomeSeen: false } }, { merge: true })
+      .set(
+        { onboarding: { welcomeSeen: false } },
+        { merge: true }
+      )
       .then(() => {
-        setParticipant(prev =>
+        setParticipant((prev) =>
           prev
-            ? { ...prev, onboarding: { ...(prev?.onboarding || {}), welcomeSeen: false } }
+            ? {
+                ...prev,
+                onboarding: {
+                  ...(prev?.onboarding || {}),
+                  welcomeSeen: false,
+                },
+              }
             : prev
         );
       })
@@ -121,9 +148,9 @@ export default function ProfileScreen() {
       // Si tu migres vers RNFirebase Auth : await auth().signInAnonymously();
       const res = await signInAnonymously(auth);
       await ensureParticipantDoc(res.user);
-      Alert.alert("Connecté", "Bienvenue !");
+      Alert.alert('Connecté', 'Bienvenue !');
     } catch (e) {
-      Alert.alert("Connexion impossible", String(e?.message || e));
+      Alert.alert('Connexion impossible', String(e?.message || e));
     } finally {
       setBusy(false);
     }
@@ -133,9 +160,9 @@ export default function ProfileScreen() {
     try {
       setBusy(true);
       await signOut();
-      Alert.alert("Déconnecté");
+      Alert.alert('Déconnecté');
     } catch (e) {
-      Alert.alert("Déconnexion impossible", String(e?.message || e));
+      Alert.alert('Déconnexion impossible', String(e?.message || e));
     } finally {
       setBusy(false);
     }
@@ -144,18 +171,18 @@ export default function ProfileScreen() {
   // === SAUVEGARDE (FireStore RNFirebase) ===
   const saveProfile = async () => {
     if (!user?.uid) {
-      Alert.alert("Non connecté", "Connecte-toi d’abord.");
+      Alert.alert('Non connecté', 'Connecte-toi d’abord.');
       return;
     }
     try {
       setBusy(true);
 
       const newPhotoURL =
-        photoURL
-        ?? participant?.photoURL
-        ?? participant?.avatarUrl
-        ?? user?.photoURL
-        ?? null;
+        photoURL ??
+        participant?.photoURL ??
+        participant?.avatarUrl ??
+        user?.photoURL ??
+        null;
 
       const isFirstSave = !participant;
 
@@ -179,11 +206,13 @@ export default function ProfileScreen() {
             createdAt: firestore.FieldValue.serverTimestamp(),
             updatedAt: firestore.FieldValue.serverTimestamp(),
             onboarding: { welcomeSeen: false },
-            ...(newPhotoURL ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL } : {}),
+            ...(newPhotoURL
+              ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL }
+              : {}),
           },
           { merge: true }
         );
-        router.replace("/onboarding/welcome");
+        router.replace('/onboarding/welcome');
         return;
       } else {
         const updatePayload = {
@@ -196,15 +225,21 @@ export default function ProfileScreen() {
         }
         await ref.update(updatePayload);
 
-        if (needsOnboardingFlag && !didPatchOnboardingRef.current) {
-          await ref.set({ onboarding: { welcomeSeen: false } }, { merge: true });
+        if (
+          needsOnboardingFlag &&
+          !didPatchOnboardingRef.current
+        ) {
+          await ref.set(
+            { onboarding: { welcomeSeen: false } },
+            { merge: true }
+          );
           didPatchOnboardingRef.current = true;
         }
 
-        Alert.alert("Profil mis à jour");
+        Alert.alert('Profil mis à jour');
       }
     } catch (e) {
-      Alert.alert("Échec sauvegarde", String(e?.message || e));
+      Alert.alert('Échec sauvegarde', String(e?.message || e));
     } finally {
       setBusy(false);
     }
@@ -212,27 +247,49 @@ export default function ProfileScreen() {
 
   if (!authReady) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator />
-        <Text> Initialisation…</Text>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.background,
+        }}
+      >
+        <ActivityIndicator color={colors.primary} />
+        <Text style={{ color: colors.text, marginTop: 8 }}>
+          Initialisation…
+        </Text>
       </View>
     );
   }
 
   const creditsValue =
-    typeof participant?.credits === "number"
+    typeof participant?.credits === 'number'
       ? participant.credits
-      : typeof participant?.credits?.balance === "number"
+      : typeof participant?.credits?.balance === 'number'
       ? participant.credits.balance
-      : typeof participant?.balance === "number"
+      : typeof participant?.balance === 'number'
       ? participant.balance
       : 0;
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Profil' }} />
+      <Stack.Screen
+        options={{
+          title: 'Profil',
+          headerStyle: { backgroundColor: colors.card },
+          headerTitleStyle: { color: colors.text },
+          headerTintColor: colors.text,
+        }}
+      />
       <KeyboardAwareScrollView
-        contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 80 }}
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{
+          padding: 16,
+          gap: 16,
+          paddingBottom: 80,
+          backgroundColor: colors.background,
+        }}
         enableOnAndroid
         enableAutomaticScroll
         extraScrollHeight={100}
@@ -240,89 +297,145 @@ export default function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="always"
       >
+        {/* Solde de crédits */}
         <CreditsWallet credits={creditsValue} />
 
+        {/* Carte profil */}
         <View
           style={{
             padding: 16,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: "#eee",
-            backgroundColor: "#fff",
+            borderColor: colors.border,
+            backgroundColor: colors.card,
             elevation: 3,
-            shadowColor: "#000",
+            shadowColor: '#000',
             shadowOpacity: 0.08,
             shadowRadius: 6,
             shadowOffset: { width: 0, height: 3 },
             gap: 16,
           }}
         >
-          <View style={{ alignItems: "center", gap: 12 }}>
+          <View style={{ alignItems: 'center', gap: 12 }}>
             <Image
-              source={photoURL ? { uri: photoURL } : require("@src/assets/avatar-placeholder.png")}
-              style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: "#eee" }}
+              source={
+                photoURL
+                  ? { uri: photoURL }
+                  : require('@src/assets/avatar-placeholder.png')
+              }
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 48,
+                backgroundColor: colors.card2 || '#1f2937',
+              }}
             />
             <TouchableOpacity
-              onPress={() => router.push("/avatars/AvatarsScreen")}
+              onPress={() => router.push('/avatars/AvatarsScreen')}
               style={{
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 borderRadius: 10,
-                backgroundColor: "#ef4444",
-                alignItems: "center",
+                backgroundColor: '#ef4444',
+                alignItems: 'center',
               }}
             >
-              <Text style={{ color: "#fff", fontWeight: "700" }}>🎨 Choisir un avatar</Text>
+              <Text
+                style={{ color: '#fff', fontWeight: '700' }}
+              >
+                🎨 Choisir un avatar
+              </Text>
             </TouchableOpacity>
           </View>
 
           <View style={{ gap: 6 }}>
-            <Text style={{ fontWeight: "600" }}>Nom d’affichage</Text>
+            <Text
+              style={{
+                fontWeight: '600',
+                color: colors.text,
+              }}
+            >
+              Nom d’affichage
+            </Text>
             <TextInput
               value={displayName}
               onChangeText={setDisplayName}
               placeholder="Ton nom"
+              placeholderTextColor={colors.subtext}
               style={{
                 borderWidth: 1,
-                borderColor: "#ddd",
+                borderColor: colors.border,
                 borderRadius: 10,
                 paddingHorizontal: 12,
                 paddingVertical: 10,
+                color: colors.text,
+                backgroundColor:
+                  colors.card2 || colors.background,
               }}
             />
           </View>
         </View>
 
-        {busy ? <ActivityIndicator /> : null}
+        {busy ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : null}
 
         {user ? (
           <View style={{ gap: 10 }}>
+            {/* Sauvegarder */}
             <TouchableOpacity
               onPress={saveProfile}
-              style={{ backgroundColor: "#111", padding: 14, borderRadius: 10, alignItems: "center" }}
+              style={{
+                backgroundColor: '#111827',
+                padding: 14,
+                borderRadius: 10,
+                alignItems: 'center',
+              }}
             >
-              <Text style={{ color: "#fff", fontWeight: "600" }}>Sauvegarder</Text>
+              <Text
+                style={{ color: '#fff', fontWeight: '600' }}
+              >
+                Sauvegarder
+              </Text>
             </TouchableOpacity>
+
+            {/* Déconnexion */}
             <TouchableOpacity
               onPress={onSignOut}
               style={{
-                backgroundColor: "#fff5f5",
                 padding: 14,
                 borderRadius: 10,
-                alignItems: "center",
+                alignItems: 'center',
                 borderWidth: 1,
-                borderColor: "#ffd6d6",
+                backgroundColor: isDark ? '#450a0a' : '#fff5f5',
+                borderColor: isDark ? '#fecaca' : '#ffd6d6',
               }}
             >
-              <Text style={{ color: "#b00020", fontWeight: "600" }}>Se déconnecter</Text>
+              <Text
+                style={{
+                  color: isDark ? '#fecaca' : '#b00020',
+                  fontWeight: '600',
+                }}
+              >
+                Se déconnecter
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
             onPress={onSignIn}
-            style={{ backgroundColor: "#111", padding: 14, borderRadius: 10, alignItems: "center" }}
+            style={{
+              backgroundColor: '#111827',
+              padding: 14,
+              borderRadius: 10,
+              alignItems: 'center',
+            }}
           >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>Se connecter</Text>
+            <Text
+              style={{ color: '#fff', fontWeight: '600' }}
+            >
+              Se connecter
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -332,14 +445,30 @@ export default function ProfileScreen() {
             onPress={async () => {
               try {
                 const res = await topUpFree();
-                Alert.alert("Top-up", `Nouveau solde: ${res.credits}`);
+                Alert.alert(
+                  'Top-up',
+                  `Nouveau solde: ${res.credits}`
+                );
               } catch (e) {
-                Alert.alert("Top-up impossible", String(e?.message || e));
+                Alert.alert(
+                  'Top-up impossible',
+                  String(e?.message || e)
+                );
               }
             }}
-            style={{ marginTop: 8, backgroundColor: "#111", padding: 12, borderRadius: 10, alignItems: "center" }}
+            style={{
+              marginTop: 8,
+              backgroundColor: '#111827',
+              padding: 12,
+              borderRadius: 10,
+              alignItems: 'center',
+            }}
           >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>+25 gratuits (bêta)</Text>
+            <Text
+              style={{ color: '#fff', fontWeight: '600' }}
+            >
+              +25 gratuits (bêta)
+            </Text>
           </TouchableOpacity>
         ) : null}
       </KeyboardAwareScrollView>

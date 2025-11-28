@@ -1,58 +1,31 @@
 // app/(drawer)/groups/_layout.js
 import React from 'react';
 import { Stack } from 'expo-router';
+import { DrawerToggleButton } from '@react-navigation/drawer';
+import { useTheme } from '@src/theme/ThemeProvider';
 
-export default function GroupsStackLayout() {
+export default function GroupsLayout() {
+  const { colors, isDark } = useTheme();
+
   return (
-    <Stack screenOptions={{ headerShown: true, headerStyle: { backgroundColor: '#fff' } }}>
-      {/* Tu n’as PAS de "index" dans ce dossier. On ne le déclare donc pas. */}
-      {/* Si tu rajoutes un app/(drawer)/groups/index.js plus tard, tu pourras ajouter cet écran. */}
-
-     <Stack.Screen
-      name="[groupId]/index"
-      options={({ route }) => ({
-        title: `Groupe ${route.params?.groupId ?? ''}`,
-        headerBackTitleVisible: false,
-        headerLeft: undefined,
-        headerRight: () => null,
-      })}
-    />
-
+    <Stack
+      screenOptions={{
+        headerLeft: (props) => <DrawerToggleButton {...props} />,
+        // 👉 applique le thème
+        headerStyle: { backgroundColor: colors.header },
+        headerTintColor: colors.headerTint,
+        headerTitleStyle: { color: colors.headerTint },
+        contentStyle: { backgroundColor: colors.background },
+        headerShadowVisible: !isDark,
+      }}
+    >
       <Stack.Screen
-        name="[groupId]/members"
-        options={{
-          title: 'Membres du groupe',
-          headerBackTitleVisible: false,
-          headerLeft: undefined,
-          headerRight: () => null,
-        }}
+        name="index"
+        options={{ title: 'Groupes' }}
       />
-
       <Stack.Screen
-        name="create"
-        options={{
-          title: 'Créer un groupe',
-          headerLeft: undefined,
-          headerRight: () => null,
-        }}
-      />
-
-      <Stack.Screen
-        name="join"
-        options={{
-          title: 'Joindre un groupe',
-          headerLeft: undefined,
-          headerRight: () => null,
-        }}
-      />
-
-      <Stack.Screen
-        name="useFavoriteGroup"
-        options={{
-          title: 'Groupe favori',
-          headerLeft: undefined,
-          headerRight: () => null,
-        }}
+        name="[groupId]"
+        options={{ title: 'Détail du groupe' }}
       />
     </Stack>
   );
