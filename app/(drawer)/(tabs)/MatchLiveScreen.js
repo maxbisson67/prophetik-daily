@@ -71,6 +71,22 @@ function todayYMD() {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Règle NHL:
+ *  - Après 9h locale → date du jour
+ *  - Avant 9h locale → date de la VEILLE (matchs de la soirée précédente)
+ */
+function computeNhlYmd() {
+  const now = new Date();
+  const base = todayYMD();
+  const hour = now.getHours();
+
+  if (hour < 9) {
+    return addDaysToYMD(base, -1);
+  }
+  return base;
+}
+
 // Gère Date / string / Timestamp Firestore
 function fmtTime(d) {
   if (!d) return '—';
@@ -92,7 +108,7 @@ function fmtTime(d) {
   return `${hh}:${mm}`;
 }
 
-function isGameToday(doc, todayStr) {
+function isGameToday(doc, ymdStr) {
   const t = doc.startTimeUTC;
   if (!t) return false;
 
@@ -113,7 +129,7 @@ function isGameToday(doc, todayStr) {
   const d = String(dt.getDate()).padStart(2, '0');
   const ymd = `${y}-${m}-${d}`;
 
-  return ymd === todayStr;
+  return ymd === ymdStr;
 }
 
 function gStartMillis(g) {
@@ -136,6 +152,30 @@ function addDaysToYMD(baseYmd, delta) {
   const mm = String(dt.getMonth() + 1).padStart(2, '0');
   const dd = String(dt.getDate()).padStart(2, '0');
   return `${yy}-${mm}-${dd}`;
+}
+
+/**
+ * Affichage "30 novembre" à partir de "2025-11-30"
+ */
+function formatFrenchShortDate(ymd) {
+  if (!ymd || typeof ymd !== 'string' || ymd.length < 10) return '';
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const months = [
+    'janvier',
+    'février',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'août',
+    'septembre',
+    'octobre',
+    'novembre',
+    'décembre',
+  ];
+  const monthName = months[(m || 1) - 1] || '';
+  return `${d} ${monthName}`;
 }
 
 /**
@@ -227,7 +267,7 @@ function GameRow({ game, onPress, colors }) {
   // On n’affiche pas "Terminé" si le match est final (le "Final..." vient de periodLabel)
   const displayStatusText = isFinal ? null : statusText;
 
-  // On garde seasonCode au cas où tu veux l'utiliser plus tard (mugs, etc.)
+  // On garde seasonCode au cas où tu veux l'utiliser plus tard
   const seasonCode = useMemo(
     () => seasonCodeFromDate(startTimeUTC || new Date()),
     [startTimeUTC]
@@ -306,65 +346,65 @@ function GameRow({ game, onPress, colors }) {
           </View>
         </View>
 
-        {/* Infos droite : statut + période + heure/temps restant */}
         {/* Colonne droite : LIVE + période + heure/temps */}
-<View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
+        <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
+          {/* Indication LIVE */}
+          {isLive && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginBottom: 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: '#dc2626',
+                  marginRight: 6,
+                }}
+              />
+              <Text
+                style={{
+                  color: '#dc2626',
+                  fontWeight: '700',
+                }}
+              >
+                LIVE
+              </Text>
+            </View>
+          )}
 
-  {/* Indication LIVE centrée avec les équipes */}
-  {isLive && (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 2,
-    }}>
-      <View
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: '#dc2626',
-          marginRight: 6,
-        }}
-      />
-      <Text
-        style={{
-          color: '#dc2626',
-          fontWeight: '700',
-        }}
-      >
-        LIVE
-      </Text>
-    </View>
-  )}
+          {/* Période / Final */}
+          {periodLabel && (
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 12,
+                marginBottom: 2,
+              }}
+            >
+              {periodLabel}
+            </Text>
+          )}
 
-  {/* Période / Final */}
-  {periodLabel && (
-    <Text
-      style={{
-        color: colors.subtext,
-        fontSize: 12,
-        marginBottom: 2,
-      }}
-    >
-      {periodLabel}
-    </Text>
-  )}
-
-  {/* Temps restant ou heure de début */}
-  {isLive ? (
-    timeRemaining ? (
-      <Text style={{ color: colors.subtext, fontSize: 12 }}>
-        {timeRemaining}
-      </Text>
-    ) : null
-  ) : isFinal ? null : (
-    <Text style={{ color: colors.subtext, fontSize: 12 }}>
-      {startTimeUTC
-        ? `Début: ${fmtTime(startTimeUTC)}`
-        : 'Heure inconnue'}
-    </Text>
-  )}
-</View>
+          {/* Temps restant ou heure de début */}
+          {isLive ? (
+            timeRemaining ? (
+              <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                {timeRemaining}
+              </Text>
+            ) : null
+          ) : isFinal ? null : (
+            <Text style={{ color: colors.subtext, fontSize: 12 }}>
+              {startTimeUTC
+                ? `Début: ${fmtTime(startTimeUTC)}`
+                : 'Heure inconnue'}
+            </Text>
+          )}
+        </View>
       </View>
 
       {/* Hint tap */}
@@ -874,24 +914,29 @@ export default function MatchLiveScreen() {
   const [selectedGame, setSelectedGame] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const effectiveYmd = useMemo(() => {
-    const now = new Date();
-    const hour = now.getHours();
-    const today = todayYMD();
+  // 🔑 "todayKey" dynamique (règle NHL avec 9h) qui se met à jour tout seul
+  const [todayKey, setTodayKey] = useState(() => computeNhlYmd());
 
-    if (hour < 9) {
-      return addDaysToYMD(today, -1);
-    }
-    return today;
+  // Met à jour todayKey toutes les 60s (pour refléter changement de journée)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const next = computeNhlYmd();
+      setTodayKey((prev) => (prev === next ? prev : next));
+    }, 60_000);
+
+    return () => clearInterval(id);
   }, []);
 
+  // Écoute globale de nhl_live_games, puis filtre côté client sur todayKey
   useEffect(() => {
     const ref = firestore().collection('nhl_live_games');
+
+    setLoading(true);
 
     const unsub = ref.onSnapshot(
       (snap) => {
         const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const todays = all.filter((g) => isGameToday(g, effectiveYmd));
+        const todays = all.filter((g) => isGameToday(g, todayKey));
         setGames(todays);
         setLoading(false);
       },
@@ -904,7 +949,7 @@ export default function MatchLiveScreen() {
     return () => {
       try { unsub(); } catch {}
     };
-  }, [effectiveYmd]);
+  }, [todayKey]);
 
   const sortedGames = useMemo(() => {
     const s = [...games];
@@ -936,6 +981,11 @@ export default function MatchLiveScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  const prettyDateLabel = useMemo(
+    () => formatFrenchShortDate(todayKey),
+    [todayKey]
+  );
 
   return (
     <>
@@ -970,7 +1020,9 @@ export default function MatchLiveScreen() {
                     marginBottom: 4,
                   }}
                 >
-                  Matchs NHL d’aujourd’hui
+                  {prettyDateLabel
+                    ? `Matchs NHL du ${prettyDateLabel}`
+                    : 'Matchs NHL'}
                 </Text>
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
                   Touchez un match pour voir les buts et les buteurs en temps réel.
@@ -983,7 +1035,9 @@ export default function MatchLiveScreen() {
             ListEmptyComponent={() => (
               <View style={{ marginTop: 40, alignItems: 'center' }}>
                 <Text style={{ color: colors.subtext }}>
-                  Aucun match trouvé pour aujourd’hui.
+                  {prettyDateLabel
+                    ? `Aucun match trouvé pour le ${prettyDateLabel}.`
+                    : 'Aucun match trouvé.'}
                 </Text>
               </View>
             )}

@@ -3,9 +3,6 @@ import { DateTime } from "luxon";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 
-/**
- * Instance Firestore partagée
- */
 const db = getFirestore();
 
 /**
@@ -17,18 +14,34 @@ export function todayLocalISO() {
 }
 
 /**
+ * Mapping "reason" interne → "type" utilisé dans credit_logs
+ * (pour que ça matche ton UI dans CreditsScreen)
+ */
+function reasonToLogType(reason) {
+  switch (reason) {
+    case "first_defi":
+      return "first_defi_reward";
+    case "first_group":
+      return "first_group_reward";
+    case "three_consecutive_days":
+      return "streak3_reward";
+    case "five_participations_any":
+      return "five_particip_reward";
+    default:
+      // Par défaut on laisse "adjustment" qui est déjà géré dans TYPE_META
+      return "adjustment";
+  }
+}
+
+/**
  * Attribue des crédits à un participant global:
  *  - /participants/{participantId}
- *
- * On garde la logique "classique" :
- *  - crée le doc s'il n'existe pas
- *  - incrémente credits.balance
- *  - journalise dans sous-collection credits_awards (optionnel)
+ *  - /participants/{participantId}/credit_logs/{autoId}
  *
  * options:
- *  - reason?: string
- *  - meta?: object
- *  - idempotencyKey?: string (évite les doublons)
+ *  - reason?: string   (ex: "five_participations_any")
+ *  - meta?: object     (ex: { groupId, defiId, ref: { type: 'defi', id: ... } })
+ *  - idempotencyKey?: string  → évite les doublons (par ex. un même trigger réexécuté)
  */
 export async function awardCredit(participantId, delta, options = {}) {
   if (!participantId) {
@@ -36,69 +49,101 @@ export async function awardCredit(participantId, delta, options = {}) {
     return;
   }
   if (!delta || Number(delta) === 0) {
-    logger.info("awardCredit called with zero delta", { participantId, delta });
+    logger.info("awardCredit called with zero delta", {
+      participantId,
+      delta,
+      options,
+    });
     return;
   }
 
-  const {
-    reason = null,
-    meta = null,
-    idempotencyKey = null,
-  } = options;
+  const { reason = null, meta = null, idempotencyKey = null } = options;
 
   const partiRef = db.collection("participants").doc(participantId);
 
-  // Gestion simple de l'idempotence via credits_awards
-  let awardRef = null;
+  // --- Idempotence : on ne bloque que sur idempotencyKey, si fourni ---
+  let idemRef = null;
   if (idempotencyKey) {
-    awardRef = partiRef.collection("credits_awards").doc(idempotencyKey);
-    const existing = await awardRef.get();
+    idemRef = partiRef
+      .collection("credit_awards_meta")
+      .doc(idempotencyKey);
+
+    const existing = await idemRef.get();
     if (existing.exists) {
-      logger.info("awardCredit skipped (idempotent)", {
+      logger.info("awardCredit skipped (idempotent hit)", {
         participantId,
         idempotencyKey,
+        reason,
       });
       return;
     }
-  } else {
-    awardRef = partiRef.collection("credits_awards").doc();
   }
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(partiRef);
     const data = snap.exists ? snap.data() || {} : {};
 
-    const oldCredits =
-      typeof data?.credits?.balance === "number"
-        ? data.credits.balance
-        : 0;
-    const newCredits = oldCredits + delta;
+    const oldBalance =
+      typeof data?.credits?.balance === "number" ? data.credits.balance : 0;
+    const newBalance = oldBalance + Number(delta);
 
+    // --- Mise à jour du solde global ---
     tx.set(
       partiRef,
       {
-        credits: { balance: newCredits },
+        credits: {
+          ...(data.credits || {}),
+          balance: newBalance,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
 
-    tx.set(
-      awardRef,
-      {
-        amount: delta,
-        reason,
-        meta,
-        createdAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    // --- Log dans credit_logs ---
+    const logRef = partiRef.collection("credit_logs").doc();
+    const logType = reasonToLogType(reason);
+
+    const logPayload = {
+      amount: Number(delta),
+      type: logType, // ex: "five_particip_reward"
+      reason: reason, // garde la reason brute si tu veux la lire plus tard
+      fromBalance: oldBalance,
+      toBalance: newBalance,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    if (meta && typeof meta === "object") {
+      logPayload.meta = meta;
+      if (meta.groupId) logPayload.groupId = meta.groupId;
+      if (meta.defiId) logPayload.defiId = meta.defiId;
+      if (meta.ref) logPayload.ref = meta.ref;
+    }
+
+    tx.set(logRef, logPayload, { merge: true });
+
+    // --- Enregistrement de l'idempotence (facultatif mais utile) ---
+    if (idemRef) {
+      tx.set(
+        idemRef,
+        {
+          createdAt: FieldValue.serverTimestamp(),
+          delta: Number(delta),
+          reason,
+          logId: logRef.id,
+          meta: meta || null,
+        },
+        { merge: true }
+      );
+    }
   });
 
   logger.info("awardCredit applied", {
     participantId,
-    delta,
+    delta: Number(delta),
     reason,
+    idempotencyKey,
   });
 }
 
@@ -116,7 +161,5 @@ export async function awardCreditsBatch(entries = []) {
   }
 }
 
-/**
- * Exports communs pour les autres modules
- */
+// On ré-exporte pour les autres modules qui l'utilisaient déjà
 export { db, FieldValue, logger };

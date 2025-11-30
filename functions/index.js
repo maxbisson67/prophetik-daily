@@ -29,6 +29,7 @@ export { ingestSkaterStatsForSeason, cronIngestSkaterStatsDaily } from "./nhlIng
 export { onGroupCreated } from "./gamification/onGroupCreated.js";
 export { onDefiCreated } from "./gamification/onDefiCreated.js";
 export { onParticipationCreated } from "./gamification/onParticipationCreated.js";
+export { debugSimulateGamification } from './gamification/debugSimulateGamification.js';
 
 export { rebuildLeaderboardForGroup, rebuildAllLeaderboards } from "./leaderboard.js";
 

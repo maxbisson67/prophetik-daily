@@ -249,6 +249,10 @@ function CustomDrawerContent(props) {
         )}
       />
 
+
+ 
+
+
       <Separator />
       <SectionLabel>Espace perso</SectionLabel>
 
@@ -270,6 +274,7 @@ function CustomDrawerContent(props) {
         )}
       />
 
+        
       <DrawerItem
         {...itemCommonProps}
         label="Crédits"

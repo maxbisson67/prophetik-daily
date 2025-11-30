@@ -103,6 +103,17 @@ function listenRNFB(refOrQuery, onNext, tag) {
   });
 }
 
+function GoalStatusIcon({ done }) {
+  return (
+    <MaterialCommunityIcons
+      name={done ? 'check-circle' : 'progress-clock'}
+      size={18}
+      color={done ? '#059669' : '#6B7280'} // vert vs gris neutre
+      style={{ marginRight: 6 }}
+    />
+  );
+}
+
 /* ----------------------------- Screen ----------------------------- */
 export default function AccueilScreen() {
   const { user, authReady } = useAuth();
@@ -486,6 +497,7 @@ export default function AccueilScreen() {
   }, []);
 
   /* ----------------------------- Derived UI data ----------------------------- */
+  /* ----------------------------- Derived UI data ----------------------------- */
   const credits =
     typeof meDoc?.credits === 'number'
       ? meDoc.credits
@@ -498,7 +510,19 @@ export default function AccueilScreen() {
   const st = meDoc?.stats || {};
   const ach = meDoc?.achievements || {};
   const streak = Number(st.currentStreakDays ?? 0);
+
+  // totalParticipations global
   const totalParticipations = Number(st.totalParticipations ?? 0);
+
+  // 🔁 Progression cyclique sur 5 participations (5 → 1,2,3,4,5,1,2,…)
+  const cycle5 = totalParticipations % 5;
+  const displayCount5 =
+    totalParticipations === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
+
+  // 🔁 Progression cyclique sur 3 jours consécutifs (3 → 1,2,3,1,2,3,…)
+  const cycle3 = streak % 3;
+  const displayStreak3 =
+    streak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
 
   const RED_DARK = '#b91c1c';
 
@@ -535,6 +559,11 @@ export default function AccueilScreen() {
     }
     setShowCreateModal(true);
   }
+
+   console.log('[Accueil] meDoc =', meDoc);
+  console.log('[Accueil] stats =', meDoc?.stats);
+  console.log('[Accueil] achievements =', meDoc?.achievements);
+  console.log('[Accueil] credits =', meDoc?.credits);
 
   /* ----------------------------- UI ----------------------------- */
   return (
@@ -968,231 +997,300 @@ export default function AccueilScreen() {
             </View>
 
             {/* === Gamification === */}
-            <View
-              style={{
-                padding: 14,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                elevation: 3,
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 3 },
-              }}
-            >
-              <Text
-                style={{
-                  fontWeight: '800',
-                  fontSize: 16,
-                  marginBottom: 8,
-                  color: colors.text,
-                }}
-              >
-                Crédits à gagner
-              </Text>
+<View
+  style={{
+    padding: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  }}
+>
+  <Text
+    style={{
+      fontWeight: '800',
+      fontSize: 16,
+      marginBottom: 8,
+      color: colors.text,
+    }}
+  >
+    Crédits à gagner
+  </Text>
 
-              {/* Premier défi */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  marginBottom: 10,
-                }}
-              >
-                <Text style={{ fontWeight: '700', color: colors.text }}>
-                  Premier défi créé{' '}
-                  {ach?.firstDefiCreated ? '✅' : '(+1 crédit)'}
-                </Text>
-                {!ach?.firstDefiCreated && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      marginTop: 6,
-                    }}
-                  >
-                    <Text
-                      style={{ color: colors.subtext, fontSize: 12 }}
-                    >
-                      Crée ton premier défi
-                    </Text>
-                    <TouchableOpacity
-                      onPress={onPressCreateDefi}
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: '#b91c1c',
-                      }}
-                    >
-                      <Text
-                        style={{ color: '#fff', fontWeight: '700' }}
-                      >
-                        Créer
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
+  {/* Premier défi */}
+  <View
+    style={{
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      marginBottom: 10,
+    }}
+  >
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <GoalStatusIcon done={!!ach?.firstDefiCreated} />
+        <Text style={{ fontWeight: '700', color: colors.text }}>
+          Premier défi créé
+        </Text>
+      </View>
+      <Text
+        style={{
+          fontWeight: '800',
+          color: ach?.firstDefiCreated ? '#059669' : colors.text,
+        }}
+      >
+        +1
+      </Text>
+    </View>
 
-              {/* Premier groupe */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  marginBottom: 10,
-                }}
-              >
-                <Text style={{ fontWeight: '700', color: colors.text }}>
-                  Premier groupe créé{' '}
-                  {ach?.firstGroupCreated ? '✅' : '(+1 crédit)'}
-                </Text>
-                {!ach?.firstGroupCreated && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      marginTop: 6,
-                    }}
-                  >
-                    <Text
-                      style={{ color: colors.subtext, fontSize: 12 }}
-                    >
-                      Crée ton premier groupe
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() =>
-                        router.push('/(drawer)/(tabs)/GroupsScreen')
-                      }
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: '#b91c1c',
-                      }}
-                    >
-                      <Text
-                        style={{ color: '#fff', fontWeight: '700' }}
-                      >
-                        Créer
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
+    {!ach?.firstDefiCreated && (
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          marginTop: 6,
+        }}
+      >
+        <Text style={{ color: colors.subtext, fontSize: 12 }}>
+          Crée ton premier défi
+        </Text>
+        <TouchableOpacity
+          onPress={onPressCreateDefi}
+          style={{
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 8,
+            backgroundColor: '#b91c1c',
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Créer</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </View>
 
-              {/* 5 participations */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  marginBottom: 10,
-                }}
-              >
-                <Text style={{ fontWeight: '700', color: colors.text }}>
-                  Participer à 5 défis{' '}
-                  {ach?.fiveParticipationsAny ? '✅' : '(+2 crédits)'}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                >
-                  Progression :{' '}
-                  {Math.min(Number(totalParticipations || 0), 5)}/5
-                </Text>
-                <View
-                  style={{
-                    height: 8,
-                    borderRadius: 99,
-                    backgroundColor: '#f3f4f6',
-                    marginTop: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          Math.round(
-                            (((totalParticipations || 0) / 5) * 100) || 0
-                          )
-                        )
-                      )}%`,
-                      height: 8,
-                      borderRadius: 99,
-                      backgroundColor: '#ef4444',
-                    }}
-                  />
-                </View>
-              </View>
+  {/* Premier groupe */}
+  <View
+    style={{
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      marginBottom: 10,
+    }}
+  >
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <GoalStatusIcon done={!!ach?.firstGroupCreated} />
+        <Text style={{ fontWeight: '700', color: colors.text }}>
+          Premier groupe créé
+        </Text>
+      </View>
+      <Text
+        style={{
+          fontWeight: '800',
+          color: ach?.firstGroupCreated ? '#059669' : colors.text,
+        }}
+      >
+        +1
+      </Text>
+    </View>
 
-              {/* 3 jours consécutifs */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                }}
-              >
-                <Text style={{ fontWeight: '700', color: colors.text }}>
-                  3 jours consécutifs{' '}
-                  {ach?.threeConsecutiveDays ? '✅' : '(+2 crédits)'}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                >
-                  Série : {Math.min(Number(streak || 0), 3)}/3
-                </Text>
-                <View
-                  style={{
-                    height: 8,
-                    borderRadius: 99,
-                    backgroundColor: '#f3f4f6',
-                    marginTop: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          Math.round(
-                            (((streak || 0) / 3) * 100) || 0
-                          )
-                        )
-                      )}%`,
-                      height: 8,
-                      borderRadius: 99,
-                      backgroundColor: '#ef4444',
-                    }}
-                  />
-                </View>
-              </View>
-            </View>
+    {!ach?.firstGroupCreated && (
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          marginTop: 6,
+        }}
+      >
+        <Text style={{ color: colors.subtext, fontSize: 12 }}>
+          Crée ton premier groupe
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/(drawer)/(tabs)/GroupsScreen')}
+          style={{
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 8,
+            backgroundColor: '#b91c1c',
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Créer</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </View>
+
+  {/* 5 participations */}
+  <View
+    style={{
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      marginBottom: 10,
+    }}
+  >
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <GoalStatusIcon done={displayCount5 === 5} />
+        <Text style={{ fontWeight: '700', color: colors.text }}>
+          Participer à 5 défis
+        </Text>
+      </View>
+      <Text
+        style={{
+          fontWeight: '800',
+          color: displayCount5 === 5 ? '#059669' : colors.text,
+        }}
+      >
+        +2
+      </Text>
+    </View>
+
+    <Text
+      style={{
+        color: colors.subtext,
+        fontSize: 12,
+        marginTop: 4,
+      }}
+    >
+      Progression : {displayCount5}/5
+    </Text>
+    <View
+      style={{
+        height: 8,
+        borderRadius: 99,
+        backgroundColor: '#f3f4f6',
+        marginTop: 6,
+        overflow: 'hidden',
+      }}
+    >
+      <View
+        style={{
+          width: `${Math.round(((displayCount5 || 0) / 5) * 100)}%`,
+          height: 8,
+          borderRadius: 99,
+          backgroundColor: '#ef4444',
+        }}
+      />
+    </View>
+  </View>
+
+  {/* 3 jours consécutifs */}
+  <View
+    style={{
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+    }}
+  >
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <GoalStatusIcon done={displayStreak3 === 3} />
+        <Text style={{ fontWeight: '700', color: colors.text }}>
+          3 jours consécutifs
+        </Text>
+      </View>
+      <Text
+        style={{
+          fontWeight: '800',
+          color: displayStreak3 === 3 ? '#059669' : colors.text,
+        }}
+      >
+        +2
+      </Text>
+    </View>
+
+    <Text
+      style={{
+        color: colors.subtext,
+        fontSize: 12,
+        marginTop: 4,
+      }}
+    >
+      Série : {displayStreak3}/3
+    </Text>
+    <View
+      style={{
+        height: 8,
+        borderRadius: 99,
+        backgroundColor: '#f3f4f6',
+        marginTop: 6,
+        overflow: 'hidden',
+      }}
+    >
+      <View
+        style={{
+          width: `${Math.round(((displayStreak3 || 0) / 3) * 100)}%`,
+          height: 8,
+          borderRadius: 99,
+          backgroundColor: '#ef4444',
+        }}
+      />
+    </View>
+  </View>
+</View>
           </ScrollView>
         )}
       </View>

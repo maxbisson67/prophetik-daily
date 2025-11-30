@@ -49,22 +49,27 @@ const TYPE_META = {
     icon: 'tune',
     tint: 'neutral',
   },
-  first_defi_reward: {
-    label: 'Récompense : 1er défi',
-    icon: 'star-circle-outline',
+   purchase_avatar: {
+    label: 'Achat d’un avatar',
+    icon: 'credit-card-outline',
+    tint: 'out',
+  },
+  first_defi: {
+    label: 'Récompense : 1er défi créé',
+    icon: 'fire',
     tint: 'in',
   },
-  first_group_reward: {
-    label: 'Récompense : 1er groupe',
-    icon: 'account-group-outline',
+  first_group: {
+    label: 'Récompense : 1er groupe créé',
+    icon: 'fire',
     tint: 'in',
   },
-  streak3_reward: {
+  three_consecutive_days: {
     label: 'Récompense : 3 jours d’affilée',
     icon: 'fire',
     tint: 'in',
   },
-  five_particip_reward: {
+  five_participations_any: {
     label: 'Récompense : 5 participations',
     icon: 'counter',
     tint: 'in',
@@ -105,6 +110,17 @@ function AmountPill({ amount }) {
         {n > 0 ? `+${n}` : n}
       </Text>
     </View>
+  );
+}
+
+function GoalStatusIcon({ done }) {
+  return (
+    <MaterialCommunityIcons
+      name={done ? 'check-circle' : 'progress-clock'}
+      size={20}
+      color={done ? '#059669' : '#6B7280'} // Vert vs Gris neutre
+      style={{ marginRight: 6 }}
+    />
   );
 }
 
@@ -260,6 +276,18 @@ export default function CreditsScreen() {
   const st = me?.stats || {};
   const ach = me?.achievements || {};
 
+  // 🔁 Progression cyclique sur 5 participations (5 → reste affiché 5, puis repart à 1)
+  const totalPart = Number(st.totalParticipations || 0);
+  const cycle5 = totalPart % 5;
+  const displayCount5 =
+    totalPart === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
+
+  // 🔁 Progression cyclique sur 3 jours consécutifs (3 → reste 3, puis repart à 1)
+  const rawStreak = Number(st.currentStreakDays || 0);
+  const cycle3 = rawStreak % 3;
+  const displayStreak3 =
+    rawStreak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
+
   const nextGoals = [
     {
       key: 'first_defi',
@@ -277,15 +305,17 @@ export default function CreditsScreen() {
       key: '5_participations',
       label: 'Participer à 5 défis',
       done: !!ach.fiveParticipationsAny,
-      reward: '+2',
-      progress: `${st.totalParticipations || 0}/5`,
+      reward: '+1',
+      // ✅ Utilise la version cyclique, comme sur l’Accueil
+      progress: `${displayCount5}/5`,
     },
     {
       key: '3_consecutive_days',
       label: '3 jours consécutifs',
       done: !!ach.threeConsecutiveDays,
-      reward: '+2',
-      progress: `${st.currentStreakDays || 0}/3`,
+      reward: '+1',
+      // ✅ Utilise la version cyclique (1,2,3 → puis repart)
+      progress: `${displayStreak3}/3`,
     },
   ];
 
@@ -437,11 +467,14 @@ export default function CreditsScreen() {
                     marginBottom: 6,
                   }}
                 >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <GoalStatusIcon done={g.done} />
+                  
                   <Text style={{ color: colors.text }}>
-                    {g.done ? '✅ ' : ''}
                     {g.label}
                     {g.progress ? `  (${g.progress})` : ''}
                   </Text>
+                </View>
                   <Text
                     style={{
                       fontWeight: '800',
