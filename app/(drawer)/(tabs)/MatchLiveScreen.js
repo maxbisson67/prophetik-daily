@@ -19,6 +19,9 @@ import { useTheme } from '@src/theme/ThemeProvider';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 
+// i18n
+import i18n from '@src/i18n/i18n';
+
 /* ========================
    Helpers date / logos
 ========================= */
@@ -156,10 +159,11 @@ function addDaysToYMD(baseYmd, delta) {
 
 /**
  * Affichage "30 novembre" à partir de "2025-11-30"
+ * (encore codé en FR ici – on pourra plus tard le brancher aussi sur i18n)
  */
 function formatFrenchShortDate(ymd) {
   if (!ymd || typeof ymd !== 'string' || ymd.length < 10) return '';
-  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const [, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
   const months = [
     'janvier',
     'février',
@@ -191,46 +195,33 @@ function periodLabelFromGame(game) {
 
   // 🏁 Match terminé : Final / Final (P) / Final (TB)
   if (isFinal) {
-    if (pt === 'SO' || period === 5) return 'Final (TB)';   // tirs de barrage
-    if (pt === 'OT' || period === 4) return 'Final (P)';    // prolongation
-    return 'Final';
+    if (pt === 'SO' || period === 5) {
+      return i18n.t('live.status.finalSO', 'Final (TB)');
+    }
+    if (pt === 'OT' || period === 4) {
+      return i18n.t('live.status.finalOT', 'Final (P)');
+    }
+    return i18n.t('live.status.final', 'Final');
   }
 
   // Match pas live → pas d’info de période (pré-match)
   if (!isLive) return null;
 
   // Match en cours → affiche seulement la période
-  if (pt === 'OT') return 'Prolongation';
-  if (pt === 'SO') return 'Tirs de barrage';
-  if (period != null) return `Période ${period}`;
+  if (pt === 'OT') {
+    return i18n.t('live.detail.ot', 'Prolongation');
+  }
+  if (pt === 'SO') {
+    return i18n.t('live.detail.so', 'Tirs de barrage');
+  }
+  if (period != null) {
+    return i18n.t('live.detail.period', {
+      defaultValue: 'Période {{period}}',
+      period,
+    });
+  }
 
   return null;
-}
-
-function seasonCodeFromDate(d) {
-  let date;
-  try {
-    if (d?.toDate) {
-      date = d.toDate();
-    } else if (d instanceof Date) {
-      date = d;
-    } else if (d) {
-      date = new Date(d);
-    }
-  } catch {
-    date = new Date();
-  }
-  if (!date || isNaN(date.getTime())) {
-    date = new Date();
-  }
-
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1; // 1-12
-
-  if (month >= 9) {
-    return `${year}${year + 1}`; // ex: 2024 -> "20242025"
-  }
-  return `${year - 1}${year}`;   // ex: février 2025 -> "20242025"
 }
 
 function shortName(fullName) {
@@ -266,12 +257,6 @@ function GameRow({ game, onPress, colors }) {
 
   // On n’affiche pas "Terminé" si le match est final (le "Final..." vient de periodLabel)
   const displayStatusText = isFinal ? null : statusText;
-
-  // On garde seasonCode au cas où tu veux l'utiliser plus tard
-  const seasonCode = useMemo(
-    () => seasonCodeFromDate(startTimeUTC || new Date()),
-    [startTimeUTC]
-  );
 
   return (
     <TouchableOpacity
@@ -372,7 +357,7 @@ function GameRow({ game, onPress, colors }) {
                   fontWeight: '700',
                 }}
               >
-                LIVE
+                {i18n.t('live.status.live', 'LIVE')}
               </Text>
             </View>
           )}
@@ -394,16 +379,35 @@ function GameRow({ game, onPress, colors }) {
           {isLive ? (
             timeRemaining ? (
               <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                {timeRemaining}
+                {i18n.t('live.detail.timeRemaining', {
+                  defaultValue: 'Temps restant: {{time}}',
+                  time: timeRemaining,
+                })}
               </Text>
             ) : null
           ) : isFinal ? null : (
             <Text style={{ color: colors.subtext, fontSize: 12 }}>
               {startTimeUTC
-                ? `Début: ${fmtTime(startTimeUTC)}`
-                : 'Heure inconnue'}
+                ? i18n.t('live.row.startAt', {
+                    defaultValue: 'Début: {{time}}',
+                    time: fmtTime(startTimeUTC),
+                  })
+                : i18n.t('live.row.startUnknown', 'Heure inconnue')}
             </Text>
           )}
+
+          {/* Texte de statut brut (si pas final) */}
+          {displayStatusText ? (
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 11,
+                marginTop: 2,
+              }}
+            >
+              {displayStatusText}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -422,7 +426,10 @@ function GameRow({ game, onPress, colors }) {
           color={colors.subtext}
         />
         <Text style={{ marginLeft: 4, color: colors.subtext, fontSize: 12 }}>
-          Touchez pour voir les détails
+          {i18n.t(
+            'live.row.tapForDetails',
+            'Touchez pour voir les détails'
+          )}
         </Text>
       </View>
     </TouchableOpacity>
@@ -483,39 +490,36 @@ function GameDetailModal({ visible, onClose, game, colors }) {
 
   const g = gameDoc || game || null;
 
+  // Regroupement des buts par période, avec codes internes
   const goalsByPeriod = useMemo(() => {
-    const map = {};
+    const map = {
+      P1: [],
+      P2: [],
+      P3: [],
+      OT: [],
+      SO: [],
+      UNKNOWN: [],
+    };
+
     goals.forEach((goal) => {
-      let label;
       const p = goal.period;
-      const pt = goal.periodType;
+      const pt = (goal.periodType || '').toUpperCase();
 
-      if (p == null) {
-        label = 'Inconnu';
-      } else if (pt === 'OT') {
-        label = 'Prolongation';
-      } else if (pt === 'SO') {
-        label = 'Tirs de barrage';
-      } else {
-        label = `Période ${p}`;
-      }
+      let code = 'UNKNOWN';
+      if (pt === 'SO') code = 'SO';
+      else if (pt === 'OT') code = 'OT';
+      else if (p === 1) code = 'P1';
+      else if (p === 2) code = 'P2';
+      else if (p === 3) code = 'P3';
 
-      if (!map[label]) map[label] = [];
-      map[label].push(goal);
+      map[code].push(goal);
     });
 
-    const order = [
-      'Période 1',
-      'Période 2',
-      'Période 3',
-      'Prolongation',
-      'Tirs de barrage',
-      'Inconnu',
-    ];
+    const order = ['P1', 'P2', 'P3', 'OT', 'SO', 'UNKNOWN'];
 
     return order
-      .filter((label) => map[label]?.length)
-      .map((label) => ({ label, goals: map[label] }));
+      .filter((code) => map[code]?.length)
+      .map((code) => ({ code, goals: map[code] }));
   }, [goals]);
 
   if (!visible || !g) return null;
@@ -540,16 +544,23 @@ function GameDetailModal({ visible, onClose, game, colors }) {
 
   if (isFinal) {
     if (ptModal === 'SO' || period === 5) {
-      periodLabel = 'Final (TB)';
+      periodLabel = i18n.t('live.status.finalSO', 'Final (TB)');
     } else if (ptModal === 'OT' || period === 4) {
-      periodLabel = 'Final (P)';
+      periodLabel = i18n.t('live.status.finalOT', 'Final (P)');
     } else {
-      periodLabel = 'Final';
+      periodLabel = i18n.t('live.status.final', 'Final');
     }
   } else if (period != null) {
-    periodLabel = `Période ${period}${
-      ptModal === 'OT' ? ' (Prolong.)' : ptModal === 'SO' ? ' (TB)' : ''
-    }`;
+    periodLabel = i18n.t('live.detail.periodWithSuffix', {
+      defaultValue: 'Période {{period}}{{suffix}}',
+      period,
+      suffix:
+        ptModal === 'OT'
+          ? ' (Prolong.)'
+          : ptModal === 'SO'
+          ? ' (TB)'
+          : '',
+    });
   }
 
   return (
@@ -608,7 +619,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                 color: colors.text,
               }}
             >
-              Détail du match
+              {i18n.t('live.detail.title', 'Détail du match')}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={colors.text} />
@@ -691,22 +702,39 @@ function GameDetailModal({ visible, onClose, game, colors }) {
               {isLive ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
                   {periodLabel
-                    ? `${periodLabel}${
-                        timeRemaining ? ` • Temps restant: ${timeRemaining}` : ''
-                      }`
+                    ? i18n.t('live.detail.liveWithPeriod', {
+                        defaultValue: '{{period}}{{time}}',
+                        period: periodLabel,
+                        time: timeRemaining
+                          ? ` • ${i18n.t('live.detail.timeRemaining', {
+                              defaultValue: 'Temps restant: {{time}}',
+                              time: timeRemaining,
+                            })}`
+                          : '',
+                      })
                     : timeRemaining
-                    ? `Temps restant: ${timeRemaining}`
-                    : 'En cours'}
+                    ? i18n.t('live.detail.timeRemaining', {
+                        defaultValue: 'Temps restant: {{time}}',
+                        time: timeRemaining,
+                      })
+                    : i18n.t('live.detail.inProgress', 'En cours')}
                 </Text>
               ) : isFinal ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  {periodLabel || 'Final'}
+                  {periodLabel ||
+                    i18n.t('live.status.final', 'Final')}
                 </Text>
               ) : (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
                   {startTimeUTC
-                    ? `Début: ${fmtTime(startTimeUTC)}`
-                    : 'Heure de début inconnue'}
+                    ? i18n.t('live.detail.startAt', {
+                        defaultValue: 'Début: {{time}}',
+                        time: fmtTime(startTimeUTC),
+                      })
+                    : i18n.t(
+                        'live.detail.startUnknown',
+                        'Heure de début inconnue'
+                      )}
                 </Text>
               )}
             </View>
@@ -729,7 +757,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                   color: colors.text,
                 }}
               >
-                Sommaire du match
+                {i18n.t('live.detail.summaryTitle', 'Sommaire du match')}
               </Text>
 
               {loading && (
@@ -743,156 +771,207 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                 >
                   <ActivityIndicator size="small" color={colors.subtext} />
                   <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                    Chargement des buts…
+                    {i18n.t(
+                      'live.detail.loadingGoals',
+                      'Chargement des buts…'
+                    )}
                   </Text>
                 </View>
               )}
 
               {!loading && goalsByPeriod.length === 0 && (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  Aucun but ou statistiques non disponibles pour ce match.
+                  {i18n.t(
+                    'live.detail.noGoals',
+                    'Aucun but ou statistiques non disponibles pour ce match.'
+                  )}
                 </Text>
               )}
 
               {!loading &&
-                goalsByPeriod.map((group) => (
-                  <View key={group.label} style={{ marginTop: 8 }}>
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: '700',
-                        marginBottom: 4,
-                      }}
-                    >
-                      {group.label}
-                    </Text>
+                goalsByPeriod.map((group) => {
+                  let label;
+                  switch (group.code) {
+                    case 'P1':
+                      label = i18n.t('live.goals.period1', 'Période 1');
+                      break;
+                    case 'P2':
+                      label = i18n.t('live.goals.period2', 'Période 2');
+                      break;
+                    case 'P3':
+                      label = i18n.t('live.goals.period3', 'Période 3');
+                      break;
+                    case 'OT':
+                      label = i18n.t('live.goals.ot', 'Prolongation');
+                      break;
+                    case 'SO':
+                      label = i18n.t('live.goals.so', 'Tirs de barrage');
+                      break;
+                    default:
+                      label = i18n.t('live.goals.unknown', 'Inconnu');
+                  }
 
-                    {group.goals.map((goal) => {
-                      const time = goal.timeInPeriod || '??:??';
+                  return (
+                    <View key={group.code} style={{ marginTop: 8 }}>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontWeight: '700',
+                          marginBottom: 4,
+                        }}
+                      >
+                        {label}
+                      </Text>
 
-                      const scorerShort = shortName(goal.scoringPlayerName || '');
-                      const scoringTotal =
-                        typeof goal.scoringPlayerTotal === 'number'
-                          ? goal.scoringPlayerTotal
-                          : typeof goal.scoringPlayerTotal === 'string' &&
-                            goal.scoringPlayerTotal !== ''
-                          ? goal.scoringPlayerTotal
-                          : null;
+                      {group.goals.map((goal) => {
+                        const time = goal.timeInPeriod || '??:??';
 
-                      const assists = [];
-                      if (goal.assist1PlayerName)
-                        assists.push(shortName(goal.assist1PlayerName));
-                      if (goal.assist2PlayerName)
-                        assists.push(shortName(goal.assist2PlayerName));
+                        const scorerShort = shortName(
+                          goal.scoringPlayerName || ''
+                        );
+                        const scoringTotal =
+                          typeof goal.scoringPlayerTotal === 'number'
+                            ? goal.scoringPlayerTotal
+                            : typeof goal.scoringPlayerTotal === 'string' &&
+                              goal.scoringPlayerTotal !== ''
+                            ? goal.scoringPlayerTotal
+                            : null;
 
-                      let assistsText = '';
-                      if (assists.length === 1) {
-                        assistsText = `Assisté de ${assists[0]}`;
-                      } else if (assists.length === 2) {
-                        assistsText = `Assisté de ${assists[0]} et ${assists[1]}`;
-                      }
+                        const assists = [];
+                        if (goal.assist1PlayerName)
+                          assists.push(shortName(goal.assist1PlayerName));
+                        if (goal.assist2PlayerName)
+                          assists.push(shortName(goal.assist2PlayerName));
 
-                      const strength =
-                        goal.strength && goal.strength !== 'EV'
-                          ? ` • ${goal.strength}`
-                          : '';
+                        let assistsText = '';
+                        if (assists.length === 1) {
+                          assistsText = i18n.t(
+                            'live.detail.assistOne',
+                            {
+                              defaultValue: 'Assisté de {{player}}',
+                              player: assists[0],
+                            }
+                          );
+                        } else if (assists.length === 2) {
+                          assistsText = i18n.t(
+                            'live.detail.assistTwo',
+                            {
+                              defaultValue:
+                                'Assisté de {{player1}} et {{player2}}',
+                              player1: assists[0],
+                              player2: assists[1],
+                            }
+                          );
+                        }
 
-                      const avatarUrl = goal.scoringPlayerAvatarUrl;
-                      const smallLogo = teamLogo(
-                        goal.scoringPlayerTeamAbbr || goal.teamAbbr
-                      );
+                        const strength =
+                          goal.strength && goal.strength !== 'EV'
+                            ? ` • ${goal.strength}`
+                            : '';
 
-                      return (
-                        <View
-                          key={goal.id}
-                          style={{
-                            flexDirection: 'row',
-                            paddingVertical: 6,
-                          }}
-                        >
-                          {/* Avatar joueur */}
+                        const avatarUrl = goal.scoringPlayerAvatarUrl;
+                        const smallLogo = teamLogo(
+                          goal.scoringPlayerTeamAbbr || goal.teamAbbr
+                        );
+
+                        return (
                           <View
+                            key={goal.id}
                             style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              overflow: 'hidden',
-                              marginRight: 8,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              backgroundColor: colors.card,
-                              borderWidth: 1,
-                              borderColor: colors.border,
+                              flexDirection: 'row',
+                              paddingVertical: 6,
                             }}
                           >
-                            {avatarUrl ? (
-                              <Image
-                                source={{ uri: avatarUrl }}
-                                style={{ width: 32, height: 32 }}
-                                resizeMode="cover"
-                              />
-                            ) : (
-                              <Text
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: '700',
-                                  color: colors.text,
-                                }}
-                              >
-                                {goal.teamAbbr || '??'}
-                              </Text>
-                            )}
-                          </View>
-
-                          {/* Texte buteur + assists */}
-                          <View style={{ flex: 1 }}>
+                            {/* Avatar joueur */}
                             <View
                               style={{
-                                flexDirection: 'row',
+                                width: 32,
+                                height: 32,
+                                borderRadius: 16,
+                                overflow: 'hidden',
+                                marginRight: 8,
                                 alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: colors.card,
+                                borderWidth: 1,
+                                borderColor: colors.border,
                               }}
                             >
-                              {smallLogo && (
+                              {avatarUrl ? (
                                 <Image
-                                  source={smallLogo}
-                                  style={{
-                                    width: 12,
-                                    height: 12,
-                                    marginRight: 4,
-                                    borderRadius: 2,
-                                  }}
+                                  source={{ uri: avatarUrl }}
+                                  style={{ width: 32, height: 32 }}
+                                  resizeMode="cover"
                                 />
+                              ) : (
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: '700',
+                                    color: colors.text,
+                                  }}
+                                >
+                                  {goal.teamAbbr || '??'}
+                                </Text>
                               )}
-                              <Text
-                                style={{
-                                  color: colors.text,
-                                  fontWeight: '700',
-                                }}
-                                numberOfLines={1}
-                              >
-                                {scorerShort || 'But'}
-                                {scoringTotal != null ? ` (${scoringTotal})` : ''}
-                                {strength}
-                              </Text>
                             </View>
 
-                            <Text
-                              style={{
-                                color: colors.subtext,
-                                fontSize: 12,
-                                marginTop: 2,
-                              }}
-                              numberOfLines={2}
-                            >
-                              {time}
-                              {assistsText ? ` - ${assistsText}` : ''}
-                            </Text>
+                            {/* Texte buteur + assists */}
+                            <View style={{ flex: 1 }}>
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                }}
+                              >
+                                {smallLogo && (
+                                  <Image
+                                    source={smallLogo}
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                      marginRight: 4,
+                                      borderRadius: 2,
+                                    }}
+                                  />
+                                )}
+                                <Text
+                                  style={{
+                                    color: colors.text,
+                                    fontWeight: '700',
+                                  }}
+                                  numberOfLines={1}
+                                >
+                                  {scorerShort ||
+                                    i18n.t(
+                                      'live.detail.goalFallback',
+                                      'But'
+                                    )}
+                                  {scoringTotal != null
+                                    ? ` (${scoringTotal})`
+                                    : ''}
+                                  {strength}
+                                </Text>
+                              </View>
+
+                              <Text
+                                style={{
+                                  color: colors.subtext,
+                                  fontSize: 12,
+                                  marginTop: 2,
+                                }}
+                                numberOfLines={2}
+                              >
+                                {time}
+                                {assistsText ? ` - ${assistsText}` : ''}
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ))}
+                        );
+                      })}
+                    </View>
+                  );
+                })}
             </View>
           </ScrollView>
         </View>
@@ -987,15 +1066,17 @@ export default function MatchLiveScreen() {
     [todayKey]
   );
 
+  const headerTitle = i18n.t('live.title', 'Match Live');
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Match Live' }} />
+      <Stack.Screen options={{ title: headerTitle }} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         {loading ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator color={colors.primary} />
             <Text style={{ marginTop: 8, color: colors.subtext }}>
-              Chargement des matchs…
+              {i18n.t('live.loading', 'Chargement des matchs…')}
             </Text>
           </View>
         ) : (
@@ -1021,11 +1102,17 @@ export default function MatchLiveScreen() {
                   }}
                 >
                   {prettyDateLabel
-                    ? `Matchs NHL du ${prettyDateLabel}`
-                    : 'Matchs NHL'}
+                    ? i18n.t('live.headerWithDate', {
+                        defaultValue: 'Matchs NHL du {{date}}',
+                        date: prettyDateLabel,
+                      })
+                    : i18n.t('live.headerNoDate', 'Matchs NHL')}
                 </Text>
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  Touchez un match pour voir les buts et les buteurs en temps réel.
+                  {i18n.t(
+                    'live.tapHint',
+                    'Touchez un match pour voir les buts et les buteurs en temps réel.'
+                  )}
                 </Text>
               </View>
             )}
@@ -1036,8 +1123,11 @@ export default function MatchLiveScreen() {
               <View style={{ marginTop: 40, alignItems: 'center' }}>
                 <Text style={{ color: colors.subtext }}>
                   {prettyDateLabel
-                    ? `Aucun match trouvé pour le ${prettyDateLabel}.`
-                    : 'Aucun match trouvé.'}
+                    ? i18n.t('live.emptyWithDate', {
+                        defaultValue: 'Aucun match trouvé pour le {{date}}.',
+                        date: prettyDateLabel,
+                      })
+                    : i18n.t('live.emptyNoDate', 'Aucun match trouvé.')}
                 </Text>
               </View>
             )}

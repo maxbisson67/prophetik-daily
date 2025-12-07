@@ -1,5 +1,7 @@
 // app/(drawer)/_layout.js
 import React, { useCallback, useMemo } from 'react';
+import i18n from '@src/i18n/i18n';
+
 import { View, Text } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import {
@@ -27,7 +29,7 @@ function getHeaderTitle(route) {
   switch (focused) {
     case 'AccueilScreen':
     case 'index':
-      return 'Accueil';
+      return i18n.t('home.title');
     case 'GroupsScreen':
       return 'Groupes';
     case 'ChallengesScreen':

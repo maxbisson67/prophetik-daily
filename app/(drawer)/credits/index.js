@@ -38,7 +38,17 @@ const TYPE_META = {
     icon: 'trophy-outline',
     tint: 'in',
   },
-  topup_free: { label: 'Bonus gratuit', icon: 'gift-outline', tint: 'in' },
+  // ✅ Nouveau : remboursement d’un défi annulé (ex: cancelled_ghost)
+  defi_refund: {
+    label: 'Remboursement : défi annulé',
+    icon: 'backup-restore',
+    tint: 'in',
+  },
+  topup_free: {
+    label: 'Bonus gratuit',
+    icon: 'gift-outline',
+    tint: 'in',
+  },
   topup_purchase: {
     label: 'Achat de crédits',
     icon: 'credit-card-outline',
@@ -49,7 +59,7 @@ const TYPE_META = {
     icon: 'tune',
     tint: 'neutral',
   },
-   purchase_avatar: {
+  purchase_avatar: {
     label: 'Achat d’un avatar',
     icon: 'credit-card-outline',
     tint: 'out',
@@ -467,14 +477,19 @@ export default function CreditsScreen() {
                     marginBottom: 6,
                   }}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <GoalStatusIcon done={g.done} />
-                  
-                  <Text style={{ color: colors.text }}>
-                    {g.label}
-                    {g.progress ? `  (${g.progress})` : ''}
-                  </Text>
-                </View>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <GoalStatusIcon done={g.done} />
+                    <Text style={{ color: colors.text }}>
+                      {g.label}
+                      {g.progress ? `  (${g.progress})` : ''}
+                    </Text>
+                  </View>
                   <Text
                     style={{
                       fontWeight: '800',

@@ -1,0 +1,444 @@
+{
+  "common": {
+    "unknownError": "Erreur inconnue",
+    "initializing": "Initialisation…",
+    "errorLabel": "Erreur :",
+    "create": "Créer",
+    "ok": "OK",
+    "cancel": "Annuler"
+  },
+  "errors": {
+    "firestorePermission": "Accès refusé par les règles Firestore."
+  },
+  "auth": {
+    "login": "Se connecter"
+  },
+  "home": {
+    "title": "Accueil",
+    "hello": "Salut",
+    "credits": "Crédits",
+    "viewCredits": "Voir et acheter des crédits",
+    "createChallenge": "Créer un défi",
+    "activeChallenges": "Défis actifs",
+    "totalPot": "Cagnotte totale",
+    "todayChallenge": "Mes défis du jour",
+    "challenge": "Défi",
+    "challengeDate": "Date NHL",
+    "challengeLimit": "Limite d’inscription :",
+    "challengeStarts": "Débute à",
+    "challengeStatus": "Ouvert",          
+    "status": {
+      "open": "Ouvert",
+      "live": "En cours",
+      "awaiting": "Calcul",
+      "completed": "Terminé"
+    },
+    "loginToAccess": "Connecte-toi pour accéder à l’accueil.",
+    "noGroups": "Tu n’as pas encore de groupes.",
+    "noActiveChallenges": "Aucun défi actif pour le moment.",
+    "editAvatar": "Modifier l'avatar",
+    "creditsToEarn": "Crédits à gagner",
+    "firstChallengeCreated": "Premier défi créé",
+    "firstChallengeHint": "Crée ton premier défi",
+    "firstGroupCreated": "Premier groupe créé",
+    "firstGroupHint": "Crée ton premier groupe",
+    "fiveParticipationsTitle": "Participer à 5 défis",
+    "threeDaysTitle": "3 jours consécutifs",
+    "progressLabel": "Progression : {{current}}/{{max}}",
+    "streakLabel": "Série : {{current}}/{{max}}"
+  },
+  "groups": {
+     "detail": {
+        "headerFallback": "Groupe",
+
+        "loading": "Chargement du groupe…",
+        "errorPrefix": "Erreur :",
+        "idLabel": "ID : {{id}}",
+        "notFound": "Aucun groupe trouvé (ID : {{id}})",
+
+        "sectionDetails": "Détails",
+        "groupType": "Type de groupe",
+        "private": "Privé",
+        "public": "Public",
+        "inviteCode": "Code d’invitation",
+        "createdAt": "Créé le",
+        "signupUntil": "Inscription jusqu’à",
+
+        "membersSection": "Membres du groupe",
+        "noMembers": "Aucun membre.",
+
+        "actionsSection": "Actions",
+        "actionCreateChallenge": "Créer un défi",
+        "actionShareInvite": "Partager le code d’invitation",
+        "actionShareInviteWithCode": "Partager le code d’invitation ({{code}})",
+        "actionLeaveGroup": "Quitter ce groupe",
+
+        "ownerOnlyAvatar": "Seul le propriétaire peut changer l’avatar",
+        "avatarEdit": "Modifier l’avatar du groupe ({{price}} crédit)",
+        "avatarBuy": "Acheter un avatar de groupe ({{price}} crédits)",
+
+        "shareErrorTitle": "Partage impossible",
+
+        "shareInviteMessage": "Rejoins mon groupe \"{{name}}\" dans Prophetik-daily.\nCode : {{code}}\nID : {{id}}",
+
+        "leaveConfirmTitle": "Groupe quitté",
+        "leaveConfirmMessage": "Tu as quitté ce groupe.",
+        "leaveErrorTitle": "Impossible de quitter",
+        "leaveErrorMessage": "Une erreur est survenue.",
+
+        "deleteBlockedTitle": "Impossible de supprimer",
+        "deleteBlockedMessage": "Il reste des défis actifs ou en cours de calcul dans ce groupe.",
+
+        "deleteConfirmTitle": "Supprimer ce groupe ?",
+        "deleteConfirmMessage": "Cette action est définitive. Les membres ne verront plus ce groupe.",
+        "deleteConfirmCancel": "Annuler",
+        "deleteConfirmOk": "Supprimer",
+
+        "deleteDoneTitle": "Groupe supprimé",
+        "deleteDoneMessage": "Le groupe a été supprimé avec succès.",
+        "deleteErrorTitle": "Suppression impossible",
+        "deleteErrorMessage": "Une erreur est survenue lors de la suppression du groupe.",
+
+        "checkingDefis": "Vérification des défis actifs…",
+        "cannotDeleteWhileDefis": "Tu ne peux pas supprimer ce groupe tant que des défis sont ouverts / en cours."
+    },
+    "title": "Mes groupes",
+    "detailTitle": "Détail du groupe",
+    "loginToSeeGroups": "Connecte-toi pour voir tes groupes.",
+    "login": "Se connecter",
+
+    "headerMine": "Groupes que je gère",
+    "headerMember": "Groupes où je suis membre",
+    "headerMineEmpty": "Aucun groupe pour l’instant.",
+    "headerMemberEmpty": "Tu n’as rejoint aucun groupe pour le moment.",
+
+    "btnCreate": "Créer",
+    "btnJoin": "Joindre",
+
+    "welcomeTitle": "Bienvenue 👋",
+    "welcomeText": "Commence par créer un groupe avec tes amis ou rejoins-en un avec un code d’invitation.",
+
+    "loading": "Chargement…",
+
+    "invitationCode": "Code invitation",
+    "roleOwner": "Propriétaire",
+    "roleMember": "Membre",
+
+    "emptyTitle": "Crée ton premier groupe ou rejoins tes amis",
+    "emptyText": "Organise vos défis, invite tes amis et commence à gagner des crédits.",
+    "emptyCreate": "Créer un groupe",
+    "emptyJoin": "Rejoindre",
+    "emptyHint": "Astuce : tu peux définir un groupe favori avec l’icône ★",
+
+    "modalTitle": "Nouveau groupe",
+    "modalSubtitle": "Rassemble ton crew et dominez les défis.",
+    "fieldNameLabel": "Nom du groupe",
+    "fieldNamePlaceholder": "Ex. Les Snipers du Nord",
+    "fieldDescriptionLabel": "Description (optionnel)",
+    "fieldDescriptionPlaceholder": "Ex. Notre pool du samedi entre amis",
+    "cancel": "Annuler",
+    "create": "Créer",
+
+    "alertNameRequiredTitle": "Nom requis",
+    "alertNameRequiredMessage": "Donne un nom à ton groupe.",
+    "alertNotConnectedTitle": "Non connecté",
+    "alertNotConnectedMessage": "Connecte-toi pour créer un groupe.",
+    "alertFavoriteReadTitle": "Lecture du favori",
+    "alertErrorTitle": "Erreur",
+    "alertFavoriteTitle": "Favori",
+    "alertFavoriteMessage": "Impossible de mettre à jour:"
+    },
+    "join": {
+        "title": "Rejoindre un groupe",
+        "ctaTitle": "🔑 Entrez votre code d’invitation",
+        "ctaSubtitle": "Rejoignez immédiatement un groupe existant et commencez à prédire.",
+        "placeholderCode": "XXXXXXXX",
+        "btnJoin": "Rejoindre le groupe",
+        "btnCancel": "Annuler",
+
+        "alertLoginRequiredTitle": "Connexion requise",
+        "alertLoginRequiredMessage": "Connecte-toi pour rejoindre un groupe.",
+        "alertCodeInvalidTitle": "Code invalide",
+        "alertCodeInvalidMessage": "Le code doit contenir {{len}} caractères (A–Z, sans O et 0).",
+
+        "alertServerUnexpected": "Réponse inattendue du serveur.",
+        "alertCodeNotFoundTitle": "Code introuvable",
+        "alertCodeNotFoundMessage": "Vérifie le code et réessaie.",
+        "alertAccessDeniedTitle": "Accès refusé",
+        "alertAccessDeniedMessage": "Tu n’es pas autorisé à rejoindre ce groupe.",
+        "alertGenericErrorTitle": "Erreur"
+    },
+    "challenges": {
+        "activeTitle": "Défis actifs",
+        "pastTitle": "Défis passés",
+        "status": {
+            "active": "Actif",
+            "awaiting": "À valider",
+            "cancelledGhost": "Annulé (pas assez de joueurs)",
+            "completed": "Terminé"
+        },
+        "gameDateLabel": "Date NHL",
+        "signupDeadlineLabel": "Limite d’inscription (heure locale) :",
+        "firstGameLabel": "Premier match (heure locale) :",
+        "potLabel": "Cagnotte : {{count}} crédit(s)",
+        "entryCostLabel": "Coût de participation : {{count}} crédit(s)",
+        "ghostRefundHint": "Les participants ont été automatiquement remboursés.",
+        "winnersTitleSingular": "Gagnant",
+        "winnersTitlePlural": "Gagnants",
+        "seeResults": "Voir résultats",
+        "participate": "Participer",
+        "loginToSee": "Connecte-toi pour voir tes défis.",
+        "loadingChallenges": "Chargement des défis…",
+        "createNhlChallenge": "Créer un défi NHL",
+        "noChallenges": "Aucun défi à afficher."
+    },
+    "defi": {
+        "create": {
+            "title": "Nouveau défi NHL",
+            "autoTitle": "Défi {{format}}",
+
+            "group": {
+                "noneHint": "Aucun groupe disponible pour créer un défi.",
+                "noneBody": "Les groupes archivés ne peuvent pas recevoir de nouveaux défis.",
+                "label": "Groupe",
+                "choose": "Choisis un groupe"
+            },
+
+            "formatLabel": "Format du défi",
+
+            "summary": {
+                "titleLabel": "Titre",
+                "costLabel": "Coût de participation",
+                "costValue": "{{credits}} crédit(s)"
+            },
+
+            "date": {
+                "labelBase": "Date NHL{{meta}}",
+                "matchesShort": "match(s)",
+                "firstAt": "1er à {{time}}",
+                "deadlineAt": "Limite {{time}}",
+                "change": "Changer"
+            },
+
+            "verify": {
+                "loading": "Vérification des matchs NHL…",
+                "noGames": "Aucun match NHL le {{date}}.",
+                "okWithTime": "{{count}} match(s) trouvé(s). Premier match à {{time}}.",
+                "okNoTime": "{{count}} match(s) trouvé(s).",
+                "error": "Impossible de vérifier les matchs NHL : {{message}}"
+            },
+
+            "alert": {
+                "noGames": {
+                "title": "Aucun match trouvé",
+                "body": "Aucun match trouvé pour le {{date}}."
+                },
+                "deadlinePassed": {
+                "title": "Limite dépassée",
+                "body": "La limite d’inscription pour le {{date}} était {{time}}. Impossible de créer le défi."
+                },
+                "error": {
+                "title": "Création impossible",
+                "body": "Une erreur s’est produite lors de la création du défi : {{message}}"
+                }
+            },
+
+            "actions": {
+                "creating": "Création…",
+                "create": "Créer le défi"
+            },
+
+            "hint": {
+                "signupDeadline": "La limite d’inscription est fixée à 1h avant le premier match (heure locale)."
+            }
+        },
+        "header": {
+            "defaultTitle": "Défi",
+            "errorTitle": "Erreur",
+            "notFoundTitle": "Défi introuvable"
+        },
+        "loading": {
+            "title": "Chargement…",
+            "generic": "Chargement…",
+            "overlayHint": "Cela peut prendre quelques secondes…",
+            "statsUpdatingToday": "Mise à jour des statistiques du jour…",
+            "statsUpdatingSeason": "Mise à jour des statistiques pour la saison…",
+            "statsGeneric": "Chargement des statistiques…"
+        },
+        "playerSelect": {
+            "title": "Sélectionner un joueur",
+            "close": "Fermer",
+            "searchPlaceholder": "Rechercher un joueur…",
+            "emptyChoice": "Choisir un joueur…"
+        },
+        "seasonToggle": {
+            "current": "Saison {{id}}",
+            "previous": "Saison {{id}}"
+        },
+        "infoCard": {
+            "nhlDate": "Date NHL",
+            "signupDeadline": "Limite inscription:",
+            "firstGameUtc": "Premier match (UTC):",
+            "choicesCount": "Nombre de choix:",
+            "status": "Statut:",
+            "lockedSuffix": "verrouillé",
+            "pot": "Cagnotte: {{count}} crédit(s)"
+        },
+        "gamesCard": {
+            "title": "Matchs NHL du jour",
+            "none": "Aucun match trouvé.",
+            "time": "Heure",
+            "away": "Visiteur",
+            "home": "Domicile"
+        },
+        "pickersCard": {
+            "title": "Sélectionne tes joueurs",
+            "choiceLabel": "Choix {{index}}",
+            "summary": "{{current}}/{{max}} sélection(s)"
+        },
+        "errors": {
+            "notFoundMessage": "Aucun défi trouvé."
+        },
+        "alerts": {
+            "playerDuplicateTitle": "Joueur déjà sélectionné",
+            "playerDuplicateMessage": "{{name}} est déjà choisi pour un autre poste.",
+            "lockedTitle": "Inscription fermée",
+            "lockedMessage": "La date limite est dépassée.",
+            "incompleteTitle": "Sélection incomplète",
+            "incompleteMessage": "Tu dois choisir {{count}} joueur(s).",
+            "savingSlow": "Création de la participation… (le premier participant peut prendre quelques secondes)",
+            "successTitle": "Participation enregistrée",
+            "successMessage": "Bonne chance ! {{potMessage}}",
+            "successPotMessage": "Cagnotte: {{count}} crédits",
+            "successPotMessageSimple": "Participation enregistrée.",
+            "genericErrorTitle": "Erreur"
+        },
+        "actions": {
+            "primarySaving": "Création de la participation…",
+            "primaryLocked": "Inscription fermée",
+            "primaryDefault": "Enregistrer ma participation"
+        },
+        "results": {
+            "header": {
+            "defaultTitle": "Résultats",
+            "groupFallback": "Groupe",
+            "pot": "Cagnotte de {{count}} crédits",
+            "startsAt": "Débute à",
+            "scoring": "Barème : Buteur = +1 • Passe = +1"
+            },
+            "status": {
+            "open": "Ouvert",
+            "live": "En cours",
+            "awaiting": "Calcul en cours",
+            "closed": "Terminé",
+            "unknown": "Inconnu"
+            },
+            "loading": {
+            "generic": "Chargement…"
+            },
+            "errors": {
+            "notFound": "Aucun défi trouvé."
+            },
+            "toast": {
+            "title": "Mise à jour officielle",
+            "empty": "Ajustement appliqué."
+            },
+            "chat": {
+            "title": "Chat du défi",
+            "count": "{{count}} messages",
+            "empty": "Aucun message.",
+            "inputPlaceholder": "Écrire un message…",
+            "send": "Envoyer"
+            },
+            "participants": {
+            "empty": "Aucune participation.",
+            "hiddenUntil": "Les choix des autres participants sont cachés jusqu’au début du premier match{{time}}.",
+            "legend": "Format : buts – passes = total",
+            "hiddenSelections": "Sélections cachées jusqu’au début du premier match.",
+            "noPlayers": "Aucun joueur sélectionné."
+            }
+        }
+    },
+    "leaderboard": {
+        "title": "Classement",
+        "loginToSee": "Connecte-toi pour voir les classements.",
+        "loading": "Chargement…",
+        "errorPrefix": "Erreur : {{message}}",
+
+        "legend": {
+            "name": "Nom",
+            "wins": "Défis gagnés",
+            "gainTotal": "Gain total",
+            "gainAvg": "Gain moyen par défi"
+        },
+
+        "rebuild": {
+            "button": "Rebuilder",
+            "loading": "Rebuild…"
+        },
+
+        "group": {
+            "noStats": "Pas encore de statistiques pour ce groupe."
+        },
+
+        "empty": {
+            "noGroups": "Tu n’as pas encore de groupes."
+        }
+    },
+    "live": {
+        "title": "Match Live",
+        "loading": "Chargement des matchs…",
+        "headerWithDate": "Matchs NHL du {{date}}",
+        "headerNoDate": "Matchs NHL",
+        "tapHint": "Touchez un match pour voir les buts et les buteurs en temps réel.",
+        "emptyWithDate": "Aucun match trouvé pour le {{date}}.",
+        "emptyNoDate": "Aucun match trouvé.",
+        "status": {
+            "live": "LIVE",
+            "final": "Final",
+            "finalOT": "Final (P)",
+            "finalSO": "Final (TB)"
+        },
+        "row": {
+            "startAt": "Début: {{time}}",
+            "startUnknown": "Heure inconnue",
+            "tapForDetails": "Touchez pour voir les détails"
+        },
+        "detail": {
+            "title": "Détail du match",
+            "startAt": "Début: {{time}}",
+            "startUnknown": "Heure de début inconnue",
+            "timeRemaining": "Temps restant: {{time}}",
+            "inProgress": "En cours",
+            "summaryTitle": "Sommaire du match",
+            "loadingGoals": "Chargement des buts…",
+            "noGoals": "Aucun but ou statistiques non disponibles pour ce match.",
+            "period": "Période {{period}}",
+            "periodWithSuffix": "Période {{period}}{{suffix}}",
+            "ot": "Prolongation",
+            "so": "Tirs de barrage",
+            "liveWithPeriod": "{{period}}{{time}}",
+            "assistOne": "Assisté de {{player}}",
+            "assistTwo": "Assisté de {{player1}} et {{player2}}",
+            "goalFallback": "But"
+        },
+        "goals": {
+            "period1": "Période 1",
+            "period2": "Période 2",
+            "period3": "Période 3",
+            "ot": "Prolongation",
+            "so": "Tirs de barrage",
+            "unknown": "Inconnu"
+        }
+    },
+    "settings": {
+        "title": "Paramètres",
+        "appearance": "Apparence",
+        "theme": {
+            "system": "Comme le système",
+            "light": "Thème clair",
+            "dark": "Thème sombre"
+        },
+        "language": "Langue"
+    }
+}

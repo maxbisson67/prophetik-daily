@@ -15,6 +15,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
+// ✅ i18n
+import i18n from '@src/i18n/i18n';
+
 // ✅ Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
@@ -458,13 +461,13 @@ export default function ChallengesScreen() {
     const s = [];
     if (activeDefis.length > 0)
       s.push({
-        title: 'Défis actifs',
+        title: i18n.t('challenges.activeTitle'),
         key: 'open',
         data: activeDefis,
       });
     if (pastLimited.length > 0)
       s.push({
-        title: 'Défis passés',
+        title: i18n.t('challenges.pastTitle'),
         key: 'past',
         data: pastLimited,
       });
@@ -522,7 +525,7 @@ export default function ChallengesScreen() {
             </Text>
           </View>
         )}
-        <Text style={{ color: colors.text}}>
+        <Text style={{ color: colors.text }}>
           {name}
           {share > 0 ? ` (+${share})` : ''}
         </Text>
@@ -531,185 +534,153 @@ export default function ChallengesScreen() {
   };
 
   // Rendu d'une carte de défi
- // Rendu d'une carte de défi
-// Rendu d'une carte de défi
-const renderCard = (item, isActive) => {
-  const groupName =
-    groupsMap[item.groupId]?.name || item.groupId;
-  const title =
-    item.title ||
-    (item.type
-      ? `Défi ${item.type}x${item.type}`
-      : 'Défi');
-  const pot = Number.isFinite(item.pot) ? item.pot : 0;
+  const renderCard = (item, isActive) => {
+    const groupName =
+      groupsMap[item.groupId]?.name || item.groupId;
+    const title =
+      item.title ||
+      (item.type
+        ? i18n.t('home.challenge') + ` ${item.type}x${item.type}`
+        : i18n.t('home.challenge'));
+    const pot = Number.isFinite(item.pot) ? item.pot : 0;
 
-  const statusKey = String(item.status || '').toLowerCase();
-  const winners = Array.isArray(item.winners)
-    ? item.winners
-    : [];
-  const winnerShares = item.winnerShares || {};
+    const statusKey = String(item.status || '').toLowerCase();
+    const winners = Array.isArray(item.winners)
+      ? item.winners
+      : [];
+    const winnerShares = item.winnerShares || {};
 
-  return (
-    <View
-      style={{
-        marginBottom: 12,
-        padding: 12,
-        borderWidth: 1,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-        elevation: 3,
-        borderColor: colors.border,
-      }}
-    >
-      {/* En-tête avec avatar groupe */}
+    const isGhostCancelled = statusKey === 'cancelled_ghost';
+
+    let statusLabel = '';
+    let statusColor = '#6b7280';
+    let statusIcon = 'checkmark-circle';
+
+    if (statusKey === 'open' || statusKey === 'live') {
+      statusLabel = i18n.t('challenges.status.active');
+      statusColor = '#16a34a';
+      statusIcon = 'flame';
+    } else if (statusKey === 'awaiting_result') {
+      statusLabel = i18n.t('challenges.status.awaiting');
+      statusColor = '#ea580c';
+      statusIcon = 'timer-outline';
+    } else if (isGhostCancelled) {
+      statusLabel = i18n.t('challenges.status.cancelledGhost');
+      statusColor = '#9ca3af';
+      statusIcon = 'alert-circle-outline';
+    } else {
+      statusLabel = i18n.t('challenges.status.completed');
+      statusColor = '#6b7280';
+      statusIcon = 'checkmark-circle';
+    }
+
+    const potLabel = i18n.t('challenges.potLabel', { count: pot });
+    const entryCost = item.participationCost ?? item.type;
+
+    const winnersTitle =
+      winners.length > 1
+        ? i18n.t('challenges.winnersTitlePlural')
+        : i18n.t('challenges.winnersTitleSingular');
+
+    return (
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          marginBottom: 12,
+          padding: 12,
+          borderWidth: 1,
+          borderRadius: 12,
+          backgroundColor: colors.card,
+          elevation: 3,
+          borderColor: colors.border,
         }}
       >
+        {/* En-tête avec avatar groupe */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            flex: 1,
-            minWidth: 0,
+            justifyContent: 'space-between',
           }}
         >
-          <Image
-            source={
-              groupsMap[item.groupId]?.avatarUrl
-                ? { uri: groupsMap[item.groupId].avatarUrl }
-                : GROUP_PLACEHOLDER
-            }
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: colors.card2,
-              borderWidth: 1,
-              borderColor: colors.border,
-              marginRight: 8,
-            }}
-          />
-          <Text
-            style={{
-              fontWeight: '700',
-              fontSize: 16,
-              flexShrink: 1,
-              color: colors.text,
-            }}
-            numberOfLines={1}
-          >
-            {groupName} – {title}
-          </Text>
-        </View>
-
-        {statusKey === 'open' || statusKey === 'live' ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="flame" size={18} color="#16a34a" />
-            <Text
-              style={{
-                marginLeft: 6,
-                color: '#16a34a',
-                fontWeight: '700',
-              }}
-            >
-              Actif
-            </Text>
-          </View>
-        ) : statusKey === 'awaiting_result' ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="timer-outline" size={18} color="#ea580c" />
-            <Text
-              style={{
-                marginLeft: 6,
-                color: '#ea580c',
-                fontWeight: '700',
-              }}
-            >
-              À valider
-            </Text>
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="checkmark-circle" size={18} color="#6b7280" />
-            <Text
-              style={{
-                marginLeft: 6,
-                color: '#6b7280',
-                fontWeight: '700',
-              }}
-            >
-              Terminé
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Infos */}
-      <View style={{ marginTop: 6, gap: 2 }}>
-        <Text style={{ color: colors.text }}>
-          Date NHL: {item.gameDate || '—'}
-        </Text>
-
-        {/* 🔹 Ces infos seulement pour les défis actifs */}
-        {isActive && (
-          <>
-            <Text style={{ color: colors.text }}>
-              Limite inscription (local): {fmtTSLocalHM(item.signupDeadline)}
-            </Text>
-            <Text style={{ color: colors.text }}>
-              Premier match (local): {fmtTSLocalHM(item.firstGameUTC)}
-            </Text>
-          </>
-        )}
-
-        {/* Cagnotte – même style que box gagnant (forme, thème) */}
-        <View
-          style={{
-            marginTop: 6,
-            alignSelf: 'stretch',
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 8,
-            paddingHorizontal: 10,
-            borderRadius: 10,
-            backgroundColor: colors.card2,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        >
-          <MaterialCommunityIcons
-            name="cash-multiple"
-            size={16}
-            color="#b91c1c" // petit accent rouge Prophetik
-          />
-          <Text
-            style={{
-              marginLeft: 6,
-              color: colors.text,
-              fontWeight: '800',
-            }}
-          >
-            Cagnotte: {pot} crédit{pot > 1 ? 's' : ''}
-          </Text>
-        </View>
-
-        {/* Coût participation – seulement pour les actifs */}
-        {isActive && (
-          <Text style={{ marginTop: 4, color: colors.subtext }}>
-            Coût participation:{' '}
-            {item.participationCost ?? item.type} crédit(s)
-          </Text>
-        )}
-
-        {/* Gagnant(s) */}
-        {statusKey === 'completed' && winners.length > 0 && (
           <View
             style={{
-              marginTop: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            <Image
+              source={
+                groupsMap[item.groupId]?.avatarUrl
+                  ? { uri: groupsMap[item.groupId].avatarUrl }
+                  : GROUP_PLACEHOLDER
+              }
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: colors.card2,
+                borderWidth: 1,
+                borderColor: colors.border,
+                marginRight: 8,
+              }}
+            />
+            <Text
+              style={{
+                fontWeight: '700',
+                fontSize: 16,
+                flexShrink: 1,
+                color: colors.text,
+              }}
+              numberOfLines={1}
+            >
+              {groupName} – {title}
+            </Text>
+          </View>
+
+          {/* Badge de statut */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name={statusIcon} size={18} color={statusColor} />
+            <Text
+              style={{
+                marginLeft: 6,
+                color: statusColor,
+                fontWeight: '700',
+              }}
+            >
+              {statusLabel}
+            </Text>
+          </View>
+        </View>
+
+        {/* Infos */}
+        <View style={{ marginTop: 6, gap: 2 }}>
+          <Text style={{ color: colors.text }}>
+            {i18n.t('challenges.gameDateLabel')}: {item.gameDate || '—'}
+          </Text>
+
+          {/* 🔹 Ces infos seulement pour les défis actifs */}
+          {isActive && !isGhostCancelled && (
+            <>
+              <Text style={{ color: colors.text }}>
+                {i18n.t('challenges.signupDeadlineLabel')}{' '}
+                {fmtTSLocalHM(item.signupDeadline)}
+              </Text>
+              <Text style={{ color: colors.text }}>
+                {i18n.t('challenges.firstGameLabel')}{' '}
+                {fmtTSLocalHM(item.firstGameUTC)}
+              </Text>
+            </>
+          )}
+
+          {/* Cagnotte */}
+          <View
+            style={{
+              marginTop: 6,
+              alignSelf: 'stretch',
+              flexDirection: 'row',
+              alignItems: 'center',
               paddingVertical: 8,
               paddingHorizontal: 10,
               borderRadius: 10,
@@ -718,105 +689,171 @@ const renderCard = (item, isActive) => {
               borderColor: colors.border,
             }}
           >
-            <View
+            <MaterialCommunityIcons
+              name="cash-multiple"
+              size={16}
+              color="#b91c1c"
+            />
+            <Text
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginBottom: 6,
+                marginLeft: 6,
+                color: colors.text,
+                fontWeight: '800',
               }}
             >
-              <MaterialCommunityIcons
-                name="trophy"
-                size={16}
-                color="#16a34a"
-              />
-              <Text
+              {potLabel}
+            </Text>
+          </View>
+
+          {/* Coût participation – seulement pour les actifs */}
+          {isActive && !isGhostCancelled && (
+            <Text
+              style={{ marginTop: 4, color: colors.subtext }}
+            >
+              {i18n.t('challenges.entryCostLabel', {
+                count: entryCost,
+              })}
+            </Text>
+          )}
+
+          {/* Info remboursement si ghost */}
+          {isGhostCancelled && (
+            <Text
+              style={{
+                marginTop: 4,
+                color: colors.subtext,
+                fontSize: 12,
+              }}
+            >
+              {i18n.t('challenges.ghostRefundHint')}
+            </Text>
+          )}
+
+          {/* Gagnant(s) */}
+          {statusKey === 'completed' &&
+            winners.length > 0 && (
+              <View
                 style={{
-                  marginLeft: 6,
-                  color: colors.text,
-                  fontWeight: '800',
+                  marginTop: 8,
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  borderRadius: 10,
+                  backgroundColor: colors.card2,
+                  borderWidth: 1,
+                  borderColor: colors.border,
                 }}
               >
-                Gagnant{winners.length > 1 ? 's' : ''} :
-              </Text>
-            </View>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="trophy"
+                    size={16}
+                    color="#16a34a"
+                  />
+                  <Text
+                    style={{
+                      marginLeft: 6,
+                      color: colors.text,
+                      fontWeight: '800',
+                    }}
+                  >
+                    {winnersTitle} :
+                  </Text>
+                </View>
 
-            <View>
-              {winners.map((uid) => (
-                <WinnerRow
-                  key={uid}
-                  uid={uid}
-                  share={Number(winnerShares?.[uid] ?? 0)}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-      </View>
+                <View>
+                  {winners.map((uid) => (
+                    <WinnerRow
+                      key={uid}
+                      uid={uid}
+                      share={Number(
+                        winnerShares?.[uid] ?? 0
+                      )}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+        </View>
 
-      {/* Boutons */}
-      <View
-        style={{
-          flexDirection: 'row',
-          gap: 8,
-          marginTop: 10,
-        }}
-      >
-        <TouchableOpacity
-          onPress={() =>
-            router.push(`/(drawer)/defis/${item.id}/results`)
-          }
+        {/* Boutons */}
+        <View
           style={{
-            flex: 1,
-            paddingVertical: 10,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: colors.border,
-            alignItems: 'center',
-            backgroundColor: colors.card2,
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 10,
           }}
         >
-          <Text
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                `/(drawer)/defis/${item.id}/results`
+              )
+            }
             style={{
-              fontWeight: '700',
-              color: colors.text,
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+              alignItems: 'center',
+              backgroundColor: colors.card2,
             }}
           >
-            Voir résultats
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={{
+                fontWeight: '700',
+                color: colors.text,
+              }}
+            >
+              {i18n.t('challenges.seeResults')}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() =>
-            statusKey === 'open' || statusKey === 'live'
-              ? router.push(`/(drawer)/defis/${item.id}`)
-              : null
-          }
-          disabled={!(statusKey === 'open' || statusKey === 'live')}
-          style={{
-            flex: 1,
-            paddingVertical: 10,
-            borderRadius: 10,
-            alignItems: 'center',
-            backgroundColor:
+          <TouchableOpacity
+            onPress={() =>
               statusKey === 'open' || statusKey === 'live'
-                ? '#b91c1c'
-                : '#9ca3af',
-          }}
-        >
-          <Text
+                ? router.push(
+                    `/(drawer)/defis/${item.id}`
+                  )
+                : null
+            }
+            disabled={
+              !(
+                statusKey === 'open' ||
+                statusKey === 'live'
+              )
+            }
             style={{
-              color: '#fff',
-              fontWeight: '700',
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 10,
+              alignItems: 'center',
+              backgroundColor:
+                statusKey === 'open' ||
+                statusKey === 'live'
+                  ? '#b91c1c'
+                  : '#9ca3af',
             }}
           >
-            Participer
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={{
+                color: '#fff',
+                fontWeight: '700',
+              }}
+            >
+              {i18n.t('challenges.participate')}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
-};
+    );
+  };
 
   // UI : pas connecté
   if (!user) {
@@ -831,7 +868,7 @@ const renderCard = (item, isActive) => {
         }}
       >
         <Text style={{ color: colors.text }}>
-          Connecte-toi pour voir tes défis.
+          {i18n.t('challenges.loginToSee')}
         </Text>
         <TouchableOpacity
           onPress={() => router.push('/(auth)/sign-in')}
@@ -849,7 +886,7 @@ const renderCard = (item, isActive) => {
               fontWeight: '700',
             }}
           >
-            Se connecter
+            {i18n.t('auth.login')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -873,7 +910,7 @@ const renderCard = (item, isActive) => {
             color: colors.subtext,
           }}
         >
-          Chargement des défis…
+          {i18n.t('challenges.loadingChallenges')}
         </Text>
       </View>
     );
@@ -891,7 +928,8 @@ const renderCard = (item, isActive) => {
         }}
       >
         <Text style={{ color: colors.text }}>
-          Erreur : {String(error?.message || error)}
+          {i18n.t('common.errorLabel')}{' '}
+          {String(error?.message || error)}
         </Text>
       </View>
     );
@@ -906,7 +944,6 @@ const renderCard = (item, isActive) => {
         groups={userGroups}
         initialGroupId={favoriteGroup?.id ?? null}
         onCreated={({ groupId }) => {
-          // On ferme simplement; tu peux ajouter une nav si tu veux
           setShowCreateModal(false);
         }}
       />
@@ -917,7 +954,7 @@ const renderCard = (item, isActive) => {
           backgroundColor: colors.background,
         }}
       >
-        {/* 👉 CTA rouge en haut de la page, sans choix de groupe ici */}
+        {/* 👉 CTA rouge en haut de la page */}
         <View
           style={{
             paddingHorizontal: 16,
@@ -931,7 +968,7 @@ const renderCard = (item, isActive) => {
               borderRadius: 10,
               paddingVertical: 12,
               alignItems: 'center',
-              backgroundColor: '#b91c1c', // même rouge que bouton Participer
+              backgroundColor: '#b91c1c',
             }}
           >
             <Text
@@ -940,7 +977,7 @@ const renderCard = (item, isActive) => {
                 fontWeight: '700',
               }}
             >
-              Créer un défi NHL
+              {i18n.t('challenges.createNhlChallenge')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -959,8 +996,7 @@ const renderCard = (item, isActive) => {
                 fontSize: 22,
                 fontWeight: '700',
                 marginBottom: 8,
-                marginTop:
-                  section.key === 'past' ? 10 : 0,
+                marginTop: section.key === 'past' ? 10 : 0,
                 color: colors.text,
               }}
             >
@@ -978,7 +1014,7 @@ const renderCard = (item, isActive) => {
                 textAlign: 'center',
               }}
             >
-              Aucun défi à afficher.
+              {i18n.t('challenges.noChallenges')}
             </Text>
           )}
         />

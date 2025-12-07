@@ -13,7 +13,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  useRef,
   useCallback,
 } from 'react';
 import { DrawerToggleButton } from '@react-navigation/drawer';
@@ -34,6 +33,7 @@ import { usePublicProfile } from '@src/profile/usePublicProfile';
 import { getNameAvatarFrom as _getNameAvatarFrom } from '@src/profile/getNameAvatar';
 
 import { useTheme } from '@src/theme/ThemeProvider';
+import i18n from '@src/i18n/i18n';
 
 import CreateDefiModal from '../../defis/CreateDefiModal';
 
@@ -401,14 +401,20 @@ export default function GroupDetailScreen() {
   const name = group?.name;
   const codeInvitation = group?.codeInvitation;
 
-  const inviteMessage = `Rejoins mon groupe "${name || id}" dans Prophetik-daily.\nCode: ${
-    codeInvitation ?? '—'
-  }\nID: ${group?.id || id}`;
+  const inviteMessage = i18n.t('groups.detail.shareInviteMessage', {
+    name: name || id,
+    code: codeInvitation ?? '—',
+    id: group?.id || id,
+  });
+
   const onShareInvite = async () => {
     try {
       await Share.share({ message: inviteMessage });
     } catch (e) {
-      Alert.alert('Partage impossible', String(e?.message ?? e));
+      Alert.alert(
+        i18n.t('groups.detail.shareErrorTitle'),
+        String(e?.message ?? e)
+      );
     }
   };
 
@@ -429,13 +435,16 @@ export default function GroupDetailScreen() {
     try {
       const leave = functions().httpsCallable('leaveGroup');
       await leave({ groupId: group.id });
-      Alert.alert('Groupe quitté', 'Tu as quitté ce groupe.');
+      Alert.alert(
+        i18n.t('groups.detail.leaveConfirmTitle'),
+        i18n.t('groups.detail.leaveConfirmMessage')
+      );
       r.replace('/(drawer)/(tabs)/GroupsScreen');
     } catch (e) {
       console.log('leaveGroup error', e);
       Alert.alert(
-        'Impossible de quitter',
-        e?.message || 'Une erreur est survenue.'
+        i18n.t('groups.detail.leaveErrorTitle'),
+        e?.message || i18n.t('groups.detail.leaveErrorMessage')
       );
     }
   };
@@ -445,19 +454,19 @@ export default function GroupDetailScreen() {
 
     if (hasActiveDefis) {
       Alert.alert(
-        'Impossible de supprimer',
-        'Il reste des défis actifs ou en cours de calcul dans ce groupe.'
+        i18n.t('groups.detail.deleteBlockedTitle'),
+        i18n.t('groups.detail.deleteBlockedMessage')
       );
       return;
     }
 
     Alert.alert(
-      'Supprimer ce groupe ?',
-      'Cette action est définitive. Les membres ne verront plus ce groupe.',
+      i18n.t('groups.detail.deleteConfirmTitle'),
+      i18n.t('groups.detail.deleteConfirmMessage'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: i18n.t('groups.detail.deleteConfirmCancel'), style: 'cancel' },
         {
-          text: 'Supprimer',
+          text: i18n.t('groups.detail.deleteConfirmOk'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -465,16 +474,16 @@ export default function GroupDetailScreen() {
               const fn = functions().httpsCallable('deleteGroup');
               await fn({ groupId: group.id });
               Alert.alert(
-                'Groupe supprimé',
-                'Le groupe a été supprimé avec succès.'
+                i18n.t('groups.detail.deleteDoneTitle'),
+                i18n.t('groups.detail.deleteDoneMessage')
               );
               r.replace('/(drawer)/(tabs)/GroupsScreen');
             } catch (e) {
               console.log('deleteGroup error', e);
               Alert.alert(
-                'Suppression impossible',
+                i18n.t('groups.detail.deleteErrorTitle'),
                 e?.message ||
-                  'Une erreur est survenue lors de la suppression du groupe.'
+                  i18n.t('groups.detail.deleteErrorMessage')
               );
             } finally {
               setDeleting(false);
@@ -502,7 +511,7 @@ export default function GroupDetailScreen() {
 
   // 🎯 Options d’entête centralisées (utilisées dans tous les états)
   const headerOptions = {
-    title: group?.name || 'Groupe',
+    title: group?.name || i18n.t('groups.detail.headerFallback'),
     headerStyle: { backgroundColor: colors.header },
     headerTintColor: colors.headerTint,
     headerTitleStyle: { color: colors.headerTint },
@@ -534,7 +543,7 @@ export default function GroupDetailScreen() {
         >
           <ActivityIndicator color={colors.primary} />
           <Text style={{ color: colors.subtext, marginTop: 8 }}>
-            Chargement du groupe…
+            {i18n.t('groups.detail.loading')}
           </Text>
         </View>
       </>
@@ -555,9 +564,12 @@ export default function GroupDetailScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Erreur : {String(error?.message || error)}
+            {i18n.t('groups.detail.errorPrefix')}{' '}
+            {String(error?.message || error)}
           </Text>
-          <Text style={{ marginTop: 6, color: colors.subtext }}>ID: {id}</Text>
+          <Text style={{ marginTop: 6, color: colors.subtext }}>
+            {i18n.t('groups.detail.idLabel', { id })}
+          </Text>
         </View>
       </>
     );
@@ -577,12 +589,24 @@ export default function GroupDetailScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Aucun groupe trouvé (ID: {id})
+            {i18n.t('groups.detail.notFound', { id })}
           </Text>
         </View>
       </>
     );
   }
+
+  const avatarCtaLabel = isOwner
+    ? (effectivePrice === 1
+        ? i18n.t('groups.detail.avatarEdit', { price: effectivePrice })
+        : i18n.t('groups.detail.avatarBuy', { price: effectivePrice }))
+    : '';
+
+  const shareCtaLabel = codeInvitation
+    ? i18n.t('groups.detail.actionShareInviteWithCode', {
+        code: codeInvitation,
+      })
+    : i18n.t('groups.detail.actionShareInvite');
 
   return (
     <>
@@ -648,7 +672,9 @@ export default function GroupDetailScreen() {
                   color: colors.text,
                 }}
               >
-                {group?.name || group?.title || 'Groupe'}
+                {group?.name ||
+                  group?.title ||
+                  i18n.t('groups.detail.headerFallback')}
               </Text>
             </View>
 
@@ -672,9 +698,7 @@ export default function GroupDetailScreen() {
                   }}
                 >
                   <Text style={{ color: '#fff', fontWeight: '900' }}>
-                    {effectivePrice === 1
-                      ? 'Modifier l’avatar du groupe (1 crédit)'
-                      : 'Acheter un avatar de groupe (5 crédits)'}
+                    {avatarCtaLabel}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -686,8 +710,10 @@ export default function GroupDetailScreen() {
                     alignItems: 'center',
                   }}
                 >
-                  <Text style={{ color: colors.subtext, fontWeight: '700' }}>
-                    Seul le propriétaire peut changer l’avatar
+                  <Text
+                    style={{ color: colors.subtext, fontWeight: '700' }}
+                  >
+                    {i18n.t('groups.detail.ownerOnlyAvatar')}
                   </Text>
                 </View>
               )}
@@ -712,24 +738,35 @@ export default function GroupDetailScreen() {
                 color: colors.text,
               }}
             >
-              Détails
+              {i18n.t('groups.detail.sectionDetails')}
             </Text>
-            <DetailRow colors={colors} label="Type de groupe">
-              {group?.isPrivate ? 'Privé' : 'Public'}
+            <DetailRow
+              colors={colors}
+              label={i18n.t('groups.detail.groupType')}
+            >
+              {group?.isPrivate
+                ? i18n.t('groups.detail.private')
+                : i18n.t('groups.detail.public')}
             </DetailRow>
             {!!codeInvitation && (
               <DetailRowWithAction
                 colors={colors}
-                label="Code d’invitation"
+                label={i18n.t('groups.detail.inviteCode')}
                 value={codeInvitation}
                 onPress={onShareInvite}
               />
             )}
-            <DetailRow colors={colors} label="Créé le">
+            <DetailRow
+              colors={colors}
+              label={i18n.t('groups.detail.createdAt')}
+            >
               {fmtDate(group?.createdAt)}
             </DetailRow>
             {!!group?.signupDeadline && (
-              <DetailRow colors={colors} label="Inscription jusqu’à">
+              <DetailRow
+                colors={colors}
+                label={i18n.t('groups.detail.signupUntil')}
+              >
                 {fmtDate(group.signupDeadline)}
               </DetailRow>
             )}
@@ -753,14 +790,14 @@ export default function GroupDetailScreen() {
                   color: colors.text,
                 }}
               >
-                Membres du groupe
+                {i18n.t('groups.detail.membersSection')}
               </Text>
             </View>
             {memberList.length === 0 ? (
               <Text
                 style={{ paddingHorizontal: 4, color: colors.subtext }}
               >
-                Aucun membre.
+                {i18n.t('groups.detail.noMembers')}
               </Text>
             ) : (
               memberList.map((m) => (
@@ -792,7 +829,7 @@ export default function GroupDetailScreen() {
                 color: colors.text,
               }}
             >
-              Actions
+              {i18n.t('groups.detail.actionsSection')}
             </Text>
             <TouchableOpacity
               onPress={() => setOpenCreate(true)}
@@ -804,7 +841,7 @@ export default function GroupDetailScreen() {
               }}
             >
               <Text style={{ color: '#fff', fontWeight: '700' }}>
-                Créer un défi
+                {i18n.t('groups.detail.actionCreateChallenge')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -819,8 +856,7 @@ export default function GroupDetailScreen() {
               }}
             >
               <Text style={{ fontWeight: '600', color: colors.text }}>
-                Partager le code d’invitation
-                {codeInvitation ? ` (${codeInvitation})` : ''}
+                {shareCtaLabel}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -835,7 +871,7 @@ export default function GroupDetailScreen() {
               }}
             >
               <Text style={{ fontWeight: '600', color: '#b00020' }}>
-                Quitter ce groupe
+                {i18n.t('groups.detail.actionLeaveGroup')}
               </Text>
             </TouchableOpacity>
 
@@ -856,7 +892,9 @@ export default function GroupDetailScreen() {
                   }}
                 >
                   <Text style={{ fontWeight: '700', color: '#b91c1c' }}>
-                    {deleting ? 'Suppression…' : 'Supprimer ce groupe'}
+                    {deleting
+                      ? 'Suppression…'
+                      : i18n.t('groups.detail.deleteConfirmTitle')}
                   </Text>
                 </TouchableOpacity>
 
@@ -868,7 +906,7 @@ export default function GroupDetailScreen() {
                       color: colors.subtext,
                     }}
                   >
-                    Vérification des défis actifs…
+                    {i18n.t('groups.detail.checkingDefis')}
                   </Text>
                 )}
 
@@ -880,8 +918,7 @@ export default function GroupDetailScreen() {
                       color: '#b91c1c',
                     }}
                   >
-                    Tu ne peux pas supprimer ce groupe tant que des défis sont
-                    ouverts / en cours.
+                    {i18n.t('groups.detail.cannotDeleteWhileDefis')}
                   </Text>
                 )}
               </View>

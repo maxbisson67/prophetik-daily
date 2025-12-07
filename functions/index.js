@@ -29,11 +29,12 @@ export { ingestSkaterStatsForSeason, cronIngestSkaterStatsDaily } from "./nhlIng
 export { onGroupCreated } from "./gamification/onGroupCreated.js";
 export { onDefiCreated } from "./gamification/onDefiCreated.js";
 export { onParticipationCreated } from "./gamification/onParticipationCreated.js";
+export { autoCancelGhostDefis } from './gamification/autoCancelGhostDefis.js';
 export { debugSimulateGamification } from './gamification/debugSimulateGamification.js';
 
 export { rebuildLeaderboardForGroup, rebuildAllLeaderboards } from "./leaderboard.js";
 
-import { reconcileLive, reconcileLiveManual  } from "./reconcileLive.js";
+import { reconcileLiveManual } from "./reconcileLive.js";
 
 export { precheckPhoneLogin } from "./precheckPhoneLogin.js";
 
@@ -45,6 +46,7 @@ export { updateNhlLiveGamesNow, updateNhlLiveGamesCron} from "./nhlLive.js"
 
 // ⚠️ Cloud Scheduler minimum = 1 minute.
 // Si tu veux “toutes les 30s”, il faut un ping externe ou une Task Queue.
+/*
 export const scheduledReconcileLive = onSchedule(
   { schedule: "every 1 minutes", timeZone: "America/Toronto", region: "us-central1" },
   async () => {
@@ -110,3 +112,4 @@ export const scheduledReconcileLive = onSchedule(
     }
   }
 );
+*/

@@ -23,6 +23,7 @@ import functions from "@react-native-firebase/functions";
 // Safe auth + thème
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
+import i18n from "@src/i18n/i18n"; // 👈 i18n
 
 const CODE_LEN = 8;
 const ALPHABET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
@@ -73,10 +74,10 @@ export default function JoinGroupScreen() {
     c.length === CODE_LEN && [...c].every((ch) => ALPHABET.includes(ch));
 
   const cleanedCode = sanitize(code);
-  const canJoin = useMemo(() => validateCode(cleanedCode) && !busy, [
-    cleanedCode,
-    busy,
-  ]);
+  const canJoin = useMemo(
+    () => validateCode(cleanedCode) && !busy,
+    [cleanedCode, busy]
+  );
 
   // 🔙 Retour logique
   const safeBack = useCallback(async () => {
@@ -113,12 +114,15 @@ export default function JoinGroupScreen() {
 
   async function onJoin() {
     if (!user?.uid)
-      return Alert.alert("Connexion requise", "Connecte-toi pour rejoindre un groupe.");
+      return Alert.alert(
+        i18n.t("join.alertLoginRequiredTitle"),
+        i18n.t("join.alertLoginRequiredMessage")
+      );
 
     if (!validateCode(cleanedCode))
       return Alert.alert(
-        "Code invalide",
-        `Le code doit contenir ${CODE_LEN} caractères (A–Z, sans O et 0).`
+        i18n.t("join.alertCodeInvalidTitle"),
+        i18n.t("join.alertCodeInvalidMessage", { len: CODE_LEN })
       );
 
     try {
@@ -133,7 +137,7 @@ export default function JoinGroupScreen() {
       const res = await joinGroupByCode({ code: cleanedCode, identity });
 
       const groupId = res?.data?.groupId;
-      if (!groupId) throw new Error("Réponse inattendue du serveur.");
+      if (!groupId) throw new Error(i18n.t("join.alertServerUnexpected"));
 
       router.replace({
         pathname: "/(drawer)/groups/[groupId]",
@@ -143,12 +147,25 @@ export default function JoinGroupScreen() {
       const msg = String(e?.message || e);
 
       if (msg.includes("not-found"))
-        Alert.alert("Code introuvable", "Vérifie le code et réessaie.");
+        Alert.alert(
+          i18n.t("join.alertCodeNotFoundTitle"),
+          i18n.t("join.alertCodeNotFoundMessage")
+        );
       else if (msg.includes("unauthenticated"))
-        Alert.alert("Connexion requise", "Connecte-toi pour rejoindre un groupe.");
+        Alert.alert(
+          i18n.t("join.alertLoginRequiredTitle"),
+          i18n.t("join.alertLoginRequiredMessage")
+        );
       else if (msg.includes("permission-denied"))
-        Alert.alert("Accès refusé", "Tu n’es pas autorisé à rejoindre ce groupe.");
-      else Alert.alert("Erreur", msg);
+        Alert.alert(
+          i18n.t("join.alertAccessDeniedTitle"),
+          i18n.t("join.alertAccessDeniedMessage")
+        );
+      else
+        Alert.alert(
+          i18n.t("join.alertGenericErrorTitle"),
+          msg
+        );
     } finally {
       setBusy(false);
     }
@@ -158,7 +175,7 @@ export default function JoinGroupScreen() {
     <>
       <Stack.Screen
         options={{
-          title: "Rejoindre un groupe",
+          title: i18n.t("join.title"),
           headerLeft: () => (
             <TouchableOpacity onPress={safeBack} style={{ paddingHorizontal: 10 }}>
               <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -195,7 +212,7 @@ export default function JoinGroupScreen() {
               color: colors.text,
             }}
           >
-            🔑 Entrez votre code d’invitation
+            {i18n.t("join.ctaTitle")}
           </Text>
           <Text
             style={{
@@ -206,7 +223,7 @@ export default function JoinGroupScreen() {
               lineHeight: 22,
             }}
           >
-            Rejoignez immédiatement un groupe existant et commencez à prédire.
+            {i18n.t("join.ctaSubtitle")}
           </Text>
         </View>
 
@@ -214,7 +231,7 @@ export default function JoinGroupScreen() {
           value={code}
           onChangeText={(t) => setCode(sanitize(t))}
           autoCapitalize="characters"
-          placeholder="XXXXXXXX"
+          placeholder={i18n.t("join.placeholderCode")}
           placeholderTextColor={colors.subtext}
           maxLength={CODE_LEN + 2}
           style={{
@@ -245,7 +262,7 @@ export default function JoinGroupScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={{ color: "#fff", fontWeight: "800" }}>
-              Rejoindre le groupe
+              {i18n.t("join.btnJoin")}
             </Text>
           )}
         </TouchableOpacity>
@@ -263,7 +280,7 @@ export default function JoinGroupScreen() {
           }}
         >
           <Text style={{ fontWeight: "600", color: colors.text }}>
-            Annuler
+            {i18n.t("join.btnCancel")}
           </Text>
         </TouchableOpacity>
       </View>

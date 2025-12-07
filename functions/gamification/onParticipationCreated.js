@@ -1,6 +1,6 @@
 // functions/gamification/onParticipationCreated.js
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { awardCredit } from './utils.js';
 
@@ -19,38 +19,79 @@ function yesterdayUtcDateString() {
 
 /**
  * Déclenché lorsqu’une participation est créée :
- *   /groups/{groupId}/defis/{defiId}/participations/{participantId}
+ *   /defis/{defiId}/participations/{participantId}
  *
- * Effets :
+ * Version "simple" :
+ *  - On met à jour participantsCount / isActivated sur le défi,
+ *    mais la gamification (stats + crédits) fonctionne pour TOUTE participation,
+ *    même si le défi n’atteint pas le minParticipants.
+ *
+ * Logique gamification :
  *  - participants/{uid}.stats.totalParticipations++ (global)
- *  - mise à jour de la série de jours consécutifs (stats.currentStreakDays, maxStreakDays, lastParticipationDay)
- *  - achievements (cycliques pour encourager la répétition) :
- *      - fiveParticipationsAny : true seulement quand on est sur un multiple de 5 (5,10,15,20,25…), sinon false
- *      - threeConsecutiveDays : true quand currentStreak est multiple de 3 (3,6,9…), sinon false
+ *  - mise à jour de la série de jours consécutifs :
+ *      stats.currentStreakDays, maxStreakDays, lastParticipationDay (YYYY-MM-DD UTC)
+ *  - achievements (cycliques) :
+ *      fiveParticipationsAny : true seulement sur un multiple de 5 (5,10,15,20…),
+ *                              sinon false
+ *      threeConsecutiveDays  : true quand currentStreak est multiple de 3 (3,6,9…),
+ *                              sinon false
  *  - crédits (répétitifs) :
- *      - tous les 5 participations → +2 crédits (reason: "five_participations_any")
- *      - tous les 3 jours consécutifs → +1 crédit (reason: "three_consecutive_days")
+ *      tous les 5 participations → +1 crédit  (reason: "five_participations_any")
+ *      tous les 3 jours consécutifs → +1 crédit (reason: "three_consecutive_days")
  *  - chaque gain de crédit passe par awardCredit → écrit aussi dans credit_logs
  */
 export const onParticipationCreated = onDocumentCreated(
-  'groups/{groupId}/defis/{defiId}/participations/{participantId}',
+  'defis/{defiId}/participations/{participantId}',
   async (event) => {
-    const { groupId, defiId, participantId } = event.params;
+    const { defiId, participantId } = event.params;
 
     logger.info('[onParticipationCreated] TRIGGERED', {
-      groupId,
       defiId,
       participantId,
     });
 
     try {
+      /* -------------------------------------------
+       * 0) Mise à jour du défi (participantsCount / isActivated)
+       * ------------------------------------------- */
+      const defiRef = db.collection('defis').doc(defiId);
+
+      const [defiSnap, participationsSnap] = await Promise.all([
+        defiRef.get(),
+        defiRef.collection('participations').get(),
+      ]);
+
+      const participantsCount = participationsSnap.size;
+      const defiData = defiSnap.exists ? defiSnap.data() || {} : {};
+
+      const minParticipants =
+        typeof defiData.minParticipants === 'number'
+          ? defiData.minParticipants
+          : 2;
+
+      const isActivatedNow = participantsCount >= minParticipants;
+      const defiUpdates = { participantsCount };
+
+      if (isActivatedNow && !defiData.isActivated) {
+        defiUpdates.isActivated = true;
+        defiUpdates.activatedAt = FieldValue.serverTimestamp();
+      }
+
+      await defiRef.set(defiUpdates, { merge: true });
+
+      // ❗ Option simple : on NE retourne plus ici.
+      // La gamification continue même si isActivatedNow === false.
+
+      /* -------------------------------------------
+       * 1) Gamification (stats + achievements + crédits)
+       * ------------------------------------------- */
+
       const participantRef = db.collection('participants').doc(participantId);
       const snap = await participantRef.get();
 
       if (!snap.exists) {
         logger.warn('[onParticipationCreated] participant doc inexistant', {
           participantId,
-          groupId,
           defiId,
         });
         return;
@@ -92,7 +133,6 @@ export const onParticipationCreated = onDocumentCreated(
       );
 
       // ---------- 3) Achievements côté booléens (cycliques) ----------
-      // On part d'une copie des achievements existants
       const nextAchievements = { ...achievements };
 
       // Cycle 5 participations : 1,2,3,4,5,1,2,3,4,5,...
@@ -100,10 +140,8 @@ export const onParticipationCreated = onDocumentCreated(
       const hitFive = newTotal > 0 && cycle5 === 0;
 
       if (hitFive) {
-        // On marque le défi comme atteint pour l'UI
         nextAchievements.fiveParticipationsAny = true;
       } else if (achievements.fiveParticipationsAny) {
-        // Dès que l'on sort du palier, on remet à false
         nextAchievements.fiveParticipationsAny = false;
       }
 
@@ -118,21 +156,11 @@ export const onParticipationCreated = onDocumentCreated(
       }
 
       // ---------- 4) Gamification crédits (répétitif) ----------
-      // Tous les 5 participations globales → +1
-      let earnedFromFive = 0;
-      if (hitFive) {
-        earnedFromFive = 1;
-      }
-
-      // Tous les 3 jours consécutifs → +1
-      let earnedFromThree = 0;
-      if (hitThree) {
-        earnedFromThree = 1;
-      }
+      let earnedFromFive = hitFive ? 1 : 0;
+      let earnedFromThree = hitThree ? 1 : 0;
 
       logger.info('[onParticipationCreated] COMPUTED', {
         participantId,
-        groupId,
         defiId,
         prevTotal,
         newTotal,
@@ -145,6 +173,8 @@ export const onParticipationCreated = onDocumentCreated(
         earnedFromThree,
         beforeAchievements: achievements,
         nextAchievements,
+        participantsCount,
+        minParticipants,
       });
 
       // ---------- 5) Mise à jour du doc participants/{uid} ----------
@@ -163,7 +193,6 @@ export const onParticipationCreated = onDocumentCreated(
 
       logger.info('[onParticipationCreated] STATS_UPDATED', {
         participantId,
-        groupId,
         defiId,
         newTotal,
         currentStreak,
@@ -171,7 +200,7 @@ export const onParticipationCreated = onDocumentCreated(
         appliedAchievements: nextAchievements,
       });
 
-      // ---------- 6) Crédits via awardCredit (écrit aussi dans credit_logs) ----------
+      // ---------- 6) Crédits via awardCredit ----------
       // 6.a) Palier 5 participations (répétitif)
       if (earnedFromFive > 0) {
         const idKeyFive = `five_participations_any:${participantId}:total:${newTotal}`;
@@ -179,7 +208,6 @@ export const onParticipationCreated = onDocumentCreated(
         await awardCredit(participantId, earnedFromFive, {
           reason: 'five_participations_any',
           meta: {
-            groupId,
             defiId,
             ref: { type: 'defi', id: defiId },
           },
@@ -188,7 +216,6 @@ export const onParticipationCreated = onDocumentCreated(
 
         logger.info('[onParticipationCreated] CREDIT_FIVE_PARTICIPATIONS', {
           participantId,
-          groupId,
           defiId,
           amount: earnedFromFive,
           newTotal,
@@ -203,7 +230,6 @@ export const onParticipationCreated = onDocumentCreated(
         await awardCredit(participantId, earnedFromThree, {
           reason: 'three_consecutive_days',
           meta: {
-            groupId,
             defiId,
             ref: { type: 'defi', id: defiId },
           },
@@ -212,7 +238,6 @@ export const onParticipationCreated = onDocumentCreated(
 
         logger.info('[onParticipationCreated] CREDIT_THREE_DAYS', {
           participantId,
-          groupId,
           defiId,
           amount: earnedFromThree,
           currentStreak,
@@ -222,18 +247,18 @@ export const onParticipationCreated = onDocumentCreated(
 
       logger.info('[onParticipationCreated] DONE', {
         participantId,
-        groupId,
         defiId,
         newTotal,
         currentStreak,
         earnedFromFive,
         earnedFromThree,
+        participantsCount,
+        minParticipants,
       });
     } catch (e) {
       logger.error('[onParticipationCreated] ERROR', {
         error: e?.message,
         stack: e?.stack,
-        groupId,
         defiId,
         participantId,
       });

@@ -1,0 +1,457 @@
+{
+  "common": {
+    "unknownError": "Unknown error",
+    "initializing": "Initializing…",
+    "errorLabel": "Error:",
+    "create": "Create",
+    "ok": "OK",
+    "cancel": "Cancel"
+  },
+  "errors": {
+    "firestorePermission": "Access denied by Firestore rules."
+  },
+  "auth": {
+    "login": "Log in"
+  },
+  "home": {
+    "title": "Home",
+    "hello": "Hi",
+    "credits": "Credits",
+    "viewCredits": "View and buy credits",
+    "createChallenge": "Create a challenge",
+    "activeChallenges": "Active challenges",
+    "totalPot": "Total pot",
+    "todayChallenge": "My challenges today",
+    "challenge": "Challenge",
+    "challengeDate": "NHL date",
+    "challengeLimit": "Signup deadline:",
+    "challengeStarts": "Starts at",
+    "challengeStatus": "Open",
+    "status": {
+      "open": "Open",
+      "live": "Live",
+      "awaiting": "Processing",
+      "completed": "Completed"
+    },
+    "loginToAccess": "Log in to access the home screen.",
+    "noGroups": "You don’t have any groups yet.",
+    "noActiveChallenges": "No active challenges at the moment.",
+    "editAvatar": "Edit avatar",
+    "creditsToEarn": "Credits to earn",
+    "firstChallengeCreated": "First challenge created",
+    "firstChallengeHint": "Create your first challenge",
+    "firstGroupCreated": "First group created",
+    "firstGroupHint": "Create your first group",
+    "fiveParticipationsTitle": "Take part in 5 challenges",
+    "threeDaysTitle": "3 consecutive days",
+    "progressLabel": "Progress: {{current}}/{{max}}",
+    "streakLabel": "Streak: {{current}}/{{max}}"
+  },
+  "groups": {
+    "detail": {
+        "headerFallback": "Group",
+
+        "loading": "Loading group…",
+        "errorPrefix": "Error:",
+        "idLabel": "ID: {{id}}",
+        "notFound": "No group found (ID: {{id}})",
+
+        "sectionDetails": "Details",
+        "groupType": "Group type",
+        "private": "Private",
+        "public": "Public",
+        "inviteCode": "Invite code",
+        "createdAt": "Created on",
+        "signupUntil": "Signup until",
+
+        "membersSection": "Group members",
+        "noMembers": "No members.",
+
+        "actionsSection": "Actions",
+        "actionCreateChallenge": "Create a challenge",
+        "actionShareInvite": "Share invite code",
+        "actionShareInviteWithCode": "Share invite code ({{code}})",
+        "actionLeaveGroup": "Leave this group",
+
+        "ownerOnlyAvatar": "Only the owner can change the avatar",
+        "avatarEdit": "Edit group avatar ({{price}} credit)",
+        "avatarBuy": "Buy a group avatar ({{price}} credits)",
+
+        "shareErrorTitle": "Share failed",
+
+        "shareInviteMessage": "Join my group \"{{name}}\" in Prophetik-daily.\nCode: {{code}}\nID: {{id}}",
+
+        "leaveConfirmTitle": "Group left",
+        "leaveConfirmMessage": "You have left this group.",
+        "leaveErrorTitle": "Unable to leave",
+        "leaveErrorMessage": "An error occurred.",
+
+        "deleteBlockedTitle": "Cannot delete",
+        "deleteBlockedMessage": "There are still active or pending challenges in this group.",
+
+        "deleteConfirmTitle": "Delete this group?",
+        "deleteConfirmMessage": "This action is permanent. Members will no longer see this group.",
+        "deleteConfirmCancel": "Cancel",
+        "deleteConfirmOk": "Delete",
+
+        "deleteDoneTitle": "Group deleted",
+        "deleteDoneMessage": "The group has been deleted successfully.",
+        "deleteErrorTitle": "Deletion failed",
+        "deleteErrorMessage": "An error occurred while deleting the group.",
+
+        "checkingDefis": "Checking for active challenges…",
+        "cannotDeleteWhileDefis": "You cannot delete this group while challenges are still open / running."
+    },
+         "title": "Groups",
+        "detailTitle": "Group details",
+        "loginToSeeGroups": "Log in to view your groups.",
+        "login": "Log in",
+
+        "headerMine": "Groups I manage",
+        "headerMember": "Groups where I’m a member",
+        "headerMineEmpty": "No group for now.",
+        "headerMemberEmpty": "You haven’t joined any group yet.",
+
+        "btnCreate": "Create",
+        "btnJoin": "Join",
+
+        "welcomeTitle": "Welcome 👋",
+        "welcomeText": "Start by creating a group with your friends or join one with an invite code.",
+
+        "loading": "Loading…",
+
+        "invitationCode": "Invite code",
+        "roleOwner": "Owner",
+        "roleMember": "Member",
+
+        "emptyTitle": "Create your first group or join your friends",
+        "emptyText": "Organize your challenges, invite your friends, and start earning credits.",
+        "emptyCreate": "Create a group",
+        "emptyJoin": "Join",
+        "emptyHint": "Tip: you can set a favorite group with the ★ icon",
+
+        "modalTitle": "New group",
+        "modalSubtitle": "Gather your crew and dominate the challenges.",
+        "fieldNameLabel": "Group name",
+        "fieldNamePlaceholder": "e.g. The Northern Snipers",
+        "fieldDescriptionLabel": "Description (optional)",
+        "fieldDescriptionPlaceholder": "e.g. Our Saturday pool with friends",
+        "cancel": "Cancel",
+        "create": "Create",
+
+        "alertNameRequiredTitle": "Name required",
+        "alertNameRequiredMessage": "Give your group a name.",
+        "alertNotConnectedTitle": "Not logged in",
+        "alertNotConnectedMessage": "Log in to create a group.",
+        "alertFavoriteReadTitle": "Favorite group",
+        "alertErrorTitle": "Error",
+        "alertFavoriteTitle": "Favorite",
+        "alertFavoriteMessage": "Unable to update:"
+    },
+    "join": {
+        "title": "Join a group",
+        "ctaTitle": "🔑 Enter your invite code",
+        "ctaSubtitle": "Join an existing group and start predicting right away.",
+        "placeholderCode": "XXXXXXXX",
+        "btnJoin": "Join group",
+        "btnCancel": "Cancel",
+
+        "alertLoginRequiredTitle": "Sign-in required",
+        "alertLoginRequiredMessage": "Log in to join a group.",
+        "alertCodeInvalidTitle": "Invalid code",
+        "alertCodeInvalidMessage": "The code must contain {{len}} characters (A–Z, without O or 0).",
+
+        "alertServerUnexpected": "Unexpected server response.",
+        "alertCodeNotFoundTitle": "Code not found",
+        "alertCodeNotFoundMessage": "Check the code and try again.",
+        "alertAccessDeniedTitle": "Access denied",
+        "alertAccessDeniedMessage": "You are not allowed to join this group.",
+        "alertGenericErrorTitle": "Error"
+    },
+    "challenges": {
+        "activeTitle": "Active challenges",
+        "pastTitle": "Past challenges",
+        "status": {
+            "active": "Active",
+            "awaiting": "Pending results",
+            "cancelledGhost": "Cancelled (not enough players)",
+            "completed": "Completed"
+        },
+        "gameDateLabel": "NHL date",
+        "signupDeadlineLabel": "Signup deadline (local time):",
+        "firstGameLabel": "First game (local time):",
+        "potLabel": "Pot: {{count}} credit(s)",
+        "entryCostLabel": "Entry cost: {{count}} credit(s)",
+        "ghostRefundHint": "Players have been automatically refunded.",
+        "winnersTitleSingular": "Winner",
+        "winnersTitlePlural": "Winners",
+        "seeResults": "See results",
+        "participate": "Join",
+        "loginToSee": "Log in to see your challenges.",
+        "loadingChallenges": "Loading challenges…",
+        "createNhlChallenge": "Create an NHL challenge",
+        "noChallenges": "No challenges to display."
+    },
+    "defi": {
+        "create": {
+            "title": "New NHL challenge",
+            "autoTitle": "Challenge {{format}}",
+
+            "group": {
+                "noneHint": "No group is available to create a challenge.",
+                "noneBody": "Archived groups cannot receive new challenges.",
+                "label": "Group",
+                "choose": "Choose a group"
+            },
+
+            "formatLabel": "Challenge format",
+
+            "summary": {
+                "titleLabel": "Title",
+                "costLabel": "Entry cost",
+                "costValue": "{{credits}} credit(s)"
+            },
+
+            "date": {
+                "labelBase": "NHL date{{meta}}",
+                "matchesShort": "game(s)",
+                "firstAt": "1st game at {{time}}",
+                "deadlineAt": "Deadline {{time}}",
+                "change": "Change"
+            },
+
+            "verify": {
+                "loading": "Checking NHL games…",
+                "noGames": "No NHL game on {{date}}.",
+                "okWithTime": "{{count}} game(s) found. First game at {{time}}.",
+                "okNoTime": "{{count}} game(s) found.",
+                "error": "Unable to check NHL games: {{message}}"
+            },
+
+            "alert": {
+                "noGames": {
+                "title": "No game found",
+                "body": "No game found for {{date}}."
+                },
+                "deadlinePassed": {
+                "title": "Deadline passed",
+                "body": "The signup deadline for {{date}} was {{time}}. The challenge can’t be created."
+                },
+                "error": {
+                "title": "Cannot create challenge",
+                "body": "An error occurred while creating the challenge: {{message}}"
+                }
+            },
+
+            "actions": {
+                "creating": "Creating…",
+                "create": "Create challenge"
+            },
+
+            "hint": {
+                "signupDeadline": "The signup deadline is set to 1 hour before the first game (local time)."
+            }
+        },
+        "header": {
+            "defaultTitle": "Challenge",
+            "errorTitle": "Error",
+            "notFoundTitle": "Challenge not found"
+        },
+        "loading": {
+            "title": "Loading…",
+            "generic": "Loading…",
+            "overlayHint": "This may take a few seconds…",
+            "statsUpdatingToday": "Updating today’s stats…",
+            "statsUpdatingSeason": "Updating stats for this season…",
+            "statsGeneric": "Loading stats…"
+        },
+        "playerSelect": {
+            "title": "Select a player",
+            "close": "Close",
+            "searchPlaceholder": "Search a player…",
+            "emptyChoice": "Choose a player…"
+        },
+        "seasonToggle": {
+            "current": "Season {{id}}",
+            "previous": "Season {{id}}"
+        },
+        "infoCard": {
+            "nhlDate": "NHL date",
+            "signupDeadline": "Signup deadline:",
+            "firstGameUtc": "First game (UTC):",
+            "choicesCount": "Number of picks:",
+            "status": "Status:",
+            "lockedSuffix": "locked",
+            "pot": "Pot: {{count}} credit(s)"
+        },
+        "gamesCard": {
+            "title": "Today’s NHL games",
+            "none": "No games found.",
+            "time": "Time",
+            "away": "Away",
+            "home": "Home"
+        },
+        "pickersCard": {
+            "title": "Select your players",
+            "choiceLabel": "Pick {{index}}",
+            "summary": "{{current}}/{{max}} pick(s)"
+        },
+        "errors": {
+            "notFoundMessage": "No challenge found."
+        },
+        "alerts": {
+            "playerDuplicateTitle": "Player already selected",
+            "playerDuplicateMessage": "{{name}} is already selected for another spot.",
+            "lockedTitle": "Signup closed",
+            "lockedMessage": "The signup deadline is over.",
+            "incompleteTitle": "Selection incomplete",
+            "incompleteMessage": "You must choose {{count}} player(s).",
+            "savingSlow": "Creating your entry… (the first participant can take a few seconds)",
+            "successTitle": "Entry saved",
+            "successMessage": "Good luck! {{potMessage}}",
+            "successPotMessage": "Pot: {{count}} credits",
+            "successPotMessageSimple": "Entry saved.",
+            "genericErrorTitle": "Error"
+        },
+        "actions": {
+            "primarySaving": "Creating your entry…",
+            "primaryLocked": "Signup closed",
+            "primaryDefault": "Save my entry"
+        },
+        "results": {
+            "header": {
+            "defaultTitle": "Results",
+            "groupFallback": "Group",
+            "pot": "Prize pool of {{count}} credits",
+            "startsAt": "Starts at",
+            "scoring": "Scoring: Goal = +1 • Assist = +1"
+            },
+            "status": {
+            "open": "Open",
+            "live": "Live",
+            "awaiting": "Scoring in progress",
+            "closed": "Finished",
+            "unknown": "Unknown"
+            },
+            "loading": {
+            "generic": "Loading…"
+            },
+            "errors": {
+            "notFound": "No challenge found."
+            },
+            "toast": {
+            "title": "Official update",
+            "empty": "Adjustment applied."
+            },
+            "chat": {
+            "title": "Challenge chat",
+            "count": "{{count}} messages",
+            "empty": "No messages yet.",
+            "inputPlaceholder": "Write a message…",
+            "send": "Send"
+            },
+            "participants": {
+            "empty": "No entries yet.",
+            "hiddenUntil": "Other players’ picks are hidden until the first game starts{{time}}.",
+            "legend": "Format: goals – assists = total",
+            "hiddenSelections": "Selections are hidden until the first game starts.",
+            "noPlayers": "No player selected."
+            }
+        }
+    },
+    "leaderboard": {
+        "title": "Leaderboard",
+        "loginToSee": "Log in to see the leaderboards.",
+        "loading": "Loading…",
+        "errorPrefix": "Error: {{message}}",
+
+        "legend": {
+            "name": "Name",
+            "wins": "Challenges won",
+            "gainTotal": "Total winnings",
+            "gainAvg": "Average gain per challenge"
+        },
+
+        "rebuild": {
+            "button": "Rebuild",
+            "loading": "Rebuilding…"
+        },
+
+        "group": {
+            "noStats": "No stats yet for this group."
+        },
+
+        "empty": {
+            "noGroups": "You don’t have any groups yet."
+        }
+    },
+    "live": {
+    "title": "Live Games",
+    "loading": "Loading games…",
+
+    "headerWithDate": "NHL games on {{date}}",
+    "headerNoDate": "NHL games",
+
+    "tapHint": "Tap a game to see goals and scorers in real time.",
+
+    "emptyWithDate": "No games found for {{date}}.",
+    "emptyNoDate": "No games found.",
+
+    "status": {
+      "live": "LIVE",
+      "final": "Final",
+      "finalOT": "Final (OT)",
+      "finalSO": "Final (SO)"
+    },
+
+    "row": {
+      "startAt": "Start: {{time}}",
+      "startUnknown": "Unknown time",
+      "tapForDetails": "Tap to see details"
+    },
+
+    "detail": {
+      "title": "Game details",
+
+      "startAt": "Start: {{time}}",
+      "startUnknown": "Unknown start time",
+
+      "timeRemaining": "Time remaining: {{time}}",
+      "inProgress": "In progress",
+
+      "summaryTitle": "Game summary",
+      "loadingGoals": "Loading goals…",
+      "noGoals": "No goals or stats available for this game.",
+
+      "period": "Period {{period}}",
+      "periodWithSuffix": "Period {{period}}{{suffix}}",
+      "ot": "Overtime",
+      "so": "Shootout",
+
+      "liveWithPeriod": "{{period}}{{time}}",
+
+      "assistOne": "Assisted by {{player}}",
+      "assistTwo": "Assisted by {{player1}} and {{player2}}",
+
+      "goalFallback": "Goal"
+    },
+    "goals": {
+      "period1": "1st period",
+      "period2": "2nd period",
+      "period3": "3rd period",
+      "ot": "Overtime",
+      "so": "Shootout",
+      "unknown": "Unknown"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "theme": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+    },
+    "language": "Language"
+ }
+}

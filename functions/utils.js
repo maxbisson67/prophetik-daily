@@ -2,6 +2,7 @@
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
+import { appYmd } from "./ProphetikDate.js";
 
 if (getApps().length === 0) initializeApp();
 export const db = getFirestore();
@@ -25,10 +26,9 @@ export function readAnyBalance(doc) {
   );
 }
 export const readTS = (v) => (v?.toDate?.() ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null);
-export const toYMD = (d) => {
-  const x = typeof d === "string" ? new Date(d) : d instanceof Date ? d : new Date();
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
-};
+
+export const toYMD = (d) => appYmd(d);
+
 export function splitEven(total, n) {
   if (n <= 0 || !(total > 0)) return Array.from({ length: Math.max(0, n) }, () => 0);
   const base = Math.floor(total / n);
@@ -57,19 +57,7 @@ export async function safeFetchJson(url, { method = "GET", headers = {}, timeout
  
 // Date YYYY-MM-DD en fuseau America/Toronto
 export function torontoYMD(date = new Date()) {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Toronto",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-
-  const parts = fmt.formatToParts(date);
-  const y = parts.find((p) => p.type === "year")?.value;
-  const m = parts.find((p) => p.type === "month")?.value;
-  const d = parts.find((p) => p.type === "day")?.value;
-
-  return `${y}-${m}-${d}`;
+  return appYmd(date);
 }
 
 // --- NHL helpers partagés ---

@@ -1,8 +1,5 @@
 // app/(drawer)/defis/[defiId]/results.js
 // Résultats (riche) + Chat repliable (hors FlatList)
-// - Résolution noms/avatars via profiles_public/{uid} (plus de lecture participants/* ou group_memberships côté client)
-// - Classement live + contributions (G/A)
-// - Chat accordéon autonome (hors FlatList)
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -27,8 +24,7 @@ import {
   useRouter,
 } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import firestore from '@react-native-firebase/firestore'; // ✅ RNFirebase
-// Safe auth
+import firestore from '@react-native-firebase/firestore';
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
 import { useTheme } from '@src/theme/ThemeProvider';
@@ -37,8 +33,10 @@ import { useUnreadCount } from '@src/defiChat/useUnreadCount';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight, HeaderBackButton } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { DrawerToggleButton } from '@react-navigation/drawer';
+
+// ✅ i18n
+import i18n from '@src/i18n/i18n';
 
 /* ----------------------------- Utils ----------------------------- */
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
@@ -76,41 +74,44 @@ function fmtTSLocalHM(v) {
 }
 
 function statusStyleBase(status) {
-  switch ((status || '').toLowerCase()) {
+  const key = (status || '').toLowerCase();
+  switch (key) {
     case 'open':
       return {
         bg: '#ECFEFF',
         fg: '#0E7490',
         icon: 'clock-outline',
-        label: 'Ouvert',
+        label: i18n.t('defi.results.status.open'),
       };
     case 'live':
       return {
         bg: '#F0FDF4',
         fg: '#166534',
         icon: 'broadcast',
-        label: 'En cours',
+        label: i18n.t('defi.results.status.live'),
       };
     case 'awaiting_result':
       return {
         bg: '#FFF7ED',
         fg: '#9A3412',
         icon: 'timer-sand',
-        label: 'Calcul en cours',
+        label: i18n.t('defi.results.status.awaiting'),
       };
     case 'closed':
       return {
         bg: '#FEF2F2',
         fg: '#991B1B',
         icon: 'lock',
-        label: 'Terminé',
+        label: i18n.t('defi.results.status.closed'),
       };
     default:
       return {
         bg: '#EFEFEF',
         fg: '#111827',
         icon: 'help-circle',
-        label: String(status || '—'),
+        label: String(
+          status || i18n.t('defi.results.status.unknown')
+        ),
       };
   }
 }
@@ -191,11 +192,11 @@ export const toastConfig = {
             marginBottom: 8,
           }}
         >
-          Mise à jour officielle
+          {i18n.t('defi.results.toast.title')}
         </Text>
         {items.length === 0 ? (
           <Text style={{ color: '#fff', opacity: 0.85 }}>
-            Ajustement appliqué.
+            {i18n.t('defi.results.toast.empty')}
           </Text>
         ) : (
           items.map((it, i) => (
@@ -227,8 +228,8 @@ export default function DefiResultsScreen() {
 
   const [loadingDefi, setLoadingDefi] = useState(true);
   const [parts, setParts] = useState([]); // [{uid, livePoints, picks, updatedAt, _raw}]
-  const [namesMap, setNamesMap] = useState({}); // ✅ uid -> displayName
-  const [participantInfoMap, setParticipantInfoMap] = useState({}); // ✅ uid -> {photoURL}
+  const [namesMap, setNamesMap] = useState({});
+  const [participantInfoMap, setParticipantInfoMap] = useState({});
 
   const [liveStats, setLiveStats] = useState({
     playerGoals: {},
@@ -237,7 +238,7 @@ export default function DefiResultsScreen() {
     playerAssists: {},
     playerPoints: {},
   });
-  const [playerMap, setPlayerMap] = useState({}); // { pid: {fullName, teamAbbr} }
+  const [playerMap, setPlayerMap] = useState({});
 
   // Chat accordéon
   const [chatCollapsed, setChatCollapsed] = useState(true);
@@ -250,7 +251,7 @@ export default function DefiResultsScreen() {
 
   const [nhlPlayersReadable, setNhlPlayersReadable] = useState(true);
 
-  // 🔵 Chat (utilise les noms/avatars provenant de profiles_public via namesMap/participantInfoMap)
+  // 🔵 Chat
   const { messages, send, busy, markRead, canSend } = useDefiChat(defiId, {
     pageSize: 50,
     groupId: group?.id,
@@ -291,7 +292,6 @@ export default function DefiResultsScreen() {
 
   const chip = statusStyleBase(defi?.status);
 
-  // construit les 3 finalistes
   const finalists = React.useMemo(() => {
     const src = Array.isArray(leaderboard) ? leaderboard : [];
     return src
@@ -312,7 +312,6 @@ export default function DefiResultsScreen() {
       });
   }, [leaderboard, namesMap, participantInfoMap]);
 
-  /* ----- Gagnants (ex-aequo) ----- */
   const winners = useMemo(() => {
     const rows = Array.isArray(leaderboard) ? leaderboard : [];
     if (!rows.length) return [];
@@ -379,11 +378,13 @@ export default function DefiResultsScreen() {
   const headerTitle = React.useMemo(
     () =>
       defi?.title ||
-      (defi?.type ? `Défi ${defi.type}x${defi.type}` : 'Résultats'),
+      (defi?.type
+        ? `${i18n.t('home.challenge')} ${defi.type}x${defi.type}`
+        : i18n.t('defi.results.header.defaultTitle')),
     [defi]
   );
 
-  // 🔒 Caviardage : avant le début du premier match, on cache les picks des autres
+  // 🔒 Caviardage
   const firstGameDate = React.useMemo(() => {
     const v = defi?.firstGameUTC;
     if (!v) return null;
@@ -403,7 +404,6 @@ export default function DefiResultsScreen() {
 
   const hideOthersPicks = React.useMemo(() => {
     const status = String(defi?.status || '').toLowerCase();
-    // Caviardage seulement quand le défi est ouvert & 1er match pas commencé
     return status === 'open' && beforeFirstGame;
   }, [defi?.status, beforeFirstGame]);
 
@@ -439,7 +439,7 @@ export default function DefiResultsScreen() {
     });
   }, []);
 
-  /* ----- Defi doc (RNFirebase) ----- */
+  /* ----- Defi doc ----- */
   useEffect(() => {
     if (!defiId) return;
     setLoadingDefi(true);
@@ -464,7 +464,7 @@ export default function DefiResultsScreen() {
     return () => un();
   }, [defi?.groupId]);
 
-  /* ----- Participations (RNFirebase chain) ----- */
+  /* ----- Participations ----- */
   useEffect(() => {
     if (!defi?.id) return;
     const colRef = firestore().collection(
@@ -488,14 +488,13 @@ export default function DefiResultsScreen() {
     return () => un();
   }, [defi?.id]);
 
-  // ----- Résoudre noms/avatars via profiles_public/{uid} -----
-  const profilesUnsubsRef = useRef(new Map()); // Map<uid, unsub>
+  // ----- profiles_public/{uid} -----
+  const profilesUnsubsRef = useRef(new Map());
   useEffect(() => {
     const neededUids = Array.from(
       new Set(parts.map((p) => p.uid).filter(Boolean))
     );
 
-    // retire les listeners devenus inutiles
     for (const [uid, un] of profilesUnsubsRef.current) {
       if (!neededUids.includes(uid)) {
         try {
@@ -505,19 +504,17 @@ export default function DefiResultsScreen() {
       }
     }
 
-    // ajoute les listeners manquants
     neededUids.forEach((uid) => {
       if (profilesUnsubsRef.current.has(uid)) return;
 
       const ref = firestore().doc(`profiles_public/${uid}`);
       const un = ref.onSnapshot(
         (snap) => {
-          const v = snap.exists ? snap.data() || {} : {};
+          const v = snap.exists ? (snap.data() || {}) : {};
           const displayName =
             v.displayName || v.name || v.username || v.email || uid;
           const avatarUrl = v.avatarUrl || v.photoURL || null;
 
-          // RNFirebase Timestamp → toMillis() ok; sinon fallback
           const version = v.updatedAt?.toMillis?.()
             ? v.updatedAt.toMillis()
             : v.updatedAt?.toDate?.()
@@ -560,10 +557,8 @@ export default function DefiResultsScreen() {
 
       profilesUnsubsRef.current.set(uid, un);
     });
-    // pas de cleanup ici (géré au démontage)
   }, [parts]);
 
-  // Cleanup global des listeners profiles_public au démontage
   useEffect(() => {
     return () => {
       for (const [, un] of profilesUnsubsRef.current) {
@@ -602,7 +597,7 @@ export default function DefiResultsScreen() {
     return () => un();
   }, [defi?.id]);
 
-  /* ----- Player meta (stabilisé) ----- */
+  /* ----- Player meta ----- */
   const allTalliedIds = useMemo(() => {
     return Array.from(
       new Set([
@@ -657,7 +652,11 @@ export default function DefiResultsScreen() {
   if (loadingDefi) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Résultats' }} />
+        <Stack.Screen
+          options={{
+            title: i18n.t('defi.results.header.defaultTitle'),
+          }}
+        />
         <View
           style={{
             flex: 1,
@@ -668,7 +667,9 @@ export default function DefiResultsScreen() {
           }}
         >
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, color: colors.text }}>Chargement…</Text>
+          <Text style={{ marginTop: 12, color: colors.text }}>
+            {i18n.t('defi.results.loading.generic')}
+          </Text>
         </View>
       </>
     );
@@ -676,7 +677,11 @@ export default function DefiResultsScreen() {
   if (!defi) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Résultats' }} />
+        <Stack.Screen
+          options={{
+            title: i18n.t('defi.results.header.defaultTitle'),
+          }}
+        />
         <View
           style={{
             flex: 1,
@@ -686,7 +691,9 @@ export default function DefiResultsScreen() {
             backgroundColor: colors.background,
           }}
         >
-          <Text style={{ color: colors.text }}>Aucun défi trouvé.</Text>
+          <Text style={{ color: colors.text }}>
+            {i18n.t('defi.results.errors.notFound')}
+          </Text>
         </View>
       </>
     );
@@ -821,7 +828,10 @@ export default function DefiResultsScreen() {
                       }}
                       numberOfLines={1}
                     >
-                      {group?.name || group?.title || group?.id || 'Groupe'}
+                      {group?.name ||
+                        group?.title ||
+                        group?.id ||
+                        i18n.t('defi.results.header.groupFallback')}
                     </Text>
                     {!!defi?.title && (
                       <Text
@@ -879,7 +889,9 @@ export default function DefiResultsScreen() {
                       color: colors.text,
                     }}
                   >
-                    Cagnotte de {Number(defi?.pot ?? 0)} crédits
+                    {i18n.t('defi.results.header.pot', {
+                      count: Number(defi?.pot ?? 0),
+                    })}
                   </Text>
                 </View>
 
@@ -912,7 +924,7 @@ export default function DefiResultsScreen() {
 
                 <View style={{ marginTop: 8 }}>
                   <Text style={{ color: colors.subtext }}>
-                    Débute à{' '}
+                    {i18n.t('defi.results.header.startsAt')}{' '}
                     <Text
                       style={{
                         fontWeight: '700',
@@ -923,7 +935,7 @@ export default function DefiResultsScreen() {
                     </Text>
                   </Text>
                   <Text style={{ color: colors.subtext }}>
-                    Barème : Buteur = +1 • Passe = +1
+                    {i18n.t('defi.results.header.scoring')}
                   </Text>
                 </View>
               </View>
@@ -987,7 +999,7 @@ export default function DefiResultsScreen() {
                     color: colors.text,
                   }}
                 >
-                  Chat du défi
+                  {i18n.t('defi.results.chat.title')}
                 </Text>
                 <Text
                   style={{
@@ -995,7 +1007,9 @@ export default function DefiResultsScreen() {
                     fontSize: 12,
                   }}
                 >
-                  {messages.length} messages
+                  {i18n.t('defi.results.chat.count', {
+                    count: messages.length,
+                  })}
                 </Text>
               </View>
               <Ionicons
@@ -1048,7 +1062,6 @@ function InlineChat({
   const INPUT_BAR_HEIGHT = 56;
   const OPEN_HEIGHT = 360;
 
-  // tri sûr même si createdAt est un Timestamp Firestore RNFirebase
   const data = React.useMemo(() => {
     const millis = (v) =>
       v?.toMillis?.()
@@ -1111,7 +1124,7 @@ function InlineChat({
         >
           {data.length === 0 ? (
             <Text style={{ color: colors.subtext }}>
-              Aucun message.
+              {i18n.t('defi.results.chat.empty')}
             </Text>
           ) : (
             <View>
@@ -1184,7 +1197,7 @@ function InlineChat({
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder="Écrire un message…"
+          placeholder={i18n.t('defi.results.chat.inputPlaceholder')}
           placeholderTextColor={colors.subtext}
           style={{
             flex: 1,
@@ -1224,7 +1237,7 @@ function InlineChat({
           }}
         >
           <Text style={{ color: '#fff', fontWeight: '800' }}>
-            Envoyer
+            {i18n.t('defi.results.chat.send')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1265,20 +1278,10 @@ function Avatar({ uri, size = 44 }) {
 }
 
 /* Helpers */
-function pluralFR(n, sing, plur) {
-  return `${n} ${n > 1 ? plur : sing}`;
-}
 function normId(v) {
   if (v == null) return null;
   const s = String(v).trim();
   return /^\d+$/.test(s) ? String(Number(s)) : s;
-}
-function formatGA(goals, assists) {
-  return `${pluralFR(goals, 'but', 'buts')}, ${pluralFR(
-    assists,
-    'passe',
-    'passes'
-  )}`;
 }
 
 function ParticipantsCard({
@@ -1298,7 +1301,7 @@ function ParticipantsCard({
         <Text
           style={{ color: colors.subtext, textAlign: 'center' }}
         >
-          Aucune participation.
+          {i18n.t('defi.results.participants.empty')}
         </Text>
       </View>
     );
@@ -1331,9 +1334,9 @@ function ParticipantsCard({
               textAlign: 'center',
             }}
           >
-            Les choix des autres participants sont cachés
-            jusqu’au début du premier match
-            {revealTimeLabel ? ` (${revealTimeLabel})` : ''}.
+            {i18n.t('defi.results.participants.hiddenUntil', {
+              time: revealTimeLabel || '',
+            })}
           </Text>
         </View>
       )}
@@ -1341,7 +1344,7 @@ function ParticipantsCard({
       {/* 🔸 LÉGENDE */}
       <View style={{ alignItems: 'center', marginBottom: 8 }}>
         <Text style={{ fontSize: 12, color: colors.subtext }}>
-          Format : buts – passes = total
+          {i18n.t('defi.results.participants.legend')}
         </Text>
       </View>
 
@@ -1446,7 +1449,6 @@ function ParticipantsCard({
             {/* Liste joueurs */}
             {rows.length > 0 ? (
               hideOthersPicks && !isSelf ? (
-                // 🔒 Caviardé pour les autres participants
                 <Text
                   style={{
                     color: colors.subtext,
@@ -1454,7 +1456,9 @@ function ParticipantsCard({
                     fontStyle: 'italic',
                   }}
                 >
-                  Sélections cachées jusqu’au début du premier match.
+                  {i18n.t(
+                    'defi.results.participants.hiddenSelections'
+                  )}
                 </Text>
               ) : (
                 <View style={{ marginTop: 8, gap: 6 }}>
@@ -1525,7 +1529,7 @@ function ParticipantsCard({
                   marginTop: 6,
                 }}
               >
-                Aucun joueur sélectionné.
+                {i18n.t('defi.results.participants.noPlayers')}
               </Text>
             )}
           </View>

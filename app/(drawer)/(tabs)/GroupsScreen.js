@@ -9,7 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { createGroupService } from '@src/groups/services';
-import { useTheme } from '@src/theme/ThemeProvider'; // 🎨 thème clair/sombre
+import { useTheme } from '@src/theme/ThemeProvider';
+import i18n from '@src/i18n/i18n'; // 👈 i18n
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)
@@ -121,7 +122,7 @@ function uniq(arr) {
 export default function GroupsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors } = useTheme(); // 🌗
+  const { colors } = useTheme();
 
   // Création
   const [createOpen, setCreateOpen] = useState(false);
@@ -157,7 +158,7 @@ export default function GroupsScreen() {
       (err) => {
         console.log('participants onSnapshot error:', err?.code, err?.message || String(err));
         setLoadingFavorite(false);
-        Alert.alert('Lecture du favori', String(err?.message || err));
+        Alert.alert(i18n.t('groups.alertFavoriteReadTitle'), String(err?.message || err));
       }
     );
     return () => { try { unsub(); } catch {} };
@@ -293,8 +294,18 @@ export default function GroupsScreen() {
   }
 
   async function onCreateGroup() {
-    if (!name.trim()) return Alert.alert('Nom requis', 'Donne un nom à ton groupe.');
-    if (!user?.uid)   return Alert.alert('Non connecté', 'Connecte-toi pour créer un groupe.');
+    if (!name.trim()) {
+      return Alert.alert(
+        i18n.t('groups.alertNameRequiredTitle'),
+        i18n.t('groups.alertNameRequiredMessage')
+      );
+    }
+    if (!user?.uid) {
+      return Alert.alert(
+        i18n.t('groups.alertNotConnectedTitle'),
+        i18n.t('groups.alertNotConnectedMessage')
+      );
+    }
 
     try {
       setCreating(true);
@@ -311,7 +322,7 @@ export default function GroupsScreen() {
       router.push({ pathname: '/(drawer)/groups/[groupId]', params: { groupId } });
     } catch (e) {
       setCreating(false);
-      Alert.alert('Erreur', String(e?.message || e));
+      Alert.alert(i18n.t('groups.alertErrorTitle'), String(e?.message || e));
     }
   }
 
@@ -365,7 +376,10 @@ export default function GroupsScreen() {
       setFavoriteGroupId(gid);
     } catch (e) {
       console.log('toggleFavorite error:', e);
-      Alert.alert('Favori', `Impossible de mettre à jour: ${String(e?.message || e)}`);
+      Alert.alert(
+        i18n.t('groups.alertFavoriteTitle'),
+        `${i18n.t('groups.alertFavoriteMessage')} ${String(e?.message || e)}`
+      );
     }
   }
 
@@ -384,7 +398,9 @@ export default function GroupsScreen() {
           backgroundColor: colors.background,
         }}
       >
-        <Text style={{ color: colors.text }}>Connecte-toi pour voir tes groupes.</Text>
+        <Text style={{ color: colors.text }}>
+          {i18n.t('groups.loginToSeeGroups')}
+        </Text>
         <TouchableOpacity
           onPress={() => router.push('/(auth)/auth-choice')}
           style={{
@@ -394,7 +410,9 @@ export default function GroupsScreen() {
             borderRadius: 12,
           }}
         >
-          <Text style={{ color: 'white', fontWeight: '600' }}>Se connecter</Text>
+          <Text style={{ color: 'white', fontWeight: '600' }}>
+            {i18n.t('groups.login')}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -414,7 +432,7 @@ export default function GroupsScreen() {
         }}
       >
         <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>
-          Mes groupes
+          {i18n.t('groups.title')}
         </Text>
 
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -427,7 +445,9 @@ export default function GroupsScreen() {
               borderRadius: 12,
             }}
           >
-            <Text style={{ color: 'white', fontWeight: '600' }}>Créer</Text>
+            <Text style={{ color: 'white', fontWeight: '600' }}>
+              {i18n.t('groups.btnCreate')}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -440,7 +460,9 @@ export default function GroupsScreen() {
               borderRadius: 12,
             }}
           >
-            <Text style={{ fontWeight: '600', color: colors.primary }}>Joindre</Text>
+            <Text style={{ fontWeight: '600', color: colors.primary }}>
+              {i18n.t('groups.btnJoin')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -458,9 +480,11 @@ export default function GroupsScreen() {
             borderColor: colors.border,
           }}
         >
-          <Text style={{ fontWeight: '700', color: colors.text }}>Bienvenue 👋</Text>
+          <Text style={{ fontWeight: '700', color: colors.text }}>
+            {i18n.t('groups.welcomeTitle')}
+          </Text>
           <Text style={{ color: colors.subtext, marginTop: 4 }}>
-            Commence par créer un groupe avec tes amis ou rejoins-en un avec un code d’invitation.
+            {i18n.t('groups.welcomeText')}
           </Text>
         </View>
       )}
@@ -475,21 +499,23 @@ export default function GroupsScreen() {
           }}
         >
           <ActivityIndicator color={colors.primary} />
-          <Text style={{ marginTop: 8, color: colors.subtext }}>Chargement…</Text>
+          <Text style={{ marginTop: 8, color: colors.subtext }}>
+            {i18n.t('groups.loading')}
+          </Text>
         </View>
       ) : (
         <FlatList
           data={[
             {
               header: true,
-              title: 'Groupes que je gère',
-              subtitle: ownedEmpty ? "Aucun groupe pour l’instant." : null,
+              title: i18n.t('groups.headerMine'),
+              subtitle: ownedEmpty ? i18n.t('groups.headerMineEmpty') : null,
             },
             ...myOwnerGroups,
             {
               header: true,
-              title: 'Groupes où je suis membre',
-              subtitle: memberEmpty ? "Tu n’as rejoint aucun groupe pour le moment." : null,
+              title: i18n.t('groups.headerMember'),
+              subtitle: memberEmpty ? i18n.t('groups.headerMemberEmpty') : null,
             },
             ...myMemberGroups,
           ]}
@@ -598,10 +624,12 @@ export default function GroupsScreen() {
                   }}
                 >
                   <Text style={{ color: colors.subtext }}>
-                    Code invitation: {item.codeInvitation || '—'}
+                    {i18n.t('groups.invitationCode')}: {item.codeInvitation || '—'}
                   </Text>
                   <Text style={{ fontWeight: '700', color: colors.text }}>
-                    {item.role === 'owner' ? 'Propriétaire' : 'Membre'}
+                    {item.role === 'owner'
+                      ? i18n.t('groups.roleOwner')
+                      : i18n.t('groups.roleMember')}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -634,7 +662,7 @@ export default function GroupsScreen() {
                   color: colors.text,
                 }}
               >
-                Crée ton premier groupe ou rejoins tes amis
+                {i18n.t('groups.emptyTitle')}
               </Text>
               <Text
                 style={{
@@ -643,7 +671,7 @@ export default function GroupsScreen() {
                   textAlign: 'center',
                 }}
               >
-                Organise vos défis, invite tes amis et commence à gagner des crédits.
+                {i18n.t('groups.emptyText')}
               </Text>
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -659,7 +687,7 @@ export default function GroupsScreen() {
                   <Text
                     style={{ color: 'white', fontWeight: '700' }}
                   >
-                    Créer un groupe
+                    {i18n.t('groups.emptyCreate')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -675,7 +703,7 @@ export default function GroupsScreen() {
                   <Text
                     style={{ fontWeight: '700', color: colors.primary }}
                   >
-                    Rejoindre
+                    {i18n.t('groups.emptyJoin')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -687,7 +715,7 @@ export default function GroupsScreen() {
                   color: colors.subtext,
                 }}
               >
-                Astuce : tu peux définir un groupe favori avec l’icône ★
+                {i18n.t('groups.emptyHint')}
               </Text>
             </View>
           )}
@@ -751,11 +779,11 @@ export default function GroupsScreen() {
                         color: colors.text,
                       }}
                     >
-                      Nouveau groupe
+                      {i18n.t('groups.modalTitle')}
                     </Text>
                   </View>
                   <Text style={{ color: colors.subtext }}>
-                    Rassemble ton crew et dominez les défis.
+                    {i18n.t('groups.modalSubtitle')}
                   </Text>
                 </View>
 
@@ -774,10 +802,10 @@ export default function GroupsScreen() {
                         color: colors.text,
                       }}
                     >
-                      Nom du groupe
+                      {i18n.t('groups.fieldNameLabel')}
                     </Text>
                     <TextInput
-                      placeholder="Ex. Les Snipers du Nord"
+                      placeholder={i18n.t('groups.fieldNamePlaceholder')}
                       placeholderTextColor={colors.subtext}
                       value={name}
                       onChangeText={setName}
@@ -811,10 +839,10 @@ export default function GroupsScreen() {
                         color: colors.text,
                       }}
                     >
-                      Description (optionnel)
+                      {i18n.t('groups.fieldDescriptionLabel')}
                     </Text>
                     <TextInput
-                      placeholder="Ex. Notre pool du samedi entre amis"
+                      placeholder={i18n.t('groups.fieldDescriptionPlaceholder')}
                       placeholderTextColor={colors.subtext}
                       value={description}
                       onChangeText={setDescription}
@@ -856,7 +884,7 @@ export default function GroupsScreen() {
                     <Text
                       style={{ fontWeight: '700', color: colors.text }}
                     >
-                      Annuler
+                      {i18n.t('groups.cancel')}
                     </Text>
                   </TouchableOpacity>
 
@@ -878,7 +906,7 @@ export default function GroupsScreen() {
                       <Text
                         style={{ color: '#fff', fontWeight: '700' }}
                       >
-                        Créer
+                        {i18n.t('groups.create')}
                       </Text>
                     )}
                   </TouchableOpacity>

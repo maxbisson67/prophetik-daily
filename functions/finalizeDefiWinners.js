@@ -4,6 +4,12 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 
+// 🔁 NEW: on importe le helper d’ingest
+import { runIngestStatsForDate } from "./ingest.js";
+
+// 🔁 NEW: on centralise la logique de date/fuseau
+import { APP_TZ, appYmd, addDaysToYmd, formatDebug } from "./ProphetikDate.js";
+
 /* ------------------------- Admin init ------------------------- */
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -12,29 +18,20 @@ const db = getFirestore();
 function readTS(v) {
   return v?.toDate?.() ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
 }
+
 function splitEven(total, n) {
   if (n <= 0 || !(total > 0)) return Array.from({ length: Math.max(0, n) }, () => 0);
   const base = Math.floor(total / n);
   let r = total - base * n;
   return Array.from({ length: n }, (_, i) => (i < r ? base + 1 : base));
 }
-function toYMDInTZ(date, timeZone = "America/Toronto") {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const y = parts.find((p) => p.type === "year")?.value;
-  const m = parts.find((p) => p.type === "month")?.value;
-  const d = parts.find((p) => p.type === "day")?.value;
-  return `${y}-${m}-${d}`;
-}
+
 function numOrNull(v) {
   if (typeof v === "number") return v;
   if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(v);
   return null;
 }
+
 function readAnyBalance(doc) {
   return (
     numOrNull(doc?.credits?.balance) ??
@@ -47,29 +44,55 @@ function readAnyBalance(doc) {
 
 /* -------------------- FINALIZATION (daily 5AM) ----------------- */
 /**
- * Règle demandée:
- * - À 05:00 America/Toronto, finaliser tous les défis:
- *   • dont gameDate == hier, quelque soit le statut (sauf déjà completed)
+ * Règle:
+ * - À 05:00 APP_TZ (America/Toronto), finaliser tous les défis:
+ *   • dont gameDate == hier (APP_TZ), quelque soit le statut (sauf déjà completed)
  *   • ET aussi ceux "open" avec gameDate ≤ hier (au cas où ils n’ont jamais été lancés correctement)
+ *
+ * Avant de finaliser, on lance une dernière synchro live (runIngestStatsForDate)
+ * pour garantir que livePoints est à jour.
  */
 export const finalizeDefiWinners = onSchedule(
-  { schedule: "*/2 * * * *", timeZone: "America/Toronto", region: "us-central1" },
-  // */2 * * * *
-  // 0 5 * * *
+  {
+    // en prod: "0 5 * * *"
+    // pour l’instant tu avais */2 pour tests
+    schedule: "*/2 * * * *",
+    timeZone: APP_TZ, // <— on s’aligne sur le fuseau centralisé
+    region: "us-central1",
+  },
   async () => {
     const now = new Date();
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yYMD = toYMDInTZ(yesterday, "America/Toronto");
 
-    logger.info(`finalizeDefiWinners@5AM: target=<=${yYMD}`);
+    // 🔁 0) Dernière synchro live avant de figer les résultats
+    try {
+      logger.info("finalizeDefiWinners: running runIngestStatsForDate() before finalization");
+      await runIngestStatsForDate();
+      logger.info("finalizeDefiWinners: ingest done");
+    } catch (e) {
+      // On log, mais on ne bloque pas: on considère que les crons précédents ont déjà tourné
+      logger.error("finalizeDefiWinners: runIngestStatsForDate failed, using last known livePoints", {
+        error: String(e?.message || e),
+      });
+    }
 
-    // 1) Tenter la requête sélective (status in)
+    // 1) Cible: tous les défis dont gameDate ≤ hier (APP_TZ)
+
+    // todayYmd = aujourd’hui dans APP_TZ
+    const todayYmd = appYmd(now); // ex: "2025-12-05" en America/Toronto
+
+    // yYMD = hier dans APP_TZ
+    const yYMD = addDaysToYmd(todayYmd, -1); // ex: "2025-12-04"
+
+    logger.info(
+      `finalizeDefiWinners@5AM: nowUTC=${formatDebug(now, "UTC")} todayApp=${todayYmd} target<=${yYMD}`
+    );
+
+    // 2) Requête des défis à finaliser
     let snap;
     try {
       snap = await db
         .collection("defis")
-        .where("gameDate", "<=", yYMD) // <= hier
+        .where("gameDate", "<=", yYMD) // <= hier (APP_TZ)
         .where("status", "in", ["open", "live", "awaiting_result"])
         .get();
     } catch (e) {
@@ -90,11 +113,15 @@ export const finalizeDefiWinners = onSchedule(
       const status = String(d.status || "").toLowerCase();
       if (status === "completed") continue; // déjà finalisé
 
-      // Récupérer toutes les participations
+      // 3) Récupérer toutes les participations avec leurs livePoints
       const partsSnap = await docSnap.ref.collection("participations").get();
       const parts = partsSnap.docs.map((s) => {
         const v = s.data() || {};
-        return { uid: s.id, livePoints: Number(v.livePoints || v.finalPoints || 0) };
+        return {
+          uid: s.id,
+          // on se base sur livePoints recalculé juste avant
+          livePoints: Number(v.livePoints ?? v.finalPoints ?? 0),
+        };
       });
 
       if (!parts.length) {
@@ -111,9 +138,11 @@ export const finalizeDefiWinners = onSchedule(
         continue;
       }
 
+      // 4) Déterminer le score max + liste des gagnants (ex aequo)
       const top = parts.reduce((m, p) => Math.max(m, p.livePoints), -Infinity);
       const winners = parts.filter((p) => p.livePoints === top).map((p) => p.uid);
 
+      // 5) Transaction: marquer le défi comme completed + payer les gagnants
       await db.runTransaction(async (tx) => {
         const dRef = db.collection("defis").doc(defiId);
         const fresh = await tx.get(dRef);

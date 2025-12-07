@@ -6,9 +6,9 @@ import {
   FieldValue,
   logger,
   apiWebSchedule,
-  apiWebPbp,
-  torontoYMD,
+  apiWebPbp
 } from "./utils.js";
+import { todayAppYmd, addDaysToYmd } from "./ProphetikDate.js";
 
 const NHL_HEADSHOT_SEASON = "20242025"; // à ajuster chaque saison
 
@@ -91,19 +91,6 @@ function createPlayerResolver() {
 }
 
 
-function addDaysToYMD(baseYmd, delta) {
-  if (!baseYmd || typeof baseYmd !== "string" || baseYmd.length < 10) {
-    return baseYmd;
-  }
-  const [y, m, d] = baseYmd.split("-").map((x) => parseInt(x, 10));
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + delta);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
 function torontoCurrentHour() {
   try {
     const now = new Date();
@@ -133,7 +120,7 @@ async function runUpdateNhlLiveGames(forYmd) {
   const ymd =
     typeof forYmd === "string" && forYmd.length >= 10
       ? forYmd.slice(0, 10)
-      : torontoYMD();
+      : todayAppYmd();
 
   logger.info("[updateNhlLiveGames] tick", { ymd, forYmd });
 
@@ -209,7 +196,15 @@ async function runUpdateNhlLiveGames(forYmd) {
     // Si le match n'est pas live ni final, on n'a pas besoin du PBP
     if (!isLive && !isFinal) continue;
 
-    // 3) PBP: pour aller chercher les buts détaillés + clock live
+    // 🕒 2bis) Base timeRemaining à partir du schedule, avec logique FINAL
+    let timeRemaining = timeRemainingSchedule;
+
+    // Si le match est final, on force "00:00" (ou null selon ton UX)
+    if (isFinal) {
+      timeRemaining = "00:00";
+    }
+
+    // 3) PBP: pour aller chercher les buts détaillés +, éventuellement, un fallback clock
     let pbp;
     try {
       pbp = await apiWebPbp(gameId);
@@ -218,53 +213,36 @@ async function runUpdateNhlLiveGames(forYmd) {
         gameId,
         error: err.message,
       });
+      // même si le PBP échoue, on a déjà écrit le doc de base plus haut
       continue;
     }
 
     const plays = Array.isArray(pbp?.plays) ? pbp.plays : [];
     logger.info("[updateNhlLiveGames] plays", { gameId, count: plays.length });
 
-    // 🕒 timeRemaining calculé à partir du PBP
-    // On part de la valeur "schedule"
-    let pbpTimeRemaining = timeRemainingSchedule;
-
-    // 3a) Si le PBP expose un clock global avec timeRemaining, on le prend
+    // 🕒 Fallback PBP.clock seulement si le schedule ne nous donne rien
     if (
+      !timeRemaining && // seulement si le schedule ne nous donne rien
       pbp &&
       typeof pbp === "object" &&
       pbp.clock &&
-      typeof pbp.clock === "object" &&
       typeof pbp.clock.timeRemaining === "string" &&
       pbp.clock.timeRemaining.trim() !== ""
     ) {
-      pbpTimeRemaining = pbp.clock.timeRemaining.trim();
-    } else if (isLive && plays.length > 0) {
-      // 3b) Sinon, on essaie de déduire le dernier timeRemaining des plays
-      let lastTime = null;
-      for (const play of plays) {
-        const det = play?.details || {};
-        const t =
-          (typeof det.timeRemaining === "string" && det.timeRemaining.trim()) ||
-          (typeof play.timeRemaining === "string" && play.timeRemaining.trim()) ||
-          null;
-        if (t) {
-          lastTime = t;
-        }
-      }
-      if (lastTime) {
-        pbpTimeRemaining = lastTime;
-      }
+      timeRemaining = pbp.clock.timeRemaining.trim();
     }
 
-    // 3c) Si on a trouvé mieux que la valeur "schedule", on réécrit timeRemaining
-    if (pbpTimeRemaining !== timeRemainingSchedule) {
+    // Si la valeur a changé par rapport à celle écrite via le schedule, on met à jour.
+    if (timeRemaining !== timeRemainingSchedule) {
       await gameRef.set(
-        { timeRemaining: pbpTimeRemaining ?? null },
+        { timeRemaining: timeRemaining ?? null },
         { merge: true }
       );
     }
 
-    // 4) Traitement des buts (comme avant)
+    // 4) Traitement des buts + suivi des eventIds pour nettoyer les fantômes
+    const pbpGoalIds = new Set();
+
     for (const play of plays) {
       const typeKey = String(play?.typeDescKey || "").toLowerCase();
       const typeCode = Number(play?.typeCode || 0);
@@ -281,6 +259,9 @@ async function runUpdateNhlLiveGames(forYmd) {
       const det = play?.details || {};
       const eventId = String(play.eventId || "");
       if (!eventId) continue;
+
+      // On garde l’eventId pour savoir plus tard ce qui doit exister en Firestore
+      pbpGoalIds.add(eventId);
 
       // teamAbbr depuis le play (équipe qui marque), sera éventuellement fallbacké
       let teamAbbr = normTeamAbbr(det.teamAbbrev);
@@ -388,6 +369,25 @@ async function runUpdateNhlLiveGames(forYmd) {
         .doc(eventId)
         .set(goalDoc, { merge: true });
     }
+
+    // 5) Nettoyage des buts fantômes : présents en Firestore mais absents du PBP courant
+    try {
+      const goalsSnap = await gameRef.collection("goals").get();
+      for (const doc of goalsSnap.docs) {
+        if (!pbpGoalIds.has(doc.id)) {
+          logger.info("[updateNhlLiveGames] deleting ghost goal", {
+            gameId,
+            eventId: doc.id,
+          });
+          await doc.ref.delete();
+        }
+      }
+    } catch (err) {
+      logger.warn("[updateNhlLiveGames] ghost cleanup failed", {
+        gameId,
+        error: err.message,
+      });
+    }
   }
 
   logger.info("[updateNhlLiveGames] done", { ymd });
@@ -404,7 +404,7 @@ export const updateNhlLiveGamesNow = onCall(
         : null;
 
     await runUpdateNhlLiveGames(ymd);
-    const effective = ymd || torontoYMD();
+    const effective = ymd || todayAppYmd();
     return { ok: true, ymd: effective };
   }
 );
@@ -416,12 +416,12 @@ export const updateNhlLiveGamesCron = onSchedule(
     region: "us-central1",
   },
   async () => {
-    const todayYmd = torontoYMD();
+    const todayYmd = todayAppYmd();
     const hour = torontoCurrentHour();
 
     // 🔁 Jusqu'à 3h du matin (heure Toronto), on continue aussi d’updater la veille
     if (hour < 3) {
-      const yesterdayYmd = addDaysToYMD(todayYmd, -1);
+      const yesterdayYmd = addDaysToYmd(todayYmd, -1);
       await runUpdateNhlLiveGames(yesterdayYmd);
     }
 

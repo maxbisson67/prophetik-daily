@@ -39,6 +39,9 @@ import { Ionicons } from '@expo/vector-icons';
 import isEqual from 'lodash.isequal';
 import { useTheme } from '@src/theme/ThemeProvider';
 
+// ✅ i18n
+import i18n from '@src/i18n/i18n';
+
 /* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
   ANA: require('../../../../assets/nhl-logos/ANA.png'),
@@ -76,7 +79,10 @@ const LOGO_MAP = {
   WSH: require('../../../../assets/nhl-logos/WSH.png'),
 };
 
-function LoadingOverlay({ visible, text = 'Chargement...' }) {
+function LoadingOverlay({
+  visible,
+  text = i18n.t('defi.loading.generic'),
+}) {
   const { colors } = useTheme();
   if (!visible) return null;
   return (
@@ -121,7 +127,7 @@ function LoadingOverlay({ visible, text = 'Chargement...' }) {
             textAlign: 'center',
           }}
         >
-          Cela peut prendre quelques secondes…
+          {i18n.t('defi.loading.overlayHint')}
         </Text>
       </View>
     </View>
@@ -132,13 +138,13 @@ function LoadingOverlay({ visible, text = 'Chargement...' }) {
 function fmtTSLocalHM(v) {
   try {
     const d =
-      v?.toDate?.() ?
-        v.toDate() :
-        v instanceof Date ?
-          v :
-          v ?
-            new Date(v) :
-            null;
+      v?.toDate?.()
+        ? v.toDate()
+        : v instanceof Date
+        ? v
+        : v
+        ? new Date(v)
+        : null;
     if (!d) return '—';
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
@@ -155,24 +161,24 @@ function fmtLocalDateStr(d) {
 function toYMD(v) {
   if (typeof v === 'string') return v;
   const d =
-    v?.toDate?.() ?
-      v.toDate() :
-      v instanceof Date ?
-        v :
-        v ?
-          new Date(v) :
-          null;
+    v?.toDate?.()
+      ? v.toDate()
+      : v instanceof Date
+      ? v
+      : v
+      ? new Date(v)
+      : null;
   if (!d) return null;
   return fmtLocalDateStr(d);
 }
 function isPast(ts) {
   if (!ts) return false;
   const d =
-    ts?.toDate?.() ?
-      ts.toDate() :
-      ts instanceof Date ?
-        ts :
-        new Date(ts);
+    ts?.toDate?.()
+      ? ts.toDate()
+      : ts instanceof Date
+      ? ts
+      : new Date(ts);
   return Date.now() > d.getTime();
 }
 const pick = (o, k) => (o && o[k] !== undefined ? o[k] : undefined);
@@ -205,8 +211,8 @@ async function fetchGamesOn(ymd) {
     const games = day
       ? day.games || []
       : Array.isArray(data?.games)
-        ? data.games
-        : [];
+      ? data.games
+      : [];
     return games.map((g) => {
       const awayRaw = g?.awayTeam?.abbrev || g?.awayTeamAbbrev || g?.awayTeam;
       const homeRaw = g?.homeTeam?.abbrev || g?.homeTeamAbbrev || g?.homeTeam;
@@ -243,8 +249,8 @@ async function fetchTeamsPlayingOn(ymd) {
     const games = day
       ? day.games || []
       : Array.isArray(data?.games)
-        ? data.games
-        : [];
+      ? data.games
+      : [];
     const abbrs = new Set();
     for (const g of games) {
       const home = g?.homeTeam ?? g?.homeTeamAbbrev ?? g?.homeTeam?.abbrev;
@@ -301,7 +307,6 @@ const cacheKeyForSeason = (seasonId) =>
 async function loadAllSkaterStatsForSeason(seasonId) {
   const map = {};
   try {
-    // chemin de base
     let pageQ = firestore()
       .collection('nhl_player_stats_current')
       .where('seasonId', '==', seasonId)
@@ -551,11 +556,11 @@ function PlayerSelectModal({ visible, onClose, options, onPick }) {
                 color: colors.text,
               }}
             >
-              Sélectionner un joueur
+              {i18n.t('defi.playerSelect.title')}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={{ fontSize: 16, color: colors.primary }}>
-                Fermer
+                {i18n.t('defi.playerSelect.close')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -563,7 +568,7 @@ function PlayerSelectModal({ visible, onClose, options, onPick }) {
           <TextInput
             value={q}
             onChangeText={setQ}
-            placeholder="Rechercher un joueur…"
+            placeholder={i18n.t('defi.playerSelect.searchPlaceholder')}
             placeholderTextColor={colors.subtext}
             style={{
               borderWidth: 1,
@@ -730,7 +735,7 @@ function PlayerPickerRow({ label, value, onEdit, locked }) {
           }}
         >
           <Text style={{ color: colors.subtext }}>
-            Choisir un joueur…
+            {i18n.t('defi.playerSelect.emptyChoice')}
           </Text>
         </TouchableOpacity>
       )}
@@ -775,12 +780,12 @@ function SeasonToggle({ seasonId, onChange }) {
       }}
     >
       <Button
-        label={`Saison ${cur}`}
+        label={i18n.t('defi.seasonToggle.current', { id: cur })}
         value={cur}
         active={seasonId === cur}
       />
       <Button
-        label={`Saison ${prev}`}
+        label={i18n.t('defi.seasonToggle.previous', { id: prev })}
         value={prev}
         active={seasonId === prev}
       />
@@ -802,7 +807,7 @@ export default function DefiParticipationScreen() {
   const [teamAbbrs, setTeamAbbrs] = useState(new Set());
   const [games, setGames] = useState([]);
 
-  const [players, setPlayers] = useState([]); // [{playerId, fullName, teamAbbr}]
+  const [players, setPlayers] = useState([]);
   const [selected, setSelected] = useState([]); // [player|null, ...]
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -917,8 +922,9 @@ export default function DefiParticipationScreen() {
     };
   }, [gameYMD]);
 
-  // Joueurs des équipes qui jouent (RNFirebase, with 'in' chunks)
   const abbrList = useMemo(() => Array.from(teamAbbrs), [teamAbbrs]);
+
+  // Joueurs des équipes qui jouent
   useEffect(() => {
     (async () => {
       if (!abbrList.length) {
@@ -955,7 +961,7 @@ export default function DefiParticipationScreen() {
     })();
   }, [JSON.stringify(abbrList)]);
 
-  // Chargement des stats pour la saison (cache-first RNFirebase)
+  // Chargement des stats pour la saison
   const loadingRef = useRef(false);
   const lastAppliedRef = useRef(null);
 
@@ -968,7 +974,7 @@ export default function DefiParticipationScreen() {
       try {
         const isCurrent = seasonId === getCurrentSeasonId();
         if (isCurrent)
-          setRefreshNote('Mise à jour des statistiques du jour…');
+          setRefreshNote(i18n.t('defi.loading.statsUpdatingToday'));
         setLoadingStats(true);
         const data = await loadAllSkaterStatsWithCache(seasonId, {
           force: false,
@@ -994,7 +1000,7 @@ export default function DefiParticipationScreen() {
   const setSeasonId = useCallback((val) => {
     setStatsById({});
     setLoadingStats(true);
-    setRefreshNote(true);
+    setRefreshNote(i18n.t('defi.loading.statsUpdatingSeason'));
     _setSeasonId(val);
     setTimeout(async () => {
       const map = await loadAllSkaterStatsWithCache(val, { force: true });
@@ -1022,7 +1028,9 @@ export default function DefiParticipationScreen() {
   const headerTitle = useMemo(() => {
     const base =
       defi?.title ||
-      (defi?.type ? `Défi ${defi.type}x${defi.type}` : 'Défi');
+      (defi?.type
+        ? `${i18n.t('home.challenge')} ${defi.type}x${defi.type}`
+        : i18n.t('defi.header.defaultTitle'));
     return base;
   }, [defi]);
 
@@ -1061,9 +1069,11 @@ export default function DefiParticipationScreen() {
         );
         if (alreadyUsed) {
           Alert.alert(
-            'Joueur déjà sélectionné',
-            `${p.fullName} est déjà choisi pour un autre poste.`,
-            [{ text: 'OK' }]
+            i18n.t('defi.alerts.playerDuplicateTitle'),
+            i18n.t('defi.alerts.playerDuplicateMessage', {
+              name: p.fullName,
+            }),
+            [{ text: i18n.t('common.ok') }]
           );
           return prev;
         }
@@ -1083,13 +1093,16 @@ export default function DefiParticipationScreen() {
   const save = useCallback(async () => {
     if (!user?.uid || !defi?.id) return;
     if (locked) {
-      Alert.alert('Inscription fermée', 'La date limite est dépassée.');
+      Alert.alert(
+        i18n.t('defi.alerts.lockedTitle'),
+        i18n.t('defi.alerts.lockedMessage')
+      );
       return;
     }
     if (!allChosen) {
       Alert.alert(
-        'Sélection incomplète',
-        `Tu dois choisir ${maxChoices} joueur(s).`
+        i18n.t('defi.alerts.incompleteTitle'),
+        i18n.t('defi.alerts.incompleteMessage', { count: maxChoices })
       );
       return;
     }
@@ -1098,9 +1111,7 @@ export default function DefiParticipationScreen() {
     setSaving(true);
 
     const msgTimer = setTimeout(() => {
-      setRefreshNote(
-        'Création de la participation… (le premier participant peut prendre quelques secondes)'
-      );
+      setRefreshNote(i18n.t('defi.alerts.savingSlow'));
     }, 400);
 
     try {
@@ -1120,14 +1131,18 @@ export default function DefiParticipationScreen() {
       if (ok) {
         const potMsg =
           newPot !== null
-            ? `Cagnotte: ${newPot} crédits`
-            : 'Participation enregistrée.';
+            ? i18n.t('defi.alerts.successPotMessage', {
+                count: newPot,
+              })
+            : i18n.t('defi.alerts.successPotMessageSimple');
         Alert.alert(
-          'Participation enregistrée',
-          `Bonne chance ! ${potMsg}`,
+          i18n.t('defi.alerts.successTitle'),
+          i18n.t('defi.alerts.successMessage', {
+            potMessage: potMsg,
+          }),
           [
             {
-              text: 'OK',
+              text: i18n.t('common.ok'),
               onPress: () =>
                 router.replace('/(drawer)/(tabs)/ChallengesScreen'),
             },
@@ -1137,21 +1152,32 @@ export default function DefiParticipationScreen() {
         throw new Error(res?.data?.error || 'Erreur inconnue');
       }
     } catch (e) {
-      Alert.alert('Erreur', String(e?.message || e));
+      Alert.alert(
+        i18n.t('defi.alerts.genericErrorTitle'),
+        String(e?.message || e)
+      );
     } finally {
       clearTimeout(msgTimer);
       setRefreshNote(null);
       setSaving(false);
       savingRef.current = false;
     }
-  }, [user?.uid, defi?.id, selected, maxChoices, locked, allChosen, router]);
+  }, [
+    user?.uid,
+    defi?.id,
+    selected,
+    maxChoices,
+    locked,
+    allChosen,
+    router,
+  ]);
 
   if (loadingDefi) {
     return (
       <>
         <Stack.Screen
           options={{
-            title: 'Chargement…',
+            title: i18n.t('defi.loading.title'),
             headerStyle: { backgroundColor: colors.card },
             headerTitleStyle: { color: colors.text },
             headerTintColor: colors.text,
@@ -1169,7 +1195,7 @@ export default function DefiParticipationScreen() {
           <Text
             style={{ marginTop: 8, color: colors.subtext }}
           >
-            Chargement…
+            {i18n.t('defi.loading.generic')}
           </Text>
         </View>
       </>
@@ -1181,7 +1207,7 @@ export default function DefiParticipationScreen() {
       <>
         <Stack.Screen
           options={{
-            title: 'Erreur',
+            title: i18n.t('defi.header.errorTitle'),
             headerStyle: { backgroundColor: colors.card },
             headerTitleStyle: { color: colors.text },
             headerTintColor: colors.text,
@@ -1197,7 +1223,8 @@ export default function DefiParticipationScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Erreur : {String(error?.message || error)}
+            {i18n.t('common.errorLabel')}{' '}
+            {String(error?.message || error)}
           </Text>
         </View>
       </>
@@ -1209,7 +1236,7 @@ export default function DefiParticipationScreen() {
       <>
         <Stack.Screen
           options={{
-            title: 'Défi introuvable',
+            title: i18n.t('defi.header.notFoundTitle'),
             headerStyle: { backgroundColor: colors.card },
             headerTitleStyle: { color: colors.text },
             headerTintColor: colors.text,
@@ -1225,7 +1252,7 @@ export default function DefiParticipationScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Aucun défi trouvé.
+            {i18n.t('defi.errors.notFoundMessage')}
           </Text>
         </View>
       </>
@@ -1241,7 +1268,7 @@ export default function DefiParticipationScreen() {
     <>
       <Stack.Screen
         options={{
-          title: headerTitle || 'Défi',
+          title: headerTitle || i18n.t('defi.header.defaultTitle'),
           headerStyle: { backgroundColor: colors.card },
           headerTitleStyle: { color: colors.text },
           headerTintColor: colors.text,
@@ -1301,28 +1328,36 @@ export default function DefiParticipationScreen() {
               {headerTitle}
             </Text>
             <Text style={{ color: colors.text }}>
-              Date NHL: {gameDayStr || '—'}
+              {i18n.t('defi.infoCard.nhlDate')}:{' '}
+              {gameDayStr || '—'}
             </Text>
             {defi.signupDeadline && (
               <Text style={{ color: colors.text }}>
-                Limite inscription: {fmtTSLocalHM(defi.signupDeadline)}
+                {i18n.t('defi.infoCard.signupDeadline')}{' '}
+                {fmtTSLocalHM(defi.signupDeadline)}
               </Text>
             )}
             {defi.firstGameAtUTC && (
               <Text style={{ color: colors.text }}>
-                Premier match (UTC):{' '}
+                {i18n.t('defi.infoCard.firstGameUtc')}{' '}
                 {fmtTSLocalHM(defi.firstGameAtUTC)}
               </Text>
             )}
             <Text style={{ color: colors.text }}>
-              Nombre de choix: {maxChoices}
+              {i18n.t('defi.infoCard.choicesCount')}{' '}
+              {maxChoices}
             </Text>
             <Text style={{ color: colors.text }}>
-              Statut: {defi.status || '—'}{' '}
-              {locked ? ' (verrouillé)' : ''}
+              {i18n.t('defi.infoCard.status')}{' '}
+              {defi.status || '—'}{' '}
+              {locked
+                ? `(${i18n.t('defi.infoCard.lockedSuffix')})`
+                : ''}
             </Text>
             <Text style={{ color: colors.text }}>
-              Cagnotte: {defi.pot ?? 0} crédit(s)
+              {i18n.t('defi.infoCard.pot', {
+                count: defi.pot ?? 0,
+              })}
             </Text>
           </View>
 
@@ -1349,7 +1384,7 @@ export default function DefiParticipationScreen() {
                 color: colors.text,
               }}
             >
-              Matchs NHL du jour
+              {i18n.t('defi.gamesCard.title')}
             </Text>
             {games.length === 0 ? (
               <Text
@@ -1358,7 +1393,7 @@ export default function DefiParticipationScreen() {
                   textAlign: 'center',
                 }}
               >
-                Aucun match trouvé.
+                {i18n.t('defi.gamesCard.none')}
               </Text>
             ) : (
               <View>
@@ -1377,7 +1412,7 @@ export default function DefiParticipationScreen() {
                       color: colors.text,
                     }}
                   >
-                    Heure
+                    {i18n.t('defi.gamesCard.time')}
                   </Text>
                   <Text
                     style={{
@@ -1386,7 +1421,7 @@ export default function DefiParticipationScreen() {
                       color: colors.text,
                     }}
                   >
-                    Visiteur
+                    {i18n.t('defi.gamesCard.away')}
                   </Text>
                   <Text
                     style={{
@@ -1395,7 +1430,7 @@ export default function DefiParticipationScreen() {
                       color: colors.text,
                     }}
                   >
-                    Domicile
+                    {i18n.t('defi.gamesCard.home')}
                   </Text>
                 </View>
                 {games.map((g, idx) => (
@@ -1477,12 +1512,14 @@ export default function DefiParticipationScreen() {
                 color: colors.text,
               }}
             >
-              Sélectionne tes joueurs
+              {i18n.t('defi.pickersCard.title')}
             </Text>
             {Array.from({ length: maxChoices }).map((_, i) => (
               <PlayerPickerRow
                 key={`choice-${i}`}
-                label={`Choix ${i + 1}`}
+                label={i18n.t('defi.pickersCard.choiceLabel', {
+                  index: i + 1,
+                })}
                 value={selected[i]}
                 onEdit={() => {
                   openPicker(i);
@@ -1491,8 +1528,10 @@ export default function DefiParticipationScreen() {
               />
             ))}
             <Text style={{ color: colors.subtext }}>
-              {selected.filter(Boolean).length}/{maxChoices}{' '}
-              sélection(s)
+              {i18n.t('defi.pickersCard.summary', {
+                current: selected.filter(Boolean).length,
+                max: maxChoices,
+              })}
             </Text>
           </View>
 
@@ -1535,7 +1574,7 @@ export default function DefiParticipationScreen() {
                       fontWeight: '700',
                     }}
                   >
-                    Création de la participation…
+                    {i18n.t('defi.actions.primarySaving')}
                   </Text>
                 </View>
               ) : (
@@ -1546,8 +1585,8 @@ export default function DefiParticipationScreen() {
                   }}
                 >
                   {locked
-                    ? 'Inscription fermée'
-                    : 'Enregistrer ma participation'}
+                    ? i18n.t('defi.actions.primaryLocked')
+                    : i18n.t('defi.actions.primaryDefault')}
                 </Text>
               )}
             </TouchableOpacity>
@@ -1562,7 +1601,9 @@ export default function DefiParticipationScreen() {
                 borderColor: colors.border,
               }}
             >
-              <Text style={{ color: colors.text }}>Annuler</Text>
+              <Text style={{ color: colors.text }}>
+                {i18n.t('common.cancel')}
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -1579,9 +1620,8 @@ export default function DefiParticipationScreen() {
         visible={loadingStats || saving}
         text={
           saving
-            ? 'Création de la participation…'
-            : refreshNote ||
-              'Chargement des statistiques…'
+            ? i18n.t('defi.actions.primarySaving')
+            : refreshNote || i18n.t('defi.loading.statsGeneric')
         }
       />
     </>

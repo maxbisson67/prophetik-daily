@@ -1,5 +1,5 @@
 // functions/gamification/utils.js
-import { DateTime } from "luxon";
+import { todayAppYmd } from "../ProphetikDate.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 
@@ -9,8 +9,8 @@ const db = getFirestore();
  * ISO local (YYYY-MM-DD) basé sur le fuseau du serveur.
  */
 export function todayLocalISO() {
-  const now = DateTime.now();
-  return now.toISODate(); // ex: "2025-11-23"
+  // Même signature fonctionnelle, mais basé sur APP_TZ, plus sur le fuseau serveur
+  return todayAppYmd();
 }
 
 /**

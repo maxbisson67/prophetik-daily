@@ -1,3 +1,4 @@
+// app/(drawer)/(tabs)/ClassementScreen.js
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
@@ -14,6 +15,9 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-ico
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useGroups } from '@src/groups/useGroups';
 import { useTheme } from '@src/theme/ThemeProvider';
+
+// ✅ i18n central
+import i18n from '@src/i18n/i18n';
 
 // ⬇️ RNFirebase
 import firestore from '@react-native-firebase/firestore';
@@ -40,6 +44,7 @@ function useLeaderboards(groupIds) {
         .collection('groups')
         .doc(String(gid))
         .collection('leaderboard');
+
       const unsub = ref.onSnapshot(
         (snap) => {
           const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -50,15 +55,18 @@ function useLeaderboards(groupIds) {
           setAll((prev) => ({ ...prev, [gid]: [] }));
         }
       );
+
+      // ✅ bon nom de variable
       unsubs.push(unsub);
     });
 
     setLoading(false);
-    return () => unsubs.forEach((u) => {
-      try {
-        u();
-      } catch {}
-    });
+    return () =>
+      unsubs.forEach((u) => {
+        try {
+          u && u();
+        } catch {}
+      });
   }, [JSON.stringify(groupIds)]);
 
   return { loading, all };
@@ -202,6 +210,8 @@ function useOwnedGroups(uid) {
 
 /* ---------------- Legend ---------------- */
 function Legend({ colors }) {
+  const t = i18n.t.bind(i18n);
+
   const Item = ({ left, text }) => (
     <View
       style={{
@@ -216,6 +226,7 @@ function Legend({ colors }) {
       <Text style={{ color: colors.subtext, fontSize: 12 }}>{text}</Text>
     </View>
   );
+
   return (
     <View
       style={{
@@ -226,11 +237,11 @@ function Legend({ colors }) {
     >
       <Item
         left={<Ionicons name="person" size={14} color={colors.subtext} />}
-        text="Nom"
+        text={t('leaderboard.legend.name')}
       />
       <Item
         left={<Ionicons name="trophy" size={14} color={colors.subtext} />}
-        text="Défis gagnés"
+        text={t('leaderboard.legend.wins')}
       />
       <Item
         left={
@@ -240,7 +251,7 @@ function Legend({ colors }) {
             color={colors.subtext}
           />
         }
-        text="Gain"
+        text={t('leaderboard.legend.gainTotal')}
       />
       <Item
         left={
@@ -250,7 +261,7 @@ function Legend({ colors }) {
             color={colors.subtext}
           />
         }
-        text="Gain moyen par défi"
+        text={t('leaderboard.legend.gainAvg')}
       />
     </View>
   );
@@ -316,10 +327,10 @@ function HeaderCol({
 function LeaderboardTable({ rows, colors }) {
   const [sort, setSort] = useState({ key: 'wins', dir: 'desc' });
 
-  // 🔁 Liste des uids visibles dans la table (ids des entries = uid des participants)
+  // 🔁 Liste des uids visibles dans la table
   const uids = useMemo(() => rows.map((r) => String(r.id)), [rows]);
 
-  // 🔵 Profils publics en temps réel pour ces uids
+  // 🔵 Profils publics pour ces uids
   const publicProfiles = usePublicProfilesFor(uids);
 
   const sorted = useMemo(() => {
@@ -446,8 +457,9 @@ function LeaderboardTable({ rows, colors }) {
                 borderColor: colors.border,
               }}
               onError={() => {
-                if (__DEV__)
+                if (__DEV__) {
                   console.warn('[Classement] avatar load error:', uri);
+                }
               }}
             />
             <View style={{ flex: 1.5 }}>
@@ -492,6 +504,7 @@ function LeaderboardTable({ rows, colors }) {
 export default function ClassementScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const t = i18n.t.bind(i18n);
 
   // 1) Groupes où je suis MEMBRE
   const {
@@ -500,7 +513,7 @@ export default function ClassementScreen() {
     error,
   } = useGroups(user?.uid);
 
-  // 2) Groupes dont je suis OWNER (tous schémas couverts)
+  // 2) Groupes dont je suis OWNER
   const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(
     user?.uid
   );
@@ -560,7 +573,7 @@ export default function ClassementScreen() {
   if (!user) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Classement' }} />
+        <Stack.Screen options={{ title: t('leaderboard.title') }} />
         <View
           style={{
             flex: 1,
@@ -571,7 +584,7 @@ export default function ClassementScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Connecte-toi pour voir les classements.
+            {t('leaderboard.loginToSee')}
           </Text>
         </View>
       </>
@@ -581,7 +594,7 @@ export default function ClassementScreen() {
   if (loadingMemberGroups || loadingOwned || loadingBoards) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Classement' }} />
+        <Stack.Screen options={{ title: t('leaderboard.title') }} />
         <View
           style={{
             flex: 1,
@@ -592,7 +605,7 @@ export default function ClassementScreen() {
         >
           <ActivityIndicator color={colors.primary} />
           <Text style={{ marginTop: 8, color: colors.subtext }}>
-            Chargement…
+            {t('leaderboard.loading')}
           </Text>
         </View>
       </>
@@ -602,7 +615,7 @@ export default function ClassementScreen() {
   if (error) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Classement' }} />
+        <Stack.Screen options={{ title: t('leaderboard.title') }} />
         <View
           style={{
             flex: 1,
@@ -613,7 +626,9 @@ export default function ClassementScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Erreur: {String(error)}
+            {t('leaderboard.errorPrefix', {
+              message: String(error),
+            })}
           </Text>
         </View>
       </>
@@ -622,7 +637,7 @@ export default function ClassementScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Classement' }} />
+      <Stack.Screen options={{ title: t('leaderboard.title') }} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <FlatList
           contentContainerStyle={{ padding: 16, gap: 16 }}
@@ -709,7 +724,9 @@ export default function ClassementScreen() {
                       <Text
                         style={{ color: '#fff', fontWeight: '700' }}
                       >
-                        {rebuilding[item.id] ? '…' : 'Rebuilder'}
+                        {rebuilding[item.id]
+                          ? t('leaderboard.rebuild.loading')
+                          : t('leaderboard.rebuild.button')}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -717,7 +734,7 @@ export default function ClassementScreen() {
 
                 {rows.length === 0 ? (
                   <Text style={{ color: colors.subtext }}>
-                    Pas encore de stats pour ce groupe.
+                    {t('leaderboard.group.noStats')}
                   </Text>
                 ) : (
                   <LeaderboardTable rows={rows} colors={colors} />
@@ -728,7 +745,7 @@ export default function ClassementScreen() {
           ListEmptyComponent={() => (
             <View style={{ alignItems: 'center', marginTop: 40 }}>
               <Text style={{ color: colors.subtext }}>
-                Tu n’as pas encore de groupes.
+                {t('leaderboard.empty.noGroups')}
               </Text>
             </View>
           )}

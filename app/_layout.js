@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from "@src/auth/SafeAuthProvider";
 import { AppVisibilityProvider } from "@src/providers/AppVisibilityProvider";
 import "@src/lib/safeAsyncStorage";
 import { ThemeProvider, useTheme  } from "@src/theme/ThemeProvider";
+import { LanguageProvider } from '@src/i18n/LanguageProvider';
 
 import {
   attachNotificationListeners,
@@ -305,11 +306,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
+          <LanguageProvider>
           <AppVisibilityProvider>
             <AuthProvider>
               <RootLayoutInner />
             </AuthProvider>
           </AppVisibilityProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
