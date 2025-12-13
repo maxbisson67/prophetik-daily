@@ -6,7 +6,7 @@ import { DateTime } from "luxon";
 
 const TZ = "America/Toronto";
 const SIGNUP_BONUS_AMOUNT = 25;
-const BONUS_COOLDOWN_DAYS = 10; // 🔥 1 bonus par 10 jours
+const BONUS_COOLDOWN_DAYS = 30; // 🔥 1 bonus par 10 jours
 
 /**
  * Trigger à la création d'un participant :

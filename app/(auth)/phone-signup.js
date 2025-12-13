@@ -1,12 +1,22 @@
 // app/(auth)/phone-signup.js
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, SafeAreaView, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  SafeAreaView,
+  ActivityIndicator,
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
+// i18n
+import i18n from '@src/i18n/i18n';
+
 // --- Helpers E.164 ---
-// Par défaut on ajoute +1 pour Canada/USA (ajuste selon ton pays, ex: '+509' pour Haïti)
 const DEFAULT_COUNTRY = '+1';
 const E164 = /^\+\d{8,15}$/;
 
@@ -26,8 +36,13 @@ function normalizePhone(input) {
 }
 
 function sanitizeDisplayName(s) {
-  return String(s || '').replace(/\s+/g, ' ').replace(/[<>]/g, '').trim().slice(0, 48);
+  return String(s || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, 48);
 }
+
 function stripUndefined(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj || {})) if (v !== undefined) out[k] = v;
@@ -36,7 +51,7 @@ function stripUndefined(obj) {
 
 async function ensureParticipantDoc(displayNameRaw) {
   const user = auth().currentUser;
-  if (!user) throw new Error('Non authentifié');
+  if (!user) throw new Error(i18n.t('auth.phoneSignup.errors.notAuthenticated', { defaultValue: 'Not authenticated' }));
 
   const displayName = sanitizeDisplayName(displayNameRaw);
   const now = firestore.FieldValue.serverTimestamp();
@@ -62,128 +77,198 @@ export default function PhoneSignUpScreen() {
   const [busy, setBusy] = useState(false);
   const confirmationRef = useRef(null);
 
-  const normalized = normalizePhone(phone);
-  const canSend = E164.test(normalized);
+  const normalized = useMemo(() => normalizePhone(phone), [phone]);
+  const canSend = useMemo(() => E164.test(normalized), [normalized]);
 
   const requestCode = async () => {
     try {
       if (!displayName.trim()) {
-        Alert.alert('Nom requis', 'Entre un nom d’affichage.');
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.displayNameRequiredTitle', { defaultValue: 'Name required' }),
+          i18n.t('auth.phoneSignup.errors.displayNameRequiredBody', { defaultValue: 'Enter a display name.' })
+        );
         return;
       }
+
       if (!canSend) {
-        Alert.alert('Numéro invalide', 'Entre un numéro valide (ex. 5145551234).');
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.invalidPhoneTitle', { defaultValue: 'Invalid phone number' }),
+          i18n.t('auth.phoneSignup.errors.invalidPhoneBody', {
+            defaultValue: 'Enter a valid number (e.g., 5145551234).',
+          })
+        );
         return;
       }
 
       setBusy(true);
       const confirmation = await auth().signInWithPhoneNumber(normalized, true);
       confirmationRef.current = confirmation;
+
       setStep(2);
-      setPhone(normalized); // reflète la normalisation dans l’UI
-      Alert.alert('Code envoyé', `Vérifie tes SMS au ${normalized}.`);
+      setPhone(normalized);
+
+      Alert.alert(
+        i18n.t('auth.phoneSignup.alerts.codeSentTitle', { defaultValue: 'Code sent' }),
+        i18n.t('auth.phoneSignup.alerts.codeSentBody', {
+          defaultValue: 'Check your SMS at {{phone}}.',
+          phone: normalized,
+        })
+      );
     } catch (e) {
-      Alert.alert('Échec de l’envoi', e?.message || String(e));
+      Alert.alert(
+        i18n.t('auth.phoneSignup.alerts.sendFailedTitle', { defaultValue: 'Send failed' }),
+        e?.message || String(e)
+      );
     } finally {
       setBusy(false);
     }
   };
 
- const confirmCode = async () => {
-  try {
-    if (!code.trim() || code.trim().length < 4) {
-      Alert.alert('Code requis', 'Entre le code reçu par SMS.');
-      return;
-    }
-    setBusy(true);
+  const confirmCode = async () => {
+    try {
+      if (!code.trim() || code.trim().length < 4) {
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.codeRequiredTitle', { defaultValue: 'Code required' }),
+          i18n.t('auth.phoneSignup.errors.codeRequiredBody', { defaultValue: 'Enter the code you received by SMS.' })
+        );
+        return;
+      }
 
-    const confirmation = confirmationRef.current;
-    if (!confirmation) {
-      Alert.alert('Session expirée', 'Réessaie l’envoi du code.');
-      setStep(1);
-      return;
-    }
+      setBusy(true);
 
-    const cred = await confirmation.confirm(code.trim());
-    const user = cred?.user || auth().currentUser;
-    if (!user) throw new Error('Utilisateur non disponible après confirmation.');
+      const confirmation = confirmationRef.current;
+      if (!confirmation) {
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.sessionExpiredTitle', { defaultValue: 'Session expired' }),
+          i18n.t('auth.phoneSignup.errors.sessionExpiredBody', { defaultValue: 'Try sending the code again.' })
+        );
+        setStep(1);
+        return;
+      }
 
-    const cleanName = sanitizeDisplayName(displayName);
-    if (cleanName && user.displayName !== cleanName) {
-      await user.updateProfile({ displayName: cleanName }).catch(() => {});
-      await auth().currentUser?.reload().catch(() => {});
-    }
+      const cred = await confirmation.confirm(code.trim());
+      const user = cred?.user || auth().currentUser;
+      if (!user) {
+        throw new Error(
+          i18n.t('auth.phoneSignup.errors.userUnavailable', {
+            defaultValue: 'User not available after confirmation.',
+          })
+        );
+      }
 
-    // 1) Crée / met à jour le doc participant de base
-    await ensureParticipantDoc(cleanName);
+      const cleanName = sanitizeDisplayName(displayName);
+      if (cleanName && user.displayName !== cleanName) {
+        await user.updateProfile({ displayName: cleanName }).catch(() => {});
+        await auth().currentUser?.reload().catch(() => {});
+      }
 
-    // 2) Initialise l'onboarding si pas encore fait
-    await firestore()
-      .collection('participants')
-      .doc(user.uid)
-      .set(
-        {
-          onboarding: { welcomeSeen: false },
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
+      // 1) Crée / met à jour le doc participant de base
+      await ensureParticipantDoc(cleanName);
+
+      // 2) Initialise l'onboarding si pas encore fait
+      await firestore()
+        .collection('participants')
+        .doc(user.uid)
+        .set(
+          {
+            onboarding: { welcomeSeen: false },
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+      Alert.alert(
+        i18n.t('auth.phoneSignup.alerts.welcomeTitle', { defaultValue: 'Welcome!' }),
+        i18n.t('auth.phoneSignup.alerts.welcomeBody', { defaultValue: 'Your account has been created.' })
       );
 
-    Alert.alert('Bienvenue!', 'Ton compte a été créé.');
+      // 3) Envoie directement vers l'onboarding
+      router.replace('/onboarding/welcome');
+    } catch (e) {
+      const msg = String(e?.message || e);
 
-    // 3) Envoie directement vers l'onboarding
-    router.replace('/onboarding/welcome');
-  } catch (e) {
-    const msg = String(e?.message || e);
-    if (msg.includes('invalid-verification-code')) {
-      Alert.alert('Code invalide', 'Vérifie le code et réessaie.');
-    } else if (msg.includes('session-expired')) {
-      Alert.alert('Session expirée', 'Redemande un nouveau code.');
-      setStep(1);
-      confirmationRef.current = null;
-    } else {
-      Alert.alert('Échec de vérification', msg);
+      if (msg.includes('invalid-verification-code')) {
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.invalidCodeTitle', { defaultValue: 'Invalid code' }),
+          i18n.t('auth.phoneSignup.errors.invalidCodeBody', { defaultValue: 'Check the code and try again.' })
+        );
+      } else if (msg.includes('session-expired')) {
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.sessionExpiredTitle', { defaultValue: 'Session expired' }),
+          i18n.t('auth.phoneSignup.errors.sessionExpiredBody2', { defaultValue: 'Request a new code.' })
+        );
+        setStep(1);
+        confirmationRef.current = null;
+      } else {
+        Alert.alert(
+          i18n.t('auth.phoneSignup.errors.verifyFailedTitle', { defaultValue: 'Verification failed' }),
+          msg
+        );
+      }
+    } finally {
+      setBusy(false);
     }
-  } finally {
-    setBusy(false);
-  }
-};
+  };
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Créer un compte (SMS)' }} />
+      <Stack.Screen
+        options={{
+          title: i18n.t('auth.phoneSignup.title', { defaultValue: 'Create account (SMS)' }),
+        }}
+      />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={{ flex: 1, padding: 16, gap: 16 }}>
           {step === 1 ? (
             <View style={{ gap: 14 }}>
-              <Text style={{ fontSize: 22, fontWeight: '800' }}>Inscription par SMS</Text>
+              <Text style={{ fontSize: 22, fontWeight: '800' }}>
+                {i18n.t('auth.phoneSignup.step1.h1', { defaultValue: 'SMS sign up' })}
+              </Text>
               <Text style={{ color: '#6B7280' }}>
-                Entre un nom d’affichage et ton numéro (ex. 5145551234 ou +15145551234).
+                {i18n.t('auth.phoneSignup.step1.subtitle', {
+                  defaultValue:
+                    'Enter a display name and your phone number (e.g., 5145551234 or +15145551234).',
+                })}
               </Text>
 
               <View style={{ gap: 6 }}>
-                <Text>Nom d’affichage</Text>
+                <Text>
+                  {i18n.t('auth.phoneSignup.step1.displayNameLabel', {
+                    defaultValue: 'Display name',
+                  })}
+                </Text>
                 <TextInput
                   value={displayName}
                   onChangeText={setDisplayName}
-                  placeholder="Ton nom"
+                  placeholder={i18n.t('auth.phoneSignup.step1.displayNamePlaceholder', {
+                    defaultValue: 'Your name',
+                  })}
                   autoCapitalize="words"
                   style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12 }}
                 />
               </View>
 
               <View style={{ gap: 6 }}>
-                <Text>Téléphone</Text>
+                <Text>
+                  {i18n.t('auth.phoneSignup.step1.phoneLabel', { defaultValue: 'Phone' })}
+                </Text>
                 <TextInput
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
-                  placeholder="5145551234"
+                  placeholder={i18n.t('auth.phoneSignup.step1.phonePlaceholder', {
+                    defaultValue: '5145551234',
+                  })}
                   autoCapitalize="none"
                   style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12 }}
                 />
                 {!!normalized && (
-                  <Text style={{ color: '#6B7280' }}>Envoi comme : {normalized}</Text>
+                  <Text style={{ color: '#6B7280' }}>
+                    {i18n.t('auth.phoneSignup.step1.sendingAs', {
+                      defaultValue: 'Sending as: {{phone}}',
+                      phone: normalized,
+                    })}
+                  </Text>
                 )}
               </View>
 
@@ -201,43 +286,77 @@ export default function PhoneSignUpScreen() {
                 {busy ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontWeight: '800' }}>Envoyer le code</Text>
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>
+                    {i18n.t('auth.phoneSignup.step1.sendCodeCta', { defaultValue: 'Send code' })}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
           ) : (
             <View style={{ gap: 14 }}>
-              <Text style={{ fontSize: 22, fontWeight: '800' }}>Vérification du code</Text>
+              <Text style={{ fontSize: 22, fontWeight: '800' }}>
+                {i18n.t('auth.phoneSignup.step2.h1', { defaultValue: 'Code verification' })}
+              </Text>
               <Text style={{ color: '#6B7280' }}>
-                Un code SMS a été envoyé à <Text style={{ fontWeight: '700' }}>{phone}</Text>.
+                {i18n.t('auth.phoneSignup.step2.subtitle', {
+                  defaultValue: 'An SMS code was sent to {{phone}}.',
+                  phone,
+                })}
               </Text>
 
               <View style={{ gap: 6 }}>
-                <Text>Code reçu (SMS)</Text>
+                <Text>
+                  {i18n.t('auth.phoneSignup.step2.codeLabel', { defaultValue: 'SMS code' })}
+                </Text>
                 <TextInput
                   value={code}
                   onChangeText={setCode}
                   keyboardType="number-pad"
-                  placeholder="123456"
+                  placeholder={i18n.t('auth.phoneSignup.step2.codePlaceholder', { defaultValue: '123456' })}
                   maxLength={6}
-                  style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, letterSpacing: 4 }}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: '#ddd',
+                    borderRadius: 10,
+                    padding: 12,
+                    letterSpacing: 4,
+                  }}
                 />
               </View>
 
               <TouchableOpacity
                 onPress={confirmCode}
                 disabled={busy}
-                style={{ backgroundColor: '#111', padding: 14, borderRadius: 10, alignItems: 'center', opacity: busy ? 0.7 : 1 }}
+                style={{
+                  backgroundColor: '#111',
+                  padding: 14,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  opacity: busy ? 0.7 : 1,
+                }}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Confirmer</Text>}
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>
+                    {i18n.t('auth.phoneSignup.step2.confirmCta', { defaultValue: 'Confirm' })}
+                  </Text>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => { setStep(1); setCode(''); }}
+                onPress={() => {
+                  setStep(1);
+                  setCode('');
+                }}
                 disabled={busy}
                 style={{ paddingVertical: 12, alignItems: 'center' }}
               >
-                <Text style={{ color: '#111' }}>Changer de numéro / Renvoyer un code</Text>
+                <Text style={{ color: '#111' }}>
+                  {i18n.t('auth.phoneSignup.step2.changeNumberCta', {
+                    defaultValue: 'Change number / Resend code',
+                  })}
+                </Text>
               </TouchableOpacity>
             </View>
           )}

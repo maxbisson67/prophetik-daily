@@ -452,7 +452,11 @@ function GameDetailModal({ visible, onClose, game, colors }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!visible || !game?.id) {
+    console.log("TIMEMNOW",
+      new Date().toString(),
+      Intl.DateTimeFormat().resolvedOptions().timeZone
+    );
+        if (!visible || !game?.id) {
       setGameDoc(null);
       setGoals([]);
       setLoading(false);

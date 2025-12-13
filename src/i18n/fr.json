@@ -5,13 +5,173 @@
     "errorLabel": "Erreur :",
     "create": "Créer",
     "ok": "OK",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "or": "ou",
+    "continue": "Continuer"
   },
   "errors": {
     "firestorePermission": "Accès refusé par les règles Firestore."
   },
   "auth": {
-    "login": "Se connecter"
+    "login": "Se connecter",
+    "choice": {
+      "title": "Bienvenue",
+      "headline": "Choisis ton mode d’inscription",
+      "body": "Connecte-toi pour participer aux défis, consulter les résultats en direct et suivre ta progression.",
+      "continueSms": "Continuer avec SMS",
+      "continueEmail": "Continuer avec Email",
+      "createSms": "Créer un compte SMS",
+      "createEmail": "Créer un compte Email",
+      "footer": "En continuant, tu acceptes nos conditions d’utilisation."
+    },
+    "signup": {
+      "title": "Créer un compte",
+      "displayNameLabel": "Nom d’affichage",
+      "displayNamePlaceholder": "Ton nom",
+      "emailLabel": "Courriel",
+      "emailPlaceholder": "toi@exemple.com",
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "••••••••",
+      "confirmPasswordLabel": "Confirmer le mot de passe",
+      "confirmPasswordPlaceholder": "••••••••",
+      "ctaCreateAccount": "Créer le compte",
+
+      "errors": {
+        "requiredTitle": "Champs requis",
+        "requiredBody": "Nom, courriel et mot de passe sont requis.",
+        "passwordTooShortTitle": "Mot de passe trop court",
+        "passwordTooShortBody": "Minimum 6 caractères.",
+        "passwordMismatchTitle": "Mismatch",
+        "passwordMismatchBody": "Les mots de passe ne correspondent pas.",
+
+        "failedTitle": "Création échouée",
+        "emailAlreadyInUse": "Ce courriel est déjà utilisé.",
+        "invalidEmail": "Le format du courriel est invalide.",
+        "network": "Problème réseau. Réessaie.",
+        "notAuthenticated": "Utilisateur non authentifié."
+      },
+
+      "success": {
+        "title": "Compte créé",
+        "body": "Bienvenue !"
+      }
+    },
+
+    "signIn": {
+      "emailTitle": "Connexion email",
+
+      "emailLabel": "Courriel",
+      "emailPlaceholder": "toi@email.com",
+
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "••••••••",
+
+      "missingFieldsTitle": "Champs manquants",
+      "missingFieldsBody": "Entre un courriel et un mot de passe.",
+
+      "successTitle": "✅ Connexion réussie",
+      "successBody": "Bienvenue dans Prophetik !",
+      "letsGoCta": "Allons-y !",
+
+      "accountCreatedTitle": "🎉 Compte créé",
+      "accountCreatedBody": "Bienvenue ! Tu peux maintenant profiter de Prophetik.",
+      "discoverCta": "Découvrir",
+
+      "cannotCreateAccountTitle": "Impossible de créer le compte",
+
+      "failTitle": "Connexion impossible",
+
+      "errors": {
+        "invalidEmail": "Adresse courriel invalide.",
+        "wrongCredentials": "Courriel ou mot de passe incorrect.",
+        "tooManyRequests": "Trop de tentatives. Réessaie plus tard."
+      }
+    },
+    
+    "phoneLogin": {
+      "title": "Connexion SMS",
+      "h1": "Se connecter par SMS",
+
+      "phoneLabel": "Téléphone (tu peux écrire 5145551234)",
+      "phonePlaceholder": "5145551234",
+      "sendingAs": "Envoi comme : {{phone}}",
+
+      "receiveCodeCta": "Recevoir le code",
+
+      "codeLabel": "Code reçu par SMS",
+      "codePlaceholder": "123456",
+      "confirmCta": "Confirmer",
+      "changeNumberCta": "Changer de numéro / Renvoyer un code",
+
+      "invalidPhoneTitle": "Numéro invalide",
+      "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
+
+      "accountRequiredTitle": "Compte requis",
+      "accountRequiredBody": "Ce numéro n'est pas associé à un compte existant. Crée d'abord un compte (SMS ou Email).",
+
+      "codeSentTitle": "Code envoyé",
+      "codeSentBody": "Vérifie tes SMS.",
+
+      "smsErrorTitle": "Erreur SMS",
+      "smsErrorBody": "Impossible d’envoyer le code.",
+
+      "userNotFound": "Utilisateur introuvable.",
+
+      "invalidCodeTitle": "Code invalide",
+      "invalidCodeBody": "Vérifie le code.",
+
+      "signInFailedTitle": "Échec de connexion"
+    },
+
+    "phoneSignup": {
+      "title": "Créer un compte (SMS)",
+
+      "step1": {
+        "h1": "Inscription par SMS",
+        "subtitle": "Entre un nom d’affichage et ton numéro (ex. 5145551234 ou +15145551234).",
+        "displayNameLabel": "Nom d’affichage",
+        "displayNamePlaceholder": "Ton nom",
+        "phoneLabel": "Téléphone",
+        "phonePlaceholder": "5145551234",
+        "sendingAs": "Envoi comme : {{phone}}",
+        "sendCodeCta": "Envoyer le code"
+      },
+
+      "step2": {
+        "h1": "Vérification du code",
+        "subtitle": "Un code SMS a été envoyé à {{phone}}.",
+        "codeLabel": "Code reçu (SMS)",
+        "codePlaceholder": "123456",
+        "confirmCta": "Confirmer",
+        "changeNumberCta": "Changer de numéro / Renvoyer un code"
+      },
+
+      "alerts": {
+        "codeSentTitle": "Code envoyé",
+        "codeSentBody": "Vérifie tes SMS au {{phone}}.",
+        "sendFailedTitle": "Échec de l’envoi",
+        "welcomeTitle": "Bienvenue!",
+        "welcomeBody": "Ton compte a été créé."
+      },
+
+      "errors": {
+        "notAuthenticated": "Non authentifié",
+        "displayNameRequiredTitle": "Nom requis",
+        "displayNameRequiredBody": "Entre un nom d’affichage.",
+        "invalidPhoneTitle": "Numéro invalide",
+        "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
+        "codeRequiredTitle": "Code requis",
+        "codeRequiredBody": "Entre le code reçu par SMS.",
+        "sessionExpiredTitle": "Session expirée",
+        "sessionExpiredBody": "Réessaie l’envoi du code.",
+        "sessionExpiredBody2": "Redemande un nouveau code.",
+        "userUnavailable": "Utilisateur non disponible après confirmation.",
+        "invalidCodeTitle": "Code invalide",
+        "invalidCodeBody": "Vérifie le code et réessaie.",
+        "verifyFailedTitle": "Échec de vérification"
+      }
+    }
+  
   },
   "home": {
     "title": "Accueil",

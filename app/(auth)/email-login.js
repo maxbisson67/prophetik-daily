@@ -1,10 +1,19 @@
 // app/(auth)/sign-in.js
 import React, { useEffect, useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, ActivityIndicator,
-  Alert, KeyboardAvoidingView, Platform
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
+
+// i18n
+import i18n from "@src/i18n/i18n";
 
 // Our “bridge” auth (firebase/auth) lives here
 import { webAuth } from "@src/lib/firebase";
@@ -41,7 +50,11 @@ export default function SignInEmail() {
         if (u) goHome();
       });
     }
-    return () => { try { unsub && unsub(); } catch {} };
+    return () => {
+      try {
+        unsub && unsub();
+      } catch {}
+    };
   }, [router]);
 
   const signIn = async () => {
@@ -49,7 +62,14 @@ export default function SignInEmail() {
     const pw = String(password || "").trim();
 
     if (!em || !pw) {
-      Alert.alert("Champs manquants", "Entre un email et un mot de passe.");
+      Alert.alert(
+        i18n.t("auth.signIn.missingFieldsTitle", {
+          defaultValue: "Missing fields",
+        }),
+        i18n.t("auth.signIn.missingFieldsBody", {
+          defaultValue: "Enter an email and a password.",
+        })
+      );
       return;
     }
 
@@ -59,9 +79,16 @@ export default function SignInEmail() {
       if (Platform.OS === "web") {
         // WEB: one sign-in is enough
         await webSignInWithEmailAndPassword(webAuth, em, pw);
-        Alert.alert("✅ Connexion réussie", "Bienvenue dans Prophetik!", [
-          { text: "OK", onPress: goHome },
-        ]);
+
+        Alert.alert(
+          i18n.t("auth.signIn.successTitle", {
+            defaultValue: "✅ Signed in",
+          }),
+          i18n.t("auth.signIn.successBody", {
+            defaultValue: "Welcome to Prophetik!",
+          }),
+          [{ text: i18n.t("common.ok", { defaultValue: "OK" }), onPress: goHome }]
+        );
         return;
       }
 
@@ -76,9 +103,16 @@ export default function SignInEmail() {
         console.log("[Bridge webAuth] sign-in skipped/failed:", e?.code || e);
       }
 
-      Alert.alert("✅ Connexion réussie", "Bienvenue dans Prophetik!", [
-        { text: "Allons-y !", onPress: goHome },
-      ]);
+      Alert.alert(
+        i18n.t("auth.signIn.successTitle", { defaultValue: "✅ Signed in" }),
+        i18n.t("auth.signIn.successBody", { defaultValue: "Welcome to Prophetik!" }),
+        [
+          {
+            text: i18n.t("auth.signIn.letsGoCta", { defaultValue: "Let's go!" }),
+            onPress: goHome,
+          },
+        ]
+      );
     } catch (e) {
       if (e?.code === "auth/user-not-found") {
         // Create account flow
@@ -93,20 +127,55 @@ export default function SignInEmail() {
               await webSignInWithEmailAndPassword(webAuth, em, pw);
             } catch {}
           }
-          Alert.alert("🎉 Compte créé", "Bienvenue! Tu peux maintenant profiter de Prophetik.", [
-            { text: "Découvrir", onPress: goHome },
-          ]);
+
+          Alert.alert(
+            i18n.t("auth.signIn.accountCreatedTitle", {
+              defaultValue: "🎉 Account created",
+            }),
+            i18n.t("auth.signIn.accountCreatedBody", {
+              defaultValue: "Welcome! You can now enjoy Prophetik.",
+            }),
+            [
+              {
+                text: i18n.t("auth.signIn.discoverCta", { defaultValue: "Discover" }),
+                onPress: goHome,
+              },
+            ]
+          );
         } catch (e2) {
-          Alert.alert("Impossible de créer le compte", String(e2?.message || e2));
+          Alert.alert(
+            i18n.t("auth.signIn.cannotCreateAccountTitle", {
+              defaultValue: "Unable to create account",
+            }),
+            String(e2?.message || e2)
+          );
         }
       } else {
         let msg = String(e?.message || e);
-        if (e?.code === "auth/invalid-email") msg = "Adresse email invalide.";
-        if (e?.code === "auth/invalid-credential" || e?.code === "auth/wrong-password")
-          msg = "Email ou mot de passe incorrect.";
-        if (e?.code === "auth/too-many-requests")
-          msg = "Trop de tentatives. Réessaie plus tard.";
-        Alert.alert("Connexion impossible", msg);
+
+        if (e?.code === "auth/invalid-email") {
+          msg = i18n.t("auth.signIn.errors.invalidEmail", {
+            defaultValue: "Invalid email address.",
+          });
+        }
+        if (
+          e?.code === "auth/invalid-credential" ||
+          e?.code === "auth/wrong-password"
+        ) {
+          msg = i18n.t("auth.signIn.errors.wrongCredentials", {
+            defaultValue: "Email or password is incorrect.",
+          });
+        }
+        if (e?.code === "auth/too-many-requests") {
+          msg = i18n.t("auth.signIn.errors.tooManyRequests", {
+            defaultValue: "Too many attempts. Try again later.",
+          });
+        }
+
+        Alert.alert(
+          i18n.t("auth.signIn.failTitle", { defaultValue: "Unable to sign in" }),
+          msg
+        );
       }
     } finally {
       setBusy(false);
@@ -115,38 +184,57 @@ export default function SignInEmail() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Connexion email", headerShown: true }} />
+      <Stack.Screen
+        options={{
+          title: i18n.t("auth.signIn.emailTitle", { defaultValue: "Email sign-in" }),
+          headerShown: true,
+        }}
+      />
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
       >
         <View style={{ flex: 1, padding: 16, gap: 12, justifyContent: "center" }}>
-          <Text style={{ fontWeight: "700", fontSize: 18 }}>Email</Text>
+          <Text style={{ fontWeight: "700", fontSize: 18 }}>
+            {i18n.t("auth.signIn.emailLabel", { defaultValue: "Email" })}
+          </Text>
+
           <TextInput
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
-            placeholder="ton@email.com"
+            placeholder={i18n.t("auth.signIn.emailPlaceholder", {
+              defaultValue: "you@email.com",
+            })}
             editable={!busy}
             style={{
-              borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12,
+              borderWidth: 1,
+              borderColor: "#ddd",
+              borderRadius: 10,
+              padding: 12,
               opacity: busy ? 0.7 : 1,
             }}
           />
 
           <Text style={{ fontWeight: "700", fontSize: 18, marginTop: 8 }}>
-            Mot de passe
+            {i18n.t("auth.signIn.passwordLabel", { defaultValue: "Password" })}
           </Text>
+
           <TextInput
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            placeholder="••••••••"
+            placeholder={i18n.t("auth.signIn.passwordPlaceholder", {
+              defaultValue: "••••••••",
+            })}
             editable={!busy}
             style={{
-              borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12,
+              borderWidth: 1,
+              borderColor: "#ddd",
+              borderRadius: 10,
+              padding: 12,
               opacity: busy ? 0.7 : 1,
             }}
           />
@@ -165,7 +253,9 @@ export default function SignInEmail() {
             {busy ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: "#fff", fontWeight: "700" }}>Continuer</Text>
+              <Text style={{ color: "#fff", fontWeight: "700" }}>
+                {i18n.t("common.continue", { defaultValue: "Continue" })}
+              </Text>
             )}
           </TouchableOpacity>
         </View>

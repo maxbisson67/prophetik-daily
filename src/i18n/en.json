@@ -5,13 +5,173 @@
     "errorLabel": "Error:",
     "create": "Create",
     "ok": "OK",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "or": "or",
+    "continue": "Continue"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
   },
   "auth": {
-    "login": "Log in"
+    "login": "Log in",
+    "choice": {
+      "title": "Welcome",
+      "headline": "Choose your sign-in method",
+      "body": "Sign in to join challenges, view live results, and track your progress.",
+      "continueSms": "Continue with SMS",
+      "continueEmail": "Continue with Email",
+      "createSms": "Create an account (SMS)",
+      "createEmail": "Create an account (Email)",
+      "footer": "By continuing, you agree to our terms of use."
+    },
+
+    "signup": {
+      "title": "Create an account",
+      "displayNameLabel": "Display name",
+      "displayNamePlaceholder": "Your name",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "••••••••",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "••••••••",
+      "ctaCreateAccount": "Create account",
+
+      "errors": {
+        "requiredTitle": "Required fields",
+        "requiredBody": "Name, email, and password are required.",
+        "passwordTooShortTitle": "Password too short",
+        "passwordTooShortBody": "Minimum 6 characters.",
+        "passwordMismatchTitle": "Mismatch",
+        "passwordMismatchBody": "Passwords do not match.",
+
+        "failedTitle": "Sign up failed",
+        "emailAlreadyInUse": "This email is already in use.",
+        "invalidEmail": "The email format is invalid.",
+        "network": "Network error. Please try again.",
+        "notAuthenticated": "User is not authenticated."
+      },
+
+      "success": {
+        "title": "Account created",
+        "body": "Welcome!"
+      }
+    },
+
+    "signIn": {
+      "emailTitle": "Email sign-in",
+
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@email.com",
+
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "••••••••",
+
+      "missingFieldsTitle": "Missing fields",
+      "missingFieldsBody": "Enter an email and a password.",
+
+      "successTitle": "✅ Signed in",
+      "successBody": "Welcome to Prophetik!",
+      "letsGoCta": "Let's go!",
+
+      "accountCreatedTitle": "🎉 Account created",
+      "accountCreatedBody": "Welcome! You can now enjoy Prophetik.",
+      "discoverCta": "Discover",
+
+      "cannotCreateAccountTitle": "Unable to create account",
+
+      "failTitle": "Unable to sign in",
+
+      "errors": {
+        "invalidEmail": "Invalid email address.",
+        "wrongCredentials": "Email or password is incorrect.",
+        "tooManyRequests": "Too many attempts. Try again later."
+      }
+    },
+
+    "phoneLogin": {
+      "title": "SMS sign-in",
+      "h1": "Sign in by SMS",
+
+      "phoneLabel": "Phone (you can type 5145551234)",
+      "phonePlaceholder": "5145551234",
+      "sendingAs": "Sending as: {{phone}}",
+
+      "receiveCodeCta": "Get code",
+
+      "codeLabel": "Code received by SMS",
+      "codePlaceholder": "123456",
+      "confirmCta": "Confirm",
+      "changeNumberCta": "Change number / Resend code",
+
+      "invalidPhoneTitle": "Invalid phone number",
+      "invalidPhoneBody": "Enter a valid number (e.g., 5145551234).",
+
+      "accountRequiredTitle": "Account required",
+      "accountRequiredBody": "This number isn't linked to an existing account. Create an account first (SMS or Email).",
+
+      "codeSentTitle": "Code sent",
+      "codeSentBody": "Check your SMS.",
+
+      "smsErrorTitle": "SMS error",
+      "smsErrorBody": "Couldn't send the code.",
+
+      "userNotFound": "User not found.",
+
+      "invalidCodeTitle": "Invalid code",
+      "invalidCodeBody": "Double-check the code.",
+
+      "signInFailedTitle": "Sign-in failed"
+    },
+
+    "phoneSignup": {
+      "title": "Create account (SMS)",
+
+      "step1": {
+        "h1": "SMS sign up",
+        "subtitle": "Enter a display name and your phone number (e.g., 5145551234 or +15145551234).",
+        "displayNameLabel": "Display name",
+        "displayNamePlaceholder": "Your name",
+        "phoneLabel": "Phone",
+        "phonePlaceholder": "5145551234",
+        "sendingAs": "Sending as: {{phone}}",
+        "sendCodeCta": "Send code"
+      },
+
+      "step2": {
+        "h1": "Code verification",
+        "subtitle": "An SMS code was sent to {{phone}}.",
+        "codeLabel": "SMS code",
+        "codePlaceholder": "123456",
+        "confirmCta": "Confirm",
+        "changeNumberCta": "Change number / Resend code"
+      },
+
+      "alerts": {
+        "codeSentTitle": "Code sent",
+        "codeSentBody": "Check your SMS at {{phone}}.",
+        "sendFailedTitle": "Send failed",
+        "welcomeTitle": "Welcome!",
+        "welcomeBody": "Your account has been created."
+      },
+
+      "errors": {
+        "notAuthenticated": "Not authenticated",
+        "displayNameRequiredTitle": "Name required",
+        "displayNameRequiredBody": "Enter a display name.",
+        "invalidPhoneTitle": "Invalid phone number",
+        "invalidPhoneBody": "Enter a valid number (e.g., 5145551234).",
+        "codeRequiredTitle": "Code required",
+        "codeRequiredBody": "Enter the code you received by SMS.",
+        "sessionExpiredTitle": "Session expired",
+        "sessionExpiredBody": "Try sending the code again.",
+        "sessionExpiredBody2": "Request a new code.",
+        "userUnavailable": "User not available after confirmation.",
+        "invalidCodeTitle": "Invalid code",
+        "invalidCodeBody": "Check the code and try again.",
+        "verifyFailedTitle": "Verification failed"
+      }
+    }
   },
   "home": {
     "title": "Home",
