@@ -14,14 +14,25 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { app } from '@src/lib/firebase';
 import { useTheme } from '@src/theme/ThemeProvider';
 
+// i18n
+import i18n from '@src/i18n/i18n';
+
 const PACKS = [
-  { id: 'p25', credits: 25, priceCents: 500, tag: 'Starter' },
-  { id: 'p60', credits: 60, priceCents: 1200, tag: 'Populaire' },
-  { id: 'p140', credits: 140, priceCents: 2500, tag: 'Meilleure valeur' },
+  { id: 'p25', credits: 25, priceCents: 500, tagKey: 'credits.wallet.packs.starter', tagFallback: 'Starter' },
+  { id: 'p60', credits: 60, priceCents: 1200, tagKey: 'credits.wallet.packs.popular', tagFallback: 'Popular' },
+  { id: 'p140', credits: 140, priceCents: 2500, tagKey: 'credits.wallet.packs.bestValue', tagFallback: 'Best value' },
 ];
 
-const fmtPrice = (cents) =>
-  (cents / 100).toLocaleString('fr-CA', { style: 'currency', currency: 'CAD' });
+// format CAD selon langue
+const fmtPrice = (cents) => {
+  const amount = (Number(cents) || 0) / 100;
+  const locale = i18n?.locale || i18n?.language || 'fr-CA';
+  try {
+    return amount.toLocaleString(locale, { style: 'currency', currency: 'CAD' });
+  } catch {
+    return amount.toLocaleString('fr-CA', { style: 'currency', currency: 'CAD' });
+  }
+};
 
 function AmountPill({ amount }) {
   const { colors } = useTheme();
@@ -112,9 +123,15 @@ export default function CreditsWallet({ credits }) {
       const awarded = res?.data?.amount ?? 25;
 
       Alert.alert(
-        '🎉 Bonus crédité',
-        `Tu viens de recevoir +${awarded} crédits.\nTon solde va se mettre à jour.`
-      );
+      i18n.t('credits.wallet.bonusSuccessTitle', {
+        defaultValue: '🎉 Bonus credited',
+      }),
+      i18n.t('credits.wallet.bonusSuccessBody', {
+        defaultValue:
+          'You just received +{{amount}} credits.\nYour balance will update shortly.',
+        amount: Number(awarded),
+      })
+    );
     } catch (e) {
       console.log('[freeTopUp] error:', e);
 
@@ -126,8 +143,14 @@ export default function CreditsWallet({ credits }) {
         const nextDay = details.nextAvailableDay; // ex: "2025-11-30"
 
         Alert.alert(
-          'Bonus déjà utilisé',
-          `Tu as déjà utilisé ton bonus récemment.\nTu pourras en redemander à partir du ${nextDay}.`
+          i18n.t('credits.wallet.bonusAlreadyUsedTitle', {
+            defaultValue: 'Bonus already used',
+          }),
+          i18n.t('credits.wallet.bonusAlreadyUsedBody', {
+            defaultValue:
+              'You have already used your bonus recently.\nYou can request it again starting {{date}}.',
+            date: nextDay,
+          })
         );
         setLoadingTopUp(false);
         return;
@@ -135,14 +158,14 @@ export default function CreditsWallet({ credits }) {
 
       if (code === 'unauthenticated') {
         Alert.alert(
-          'Connexion requise',
-          "Tu dois être connecté pour demander un bonus de crédits."
+          i18n.t('credits.wallet.loginRequiredTitle', 'Sign-in required'),
+          i18n.t('credits.wallet.loginRequiredBody', 'You must be logged in to request a credit bonus.')
         );
         setLoadingTopUp(false);
         return;
       }
 
-      Alert.alert('Oups', message);
+      Alert.alert(i18n.t('common.unknownError', 'Unknown error'), message);
     } finally {
       setLoadingTopUp(false);
     }
@@ -152,12 +175,16 @@ export default function CreditsWallet({ credits }) {
     try {
       setBuying(true);
       // TODO: branchement avec ta CF de checkout (Stripe / autre)
-      Alert.alert(
-        'Bientôt',
-        `Achat de ${selectedPack.credits} crédits (${fmtPrice(selectedPack.priceCents)})`
-      );
+    Alert.alert(
+      i18n.t('credits.wallet.comingSoonTitle', { defaultValue: 'Coming soon' }),
+      i18n.t('credits.wallet.comingSoonBody', {
+        defaultValue: 'Purchase of {{credits}} credits ({{price}})',
+        credits: Number(selectedPack.credits),
+        price: fmtPrice(selectedPack.priceCents),
+      })
+    );
     } catch (e) {
-      Alert.alert('Paiement', String(e?.message || e));
+      Alert.alert(i18n.t('credits.wallet.paymentTitle', 'Payment'), String(e?.message || e));
     } finally {
       setBuying(false);
     }
@@ -180,7 +207,7 @@ export default function CreditsWallet({ credits }) {
     >
       {/* Bandeau solde */}
       <LinearGradient
-        colors={['#020617', '#0f172a']} // bandeau sombre, OK dans les 2 thèmes
+        colors={['#020617', '#0f172a']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ padding: 18 }}
@@ -207,7 +234,7 @@ export default function CreditsWallet({ credits }) {
                 letterSpacing: 0.4,
               }}
             >
-              MON SOLDE
+              {i18n.t('credits.wallet.balanceLabel', 'MY BALANCE')}
             </Text>
             <Text
               style={{
@@ -236,7 +263,9 @@ export default function CreditsWallet({ credits }) {
             {loadingTopUp ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: '#fff', fontWeight: '800' }}>+25 Bonus</Text>
+              <Text style={{ color: '#fff', fontWeight: '800' }}>
+                {i18n.t('credits.wallet.bonusButton', '+25 Bonus')}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -252,7 +281,7 @@ export default function CreditsWallet({ credits }) {
             color: colors.text,
           }}
         >
-          Acheter des crédits
+          {i18n.t('credits.wallet.buyTitle', 'Buy credits')}
         </Text>
 
         {/* Packs (chips) */}
@@ -276,9 +305,14 @@ export default function CreditsWallet({ credits }) {
                 }}
               >
                 <Text style={{ fontWeight: '800', color: colors.text }}>
-                  {p.credits} crédits
+                  {i18n.t('credits.wallet.creditsLabel', {
+                    defaultValue: '{{count}} credits',
+                    count: Number(p.credits),
+                  })}
                 </Text>
-                <Text style={{ color: colors.subtext, fontSize: 12 }}>{p.tag}</Text>
+                <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                  {i18n.t(p.tagKey, p.tagFallback)}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -299,7 +333,10 @@ export default function CreditsWallet({ credits }) {
         >
           <View>
             <Text style={{ fontWeight: '800', color: colors.text }}>
-              {selectedPack.credits} crédits
+              {i18n.t('credits.wallet.creditsLabel', {
+                defaultValue: '{{count}} credits',
+                count: Number(selectedPack.credits),
+              })}
             </Text>
             <Text style={{ color: colors.subtext, marginTop: 2 }}>
               {fmtPrice(selectedPack.priceCents)}
@@ -320,7 +357,9 @@ export default function CreditsWallet({ credits }) {
             {buying ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: '#fff', fontWeight: '900' }}>Acheter</Text>
+              <Text style={{ color: '#fff', fontWeight: '900' }}>
+                {i18n.t('credits.wallet.buyButton', 'Buy')}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -332,7 +371,10 @@ export default function CreditsWallet({ credits }) {
             marginTop: 10,
           }}
         >
-          Paiements sécurisés • Reçus envoyés par courriel • Crédits livrés instantanément
+          {i18n.t(
+            'credits.wallet.footerNote',
+            'Secure payments • Receipts by email • Credits delivered instantly'
+          )}
         </Text>
       </View>
     </View>

@@ -33,6 +33,15 @@ async function getGamesForYmdCached(ymd, cache) {
   return games;
 }
 
+// Petit helper pour ne garder que les valeurs > 0
+function cleanObj(mapOrObj) {
+  const entries =
+    mapOrObj instanceof Map
+      ? Array.from(mapOrObj.entries())
+      : Object.entries(mapOrObj || {});
+  return Object.fromEntries(entries.filter(([, v]) => Number(v) > 0));
+}
+
 export async function runIngestStatsForDate() {
   logger.info("[runIngestStatsForDate] tick", {
     at: new Date().toISOString(),
@@ -53,10 +62,10 @@ export async function runIngestStatsForDate() {
     // YMD de ce défi
     const ymd =
       typeof defi.gameDate === "string"
-      ? defi.gameDate.slice(0, 10)          // "YYYY-MM-DD..."
-      : defi.gameDate
-      ? appYmd(readTS(defi.gameDate))       // Timestamp → Date → APP_TZ YMD
-      : null;
+        ? defi.gameDate.slice(0, 10) // "YYYY-MM-DD..."
+        : defi.gameDate
+        ? appYmd(readTS(defi.gameDate)) // Timestamp → Date → APP_TZ YMD
+        : null;
 
     if (!ymd) continue;
 
@@ -126,12 +135,13 @@ export async function runIngestStatsForDate() {
     // ✅ Écriture des stats live globales pour ce défi
     const liveRef = docSnap.ref.collection("live").doc("stats");
 
-    const goalsObj = Object.fromEntries(goalsByPlayer);
-    const assistsObj = Object.fromEntries(assistsByPlayer);
-    const pointsObj = Object.fromEntries(pointsByPlayer);
+    const goalsObj   = cleanObj(goalsByPlayer);
+    const assistsObj = cleanObj(assistsByPlayer);
+    const pointsObj  = cleanObj(pointsByPlayer);
 
     const bw = db.bulkWriter();
 
+    // 🚨 IMPORTANT : merge: false pour REPLACER complètement le doc
     bw.set(
       liveRef,
       {
@@ -140,7 +150,7 @@ export async function runIngestStatsForDate() {
         playerPoints: pointsObj,
         updatedAt: FieldValue.serverTimestamp(),
       },
-      { merge: true }
+      { merge: false }
     );
 
     // ✅ Mise à jour des livePoints pour chaque participant
@@ -177,7 +187,7 @@ export const ingestStatsForDate = onCall(async () => {
 
 export const ingestStatsForDateCron = onSchedule(
   {
-    schedule: "*/2 * * * *",
+    schedule: "*/1 * * * *",
     timeZone: "America/Toronto",
     region: "us-central1",
   },

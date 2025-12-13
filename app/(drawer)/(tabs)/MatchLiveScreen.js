@@ -250,10 +250,12 @@ function GameRow({ game, onPress, colors }) {
     statusText,
     isLive,
     isFinal,
+    inIntermission,
   } = game;
 
   const timeRemaining = game.timeRemaining ?? null;
   const periodLabel = periodLabelFromGame(game);
+  const isIntermission = !!inIntermission;
 
   // On n’affiche pas "Terminé" si le match est final (le "Final..." vient de periodLabel)
   const displayStatusText = isFinal ? null : statusText;
@@ -377,7 +379,11 @@ function GameRow({ game, onPress, colors }) {
 
           {/* Temps restant ou heure de début */}
           {isLive ? (
-            timeRemaining ? (
+            isIntermission ? (
+              <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                {i18n.t('live.detail.intermission', 'Entracte')}
+              </Text>
+            ) : timeRemaining ? (
               <Text style={{ color: colors.subtext, fontSize: 12 }}>
                 {i18n.t('live.detail.timeRemaining', {
                   defaultValue: 'Temps restant: {{time}}',
@@ -535,9 +541,11 @@ function GameDetailModal({ visible, onClose, game, colors }) {
     isFinal,
     period,
     periodType,
+    inIntermission,
   } = g;
 
   const timeRemaining = g.timeRemaining ?? null;
+  const isIntermission = !!inIntermission;
 
   let periodLabel = null;
   const ptModal = (periodType || '').toUpperCase();
@@ -701,7 +709,17 @@ function GameDetailModal({ visible, onClose, game, colors }) {
               {/* Ligne infos période / temps ou début */}
               {isLive ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  {periodLabel
+                  {isIntermission
+                    ? (
+                      periodLabel
+                        ? i18n.t('live.detail.intermissionWithPeriod', {
+                            defaultValue: '{{period}} • {{label}}',
+                            period: periodLabel,
+                            label: i18n.t('live.detail.intermission', 'Entracte'),
+                          })
+                        : i18n.t('live.detail.intermission', 'Entracte')
+                    )
+                    : periodLabel
                     ? i18n.t('live.detail.liveWithPeriod', {
                         defaultValue: '{{period}}{{time}}',
                         period: periodLabel,
@@ -737,7 +755,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                       )}
                 </Text>
               )}
-            </View>
+               </View> 
 
             {/* Buts par période */}
             <View

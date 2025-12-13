@@ -14,19 +14,23 @@ import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
+// i18n
+import i18n from '@src/i18n/i18n';
+
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useTheme } from '@src/theme/ThemeProvider';
 
 const DEFAULT_PRICE = 5;
 
+// ⚠️ Fallback (dev only) – noms non traduits ici
 const FALLBACK = [
-  { id: 'wolves',   name: 'Les Loups',           url: 'https://picsum.photos/seed/wolves/400',   sort: 10, price: 5 },
-  { id: 'titans',   name: 'Les Titans',          url: 'https://picsum.photos/seed/titans/400',   sort: 20, price: 5 },
-  { id: 'visions',  name: 'Les Visionnaires',    url: 'https://picsum.photos/seed/visions/400',  sort: 30, price: 5 },
-  { id: 'dragons',  name: 'Les Dragons',         url: 'https://picsum.photos/seed/dragons/400',  sort: 40, price: 5 },
-  { id: 'skaters',  name: 'Les Patineurs Fous',  url: 'https://picsum.photos/seed/skaters/400',  sort: 50, price: 5 },
-  { id: 'blizzard', name: 'Le Blizzard',         url: 'https://picsum.photos/seed/blizzard/400', sort: 60, price: 5 },
+  { id: 'wolves', name: 'Les Loups', url: 'https://picsum.photos/seed/wolves/400', sort: 10, price: 5 },
+  { id: 'titans', name: 'Les Titans', url: 'https://picsum.photos/seed/titans/400', sort: 20, price: 5 },
+  { id: 'visions', name: 'Les Visionnaires', url: 'https://picsum.photos/seed/visions/400', sort: 30, price: 5 },
+  { id: 'dragons', name: 'Les Dragons', url: 'https://picsum.photos/seed/dragons/400', sort: 40, price: 5 },
+  { id: 'skaters', name: 'Les Patineurs Fous', url: 'https://picsum.photos/seed/skaters/400', sort: 50, price: 5 },
+  { id: 'blizzard', name: 'Le Blizzard', url: 'https://picsum.photos/seed/blizzard/400', sort: 60, price: 5 },
 ];
 
 function Chip({ icon, color, bg, label }) {
@@ -43,11 +47,7 @@ function Chip({ icon, color, bg, label }) {
       }}
     >
       {!!icon && (
-        <MaterialCommunityIcons
-          name={icon}
-          size={14}
-          color={color || '#111'}
-        />
+        <MaterialCommunityIcons name={icon} size={14} color={color || '#111'} />
       )}
       <Text
         style={{
@@ -217,30 +217,32 @@ export default function GroupAvatarsScreen() {
       (Array.isArray(group.admins) && group.admins.includes(user.uid)));
 
   async function handleBuy() {
-    if (!user?.uid)
+    if (!user?.uid) {
       return Alert.alert(
-        'Connexion requise',
-        'Connecte-toi pour acheter un avatar.'
+        i18n.t('groupAvatars.alerts.loginRequiredTitle', 'Connexion requise'),
+        i18n.t('groupAvatars.alerts.loginRequiredBody', 'Connecte-toi pour acheter un avatar.')
       );
-    if (!group?.id)
+    }
+    if (!group?.id) {
       return Alert.alert(
-        'Groupe requis',
-        'Aucun groupe n’a été fourni.'
+        i18n.t('groupAvatars.alerts.groupRequiredTitle', 'Groupe requis'),
+        i18n.t('groupAvatars.alerts.groupRequiredBody', 'Aucun groupe n’a été fourni.')
       );
-    if (!selectedItem)
+    }
+    if (!selectedItem) {
       return Alert.alert(
-        'Choisis un avatar',
-        'Sélectionne un avatar avant d’acheter.'
+        i18n.t('groupAvatars.alerts.selectRequiredTitle', 'Choisis un avatar'),
+        i18n.t('groupAvatars.alerts.selectRequiredBody', 'Sélectionne un avatar avant d’acheter.')
       );
-    if (!canManage)
+    }
+    if (!canManage) {
       return Alert.alert(
-        'Accès refusé',
-        'Seul le propriétaire du groupe peut changer son avatar.'
+        i18n.t('groupAvatars.alerts.accessDeniedTitle', 'Accès refusé'),
+        i18n.t('groupAvatars.alerts.accessDeniedBody', 'Seul le propriétaire du groupe peut changer son avatar.')
       );
+    }
 
-    const price = Number.isFinite(selectedItem.price)
-      ? selectedItem.price
-      : DEFAULT_PRICE;
+    const price = Number.isFinite(selectedItem.price) ? selectedItem.price : DEFAULT_PRICE;
 
     try {
       setBusy(true);
@@ -253,49 +255,49 @@ export default function GroupAvatarsScreen() {
       });
 
       if (res?.data?.ok) {
+        const groupName = group?.name || group?.title || group?.id || '—';
         Alert.alert(
-          'Avatar défini 🎉',
-          `Le groupe “${
-            group?.name || group?.title || group?.id
-          }” a un nouvel avatar !`,
-          [{ text: 'OK', onPress: () => router.back() }]
+          i18n.t('groupAvatars.alerts.successTitle', 'Avatar défini 🎉'),
+          i18n.t('groupAvatars.alerts.successBody', {
+            defaultValue: 'Le groupe “{{name}}” a un nouvel avatar !',
+            name: groupName,
+          }),
+          [{ text: i18n.t('common.ok', 'OK'), onPress: () => router.back() }]
         );
       } else {
-        throw new Error(res?.data?.error || 'Erreur inconnue');
+        throw new Error(res?.data?.error || i18n.t('common.unknownError', 'Erreur inconnue'));
       }
     } catch (e) {
-      Alert.alert('Achat impossible', String(e?.message || e));
+      Alert.alert(
+        i18n.t('groupAvatars.alerts.purchaseFailedTitle', 'Achat impossible'),
+        String(e?.message || e)
+      );
     } finally {
       setBusy(false);
     }
   }
 
+  const headerTitle = i18n.t('groupAvatars.title', 'Avatars de groupe');
+
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Avatars de groupe',
+          title: headerTitle,
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.replace('/(drawer)/boutique')}
               style={{ paddingHorizontal: 10 }}
             >
-              <Ionicons
-                name="arrow-back"
-                size={24}
-                color={colors.text}
-              />
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
           ),
-          headerStyle: {
-            backgroundColor: colors.card,
-          },
-          headerTitleStyle: {
-            color: colors.text,
-          },
+          headerStyle: { backgroundColor: colors.card },
+          headerTitleStyle: { color: colors.text },
           headerTintColor: colors.text,
         }}
       />
+
       <FlatList
         data={items || []}
         keyExtractor={(it) => it.id}
@@ -333,15 +335,13 @@ export default function GroupAvatarsScreen() {
                   color: colors.text,
                 }}
               >
-                Groupe
+                {i18n.t('groupAvatars.group.title', 'Groupe')}
               </Text>
+
               <Text style={{ fontWeight: '700', color: colors.text }}>
                 {loadingGroup
-                  ? 'Chargement…'
-                  : group?.name ||
-                    group?.title ||
-                    group?.id ||
-                    '—'}
+                  ? i18n.t('common.initializing', 'Chargement…')
+                  : group?.name || group?.title || group?.id || '—'}
               </Text>
 
               <View
@@ -354,33 +354,24 @@ export default function GroupAvatarsScreen() {
               >
                 <Chip
                   icon={canManage ? 'shield-check' : 'lock'}
+                  // note: couleurs simples; tu peux les rendre theme-aware si tu veux
                   color={canManage ? '#065F46' : '#991B1B'}
                   bg={canManage ? '#ECFDF5' : '#FEE2E2'}
                   label={
                     canManage
-                      ? 'Tu es propriétaire'
-                      : 'Lecture seule'
+                      ? i18n.t('groupAvatars.access.owner', 'Tu es propriétaire')
+                      : i18n.t('groupAvatars.access.readOnly', 'Lecture seule')
                   }
                 />
+
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: colors.subtext,
-                    }}
-                  >
-                    Tes crédits
+                  <Text style={{ fontSize: 12, color: colors.subtext }}>
+                    {i18n.t('groupAvatars.group.myCreditsLabel', 'Tes crédits')}
                   </Text>
                   {loadingMe ? (
                     <ActivityIndicator color={colors.primary} />
                   ) : (
-                    <Text
-                      style={{
-                        fontWeight: '900',
-                        fontSize: 20,
-                        color: colors.text,
-                      }}
-                    >
+                    <Text style={{ fontWeight: '900', fontSize: 20, color: colors.text }}>
                       {credits}
                     </Text>
                   )}
@@ -398,21 +389,11 @@ export default function GroupAvatarsScreen() {
                 borderColor: colors.border,
               }}
             >
-              <Text
-                style={{
-                  fontWeight: '700',
-                  marginBottom: 8,
-                  color: colors.text,
-                }}
-              >
-                Aperçu
+              <Text style={{ fontWeight: '700', marginBottom: 8, color: colors.text }}>
+                {i18n.t('groupAvatars.preview.title', 'Aperçu')}
               </Text>
-              <View
-                style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
+
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                 {selectedItem?.url ? (
                   <Image
                     source={{ uri: selectedItem.url }}
@@ -434,88 +415,73 @@ export default function GroupAvatarsScreen() {
                       justifyContent: 'center',
                     }}
                   >
-                    <Text
-                      style={{
-                        color: colors.subtext,
-                      }}
-                    >
-                      Sélectionne un avatar
+                    <Text style={{ color: colors.subtext }}>
+                      {i18n.t('groupAvatars.preview.noneSelected', 'Sélectionne un avatar')}
                     </Text>
                   </View>
                 )}
+
                 {!!selectedItem && (
-                  <Text
-                    style={{
-                      marginTop: 8,
-                      fontWeight: '700',
-                      color: colors.text,
-                    }}
-                  >
+                  <Text style={{ marginTop: 8, fontWeight: '700', color: colors.text }}>
                     {selectedItem.name || selectedItem.id}
                   </Text>
                 )}
 
-                <TouchableOpacity
-                  onPress={handleBuy}
-                  disabled={busy || !selectedItem || !canManage}
-                  style={{
-                    marginTop: 12,
-                    backgroundColor:
-                      busy || !selectedItem || !canManage
-                        ? '#9ca3af'
-                        : '#ef4444',
-                    paddingVertical: 14,
-                    paddingHorizontal: 16,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    elevation: 2,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    shadowOffset: { width: 0, height: 2 },
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: '#fff',
-                      fontWeight: '900',
-                    }}
-                  >
-                    {busy
-                      ? 'Traitement…'
-                      : selectedItem
-                      ? `Acheter pour le groupe (${
-                          Number.isFinite(selectedItem.price)
-                            ? selectedItem.price
-                            : DEFAULT_PRICE
-                        } crédits)`
-                      : 'Choisis un avatar'}
-                  </Text>
-                </TouchableOpacity>
+                {(() => {
+                  const price = selectedItem
+                    ? Number.isFinite(selectedItem.price)
+                      ? selectedItem.price
+                      : DEFAULT_PRICE
+                    : DEFAULT_PRICE;
+
+                  const disabled = busy || !selectedItem || !canManage;
+
+                  const btnLabel = busy
+                    ? i18n.t('groupAvatars.actions.processing', 'Traitement…')
+                    : selectedItem
+                    ? i18n.t('groupAvatars.actions.buyForGroup', {
+                        defaultValue: 'Acheter pour le groupe ({{price}} crédits)',
+                        price,
+                      })
+                    : i18n.t('groupAvatars.actions.chooseFirst', 'Choisis un avatar');
+
+                  return (
+                    <TouchableOpacity
+                      onPress={handleBuy}
+                      disabled={disabled}
+                      style={{
+                        marginTop: 12,
+                        backgroundColor: disabled ? '#9ca3af' : '#ef4444',
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        borderRadius: 12,
+                        alignItems: 'center',
+                        elevation: 2,
+                        shadowColor: '#000',
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        shadowOffset: { width: 0, height: 2 },
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '900' }}>
+                        {btnLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             </View>
 
             {/* Titre catalogue */}
-            <Text
-              style={{ fontWeight: '700', color: colors.text }}
-            >
-              Catalogue
+            <Text style={{ fontWeight: '700', color: colors.text }}>
+              {i18n.t('groupAvatars.catalog.title', 'Catalogue')}
             </Text>
+
             {loadingItems && (
-              <View
-                style={{
-                  alignItems: 'center',
-                  paddingVertical: 16,
-                }}
-              >
+              <View style={{ alignItems: 'center', paddingVertical: 16 }}>
                 <ActivityIndicator color={colors.primary} />
-                <Text
-                  style={{
-                    marginTop: 8,
-                    color: colors.subtext,
-                  }}
-                >
-                  Chargement…
+                <Text style={{ marginTop: 8, color: colors.subtext }}>
+                  {i18n.t('common.initializing', 'Chargement…')}
                 </Text>
               </View>
             )}
@@ -523,9 +489,8 @@ export default function GroupAvatarsScreen() {
         }
         renderItem={({ item }) => {
           const active = selectedId === item.id;
-          const price = Number.isFinite(item.price)
-            ? item.price
-            : DEFAULT_PRICE;
+          const price = Number.isFinite(item.price) ? item.price : DEFAULT_PRICE;
+
           return (
             <TouchableOpacity
               onPress={() => setSelectedId(item.id)}
@@ -552,43 +517,28 @@ export default function GroupAvatarsScreen() {
                 }}
               />
               <Text
-                style={{
-                  marginTop: 8,
-                  fontWeight: '700',
-                  color: colors.text,
-                }}
+                style={{ marginTop: 8, fontWeight: '700', color: colors.text }}
                 numberOfLines={1}
               >
                 {item.name || item.id}
               </Text>
-              <Text
-                style={{
-                  color: colors.subtext,
-                  fontSize: 12,
-                }}
-              >
-                {price} crédit{price > 1 ? 's' : ''}
+              <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                {i18n.t('groupAvatars.catalog.priceLine', {
+                  defaultValue: '{{price}} crédit{{s}}',
+                  price,
+                  s: price > 1 ? 's' : '',
+                })}
               </Text>
             </TouchableOpacity>
           );
         }}
         ListFooterComponent={
-          <View
-            style={{
-              gap: 8,
-              marginTop: 12,
-              marginBottom: 16,
-            }}
-          >
-            <Text
-              style={{
-                color: colors.subtext,
-                fontSize: 12,
-                textAlign: 'center',
-              }}
-            >
-              En achetant, tu acceptes un usage personnel dans
-              l’app. Aucun remboursement.
+          <View style={{ gap: 8, marginTop: 12, marginBottom: 16 }}>
+            <Text style={{ color: colors.subtext, fontSize: 12, textAlign: 'center' }}>
+              {i18n.t(
+                'groupAvatars.footer.legal',
+                'En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement.'
+              )}
             </Text>
           </View>
         }

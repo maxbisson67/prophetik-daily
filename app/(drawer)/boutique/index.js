@@ -17,13 +17,16 @@ import { useFocusEffect } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 
+// i18n
+import i18n from '@src/i18n/i18n';
+
 // Hooks & thèmes
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useGroups } from '@src/groups/useGroups';
 import { useTheme } from '@src/theme/ThemeProvider';
 
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
-const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
+const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
 
 /* =========================================================
    Helpers
@@ -32,7 +35,7 @@ const GROUP_PLACEHOLDER  = require('@src/assets/group-placeholder.png');
 // util dédup
 function dedupeById(arr) {
   const m = new Map();
-  for (const g of (arr || [])) m.set(String(g.id), g);
+  for (const g of arr || []) m.set(String(g.id), g);
   return Array.from(m.values());
 }
 
@@ -42,7 +45,11 @@ function useOwnedGroups(uid) {
   const [loading, setLoading] = React.useState(!!uid);
 
   React.useEffect(() => {
-    if (!uid) { setOwned([]); setLoading(false); return; }
+    if (!uid) {
+      setOwned([]);
+      setLoading(false);
+      return;
+    }
 
     const results = { ownerId: [], createdBy: [], ownersArr: [] };
     const unsubs = [];
@@ -50,12 +57,14 @@ function useOwnedGroups(uid) {
     const attach = (q, key) => {
       const un = q.onSnapshot(
         (snap) => {
-          results[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setOwned(dedupeById([
-            ...results.ownerId,
-            ...results.createdBy,
-            ...results.ownersArr,
-          ]));
+          results[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setOwned(
+            dedupeById([
+              ...results.ownerId,
+              ...results.createdBy,
+              ...results.ownersArr,
+            ])
+          );
           setLoading(false);
         },
         () => setLoading(false)
@@ -80,12 +89,20 @@ function useOwnedGroups(uid) {
     // owners: array-contains uid
     try {
       attach(
-        firestore().collection('groups').where('owners', 'array-contains', String(uid)),
+        firestore()
+          .collection('groups')
+          .where('owners', 'array-contains', String(uid)),
         'ownersArr'
       );
     } catch {}
 
-    return () => { unsubs.forEach(u => { try { u(); } catch {} }); };
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
   }, [uid]);
 
   return { owned, loading };
@@ -133,14 +150,22 @@ function useParticipantAvatarLive(uid) {
   const [participant, setParticipant] = useState(null);
 
   useEffect(() => {
-    if (!uid) { setParticipant(null); return; }
+    if (!uid) {
+      setParticipant(null);
+      return;
+    }
 
     const unsub = firestore()
       .doc(`participants/${String(uid)}`)
       .onSnapshot(
         (snap) => {
           if (!snap.exists) {
-            setParticipant({ displayName: '', photoURL: null, updatedAt: null, avatarPurchasedAt: null });
+            setParticipant({
+              displayName: '',
+              photoURL: null,
+              updatedAt: null,
+              avatarPurchasedAt: null,
+            });
             return;
           }
           const d = snap.data() || {};
@@ -153,14 +178,30 @@ function useParticipantAvatarLive(uid) {
         },
         (e) => {
           console.log('[Boutique] useParticipantAvatarLive error:', e?.message || e);
-          setParticipant({ displayName: '', photoURL: null, updatedAt: null, avatarPurchasedAt: null });
+          setParticipant({
+            displayName: '',
+            photoURL: null,
+            updatedAt: null,
+            avatarPurchasedAt: null,
+          });
         }
       );
 
-    return () => { try { unsub(); } catch {} };
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
   }, [uid]);
 
   return participant;
+}
+
+// 🎨 Version theme-aware : utilise les surfaces du thème plutôt que des hex statiques
+function themeAwareListBG(colors) {
+  if (colors.card2) return colors.card2;
+  if (colors.card) return colors.card;
+  return colors.background;
 }
 
 /* =========================================================
@@ -174,14 +215,20 @@ export default function BoutiqueScreen() {
   const { owned: ownedGroups } = useOwnedGroups(user?.uid);
   const { groups, loading, error } = useGroups(user?.uid);
 
+  const headerTitle = i18n.t('boutique.title', 'Boutique');
+
   // Fusion: tout groupe dont je suis owner, qu'il vienne de useGroups ou du hook owned
   const groupsOwned = React.useMemo(() => {
-    const ownedFromMembership = (groups || []).filter(g => (
-      String(g.role || '').toLowerCase() === 'owner' ||
-      g.ownerId === user?.uid ||
-      g.createdBy === user?.uid ||
-      (Array.isArray(g.owners) && g.owners.includes(user?.uid))
-    ));
+    const ownedFromMembership = (groups || []).filter((g) => {
+      const role = String(g.role || '').toLowerCase();
+      return (
+        role === 'owner' ||
+        g.ownerId === user?.uid ||
+        g.createdBy === user?.uid ||
+        (Array.isArray(g.owners) && g.owners.includes(user?.uid))
+      );
+    });
+
     return dedupeById([...(ownedGroups || []), ...ownedFromMembership]);
   }, [groups, ownedGroups, user?.uid]);
 
@@ -191,7 +238,10 @@ export default function BoutiqueScreen() {
   // Clé de version (sert de cache-buster)
   const versionKey = useMemo(() => {
     const pUpd = participantDoc?.updatedAt?.seconds || participantDoc?.updatedAt || '';
-    const pBuy = participantDoc?.avatarPurchasedAt?.seconds || participantDoc?.avatarPurchasedAt || '';
+    const pBuy =
+      participantDoc?.avatarPurchasedAt?.seconds ||
+      participantDoc?.avatarPurchasedAt ||
+      '';
     const profUpd = profile?.updatedAt?.seconds || profile?.updatedAt || '';
     return [pUpd, pBuy, profUpd].filter(Boolean).join('|') || (user?.uid ?? 'v1');
   }, [participantDoc?.updatedAt, participantDoc?.avatarPurchasedAt, profile?.updatedAt, user?.uid]);
@@ -206,13 +256,21 @@ export default function BoutiqueScreen() {
       user?.photoURL,
       user?.photoUrl,
     ].filter(Boolean);
-  }, [participantDoc?.photoURL, profile?.photoURL, profile?.avatarUrl, profile?.photoUrl, user?.photoURL, user?.photoUrl]);
+  }, [
+    participantDoc?.photoURL,
+    profile?.photoURL,
+    profile?.avatarUrl,
+    profile?.photoUrl,
+    user?.photoURL,
+    user?.photoUrl,
+  ]);
 
   const [avatarUri, setAvatarUri] = useState(null);
 
   // Résolution de l’URL (avec cache-buster) + re-run à chaque changement de clé
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       for (const raw of avatarCandidates) {
         const url = await resolveStorageUrlMaybe(raw);
@@ -223,13 +281,18 @@ export default function BoutiqueScreen() {
       }
       if (!cancelled) setAvatarUri(null);
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [avatarCandidates, versionKey]);
 
   // Re-resout quand l’écran reprend le focus (utile au retour de AvatarsScreen)
   useFocusEffect(
     React.useCallback(() => {
-      setAvatarUri((prev) => (prev ? withCacheKey(prev.split('?')[0], versionKey) : prev));
+      setAvatarUri((prev) =>
+        prev ? withCacheKey(prev.split('?')[0], versionKey) : prev
+      );
     }, [versionKey])
   );
 
@@ -239,9 +302,11 @@ export default function BoutiqueScreen() {
   if (!user) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Boutique' }} />
+        <Stack.Screen options={{ title: headerTitle }} />
         <View style={[styles.screen, styles.center]}>
-          <Text style={styles.text}>Connecte-toi pour accéder à la boutique.</Text>
+          <Text style={styles.text}>
+            {i18n.t('boutique.loginRequired', 'Connecte-toi pour accéder à la boutique.')}
+          </Text>
         </View>
       </>
     );
@@ -250,10 +315,12 @@ export default function BoutiqueScreen() {
   if (loading) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Boutique' }} />
+        <Stack.Screen options={{ title: headerTitle }} />
         <View style={[styles.screen, styles.center]}>
           <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.textSubtle, { marginTop: 8 }]}>Chargement…</Text>
+          <Text style={[styles.textSubtle, { marginTop: 8 }]}>
+            {i18n.t('boutique.loading', 'Chargement…')}
+          </Text>
         </View>
       </>
     );
@@ -262,9 +329,14 @@ export default function BoutiqueScreen() {
   if (error) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Boutique' }} />
+        <Stack.Screen options={{ title: headerTitle }} />
         <View style={[styles.screen, styles.center, { padding: 16 }]}>
-          <Text style={styles.text}>Erreur: {String(error)}</Text>
+          <Text style={styles.text}>
+            {i18n.t('boutique.errorPrefix', {
+              defaultValue: 'Erreur : {{message}}',
+              message: String(error),
+            })}
+          </Text>
         </View>
       </>
     );
@@ -274,93 +346,129 @@ export default function BoutiqueScreen() {
      Affichage principal
   ========================================================= */
   return (
-  <>
-    <Stack.Screen options={{ title: 'Boutique' }} />
-    <ScrollView
-      style={styles.screen}                // 👈 fond de tout le ScrollView
-      contentContainerStyle={styles.container}  // 👈 fond + padding pour le contenu
-    >
-      {/* 1️⃣ Carte : Avatar de profil */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Avatar de profil</Text>
+    <>
+      <Stack.Screen options={{ title: headerTitle }} />
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.container}
+      >
+        {/* 1️⃣ Carte : Avatar de profil */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            {i18n.t('boutique.profileCard.title', 'Avatar de profil')}
+          </Text>
 
-        <View style={styles.rowCenter}>
-          <Image
-            key={avatarUri || 'placeholder'}
-            source={avatarUri ? { uri: avatarUri, cache: 'reload' } : AVATAR_PLACEHOLDER}
-            onError={() => setAvatarUri(null)}
-            style={[styles.avatarXL, { backgroundColor: colors.border }]}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.textSubtle}>
-              Personnalise ton identité dans l’app.
-            </Text>
+          <View style={styles.rowCenter}>
+            <Image
+              key={avatarUri || 'placeholder'}
+              source={
+                avatarUri
+                  ? { uri: avatarUri, cache: 'reload' }
+                  : AVATAR_PLACEHOLDER
+              }
+              onError={() => setAvatarUri(null)}
+              style={[styles.avatarXL, { backgroundColor: colors.border }]}
+            />
 
-            <TouchableOpacity
-              onPress={() => router.push('/avatars/AvatarsScreen')}
-              style={[styles.btnPrimary, styles.btnWithIcon, { marginTop: 10 }]}
-            >
-              <MaterialCommunityIcons name="account-edit" size={18} color="#fff" />
-              <Text style={styles.btnPrimaryText}>Changer d’avatar (1 crédit)</Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.textSubtle}>
+                {i18n.t(
+                  'boutique.profileCard.hint',
+                  'Personnalise ton identité dans l’app.'
+                )}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => router.push('/avatars/AvatarsScreen')}
+                style={[styles.btnPrimary, styles.btnWithIcon, { marginTop: 10 }]}
+              >
+                <MaterialCommunityIcons
+                  name="account-edit"
+                  size={18}
+                  color="#fff"
+                />
+                <Text style={styles.btnPrimaryText}>
+                  {i18n.t('boutique.profileCard.changeAvatar', {
+                    defaultValue: "Changer d’avatar ({{price}} crédit)",
+                    price: 1,
+                  })}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* 2️⃣ Carte : Avatars de groupes */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Avatars de groupes</Text>
-
-        {groupsOwned.length === 0 ? (
-          <Text style={styles.textSubtle}>
-            Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.
+        {/* 2️⃣ Carte : Avatars de groupes */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            {i18n.t('boutique.groupsCard.title', 'Avatars de groupes')}
           </Text>
-        ) : (
-          <>
-            <Text style={[styles.textSubtle, { marginBottom: 10 }]}>
-              Change l’avatar des groupes que tu gères :
+
+          {groupsOwned.length === 0 ? (
+            <Text style={styles.textSubtle}>
+              {i18n.t(
+                'boutique.groupsCard.emptyOwner',
+                'Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.'
+              )}
             </Text>
+          ) : (
+            <>
+              <Text style={[styles.textSubtle, { marginBottom: 10 }]}>
+                {i18n.t(
+                  'boutique.groupsCard.hint',
+                  'Change l’avatar des groupes que tu gères :'
+                )}
+              </Text>
 
-            {groupsOwned.map((item) => (
-              <View key={item.id} style={styles.groupRow}>
-                <View style={[styles.rowCenter, { flex: 1 }]}>
-                  <Image
-                    source={item.avatarUrl ? { uri: item.avatarUrl } : GROUP_PLACEHOLDER}
-                    style={[
-                      styles.avatarLG,
-                      { backgroundColor: colors.background, borderColor: colors.border },
-                    ]}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.textBold}>{item.name || item.id}</Text>
-                    {!!item.description && (
-                      <Text numberOfLines={1} style={styles.textMicro}>
-                        {item.description}
-                      </Text>
-                    )}
+              {groupsOwned.map((item) => (
+                <View key={item.id} style={styles.groupRow}>
+                  <View style={[styles.rowCenter, { flex: 1 }]}>
+                    <Image
+                      source={
+                        item.avatarUrl
+                          ? { uri: item.avatarUrl }
+                          : GROUP_PLACEHOLDER
+                      }
+                      style={[
+                        styles.avatarLG,
+                        {
+                          backgroundColor: colors.background,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.textBold}>{item.name || item.id}</Text>
+                      {!!item.description && (
+                        <Text numberOfLines={1} style={styles.textMicro}>
+                          {item.description}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                </View>
 
-                <TouchableOpacity
-                  onPress={() =>
-                    router.push({
-                      pathname: '/avatars/GroupAvatarsScreen',
-                      params: { groupId: item.id },
-                    })
-                  }
-                  style={[styles.btnDark, styles.btnWithIcon]}
-                >
-                  <Ionicons name="create" size={16} color="#fff" />
-                  <Text style={styles.btnDarkText}>Modifier</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </>
-        )}
-      </View>
-    </ScrollView>
-  </>
-);
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: '/avatars/GroupAvatarsScreen',
+                        params: { groupId: item.id },
+                      })
+                    }
+                    style={[styles.btnDark, styles.btnWithIcon]}
+                  >
+                    <Ionicons name="create" size={16} color="#fff" />
+                    <Text style={styles.btnDarkText}>
+                      {i18n.t('boutique.groupsCard.edit', 'Modifier')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
+          )}
+        </View>
+      </ScrollView>
+    </>
+  );
 }
 
 /* =========================================================
@@ -382,7 +490,12 @@ function makeStyles(colors) {
       shadowOffset: { width: 0, height: 3 },
       elevation: 3,
     },
-    cardTitle: { fontSize: 18, fontWeight: '800', marginBottom: 10, color: colors.text },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 10,
+      color: colors.text,
+    },
     text: { color: colors.text },
     textBold: { color: colors.text, fontWeight: '700' },
     textSubtle: { color: colors.subtext },
@@ -390,7 +503,13 @@ function makeStyles(colors) {
     rowCenter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     center: { alignItems: 'center', justifyContent: 'center' },
     avatarXL: { width: 64, height: 64, borderRadius: 32, marginRight: 12 },
-    avatarLG: { width: 48, height: 48, borderRadius: 24, marginRight: 10, borderWidth: 1 },
+    avatarLG: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      marginRight: 10,
+      borderWidth: 1,
+    },
     btnWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     btnPrimary: {
       alignSelf: 'flex-start',
@@ -420,12 +539,4 @@ function makeStyles(colors) {
       justifyContent: 'space-between',
     },
   });
-}
-
-// 🎨 Version theme-aware : utilise les surfaces du thème plutôt que des hex statiques
-function themeAwareListBG(colors) {
-  // surface secondaire si dispo, sinon on retombe sur la carte / background
-  if (colors.card2) return colors.card2;
-  if (colors.card) return colors.card;
-  return colors.background;
 }

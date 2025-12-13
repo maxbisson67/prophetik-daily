@@ -1,4 +1,5 @@
 // app/profile/index.js
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,13 +10,12 @@ import {
   Alert,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import React, { useEffect, useState, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 
 // 🔁 RN Firebase Firestore
 import firestore from '@react-native-firebase/firestore';
 
-// Auth (tu peux garder ton provider actuel)
+// Auth web (tu peux garder ton provider actuel)
 import { signInAnonymously, updateProfile } from 'firebase/auth';
 
 // Safe auth
@@ -31,11 +31,15 @@ import { auth } from '@src/lib/firebase';
 // Thème
 import { useTheme } from '@src/theme/ThemeProvider';
 
+// i18n (singleton)
+import i18n from '@src/i18n/i18n';
+
 export default function ProfileScreen() {
   const { user, authReady, signOut } = useAuth();
   const router = useRouter();
   const { loading: creditsLoading, topUpFree } = useCredits();
   const { colors } = useTheme();
+
   const isDark = colors.background === '#111827';
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -55,22 +59,24 @@ export default function ProfileScreen() {
   // --- fetch participant (RNFirebase)
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       setParticipantLoaded(false);
+
       if (!user?.uid) {
         setParticipant(null);
         setParticipantLoaded(true);
         return;
       }
+
       try {
         const snap = await firestore().doc(`participants/${user.uid}`).get();
         if (cancelled) return;
+
         if (snap.exists) {
           const p = snap.data() || {};
           setDisplayName(p?.displayName || user.displayName || '');
-          setPhotoURL(
-            p?.photoURL ?? p?.avatarUrl ?? user.photoURL ?? null
-          );
+          setPhotoURL(p?.photoURL ?? p?.avatarUrl ?? user.photoURL ?? null);
           setParticipant({ id: snap.id, ...p });
         } else {
           setParticipant(null);
@@ -79,6 +85,7 @@ export default function ProfileScreen() {
         if (!cancelled) setParticipantLoaded(true);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -98,12 +105,10 @@ export default function ProfileScreen() {
     if (didPatchOnboardingRef.current) return;
 
     didPatchOnboardingRef.current = true;
+
     firestore()
       .doc(`participants/${user.uid}`)
-      .set(
-        { onboarding: { welcomeSeen: false } },
-        { merge: true }
-      )
+      .set({ onboarding: { welcomeSeen: false } }, { merge: true })
       .then(() => {
         setParticipant((prev) =>
           prev
@@ -124,6 +129,7 @@ export default function ProfileScreen() {
   const ensureParticipantDoc = async (u) => {
     const ref = firestore().doc(`participants/${u.uid}`);
     const snap = await ref.get();
+
     if (!snap.exists) {
       await ref.set(
         {
@@ -138,6 +144,7 @@ export default function ProfileScreen() {
         },
         { merge: true }
       );
+
       router.replace('/onboarding/welcome');
     }
   };
@@ -145,12 +152,19 @@ export default function ProfileScreen() {
   const onSignIn = async () => {
     try {
       setBusy(true);
-      // Si tu migres vers RNFirebase Auth : await auth().signInAnonymously();
+
       const res = await signInAnonymously(auth);
       await ensureParticipantDoc(res.user);
-      Alert.alert('Connecté', 'Bienvenue !');
+
+      Alert.alert(
+        i18n.t('profile.alert.connectedTitle', { defaultValue: 'Connected' }),
+        i18n.t('profile.alert.connectedBody', { defaultValue: 'Welcome!' })
+      );
     } catch (e) {
-      Alert.alert('Connexion impossible', String(e?.message || e));
+      Alert.alert(
+        i18n.t('profile.alert.signInFailTitle', { defaultValue: 'Unable to sign in' }),
+        String(e?.message || e)
+      );
     } finally {
       setBusy(false);
     }
@@ -160,9 +174,15 @@ export default function ProfileScreen() {
     try {
       setBusy(true);
       await signOut();
-      Alert.alert('Déconnecté');
+
+      Alert.alert(
+        i18n.t('profile.alert.signedOutTitle', { defaultValue: 'Signed out' })
+      );
     } catch (e) {
-      Alert.alert('Déconnexion impossible', String(e?.message || e));
+      Alert.alert(
+        i18n.t('profile.alert.signOutFailTitle', { defaultValue: 'Unable to sign out' }),
+        String(e?.message || e)
+      );
     } finally {
       setBusy(false);
     }
@@ -171,9 +191,13 @@ export default function ProfileScreen() {
   // === SAUVEGARDE (FireStore RNFirebase) ===
   const saveProfile = async () => {
     if (!user?.uid) {
-      Alert.alert('Non connecté', 'Connecte-toi d’abord.');
+      Alert.alert(
+        i18n.t('profile.alert.notLoggedTitle', { defaultValue: 'Not logged in' }),
+        i18n.t('profile.alert.notLoggedBody', { defaultValue: 'Please sign in first.' })
+      );
       return;
     }
+
     try {
       setBusy(true);
 
@@ -206,40 +230,40 @@ export default function ProfileScreen() {
             createdAt: firestore.FieldValue.serverTimestamp(),
             updatedAt: firestore.FieldValue.serverTimestamp(),
             onboarding: { welcomeSeen: false },
-            ...(newPhotoURL
-              ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL }
-              : {}),
+            ...(newPhotoURL ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL } : {}),
           },
           { merge: true }
         );
+
         router.replace('/onboarding/welcome');
         return;
-      } else {
-        const updatePayload = {
-          displayName: displayName || null,
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        };
-        if (newPhotoURL) {
-          updatePayload.photoURL = newPhotoURL;
-          updatePayload.avatarUrl = newPhotoURL;
-        }
-        await ref.update(updatePayload);
-
-        if (
-          needsOnboardingFlag &&
-          !didPatchOnboardingRef.current
-        ) {
-          await ref.set(
-            { onboarding: { welcomeSeen: false } },
-            { merge: true }
-          );
-          didPatchOnboardingRef.current = true;
-        }
-
-        Alert.alert('Profil mis à jour');
       }
+
+      const updatePayload = {
+        displayName: displayName || null,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      };
+
+      if (newPhotoURL) {
+        updatePayload.photoURL = newPhotoURL;
+        updatePayload.avatarUrl = newPhotoURL;
+      }
+
+      await ref.update(updatePayload);
+
+      if (needsOnboardingFlag && !didPatchOnboardingRef.current) {
+        await ref.set({ onboarding: { welcomeSeen: false } }, { merge: true });
+        didPatchOnboardingRef.current = true;
+      }
+
+      Alert.alert(
+        i18n.t('profile.alert.savedTitle', { defaultValue: 'Profile updated' })
+      );
     } catch (e) {
-      Alert.alert('Échec sauvegarde', String(e?.message || e));
+      Alert.alert(
+        i18n.t('profile.alert.saveFailTitle', { defaultValue: 'Save failed' }),
+        String(e?.message || e)
+      );
     } finally {
       setBusy(false);
     }
@@ -257,7 +281,7 @@ export default function ProfileScreen() {
       >
         <ActivityIndicator color={colors.primary} />
         <Text style={{ color: colors.text, marginTop: 8 }}>
-          Initialisation…
+          {i18n.t('common.initializing', { defaultValue: 'Initializing…' })}
         </Text>
       </View>
     );
@@ -276,12 +300,13 @@ export default function ProfileScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Profil',
+          title: i18n.t('profile.title', { defaultValue: 'Profile' }),
           headerStyle: { backgroundColor: colors.card },
           headerTitleStyle: { color: colors.text },
           headerTintColor: colors.text,
         }}
       />
+
       <KeyboardAwareScrollView
         style={{ flex: 1, backgroundColor: colors.background }}
         contentContainerStyle={{
@@ -330,6 +355,7 @@ export default function ProfileScreen() {
                 backgroundColor: colors.card2 || '#1f2937',
               }}
             />
+
             <TouchableOpacity
               onPress={() => router.push('/avatars/AvatarsScreen')}
               style={{
@@ -340,27 +366,21 @@ export default function ProfileScreen() {
                 alignItems: 'center',
               }}
             >
-              <Text
-                style={{ color: '#fff', fontWeight: '700' }}
-              >
-                🎨 Choisir un avatar
+              <Text style={{ color: '#fff', fontWeight: '700' }}>
+                {i18n.t('profile.chooseAvatarCta', { defaultValue: '🎨 Choose an avatar' })}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={{ gap: 6 }}>
-            <Text
-              style={{
-                fontWeight: '600',
-                color: colors.text,
-              }}
-            >
-              Nom d’affichage
+            <Text style={{ fontWeight: '600', color: colors.text }}>
+              {i18n.t('profile.displayNameLabel', { defaultValue: 'Display name' })}
             </Text>
+
             <TextInput
               value={displayName}
               onChangeText={setDisplayName}
-              placeholder="Ton nom"
+              placeholder={i18n.t('profile.displayNamePlaceholder', { defaultValue: 'Your name' })}
               placeholderTextColor={colors.subtext}
               style={{
                 borderWidth: 1,
@@ -369,20 +389,16 @@ export default function ProfileScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 10,
                 color: colors.text,
-                backgroundColor:
-                  colors.card2 || colors.background,
+                backgroundColor: colors.card2 || colors.background,
               }}
             />
           </View>
         </View>
 
-        {busy ? (
-          <ActivityIndicator color={colors.primary} />
-        ) : null}
+        {busy ? <ActivityIndicator color={colors.primary} /> : null}
 
         {user ? (
           <View style={{ gap: 10 }}>
-            {/* Sauvegarder */}
             <TouchableOpacity
               onPress={saveProfile}
               style={{
@@ -392,14 +408,11 @@ export default function ProfileScreen() {
                 alignItems: 'center',
               }}
             >
-              <Text
-                style={{ color: '#fff', fontWeight: '600' }}
-              >
-                Sauvegarder
+              <Text style={{ color: '#fff', fontWeight: '600' }}>
+                {i18n.t('profile.save', { defaultValue: 'Save' })}
               </Text>
             </TouchableOpacity>
 
-            {/* Déconnexion */}
             <TouchableOpacity
               onPress={onSignOut}
               style={{
@@ -417,7 +430,7 @@ export default function ProfileScreen() {
                   fontWeight: '600',
                 }}
               >
-                Se déconnecter
+                {i18n.t('profile.signOut', { defaultValue: 'Sign out' })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -431,27 +444,27 @@ export default function ProfileScreen() {
               alignItems: 'center',
             }}
           >
-            <Text
-              style={{ color: '#fff', fontWeight: '600' }}
-            >
-              Se connecter
+            <Text style={{ color: '#fff', fontWeight: '600' }}>
+              {i18n.t('auth.login', { defaultValue: 'Log in' })}
             </Text>
           </TouchableOpacity>
         )}
 
-        {/* Top-up de test */}
         {user && !creditsLoading && creditsValue < 5 ? (
           <TouchableOpacity
             onPress={async () => {
               try {
                 const res = await topUpFree();
                 Alert.alert(
-                  'Top-up',
-                  `Nouveau solde: ${res.credits}`
+                  i18n.t('profile.topup.title', { defaultValue: 'Top-up' }),
+                  i18n.t('profile.topup.body', {
+                    defaultValue: 'New balance: {{credits}}',
+                    credits: Number(res?.credits ?? 0),
+                  })
                 );
               } catch (e) {
                 Alert.alert(
-                  'Top-up impossible',
+                  i18n.t('profile.topup.failTitle', { defaultValue: 'Top-up failed' }),
                   String(e?.message || e)
                 );
               }
@@ -464,10 +477,8 @@ export default function ProfileScreen() {
               alignItems: 'center',
             }}
           >
-            <Text
-              style={{ color: '#fff', fontWeight: '600' }}
-            >
-              +25 gratuits (bêta)
+            <Text style={{ color: '#fff', fontWeight: '600' }}>
+              {i18n.t('profile.topup.betaCta', { defaultValue: '+25 free (beta)' })}
             </Text>
           </TouchableOpacity>
         ) : null}

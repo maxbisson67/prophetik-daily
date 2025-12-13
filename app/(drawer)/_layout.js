@@ -1,8 +1,6 @@
 // app/(drawer)/_layout.js
 import React, { useCallback, useMemo } from 'react';
-import i18n from '@src/i18n/i18n';
-
-import { View, Text } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import {
   DrawerToggleButton,
@@ -15,37 +13,52 @@ import {
 } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useTheme } from '@src/theme/ThemeProvider';
-
-// ✅ expo-image pour contrôler le cache (ici: Image RN standard)
-import { Image } from 'react-native';
-
-// 🔽 profil public (displayName, avatarUrl, updatedAt)
 import { usePublicProfile } from '@src/profile/usePublicProfile';
+
+// ✅ i18n (uniforme partout)
+import i18n from '@src/i18n/i18n';
+
+/* =========================================================
+   Helpers
+========================================================= */
 
 function getHeaderTitle(route) {
   const focused = getFocusedRouteNameFromRoute(route) ?? 'AccueilScreen';
+
   switch (focused) {
     case 'AccueilScreen':
     case 'index':
-      return i18n.t('home.title');
+      return i18n.t('home.title', { defaultValue: 'Home' });
+
     case 'GroupsScreen':
-      return 'Groupes';
+      return i18n.t('drawer.groups', { defaultValue: 'Groups' });
+
     case 'ChallengesScreen':
-      return 'Défis';
+      return i18n.t('drawer.challenges', { defaultValue: 'Challenges' });
+
     case 'credits/index':
-      return 'Crédits';
+      return i18n.t('drawer.credits', { defaultValue: 'Credits' });
+
     case 'boutique/index':
-      return 'Boutique';
+      return i18n.t('drawer.shop', { defaultValue: 'Shop' });
+
     case 'profile/index':
-      return 'Profile';
+      return i18n.t('drawer.profile', { defaultValue: 'Profile' });
+
     case 'settings/index':
-      return 'Réglages';
+      return i18n.t('drawer.settings', { defaultValue: 'Settings' });
+
     case 'ClassementScreen':
-      return 'Classement';
+      return i18n.t('drawer.leaderboard', { defaultValue: 'Leaderboard' });
+
+    case 'MatchLiveScreen':
+      return i18n.t('drawer.matchLive', { defaultValue: 'Live game' });
+
     default:
-      return 'Prophetik';
+      return i18n.t('app.name', { defaultValue: 'Prophetik' });
   }
 }
 
@@ -65,6 +78,7 @@ function SectionLabel({ children }) {
     </Text>
   );
 }
+
 function Separator() {
   const { colors } = useTheme();
   return (
@@ -83,7 +97,10 @@ function tsToMillis(ts) {
   if (!ts) return 0;
   if (typeof ts.toMillis === 'function') return ts.toMillis();
   if (typeof ts.seconds === 'number') {
-    return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds / 1e6) : 0);
+    return (
+      ts.seconds * 1000 +
+      (ts.nanoseconds ? Math.floor(ts.nanoseconds / 1e6) : 0)
+    );
   }
   if (typeof ts === 'number') return ts;
   return 0;
@@ -95,18 +112,23 @@ function withCacheBust(url, updatedAt) {
   return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
 }
 
-/* ------------------------------------------------------------------ */
-/* DrawerHeader: lit profiles_public/{uid} pour afficher nom + avatar  */
-/* ------------------------------------------------------------------ */
+/* =========================================================
+   DrawerHeader: profiles_public/{uid}
+========================================================= */
 function DrawerHeader() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { profile: pub, loading: loadingPub } = usePublicProfile(user?.uid);
 
+  const guestLabel = i18n.t('drawer.guest', { defaultValue: 'Guest' });
+  const onlineLabel = i18n.t('drawer.online', { defaultValue: 'Signed in' });
+  const offlineLabel = i18n.t('drawer.offline', { defaultValue: 'Offline' });
+  const loadingLabel = i18n.t('common.loading', { defaultValue: 'Loading…' });
+
   const displayName =
     pub?.displayName ||
     user?.displayName ||
-    (user?.email ? user.email.split('@')[0] : 'Invité');
+    (user?.email ? user.email.split('@')[0] : guestLabel);
 
   const email = user?.email || '';
 
@@ -156,19 +178,19 @@ function DrawerHeader() {
       />
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
-          {loadingPub ? 'Chargement…' : displayName}
+          {loadingPub ? loadingLabel : displayName}
         </Text>
         <Text style={{ color: colors.subtext, fontSize: 12 }}>
-          {email || (user ? 'Connecté' : 'Hors ligne')}
+          {email || (user ? onlineLabel : offlineLabel)}
         </Text>
       </View>
     </View>
   );
 }
 
-/* ------------------------------------ */
-/* Drawer content                       */
-/* ------------------------------------ */
+/* =========================================================
+   Drawer Content
+========================================================= */
 function CustomDrawerContent(props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -183,14 +205,8 @@ function CustomDrawerContent(props) {
   );
 
   const itemCommonProps = {
-    // ✅ style du conteneur
     style: { marginHorizontal: 4, borderRadius: 10 },
-    // ✅ style du label (texte)
-    labelStyle: {
-      color: colors.text,
-      fontWeight: '600',
-    },
-    // ✅ couleur de l’icône (on ignore le "color" automatique)
+    labelStyle: { color: colors.text, fontWeight: '600' },
     activeTintColor: colors.primary,
     inactiveTintColor: colors.subtext,
   };
@@ -204,11 +220,13 @@ function CustomDrawerContent(props) {
       <DrawerHeader />
       <Separator />
 
-      <SectionLabel>Navigation</SectionLabel>
+      <SectionLabel>
+        {i18n.t('drawer.section.navigation', { defaultValue: 'Navigation' })}
+      </SectionLabel>
 
       <DrawerItem
         {...itemCommonProps}
-        label="Accueil"
+        label={i18n.t('drawer.home', { defaultValue: 'Home' })}
         onPress={() => goTab('AccueilScreen')}
         icon={({ size }) => (
           <Ionicons name="home" size={size} color={colors.text} />
@@ -217,7 +235,7 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label="Groupes"
+        label={i18n.t('drawer.groups', { defaultValue: 'Groups' })}
         onPress={() => goTab('GroupsScreen')}
         icon={({ size }) => (
           <Ionicons name="people" size={size} color={colors.text} />
@@ -226,7 +244,7 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label="Défis"
+        label={i18n.t('drawer.challenges', { defaultValue: 'Challenges' })}
         onPress={() => goTab('ChallengesScreen')}
         icon={({ size }) => (
           <Ionicons name="trophy" size={size} color={colors.text} />
@@ -235,56 +253,45 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label="Classement"
+        label={i18n.t('drawer.leaderboard', { defaultValue: 'Leaderboard' })}
         onPress={() => goTab('ClassementScreen')}
         icon={({ size }) => (
           <Ionicons name="podium" size={size} color={colors.text} />
         )}
       />
 
-       <DrawerItem
+      <DrawerItem
         {...itemCommonProps}
-        label="Match Live"
+        label={i18n.t('drawer.matchLive', { defaultValue: 'Live game' })}
         onPress={() => goTab('MatchLiveScreen')}
         icon={({ size }) => (
           <Ionicons name="pulse-outline" size={size} color={colors.text} />
         )}
       />
 
-
- 
-
-
       <Separator />
-      <SectionLabel>Espace perso</SectionLabel>
+      <SectionLabel>
+        {i18n.t('drawer.section.personal', { defaultValue: 'Personal' })}
+      </SectionLabel>
 
       <DrawerItem
         {...itemCommonProps}
-        label="Boutique"
+        label={i18n.t('drawer.shop', { defaultValue: 'Shop' })}
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => {
-            router.push('/(drawer)/boutique');
-          });
+          requestAnimationFrame(() => router.push('/(drawer)/boutique'));
         }}
         icon={({ size }) => (
-          <MaterialCommunityIcons
-            name="shopping"
-            size={size}
-            color={colors.text}
-          />
+          <MaterialCommunityIcons name="shopping" size={size} color={colors.text} />
         )}
       />
 
-        
       <DrawerItem
         {...itemCommonProps}
-        label="Crédits"
+        label={i18n.t('drawer.credits', { defaultValue: 'Credits' })}
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => {
-            router.push('/(drawer)/credits');
-          });
+          requestAnimationFrame(() => router.push('/(drawer)/credits'));
         }}
         icon={({ size }) => (
           <Ionicons name="card" size={size} color={colors.text} />
@@ -293,12 +300,10 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label="Profil"
+        label={i18n.t('drawer.profile', { defaultValue: 'Profile' })}
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => {
-            router.push('/(drawer)/profile');
-          });
+          requestAnimationFrame(() => router.push('/(drawer)/profile'));
         }}
         icon={({ size }) => (
           <Ionicons name="person-circle" size={size} color={colors.text} />
@@ -307,12 +312,10 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label="Réglages"
+        label={i18n.t('drawer.settings', { defaultValue: 'Settings' })}
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => {
-            router.push('/(drawer)/settings');
-          });
+          requestAnimationFrame(() => router.push('/(drawer)/settings'));
         }}
         icon={({ size }) => (
           <Ionicons name="settings" size={size} color={colors.text} />
@@ -323,7 +326,7 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label="Se déconnecter"
+        label={i18n.t('drawer.signOut', { defaultValue: 'Sign out' })}
         onPress={async () => {
           await signOut().catch(() => {});
           router.replace('/(auth)/auth-choice');
@@ -336,6 +339,9 @@ function CustomDrawerContent(props) {
   );
 }
 
+/* =========================================================
+   Drawer Layout
+========================================================= */
 export default function DrawerLayout() {
   const { colors } = useTheme();
 
@@ -350,9 +356,7 @@ export default function DrawerLayout() {
         headerLeft: (props) => <DrawerToggleButton {...props} />,
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
-        drawerStyle: {
-          backgroundColor: colors.background,
-        },
+        drawerStyle: { backgroundColor: colors.background },
         drawerActiveTintColor: colors.primary,
         drawerInactiveTintColor: colors.subtext,
         drawerLabelStyle: { fontWeight: '700' },
@@ -361,7 +365,7 @@ export default function DrawerLayout() {
       <Drawer.Screen
         name="(tabs)"
         options={({ route }) => ({
-          drawerLabel: 'Accueil',
+          drawerLabel: i18n.t('drawer.home', { defaultValue: 'Home' }),
           headerTitle: getHeaderTitle(route),
         })}
       />

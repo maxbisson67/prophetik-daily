@@ -19,6 +19,7 @@ import ExpoImagePicker
 import ExpoKeepAwake
 import ExpoLinearGradient
 import ExpoLinking
+import ExpoLocalization
 import EXNotifications
 import ExpoHead
 import ExpoSystemUI
@@ -47,6 +48,7 @@ public class ExpoModulesProvider: ModulesProvider {
       KeepAwakeModule.self,
       LinearGradientModule.self,
       ExpoLinkingModule.self,
+      LocalizationModule.self,
       BackgroundModule.self,
       BadgeModule.self,
       CategoriesModule.self,
@@ -81,6 +83,7 @@ public class ExpoModulesProvider: ModulesProvider {
       KeepAwakeModule.self,
       LinearGradientModule.self,
       ExpoLinkingModule.self,
+      LocalizationModule.self,
       BackgroundModule.self,
       BadgeModule.self,
       CategoriesModule.self,

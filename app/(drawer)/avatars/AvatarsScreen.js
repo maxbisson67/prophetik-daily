@@ -12,6 +12,10 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
+
+// i18n
+import i18n from '@src/i18n/i18n';
+
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,6 +23,7 @@ import { useTheme } from '@src/theme/ThemeProvider';
 
 const DEFAULT_PRICE = 5;
 
+// ⚠️ Ces items sont “fallback dev”. Leurs name/tags ne sont pas traduits (normal).
 const FALLBACK_AVATARS = [
   {
     id: 'rough-01',
@@ -70,11 +75,7 @@ function Chip({ icon, color, bg, label }) {
       }}
     >
       {!!icon && (
-        <MaterialCommunityIcons
-          name={icon}
-          size={14}
-          color={defaultColor}
-        />
+        <MaterialCommunityIcons name={icon} size={14} color={defaultColor} />
       )}
       <Text
         style={{
@@ -160,13 +161,10 @@ export default function AvatarsScreen() {
   // Avatars store
   useEffect(() => {
     setLoadingAvatars(true);
-    const qRef = firestore()
-      .collection('catalog_avatars')
-      .orderBy('sort', 'asc');
+    const qRef = firestore().collection('catalog_avatars').orderBy('sort', 'asc');
     const unsub = qRef.onSnapshot(
       (snap) => {
-        const rows =
-          snap?.docs?.map((d) => ({ id: d.id, ...d.data() })) || [];
+        const rows = snap?.docs?.map((d) => ({ id: d.id, ...d.data() })) || [];
         setStoreAvatars(rows.length ? rows : FALLBACK_AVATARS);
         setLoadingAvatars(false);
       },
@@ -183,49 +181,48 @@ export default function AvatarsScreen() {
   }, []);
 
   const credits = useMemo(() => readCredits(me), [me]);
-  const alreadyBought = useMemo(
-    () => hasBoughtAvatarBefore(me),
-    [me]
-  );
+  const alreadyBought = useMemo(() => hasBoughtAvatarBefore(me), [me]);
   const effectivePrice = useMemo(
     () => getEffectivePrice({ me, selectedItem }),
     [me, selectedItem]
   );
 
   async function handleBuy() {
-    if (!user?.uid)
+    if (!user?.uid) {
       return Alert.alert(
-        'Connexion requise',
-        'Connecte-toi pour acheter un avatar.'
+        i18n.t('avatars.alerts.loginRequiredTitle', 'Connexion requise'),
+        i18n.t('avatars.alerts.loginRequiredBody', 'Connecte-toi pour acheter un avatar.')
       );
-    if (!selectedItem)
+    }
+    if (!selectedItem) {
       return Alert.alert(
-        'Choisis un avatar',
-        'Sélectionne un avatar avant d’acheter.'
+        i18n.t('avatars.alerts.selectRequiredTitle', 'Choisis un avatar'),
+        i18n.t('avatars.alerts.selectRequiredBody', 'Sélectionne un avatar avant d’acheter.')
       );
+    }
     if (credits < effectivePrice) {
       return Alert.alert(
-        'Crédits insuffisants',
-        `Il te faut ${effectivePrice} crédit${
-          effectivePrice > 1 ? 's' : ''
-        } (solde: ${credits}).`
+        i18n.t('avatars.alerts.insufficientCreditsTitle', 'Crédits insuffisants'),
+        i18n.t('avatars.alerts.insufficientCreditsBody', {
+          defaultValue: 'Il te faut {{price}} crédit(s) (solde: {{credits}}).',
+          price: effectivePrice,
+          credits,
+        })
       );
     }
 
     try {
       // 1) Débit & droit d’activer via CF (serveur fait foi)
-      const callPurchase =
-        functions().httpsCallable('purchaseAvatar');
+      const callPurchase = functions().httpsCallable('purchaseAvatar');
       const payload = {
         avatarId: selectedItem.id,
         price: effectivePrice,
         photoURL: selectedItem.url, // optionnel côté serveur
       };
       const res = await callPurchase(payload);
-      if (!res?.data?.ok)
-        throw new Error(res?.data?.error || 'Erreur inconnue');
+      if (!res?.data?.ok) throw new Error(res?.data?.error || i18n.t('common.unknownError', 'Erreur inconnue'));
 
-      // 2) Option B: écrire uniquement avatarId (+ updatedAt) → CF onAvatarIdChange mettra avatarUrl
+      // 2) Écrit uniquement avatarId (+ updatedAt) → CF onAvatarIdChange mettra avatarUrl
       await firestore()
         .doc(`profiles_public/${user.uid}`)
         .set(
@@ -238,19 +235,30 @@ export default function AvatarsScreen() {
 
       const wasSwitch = effectivePrice === 1;
       Alert.alert(
-        wasSwitch ? '✅ Avatar (ré)activé' : '🎉 Avatar acheté',
-        'Ton profil sera mis à jour dans un instant.',
-        [{ text: 'OK', onPress: () => r.back() }]
+        wasSwitch
+          ? i18n.t('avatars.alerts.activatedTitle', '✅ Avatar (ré)activé')
+          : i18n.t('avatars.alerts.purchasedTitle', '🎉 Avatar acheté'),
+        i18n.t('avatars.alerts.purchasedBody', 'Ton profil sera mis à jour dans un instant.'),
+        [
+          {
+            text: i18n.t('common.ok', 'OK'),
+            onPress: () => r.back(),
+          },
+        ]
       );
     } catch (e) {
-      Alert.alert('Achat impossible', String(e?.message || e));
+      Alert.alert(
+        i18n.t('avatars.alerts.purchaseFailedTitle', 'Achat impossible'),
+        String(e?.message || e)
+      );
     }
   }
 
+  // ---- non connecté ----
   if (!user) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Avatars' }} />
+        <Stack.Screen options={{ title: i18n.t('avatars.title', 'Avatars') }} />
         <View
           style={{
             flex: 1,
@@ -261,7 +269,10 @@ export default function AvatarsScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Connecte-toi pour accéder à la boutique d’avatars.
+            {i18n.t(
+              'avatars.loginGate.body',
+              'Connecte-toi pour accéder à la boutique d’avatars.'
+            )}
           </Text>
           <TouchableOpacity
             onPress={() => r.push('/(auth)/auth-choice')}
@@ -273,13 +284,8 @@ export default function AvatarsScreen() {
               borderRadius: 10,
             }}
           >
-            <Text
-              style={{
-                color: '#fff',
-                fontWeight: '700',
-              }}
-            >
-              Se connecter
+            <Text style={{ color: '#fff', fontWeight: '700' }}>
+              {i18n.t('auth.login', 'Se connecter')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -287,33 +293,30 @@ export default function AvatarsScreen() {
     );
   }
 
+  const headerTitle = i18n.t('avatars.headerTitle', 'Mon avatar');
+
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Mon avatar',
+          title: headerTitle,
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => r.replace('/(drawer)/boutique')}
               style={{ paddingHorizontal: 10 }}
             >
-              <Ionicons
-                name="arrow-back"
-                size={24}
-                color={colors.text}
-              />
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
           ),
         }}
       />
+
       <FlatList
         data={storeAvatars || []}
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={{ gap: 12 }}
-        ItemSeparatorComponent={() => (
-          <View style={{ height: 12 }} />
-        )}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         contentContainerStyle={{
           padding: 16,
           gap: 12,
@@ -344,13 +347,13 @@ export default function AvatarsScreen() {
                   color: colors.text,
                 }}
               >
-                Avatars exclusifs
+                {i18n.t('avatars.info.title', 'Avatars exclusifs')}
               </Text>
+
               <Text style={{ color: colors.text }}>
-                Personnalise ton profil avec un avatar unique. Chaque
-                avatar coûte{' '}
+                {i18n.t('avatars.info.bodyPrefix', 'Personnalise ton profil avec un avatar unique. Chaque avatar coûte')}{' '}
                 <Text style={{ fontWeight: '800' }}>
-                  {DEFAULT_PRICE} crédits
+                  {DEFAULT_PRICE} {i18n.t('avatars.common.credits', 'crédits')}
                 </Text>
                 .
               </Text>
@@ -363,32 +366,24 @@ export default function AvatarsScreen() {
                   alignItems: 'center',
                 }}
               >
-               <Chip
-                icon="information"
-                // ✅ Couleurs plus contrastées en mode sombre
-                bg={isDark ? '#22c55e' : '#dcfce7'}
-                color={isDark ? '#052e16' : '#166534'}
-                label="Réactivation: 1 crédit"
-              />
+                <Chip
+                  icon="information"
+                  bg={isDark ? '#22c55e' : '#dcfce7'}
+                  color={isDark ? '#052e16' : '#166534'}
+                  label={i18n.t('avatars.info.reactivationChip', {
+                    defaultValue: 'Réactivation: {{price}} crédit',
+                    price: 1,
+                  })}
+                />
+
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: colors.subtext,
-                    }}
-                  >
-                    Tes crédits
+                  <Text style={{ fontSize: 12, color: colors.subtext }}>
+                    {i18n.t('avatars.info.myCreditsLabel', 'Tes crédits')}
                   </Text>
                   {loadingMe ? (
                     <ActivityIndicator color={colors.primary} />
                   ) : (
-                    <Text
-                      style={{
-                        fontWeight: '900',
-                        fontSize: 20,
-                        color: colors.text,
-                      }}
-                    >
+                    <Text style={{ fontWeight: '900', fontSize: 20, color: colors.text }}>
                       {credits}
                     </Text>
                   )}
@@ -406,21 +401,11 @@ export default function AvatarsScreen() {
                 borderColor: colors.border,
               }}
             >
-              <Text
-                style={{
-                  fontWeight: '700',
-                  marginBottom: 8,
-                  color: colors.text,
-                }}
-              >
-                Aperçu
+              <Text style={{ fontWeight: '700', marginBottom: 8, color: colors.text }}>
+                {i18n.t('avatars.preview.title', 'Aperçu')}
               </Text>
-              <View
-                style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
+
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                 {selectedItem?.url ? (
                   <Image
                     source={{ uri: selectedItem.url }}
@@ -443,34 +428,35 @@ export default function AvatarsScreen() {
                     }}
                   >
                     <Text style={{ color: colors.subtext }}>
-                      Sélectionne un avatar
+                      {i18n.t('avatars.preview.noneSelected', 'Sélectionne un avatar')}
                     </Text>
                   </View>
                 )}
+
                 {!!selectedItem && (
-                  <Text
-                    style={{
-                      marginTop: 8,
-                      fontWeight: '700',
-                      color: colors.text,
-                    }}
-                  >
+                  <Text style={{ marginTop: 8, fontWeight: '700', color: colors.text }}>
                     {selectedItem.name || selectedItem.id}
                   </Text>
                 )}
 
                 {(() => {
-                  const disabled =
-                    !selectedItem || credits < effectivePrice;
+                  const disabled = !selectedItem || credits < effectivePrice;
+
+                  const btnLabel = !selectedItem
+                    ? i18n.t('avatars.actions.chooseFirst', 'Choisis un avatar')
+                    : i18n.t('avatars.actions.buyButton', {
+                        defaultValue: 'Acheter ({{price}} crédit{{s}})',
+                        price: effectivePrice,
+                        s: effectivePrice > 1 ? 's' : '',
+                      });
+
                   return (
                     <>
                       <TouchableOpacity
                         onPress={handleBuy}
                         disabled={disabled}
                         style={{
-                          backgroundColor: disabled
-                            ? '#9ca3af'
-                            : '#ef4444',
+                          backgroundColor: disabled ? '#9ca3af' : '#ef4444',
                           paddingVertical: 14,
                           paddingHorizontal: 20,
                           borderRadius: 12,
@@ -484,35 +470,26 @@ export default function AvatarsScreen() {
                           marginTop: 10,
                         }}
                       >
-                        <Text
-                          style={{
-                            color: '#fff',
-                            fontWeight: '900',
-                          }}
-                        >
-                          {!selectedItem
-                            ? 'Choisis un avatar'
-                            : `Acheter (${effectivePrice} crédit${
-                                effectivePrice > 1 ? 's' : ''
-                              })`}
+                        <Text style={{ color: '#fff', fontWeight: '900' }}>
+                          {btnLabel}
                         </Text>
                       </TouchableOpacity>
 
-                      {alreadyBought &&
-                        selectedItem &&
-                        effectivePrice === 1 && (
-                          <Text
-                            style={{
-                              color: colors.subtext,
-                              fontSize: 12,
-                              marginTop: 6,
-                              textAlign: 'center',
-                            }}
-                          >
-                            Toute (ré)activation d’avatar coûte 1
-                            crédit.
-                          </Text>
-                        )}
+                      {alreadyBought && selectedItem && effectivePrice === 1 && (
+                        <Text
+                          style={{
+                            color: colors.subtext,
+                            fontSize: 12,
+                            marginTop: 6,
+                            textAlign: 'center',
+                          }}
+                        >
+                          {i18n.t(
+                            'avatars.info.reactivationHint',
+                            'Toute (ré)activation d’avatar coûte 1 crédit.'
+                          )}
+                        </Text>
+                      )}
                     </>
                   );
                 })()}
@@ -520,29 +497,15 @@ export default function AvatarsScreen() {
             </View>
 
             {/* Titre catalogue */}
-            <Text
-              style={{
-                fontWeight: '700',
-                color: colors.text,
-              }}
-            >
-              Catalogue
+            <Text style={{ fontWeight: '700', color: colors.text }}>
+              {i18n.t('avatars.catalog.title', 'Catalogue')}
             </Text>
+
             {loadingAvatars && (
-              <View
-                style={{
-                  alignItems: 'center',
-                  paddingVertical: 16,
-                }}
-              >
+              <View style={{ alignItems: 'center', paddingVertical: 16 }}>
                 <ActivityIndicator color={colors.primary} />
-                <Text
-                  style={{
-                    marginTop: 8,
-                    color: colors.subtext,
-                  }}
-                >
-                  Chargement…
+                <Text style={{ marginTop: 8, color: colors.subtext }}>
+                  {i18n.t('common.initializing', 'Chargement…')}
                 </Text>
               </View>
             )}
@@ -550,9 +513,7 @@ export default function AvatarsScreen() {
         }
         renderItem={({ item }) => {
           const active = selectedId === item.id;
-          const price = Number.isFinite(item.price)
-            ? item.price
-            : DEFAULT_PRICE;
+          const price = Number.isFinite(item.price) ? item.price : DEFAULT_PRICE;
 
           const cardBg = active
             ? isDark
@@ -582,43 +543,28 @@ export default function AvatarsScreen() {
                 }}
               />
               <Text
-                style={{
-                  marginTop: 8,
-                  fontWeight: '700',
-                  color: colors.text,
-                }}
+                style={{ marginTop: 8, fontWeight: '700', color: colors.text }}
                 numberOfLines={1}
               >
                 {item.name || item.id}
               </Text>
-              <Text
-                style={{
-                  color: colors.subtext,
-                  fontSize: 12,
-                }}
-              >
-                {price} crédit{price > 1 ? 's' : ''}
+              <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                {i18n.t('avatars.catalog.priceLine', {
+                  defaultValue: '{{price}} crédit{{s}}',
+                  price,
+                  s: price > 1 ? 's' : '',
+                })}
               </Text>
             </TouchableOpacity>
           );
         }}
         ListFooterComponent={
-          <View
-            style={{
-              gap: 8,
-              marginTop: 12,
-              marginBottom: 16,
-            }}
-          >
-            <Text
-              style={{
-                color: colors.subtext,
-                fontSize: 12,
-                textAlign: 'center',
-              }}
-            >
-              En achetant, tu acceptes un usage personnel dans l’app.
-              Aucun remboursement.
+          <View style={{ gap: 8, marginTop: 12, marginBottom: 16 }}>
+            <Text style={{ color: colors.subtext, fontSize: 12, textAlign: 'center' }}>
+              {i18n.t(
+                'avatars.footer.legal',
+                'En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement.'
+              )}
             </Text>
           </View>
         }

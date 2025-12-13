@@ -420,7 +420,8 @@
             "liveWithPeriod": "{{period}}{{time}}",
             "assistOne": "Assisté de {{player}}",
             "assistTwo": "Assisté de {{player1}} et {{player2}}",
-            "goalFallback": "But"
+            "goalFallback": "But",
+            "intermission":"Entracte"
         },
         "goals": {
             "period1": "Période 1",
@@ -440,5 +441,222 @@
             "dark": "Thème sombre"
         },
         "language": "Langue"
+    },
+
+    "boutique": {
+        "title": "Boutique",
+        "loginRequired": "Connecte-toi pour accéder à la boutique.",
+        "loading": "Chargement…",
+        "errorPrefix": "Erreur : {{message}}",
+
+        "profileCard": {
+            "title": "Avatar de profil",
+            "hint": "Personnalise ton identité dans l’app.",
+            "changeAvatar": "Changer d’avatar ({{price}} crédit)"
+        },
+
+        "groupsCard": {
+            "title": "Avatars de groupes",
+            "emptyOwner": "Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.",
+            "hint": "Change l’avatar des groupes que tu gères :",
+            "edit": "Modifier"
+        }
+    },
+
+    "avatars": {
+        "title": "Avatars",
+        "headerTitle": "Mon avatar",
+        "common": { "credits": "crédits" },
+
+        "loginGate": {
+        "body": "Connecte-toi pour accéder à la boutique d’avatars."
+        },
+
+        "info": {
+        "title": "Avatars exclusifs",
+        "bodyPrefix": "Personnalise ton profil avec un avatar unique. Chaque avatar coûte",
+        "reactivationChip": "Réactivation: {{price}} crédit",
+        "myCreditsLabel": "Tes crédits",
+        "reactivationHint": "Toute (ré)activation d’avatar coûte 1 crédit."
+        },
+
+        "preview": {
+        "title": "Aperçu",
+        "noneSelected": "Sélectionne un avatar"
+        },
+
+        "catalog": {
+        "title": "Catalogue",
+        "priceLine": "{{price}} crédit{{s}}"
+        },
+
+        "actions": {
+        "chooseFirst": "Choisis un avatar",
+        "buyButton": "Acheter ({{price}} crédit{{s}})"
+        },
+
+        "alerts": {
+        "loginRequiredTitle": "Connexion requise",
+        "loginRequiredBody": "Connecte-toi pour acheter un avatar.",
+        "selectRequiredTitle": "Choisis un avatar",
+        "selectRequiredBody": "Sélectionne un avatar avant d’acheter.",
+        "insufficientCreditsTitle": "Crédits insuffisants",
+        "insufficientCreditsBody": "Il te faut {{price}} crédit(s) (solde: {{credits}}).",
+        "activatedTitle": "✅ Avatar (ré)activé",
+        "purchasedTitle": "🎉 Avatar acheté",
+        "purchasedBody": "Ton profil sera mis à jour dans un instant.",
+        "purchaseFailedTitle": "Achat impossible"
+        },
+
+        "footer": {
+        "legal": "En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement."
+        }
+    },
+
+    "groupAvatars": {
+    "title": "Avatars de groupe",
+
+    "group": {
+      "title": "Groupe",
+      "myCreditsLabel": "Tes crédits"
+    },
+
+    "access": {
+      "owner": "Tu es propriétaire",
+      "readOnly": "Lecture seule"
+    },
+
+    "preview": {
+      "title": "Aperçu",
+      "noneSelected": "Sélectionne un avatar"
+    },
+
+    "catalog": {
+      "title": "Catalogue",
+      "priceLine": "{{price}} crédit{{s}}"
+    },
+
+    "actions": {
+      "processing": "Traitement…",
+      "chooseFirst": "Choisis un avatar",
+      "buyForGroup": "Acheter pour le groupe ({{price}} crédits)"
+    },
+
+    "alerts": {
+      "loginRequiredTitle": "Connexion requise",
+      "loginRequiredBody": "Connecte-toi pour acheter un avatar.",
+      "groupRequiredTitle": "Groupe requis",
+      "groupRequiredBody": "Aucun groupe n’a été fourni.",
+      "selectRequiredTitle": "Choisis un avatar",
+      "selectRequiredBody": "Sélectionne un avatar avant d’acheter.",
+      "accessDeniedTitle": "Accès refusé",
+      "accessDeniedBody": "Seul le propriétaire du groupe peut changer son avatar.",
+      "successTitle": "Avatar défini 🎉",
+      "successBody": "Le groupe “{{name}}” a un nouvel avatar !",
+      "purchaseFailedTitle": "Achat impossible"
+    },
+
+    "footer": {
+      "legal": "En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement."
     }
-}
+  },
+
+  "credits": {
+    "title": "Crédits",
+    "loginHint": "Connecte-toi…",
+
+    "goals": {
+      "title": "Objectifs",
+      "firstDefi": "Premier défi créé",
+      "firstGroup": "Premier groupe créé",
+      "fiveParticipations": "Participer à 5 défis",
+      "threeDays": "3 jours consécutifs"
+    },
+
+    "activities": {
+      "title": "Activités",
+      "empty": "Aucun mouvement de crédits pour l’instant."
+    },
+
+    "logs": {
+      "unknownType": "Mouvement",
+      "types": {
+        "defi_entry": "Inscription à un défi",
+        "defi_payout": "Gain de défi",
+        "defi_refund": "Remboursement : défi annulé",
+        "topup_free": "Bonus gratuit",
+        "topup_purchase": "Achat de crédits",
+        "adjustment": "Ajustement",
+        "purchase_avatar": "Achat d’un avatar",
+        "first_defi": "Récompense : 1er défi créé",
+        "first_group": "Récompense : 1er groupe créé",
+        "streak3_reward": "Récompense : 3 jours d’affilée",
+        "five_particip_reward": "Récompense : 5 participations"
+      },
+
+      "wallet": {
+        "balanceLabel": "MON SOLDE",
+        "bonusButton": "+25 Bonus",
+        "buyTitle": "Acheter des crédits",
+        "creditsLabel": "{{count}} crédits",
+        "buyButton": "Acheter",
+        "footerNote": "Paiements sécurisés • Reçus envoyés par courriel • Crédits livrés instantanément",
+
+        "bonusSuccessTitle": "🎉 Bonus crédité",
+        "bonusSuccessBody": "Tu viens de recevoir +{{amount}} crédits.\nTon solde va se mettre à jour.",
+
+        "bonusAlreadyUsedTitle": "Bonus déjà utilisé",
+        "bonusAlreadyUsedBody": "Tu as déjà utilisé ton bonus récemment.\nTu pourras en redemander à partir du {{date}}.",
+
+        "loginRequiredTitle": "Connexion requise",
+        "loginRequiredBody": "Tu dois être connecté pour demander un bonus de crédits.",
+
+        "comingSoonTitle": "Bientôt",
+        "comingSoonBody": "Achat de {{credits}} crédits ({{price}})",
+
+        "paymentTitle": "Paiement",
+
+        "packs": {
+            "starter": "Starter",
+            "popular": "Populaire",
+            "bestValue": "Meilleure valeur"
+        }
+    }
+    }
+  },
+
+  "profile": {
+    "title": "Profil",
+
+    "chooseAvatarCta": "🎨 Choisir un avatar",
+
+    "displayNameLabel": "Nom d’affichage",
+    "displayNamePlaceholder": "Ton nom",
+
+    "save": "Sauvegarder",
+    "signOut": "Se déconnecter",
+
+    "alert": {
+      "connectedTitle": "Connecté",
+      "connectedBody": "Bienvenue !",
+
+      "signedOutTitle": "Déconnecté",
+
+      "signInFailTitle": "Connexion impossible",
+      "signOutFailTitle": "Déconnexion impossible",
+
+      "notLoggedTitle": "Non connecté",
+      "notLoggedBody": "Connecte-toi d’abord.",
+
+      "savedTitle": "Profil mis à jour",
+      "saveFailTitle": "Échec de la sauvegarde"
+    },
+
+    "topup": {
+      "title": "Top-up",
+      "body": "Nouveau solde : {{credits}}",
+      "failTitle": "Top-up impossible",
+      "betaCta": "+25 gratuits (bêta)"
+    }
+  }
+} 

@@ -1267,7 +1267,7 @@ export default function AccueilScreen() {
                         displayCount5 === 5 ? '#059669' : colors.text,
                     }}
                   >
-                    +2
+                    +1
                   </Text>
                 </View>
 
@@ -1343,7 +1343,7 @@ export default function AccueilScreen() {
                         displayStreak3 === 3 ? '#059669' : colors.text,
                     }}
                   >
-                    +2
+                    +1
                   </Text>
                 </View>
 

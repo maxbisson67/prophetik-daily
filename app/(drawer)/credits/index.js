@@ -10,6 +10,9 @@ import { useAuth } from '@src/auth/SafeAuthProvider';
 import CreditsWallet from '@src/credits/CreditsWallet';
 import { useTheme } from '@src/theme/ThemeProvider';
 
+// i18n
+import i18n from '@src/i18n/i18n';
+
 /* ---------- Helpers ---------- */
 
 function fmtDateTime(ts) {
@@ -27,73 +30,96 @@ function fmtDateTime(ts) {
   }
 }
 
+/**
+ * On garde l’icon + tint en dur ici,
+ * mais le label devient une clé i18n (et fallback).
+ */
 const TYPE_META = {
   defi_entry: {
-    label: 'Inscription à un défi',
+    labelKey: 'credits.logs.types.defi_entry',
+    labelFallback: 'Challenge entry',
     icon: 'ticket-confirmation-outline',
     tint: 'out',
   },
   defi_payout: {
-    label: 'Gain de défi',
+    labelKey: 'credits.logs.types.defi_payout',
+    labelFallback: 'Challenge payout',
     icon: 'trophy-outline',
     tint: 'in',
   },
-  // ✅ Nouveau : remboursement d’un défi annulé (ex: cancelled_ghost)
+  // ✅ remboursement d’un défi annulé (ex: cancelled_ghost)
   defi_refund: {
-    label: 'Remboursement : défi annulé',
+    labelKey: 'credits.logs.types.defi_refund',
+    labelFallback: 'Refund: cancelled challenge',
     icon: 'backup-restore',
     tint: 'in',
   },
   topup_free: {
-    label: 'Bonus gratuit',
+    labelKey: 'credits.logs.types.topup_free',
+    labelFallback: 'Free bonus',
     icon: 'gift-outline',
     tint: 'in',
   },
   topup_purchase: {
-    label: 'Achat de crédits',
+    labelKey: 'credits.logs.types.topup_purchase',
+    labelFallback: 'Credits purchase',
     icon: 'credit-card-outline',
     tint: 'in',
   },
   adjustment: {
-    label: 'Ajustement',
+    labelKey: 'credits.logs.types.adjustment',
+    labelFallback: 'Adjustment',
     icon: 'tune',
     tint: 'neutral',
   },
   purchase_avatar: {
-    label: 'Achat d’un avatar',
+    labelKey: 'credits.logs.types.purchase_avatar',
+    labelFallback: 'Avatar purchase',
     icon: 'credit-card-outline',
     tint: 'out',
   },
   first_defi: {
-    label: 'Récompense : 1er défi créé',
+    labelKey: 'credits.logs.types.first_defi',
+    labelFallback: 'Reward: 1st challenge created',
     icon: 'fire',
     tint: 'in',
   },
   first_group: {
-    label: 'Récompense : 1er groupe créé',
+    labelKey: 'credits.logs.types.first_group',
+    labelFallback: 'Reward: 1st group created',
     icon: 'fire',
     tint: 'in',
   },
-  three_consecutive_days: {
-    label: 'Récompense : 3 jours d’affilée',
+  streak3_reward: {
+    labelKey: 'credits.logs.types.streak3_reward',
+    labelFallback: 'Reward: 3-day streak',
     icon: 'fire',
     tint: 'in',
   },
-  five_participations_any: {
-    label: 'Récompense : 5 participations',
+  five_particip_reward: {
+    labelKey: 'credits.logs.types.five_particip_reward',
+    labelFallback: 'Reward: 5 participations',
     icon: 'counter',
     tint: 'in',
   },
 };
 
 function typeMeta(type, amount) {
-  const meta = {
-    ...(TYPE_META[type] || {
-      label: type || 'Mouvement',
-      icon: 'dots-horizontal',
-      tint: 'neutral',
-    }),
+  const base = TYPE_META[type] || {
+    labelKey: null,
+    labelFallback: type || i18n.t('credits.logs.unknownType', 'Activity'),
+    icon: 'dots-horizontal',
+    tint: 'neutral',
   };
+
+  const meta = { ...base };
+
+  // label résolu via i18n si on a une clé
+  meta.label = meta.labelKey
+    ? i18n.t(meta.labelKey, meta.labelFallback)
+    : meta.labelFallback;
+
+  // tint neutral -> in/out selon le montant
   if (meta.tint === 'neutral') {
     if (Number(amount) > 0) meta.tint = 'in';
     else if (Number(amount) < 0) meta.tint = 'out';
@@ -128,7 +154,7 @@ function GoalStatusIcon({ done }) {
     <MaterialCommunityIcons
       name={done ? 'check-circle' : 'progress-clock'}
       size={20}
-      color={done ? '#059669' : '#6B7280'} // Vert vs Gris neutre
+      color={done ? '#059669' : '#6B7280'}
       style={{ marginRight: 6 }}
     />
   );
@@ -152,7 +178,7 @@ export default function CreditsScreen() {
 
   const [me, setMe] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [groupsLB, setGroupsLB] = useState([]);
+  const [groupsLB, setGroupsLB] = useState([]); // (conservé même si non affiché ici)
   const [loading, setLoading] = useState(true);
 
   // Profil + logs + groups où je suis membre/owner (pour classements simples)
@@ -207,21 +233,13 @@ export default function CreditsScreen() {
               .orderBy('balance', 'desc')
               .limit(10)
               .get();
-            entries = lbSnap.docs.map((x) => ({
-              id: x.id,
-              ...x.data(),
-            }));
+            entries = lbSnap.docs.map((x) => ({ id: x.id, ...x.data() }));
           } catch {
             const lbSnap = await firestore()
               .collection(`groups/${gid}/leaderboard`)
               .get();
-            entries = lbSnap.docs.map((x) => ({
-              id: x.id,
-              ...x.data(),
-            }));
-            entries.sort(
-              (a, b) => (b.balance || 0) - (a.balance || 0)
-            );
+            entries = lbSnap.docs.map((x) => ({ id: x.id, ...x.data() }));
+            entries.sort((a, b) => (b.balance || 0) - (a.balance || 0));
             entries = entries.slice(0, 10);
           }
 
@@ -243,10 +261,12 @@ export default function CreditsScreen() {
     };
   }, [user?.uid]);
 
+  const screenTitle = i18n.t('credits.title', 'Credits');
+
   if (!user) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Crédits' }} />
+        <Stack.Screen options={{ title: screenTitle }} />
         <View
           style={{
             flex: 1,
@@ -257,7 +277,7 @@ export default function CreditsScreen() {
           }}
         >
           <Text style={{ color: colors.text }}>
-            Connecte-toi…
+            {i18n.t('credits.loginHint', 'Log in…')}
           </Text>
         </View>
       </>
@@ -267,7 +287,7 @@ export default function CreditsScreen() {
   if (loading || !me) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Crédits' }} />
+        <Stack.Screen options={{ title: screenTitle }} />
         <View
           style={{
             flex: 1,
@@ -286,45 +306,41 @@ export default function CreditsScreen() {
   const st = me?.stats || {};
   const ach = me?.achievements || {};
 
-  // 🔁 Progression cyclique sur 5 participations (5 → reste affiché 5, puis repart à 1)
+  // 🔁 Progression cyclique sur 5 participations
   const totalPart = Number(st.totalParticipations || 0);
   const cycle5 = totalPart % 5;
-  const displayCount5 =
-    totalPart === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
+  const displayCount5 = totalPart === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
 
-  // 🔁 Progression cyclique sur 3 jours consécutifs (3 → reste 3, puis repart à 1)
+  // 🔁 Progression cyclique sur 3 jours consécutifs
   const rawStreak = Number(st.currentStreakDays || 0);
   const cycle3 = rawStreak % 3;
-  const displayStreak3 =
-    rawStreak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
+  const displayStreak3 = rawStreak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
 
   const nextGoals = [
     {
       key: 'first_defi',
-      label: 'Premier défi créé',
+      label: i18n.t('credits.goals.firstDefi', 'First challenge created'),
       done: !!ach.firstDefiCreated,
       reward: '+1',
     },
     {
       key: 'first_group',
-      label: 'Premier groupe créé',
+      label: i18n.t('credits.goals.firstGroup', 'First group created'),
       done: !!ach.firstGroupCreated,
       reward: '+1',
     },
     {
       key: '5_participations',
-      label: 'Participer à 5 défis',
+      label: i18n.t('credits.goals.fiveParticipations', 'Take part in 5 challenges'),
       done: !!ach.fiveParticipationsAny,
       reward: '+1',
-      // ✅ Utilise la version cyclique, comme sur l’Accueil
       progress: `${displayCount5}/5`,
     },
     {
       key: '3_consecutive_days',
-      label: '3 jours consécutifs',
+      label: i18n.t('credits.goals.threeDays', '3 consecutive days'),
       done: !!ach.threeConsecutiveDays,
       reward: '+1',
-      // ✅ Utilise la version cyclique (1,2,3 → puis repart)
       progress: `${displayStreak3}/3`,
     },
   ];
@@ -348,33 +364,29 @@ export default function CreditsScreen() {
             color: colors.text,
           }}
         >
-          Activités
+          {i18n.t('credits.activities.title', 'Activities')}
         </Text>
 
         {logs.length === 0 ? (
           <Text style={{ color: colors.subtext }}>
-            Aucun mouvement de crédits pour l’instant.
+            {i18n.t('credits.activities.empty', 'No credit activity yet.')}
           </Text>
         ) : (
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
+          <View style={{ borderTopWidth: 1, borderColor: colors.border }}>
             {logs.map((item) => {
               const meta = typeMeta(item.type, item.amount);
               const when = fmtDateTime(item.createdAt);
+
               const subtitleParts = [];
               if (when) subtitleParts.push(when);
+
               if (
                 typeof item.fromBalance === 'number' &&
                 typeof item.toBalance === 'number'
               ) {
-                subtitleParts.push(
-                  `${item.fromBalance} → ${item.toBalance}`
-                );
+                subtitleParts.push(`${item.fromBalance} → ${item.toBalance}`);
               }
+
               return (
                 <View
                   key={item.id}
@@ -387,10 +399,7 @@ export default function CreditsScreen() {
                     gap: 12,
                   }}
                 >
-                  <RowIcon
-                    name={meta.icon}
-                    tint={meta.tint}
-                  />
+                  <RowIcon name={meta.icon} tint={meta.tint} />
                   <View style={{ flex: 1 }}>
                     <View
                       style={{
@@ -399,16 +408,12 @@ export default function CreditsScreen() {
                         alignItems: 'center',
                       }}
                     >
-                      <Text
-                        style={{
-                          fontWeight: '700',
-                          color: colors.text,
-                        }}
-                      >
+                      <Text style={{ fontWeight: '700', color: colors.text }}>
                         {meta.label}
                       </Text>
                       <AmountPill amount={item.amount} />
                     </View>
+
                     {!!subtitleParts.length && (
                       <Text
                         style={{
@@ -432,7 +437,7 @@ export default function CreditsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Crédits' }} />
+      <Stack.Screen options={{ title: screenTitle }} />
       <FlatList
         style={{ flex: 1, backgroundColor: colors.background }}
         data={[]}
@@ -465,8 +470,9 @@ export default function CreditsScreen() {
                   color: colors.text,
                 }}
               >
-                Objectifs
+                {i18n.t('credits.goals.title', 'Goals')}
               </Text>
+
               {nextGoals.map((g) => (
                 <View
                   key={g.key}
@@ -477,19 +483,14 @@ export default function CreditsScreen() {
                     marginBottom: 6,
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <GoalStatusIcon done={g.done} />
                     <Text style={{ color: colors.text }}>
                       {g.label}
                       {g.progress ? `  (${g.progress})` : ''}
                     </Text>
                   </View>
+
                   <Text
                     style={{
                       fontWeight: '800',

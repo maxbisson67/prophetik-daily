@@ -6,7 +6,7 @@ import {
   FieldValue,
   logger,
   apiWebSchedule,
-  apiWebPbp
+  apiWebPbp,
 } from "./utils.js";
 import { todayAppYmd, addDaysToYmd } from "./ProphetikDate.js";
 
@@ -90,7 +90,6 @@ function createPlayerResolver() {
   };
 }
 
-
 function torontoCurrentHour() {
   try {
     const now = new Date();
@@ -109,6 +108,17 @@ function torontoCurrentHour() {
   }
 }
 
+/** Format seconds → "MM:SS" pour fallback si on n’a que secondsRemaining. */
+function formatSecondsToMmSs(seconds) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return null;
+  const s = Math.max(0, Math.floor(seconds));
+  const mPart = Math.floor(s / 60);
+  const sPart = s % 60;
+  const mm = String(mPart).padStart(2, "0");
+  const ss = String(sPart).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
 /**
  * Tâche principale : va chercher le schedule NHL + PBP
  * et met à jour:
@@ -124,7 +134,7 @@ async function runUpdateNhlLiveGames(forYmd) {
 
   logger.info("[updateNhlLiveGames] tick", { ymd, forYmd });
 
-  // Initialiser le resolver joueur (cache en mémoire par exécution)
+  // Resolver joueur (cache mémoire par exécution)
   const resolvePlayer = createPlayerResolver();
 
   // 1) Schedule du jour
@@ -140,7 +150,9 @@ async function runUpdateNhlLiveGames(forYmd) {
     const gameId = String(g.id);
     if (!gameId) continue;
 
-    // --- Infos de base du match ---
+    const gameRef = db.collection("nhl_live_games").doc(gameId);
+
+    // --- Infos de base du match depuis le schedule ---
     const homeAbbr = normTeamAbbr(
       g.homeTeam?.abbrev || g.homeTeamAbbrev || g.homeTeam
     );
@@ -158,89 +170,166 @@ async function runUpdateNhlLiveGames(forYmd) {
     const period = g.periodDescriptor?.number ?? null;
     const periodType = g.periodDescriptor?.periodType ?? null;
 
-    // ⏱ clock du schedule (souvent incomplet / absent)
-    const clock = g.clock && typeof g.clock === "object" ? g.clock : null;
+    // Clock depuis le SCHEDULE (si dispo)
+    const schedClock = g.clock && typeof g.clock === "object" ? g.clock : null;
 
-    // 🕒 version "schedule" de timeRemaining (souvent null)
-    let timeRemainingSchedule = null;
-    if (clock && "timeRemaining" in clock) {
-      timeRemainingSchedule =
-        clock.timeRemaining != null ? clock.timeRemaining : null;
+    let schedTimeRemaining = null;
+    let schedSecondsRemaining = null;
+    let schedClockRunning = null;
+    let schedInIntermission = null;
+    let schedDisplayPeriod =
+      typeof g.displayPeriod === "number" ? g.displayPeriod : null;
+    let schedMaxPeriods =
+      typeof g.maxPeriods === "number" ? g.maxPeriods : null;
+
+    if (schedClock) {
+      if (
+        typeof schedClock.timeRemaining === "string" &&
+        schedClock.timeRemaining.trim() !== ""
+      ) {
+        schedTimeRemaining = schedClock.timeRemaining.trim();
+      } else if (typeof schedClock.secondsRemaining === "number") {
+        schedTimeRemaining = formatSecondsToMmSs(schedClock.secondsRemaining);
+      }
+
+      if (typeof schedClock.secondsRemaining === "number") {
+        schedSecondsRemaining = schedClock.secondsRemaining;
+      }
+      if (typeof schedClock.running === "boolean") {
+        schedClockRunning = schedClock.running;
+      }
+      if (typeof schedClock.inIntermission === "boolean") {
+        schedInIntermission = schedClock.inIntermission;
+      }
+    }
+
+    // 2) PBP (pour les matchs live ou terminés)
+    let pbp = null;
+    if (isLive || isFinal) {
+      try {
+        pbp = await apiWebPbp(gameId);
+      } catch (err) {
+        logger.warn("[updateNhlLiveGames] apiWebPbp failed", {
+          gameId,
+          error: err.message,
+        });
+      }
+    }
+
+    // Clock depuis le PBP (si dispo)
+    let pbpTimeRemaining = null;
+    let pbpSecondsRemaining = null;
+    let pbpClockRunning = null;
+    let pbpInIntermission = null;
+    let pbpDisplayPeriod = null;
+    let pbpMaxPeriods = null;
+
+    if (pbp && typeof pbp === "object") {
+      if (pbp.clock && typeof pbp.clock === "object") {
+        const c = pbp.clock;
+        if (
+          typeof c.timeRemaining === "string" &&
+          c.timeRemaining.trim() !== ""
+        ) {
+          pbpTimeRemaining = c.timeRemaining.trim();
+        } else if (typeof c.secondsRemaining === "number") {
+          pbpTimeRemaining = formatSecondsToMmSs(c.secondsRemaining);
+        }
+
+        if (typeof c.secondsRemaining === "number") {
+          pbpSecondsRemaining = c.secondsRemaining;
+        }
+        if (typeof c.running === "boolean") {
+          pbpClockRunning = c.running;
+        }
+        if (typeof c.inIntermission === "boolean") {
+          pbpInIntermission = c.inIntermission;
+        }
+      }
+
+      if (typeof pbp.displayPeriod === "number") {
+        pbpDisplayPeriod = pbp.displayPeriod;
+      }
+      if (typeof pbp.maxPeriods === "number") {
+        pbpMaxPeriods = pbp.maxPeriods;
+      }
+    }
+
+    // 3) Fusion des sources pour le clock
+    let timeRemaining = null;
+    let secondsRemaining = null;
+    let clockRunning = null;
+    let inIntermission = null;
+    let displayPeriod = null;
+    let maxPeriods = null;
+
+    if (isFinal) {
+      // ✅ Match terminé → on force 00:00
+      timeRemaining = "00:00";
+      secondsRemaining = 0;
+      clockRunning = false;
+      inIntermission = false;
+      displayPeriod = pbpDisplayPeriod ?? schedDisplayPeriod ?? null;
+      maxPeriods = pbpMaxPeriods ?? schedMaxPeriods ?? null;
+    } else {
+      // ⏱ Match en cours / à venir
+      // priorité PBP → fallback schedule
+      timeRemaining = pbpTimeRemaining ?? schedTimeRemaining ?? null;
+      secondsRemaining = pbpSecondsRemaining ?? schedSecondsRemaining ?? null;
+      clockRunning = pbpClockRunning ?? schedClockRunning ?? null;
+      inIntermission = pbpInIntermission ?? schedInIntermission ?? null;
+      displayPeriod = pbpDisplayPeriod ?? schedDisplayPeriod ?? null;
+      maxPeriods = pbpMaxPeriods ?? schedMaxPeriods ?? null;
     }
 
     const venue = g.venue?.default || g.venueName || null;
 
-    const gameRef = db.collection("nhl_live_games").doc(gameId);
+    // 4) Écriture Firestore
+    const baseUpdate = {
+      date: ymd,
+      homeAbbr,
+      awayAbbr,
+      homeScore,
+      awayScore,
+      startTimeUTC: g.startTimeUTC || null,
+      state,
+      isLive,
+      isFinal,
+      period,
+      periodType,
+      venue,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
 
-    // 2) Écrire / mettre à jour le doc principal du match (version schedule only)
-    await gameRef.set(
-      {
-        date: ymd,
-        homeAbbr,
-        awayAbbr,
-        homeScore,
-        awayScore,
-        startTimeUTC: g.startTimeUTC || null,
-        state,
-        isLive,
-        isFinal,
-        period,
-        periodType,
-        timeRemaining: timeRemainingSchedule, // 🔒 jamais undefined
-        venue,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    if (timeRemaining !== null) baseUpdate.timeRemaining = timeRemaining;
+    if (secondsRemaining !== null) baseUpdate.secondsRemaining = secondsRemaining;
+    if (clockRunning !== null) baseUpdate.clockRunning = clockRunning;
+    if (inIntermission !== null) baseUpdate.inIntermission = inIntermission;
+    if (displayPeriod !== null) baseUpdate.displayPeriod = displayPeriod;
+    if (maxPeriods !== null) baseUpdate.maxPeriods = maxPeriods;
 
-    // Si le match n'est pas live ni final, on n'a pas besoin du PBP
+    await gameRef.set(baseUpdate, { merge: true });
+
+    logger.info("[updateNhlLiveGames] clock-update", {
+      gameId,
+      state,
+      timeRemaining,
+      secondsRemaining,
+      clockRunning,
+      inIntermission,
+      displayPeriod,
+      maxPeriods,
+    });
+
+    // 5) Si pas live et pas final → pas de buts à gérer
     if (!isLive && !isFinal) continue;
 
-    // 🕒 2bis) Base timeRemaining à partir du schedule, avec logique FINAL
-    let timeRemaining = timeRemainingSchedule;
-
-    // Si le match est final, on force "00:00" (ou null selon ton UX)
-    if (isFinal) {
-      timeRemaining = "00:00";
-    }
-
-    // 3) PBP: pour aller chercher les buts détaillés +, éventuellement, un fallback clock
-    let pbp;
-    try {
-      pbp = await apiWebPbp(gameId);
-    } catch (err) {
-      logger.warn("[updateNhlLiveGames] apiWebPbp failed", {
-        gameId,
-        error: err.message,
-      });
-      // même si le PBP échoue, on a déjà écrit le doc de base plus haut
-      continue;
-    }
+    // 6) Traitement des buts si on a un PBP
+    if (!pbp) continue;
 
     const plays = Array.isArray(pbp?.plays) ? pbp.plays : [];
     logger.info("[updateNhlLiveGames] plays", { gameId, count: plays.length });
 
-    // 🕒 Fallback PBP.clock seulement si le schedule ne nous donne rien
-    if (
-      !timeRemaining && // seulement si le schedule ne nous donne rien
-      pbp &&
-      typeof pbp === "object" &&
-      pbp.clock &&
-      typeof pbp.clock.timeRemaining === "string" &&
-      pbp.clock.timeRemaining.trim() !== ""
-    ) {
-      timeRemaining = pbp.clock.timeRemaining.trim();
-    }
-
-    // Si la valeur a changé par rapport à celle écrite via le schedule, on met à jour.
-    if (timeRemaining !== timeRemainingSchedule) {
-      await gameRef.set(
-        { timeRemaining: timeRemaining ?? null },
-        { merge: true }
-      );
-    }
-
-    // 4) Traitement des buts + suivi des eventIds pour nettoyer les fantômes
     const pbpGoalIds = new Set();
 
     for (const play of plays) {
@@ -260,13 +349,11 @@ async function runUpdateNhlLiveGames(forYmd) {
       const eventId = String(play.eventId || "");
       if (!eventId) continue;
 
-      // On garde l’eventId pour savoir plus tard ce qui doit exister en Firestore
       pbpGoalIds.add(eventId);
 
-      // teamAbbr depuis le play (équipe qui marque), sera éventuellement fallbacké
       let teamAbbr = normTeamAbbr(det.teamAbbrev);
 
-      // --- IDs & fallback names venant de l’API NHL ---
+      // IDs & fallback names
       const scoringPlayerIdRaw = det.scoringPlayerId || det.playerId || null;
       const scoringBackupName =
         det.scoringPlayerName?.default ||
@@ -287,17 +374,14 @@ async function runUpdateNhlLiveGames(forYmd) {
       const assist1PlayerId = normalizePlayerId(assist1PlayerIdRaw);
       const assist2PlayerId = normalizePlayerId(assist2PlayerIdRaw);
 
-      // 🔎 Résolution des joueurs via /nhl_players/{id}, avec fallback API
       const scoring = await resolvePlayer(scoringPlayerId, scoringBackupName);
       const assist1 = await resolvePlayer(assist1PlayerId, assist1BackupName);
       const assist2 = await resolvePlayer(assist2PlayerId, assist2BackupName);
 
-      // Si on n’a pas d’équipe dans le play, on peut utiliser l’équipe du buteur
       if (!teamAbbr && scoring.teamAbbr) {
         teamAbbr = scoring.teamAbbr;
       }
 
-      // ⭐ Nombre total de buts du buteur (dans le match/saison selon l’API)
       const scoringPlayerTotal =
         det.scoringPlayerTotal ??
         det.scoringPlayerTotal?.default ??
@@ -305,7 +389,6 @@ async function runUpdateNhlLiveGames(forYmd) {
 
       const periodNumber = play.periodDescriptor?.number ?? null;
 
-      // Essayer plusieurs champs pour le temps dans la période (pour l’affichage des buts)
       const timeInPeriod =
         det.timeInPeriod ||
         det.timeInPeriod?.default ||
@@ -316,7 +399,6 @@ async function runUpdateNhlLiveGames(forYmd) {
 
       const strength = det.strength ?? null;
 
-      // 🔗 URLs d’avatar (buteur et passeurs)
       const scoringPlayerAvatarUrl =
         scoring.teamAbbr && scoringPlayerId
           ? `https://assets.nhle.com/mugs/nhl/${NHL_HEADSHOT_SEASON}/${scoring.teamAbbr}/${scoringPlayerId}.png`
@@ -370,7 +452,7 @@ async function runUpdateNhlLiveGames(forYmd) {
         .set(goalDoc, { merge: true });
     }
 
-    // 5) Nettoyage des buts fantômes : présents en Firestore mais absents du PBP courant
+    // 7) Nettoyage des buts fantômes
     try {
       const goalsSnap = await gameRef.collection("goals").get();
       for (const doc of goalsSnap.docs) {
@@ -411,7 +493,7 @@ export const updateNhlLiveGamesNow = onCall(
 
 export const updateNhlLiveGamesCron = onSchedule(
   {
-    schedule: "*/1 * * * *", // toutes les minutes
+    schedule: "*/1 * * * *",
     timeZone: "America/Toronto",
     region: "us-central1",
   },

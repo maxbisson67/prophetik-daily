@@ -433,7 +433,8 @@
       "assistOne": "Assisted by {{player}}",
       "assistTwo": "Assisted by {{player1}} and {{player2}}",
 
-      "goalFallback": "Goal"
+      "goalFallback": "Goal",
+      "intermission":"Intermission"
     },
     "goals": {
       "period1": "1st period",
@@ -453,5 +454,221 @@
         "dark": "Dark"
     },
     "language": "Language"
- }
-}
+ },
+
+ "boutique": {
+    "title": "Shop",
+    "loginRequired": "Log in to access the shop.",
+    "loading": "Loading…",
+    "errorPrefix": "Error: {{message}}",
+
+    "profileCard": {
+        "title": "Profile avatar",
+        "hint": "Customize your identity in the app.",
+        "changeAvatar": "Change avatar ({{price}} credit)"
+    },
+
+    "groupsCard": {
+        "title": "Group avatars",
+        "emptyOwner": "You don’t own any group. Create one in the Groups tab.",
+        "hint": "Change the avatar of the groups you manage:",
+        "edit": "Edit"
+    }
+  },
+
+  "avatars": {
+    "title": "Avatars",
+    "headerTitle": "My avatar",
+    "common": { "credits": "credits" },
+
+    "loginGate": {
+      "body": "Log in to access the avatar shop."
+    },
+
+    "info": {
+      "title": "Exclusive avatars",
+      "bodyPrefix": "Customize your profile with a unique avatar. Each avatar costs",
+      "reactivationChip": "Re-activate: {{price}} credit",
+      "myCreditsLabel": "Your credits",
+      "reactivationHint": "Any avatar re-activation costs 1 credit."
+    },
+
+    "preview": {
+      "title": "Preview",
+      "noneSelected": "Select an avatar"
+    },
+
+    "catalog": {
+      "title": "Catalog",
+      "priceLine": "{{price}} credit{{s}}"
+    },
+
+    "actions": {
+      "chooseFirst": "Choose an avatar",
+      "buyButton": "Buy ({{price}} credit{{s}})"
+    },
+
+    "alerts": {
+      "loginRequiredTitle": "Login required",
+      "loginRequiredBody": "Log in to buy an avatar.",
+      "selectRequiredTitle": "Choose an avatar",
+      "selectRequiredBody": "Select an avatar before buying.",
+      "insufficientCreditsTitle": "Not enough credits",
+      "insufficientCreditsBody": "You need {{price}} credit(s) (balance: {{credits}}).",
+      "activatedTitle": "✅ Avatar re-activated",
+      "purchasedTitle": "🎉 Avatar purchased",
+      "purchasedBody": "Your profile will update in a moment.",
+      "purchaseFailedTitle": "Purchase failed"
+    },
+
+    "footer": {
+      "legal": "By purchasing, you agree to personal use in the app. No refunds."
+    }
+  },
+
+  "groupAvatars": {
+    "title": "Group avatars",
+
+    "group": {
+      "title": "Group",
+      "myCreditsLabel": "Your credits"
+    },
+
+    "access": {
+      "owner": "You are the owner",
+      "readOnly": "Read-only"
+    },
+
+    "preview": {
+      "title": "Preview",
+      "noneSelected": "Select an avatar"
+    },
+
+    "catalog": {
+      "title": "Catalog",
+      "priceLine": "{{price}} credit{{s}}"
+    },
+
+    "actions": {
+      "processing": "Processing…",
+      "chooseFirst": "Choose an avatar",
+      "buyForGroup": "Buy for the group ({{price}} credits)"
+    },
+
+    "alerts": {
+      "loginRequiredTitle": "Login required",
+      "loginRequiredBody": "Log in to buy an avatar.",
+      "groupRequiredTitle": "Group required",
+      "groupRequiredBody": "No group was provided.",
+      "selectRequiredTitle": "Choose an avatar",
+      "selectRequiredBody": "Select an avatar before buying.",
+      "accessDeniedTitle": "Access denied",
+      "accessDeniedBody": "Only the group owner can change its avatar.",
+      "successTitle": "Avatar set 🎉",
+      "successBody": "The group “{{name}}” has a new avatar!",
+      "purchaseFailedTitle": "Purchase failed"
+    },
+
+    "footer": {
+      "legal": "By purchasing, you agree to personal use in the app. No refunds."
+    }
+  },
+
+  "credits": {
+    "title": "Credits",
+    "loginHint": "Log in…",
+
+    "goals": {
+      "title": "Goals",
+      "firstDefi": "First challenge created",
+      "firstGroup": "First group created",
+      "fiveParticipations": "Take part in 5 challenges",
+      "threeDays": "3 consecutive days"
+    },
+
+    "activities": {
+      "title": "Activities",
+      "empty": "No credit activity yet."
+    },
+
+    "logs": {
+      "unknownType": "Activity",
+      "types": {
+        "defi_entry": "Challenge entry",
+        "defi_payout": "Challenge payout",
+        "defi_refund": "Refund: cancelled challenge",
+        "topup_free": "Free bonus",
+        "topup_purchase": "Credits purchase",
+        "adjustment": "Adjustment",
+        "purchase_avatar": "Avatar purchase",
+        "first_defi": "Reward: 1st challenge created",
+        "first_group": "Reward: 1st group created",
+        "streak3_reward": "Reward: 3-day streak",
+        "five_particip_reward": "Reward: 5 participations"
+      }
+    },
+
+    "wallet": {
+      "balanceLabel": "MY BALANCE",
+      "bonusButton": "+25 Bonus",
+      "buyTitle": "Buy credits",
+      "creditsLabel": "{{count}} credits",
+      "buyButton": "Buy",
+      "footerNote": "Secure payments • Receipts by email • Credits delivered instantly",
+
+      "bonusSuccessTitle": "🎉 Bonus credited",
+      "bonusSuccessBody": "You just received +{{amount}} credits.\nYour balance will update shortly.",
+
+      "bonusAlreadyUsedTitle": "Bonus already used",
+      "bonusAlreadyUsedBody": "You have already used your bonus recently.\nYou can request it again starting {{date}}.",
+
+      "loginRequiredTitle": "Sign-in required",
+      "loginRequiredBody": "You must be logged in to request a credit bonus.",
+
+      "comingSoonTitle": "Coming soon",
+      "comingSoonBody": "Purchase of {{credits}} credits ({{price}})",
+
+      "paymentTitle": "Payment",
+
+      "packs": {
+        "starter": "Starter",
+        "popular": "Popular",
+        "bestValue": "Best value"
+      }
+    }
+  },
+  "profile": {
+    "title": "Profile",
+
+    "chooseAvatarCta": "🎨 Choose an avatar",
+
+    "displayNameLabel": "Display name",
+    "displayNamePlaceholder": "Your name",
+
+    "save": "Save",
+    "signOut": "Sign out",
+
+    "alert": {
+      "connectedTitle": "Connected",
+      "connectedBody": "Welcome!",
+
+      "signedOutTitle": "Signed out",
+
+      "signInFailTitle": "Unable to sign in",
+      "signOutFailTitle": "Unable to sign out",
+
+      "notLoggedTitle": "Not logged in",
+      "notLoggedBody": "Please sign in first.",
+
+      "savedTitle": "Profile updated",
+      "saveFailTitle": "Save failed"
+    },
+
+    "topup": {
+      "title": "Top-up",
+      "body": "New balance: {{credits}}",
+      "failTitle": "Top-up failed",
+      "betaCta": "+25 free (beta)"
+    }
+  }
+}    
