@@ -93,6 +93,11 @@ export async function createDefi(input = {}) {
     status = 'active',
     firstGameUTC = null,     // Date | ISO | null
     signupDeadline = null,   // Date | ISO | null
+
+    format = null,          // { picks, pool }
+    availability = null,    // { days: ["SATURDAY"], timezone: "America/Toronto" }
+    bonusReward = null,     // { type: "random", values: [6,7] }
+    isSpecial = null,
   } = input;
 
   if (!groupId)   throw new Error('groupId requis');
@@ -119,6 +124,10 @@ export async function createDefi(input = {}) {
     // Ces champs sont des instants précis → Firestore stocke en UTC
     firstGameUTC: toDate(firstGameUTC) || undefined,
     signupDeadline: toDate(signupDeadline) || undefined,
+    format: format || undefined,
+    availability: availability || undefined,
+    bonusReward: bonusReward || undefined,
+    isSpecial: typeof isSpecial === 'boolean' ? isSpecial : undefined,
     createdAt: firestore.FieldValue.serverTimestamp(),
     updatedAt: firestore.FieldValue.serverTimestamp(),
   };

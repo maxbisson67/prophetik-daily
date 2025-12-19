@@ -233,46 +233,48 @@ function CustomDrawerContent(props) {
         )}
       />
 
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.groups', { defaultValue: 'Groups' })}
-        onPress={() => goTab('GroupsScreen')}
-        icon={({ size }) => (
-          <Ionicons name="people" size={size} color={colors.text} />
-        )}
-      />
-
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.challenges', { defaultValue: 'Challenges' })}
-        onPress={() => goTab('ChallengesScreen')}
-        icon={({ size }) => (
-          <Ionicons name="trophy" size={size} color={colors.text} />
-        )}
-      />
-
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.leaderboard', { defaultValue: 'Leaderboard' })}
-        onPress={() => goTab('ClassementScreen')}
-        icon={({ size }) => (
-          <Ionicons name="podium" size={size} color={colors.text} />
-        )}
-      />
-
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.matchLive', { defaultValue: 'Live game' })}
-        onPress={() => goTab('MatchLiveScreen')}
-        icon={({ size }) => (
-          <Ionicons name="pulse-outline" size={size} color={colors.text} />
-        )}
-      />
-
       <Separator />
       <SectionLabel>
         {i18n.t('drawer.section.personal', { defaultValue: 'Personal' })}
       </SectionLabel>
+
+
+      <DrawerItem
+          {...itemCommonProps}
+          label={i18n.t('drawer.howItWorks', { defaultValue: 'Comment ça marche' })}
+          onPress={() => {
+            props.navigation.dispatch(DrawerActions.closeDrawer());
+            requestAnimationFrame(() => router.push('/(drawer)/howitworks'));
+          }}
+          icon={({ size }) => (
+            <Ionicons name="help-circle-outline" size={size} color={colors.text} />
+          )}
+      />
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t('drawer.subscriptions', { defaultValue: 'Subscriptions' })}
+        onPress={() => {
+          props.navigation.dispatch(DrawerActions.closeDrawer());
+          requestAnimationFrame(() => router.push('/(drawer)/subscriptions'));
+        }}
+        icon={({ size }) => (
+          <Ionicons name="diamond-outline" size={size} color={colors.text} />
+        )}
+      />
+
+        <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t('drawer.credits', { defaultValue: 'Credits' })}
+        onPress={() => {
+          props.navigation.dispatch(DrawerActions.closeDrawer());
+          requestAnimationFrame(() => router.push('/(drawer)/credits'));
+        }}
+        icon={({ size }) => (
+          <Ionicons name="card" size={size} color={colors.text} />
+        )}
+      />
+
 
       <DrawerItem
         {...itemCommonProps}
@@ -286,18 +288,7 @@ function CustomDrawerContent(props) {
         )}
       />
 
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.credits', { defaultValue: 'Credits' })}
-        onPress={() => {
-          props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => router.push('/(drawer)/credits'));
-        }}
-        icon={({ size }) => (
-          <Ionicons name="card" size={size} color={colors.text} />
-        )}
-      />
-
+    
       <DrawerItem
         {...itemCommonProps}
         label={i18n.t('drawer.profile', { defaultValue: 'Profile' })}
@@ -321,6 +312,7 @@ function CustomDrawerContent(props) {
           <Ionicons name="settings" size={size} color={colors.text} />
         )}
       />
+
 
       <Separator />
 

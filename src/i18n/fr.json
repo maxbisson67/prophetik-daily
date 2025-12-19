@@ -1,4 +1,7 @@
 {
+   "app": {
+    "name": "Prophetik"
+  },
   "common": {
     "unknownError": "Erreur inconnue",
     "initializing": "Initialisation…",
@@ -7,7 +10,8 @@
     "ok": "OK",
     "cancel": "Annuler",
     "or": "ou",
-    "continue": "Continuer"
+    "continue": "Continuer",
+    "loading": "Chargement…"
   },
   "errors": {
     "firestorePermission": "Accès refusé par les règles Firestore."
@@ -356,6 +360,23 @@
         "create": {
             "title": "Nouveau défi NHL",
             "autoTitle": "Défi {{format}}",
+
+            "alert": {
+                "saturdayOnly": {
+                "title": "Samedi seulement",
+                "body": "Le défi 6x7 est disponible uniquement le samedi."
+                }
+            },
+            "saturdayOnlyTag": "Sam",
+
+            "autoTitle67": "Défi 6x7",
+            "special67": {
+                "saturdayOnly": "Samedi seulement",
+                "body": "Événement spécial Prophetik. Disponible uniquement le samedi (grosse journée NHL).",
+                "bonusLine": "🎁 Bonus au gagnant: 6 ou 7 crédits (aléatoire).",
+                "notSaturdayHint": "Choisis une date de samedi pour activer la création.",
+                "badge": "Événement spécial"
+            },
 
             "group": {
                 "noneHint": "Aucun groupe disponible pour créer un défi.",
@@ -817,6 +838,187 @@
       "body": "Nouveau solde : {{credits}}",
       "failTitle": "Top-up impossible",
       "betaCta": "+25 gratuits (bêta)"
+    }
+  },
+
+  "howItWorks": {
+    "title": "Comment ça marche",
+    "headerTitle": "Comment ça marche",
+    "subtitle": "Tout ce qu’il faut savoir pour créer un défi, participer, comprendre les formats, la cagnotte et le bris d’égalité.",
+    "headerHint": "Guides rapides & règles des défis",
+
+    "formats": {
+      "title": "Formats & coût de participation",
+      "rule": "Règle simple : coût = nombre de joueurs à sélectionner",
+      "costPill": "{{cost}} crédit(s)",
+      "picksLabel": "Joueurs à choisir",
+      "costLabel": "Coût pour participer",
+      "special67Note": "Événement spécial (samedi seulement). Bonus au gagnant."
+    },
+
+    "create": {
+      "title": "Créer un défi",
+      "step1": "Accède à l’onglet Défis.",
+      "step2": "Choisis un groupe.",
+      "step3": "Sélectionne un format (1x1, 2x2, …, 6x7).",
+      "step4": "Choisis la date NHL.",
+      "step5": "Clique sur « Créer le défi ».",
+      "deadlinePill": "Inscription/modification : jusqu’à 1h avant le 1er match",
+      "deadlineNote": "Le bouton « Créer » peut se désactiver si la date limite est passée (1h avant le premier match)."
+    },
+
+    "join": {
+      "title": "Participer à un défi",
+      "step1": "Accède à l’onglet Défis.",
+      "step2": "Repère le défi (format + date).",
+      "step3": "Clique sur « Participer ».",
+      "step4": "Sélectionne le nombre de joueurs requis par le format.",
+      "step5": "Sauvegarde tes choix.",
+      "editPill": "Tu peux modifier tes choix jusqu’à 1h avant le 1er match"
+    },
+
+    "pot": {
+      "title": "Cagnotte & gains",
+      "rule1": "Chaque participation ajoute des crédits à la cagnotte.",
+      "rule2": "Le gagnant remporte la cagnotte du défi.",
+      "exampleTitle": "Exemple",
+      "exampleBody": "Défi 2x2 avec 5 participants → coût 2 crédits chacun → cagnotte = 10 crédits.",
+      "special67Pill": "6x7 : bonus spécial au gagnant (6 ou 7 crédits)"
+    },
+
+    "tiebreak": {
+      "title": "Bris d’égalité",
+      "intro": "Si plusieurs participants ont le même score, Prophetik utilise un bris d’égalité automatique pour déterminer un seul gagnant.",
+      "rule1": "1) Total de buts",
+      "rule2": "2) Total de passes",
+      "rule3": "3) Moins de joueurs différents utilisés (avantage à la précision)",
+      "rule4": "4) Heure de participation (premier inscrit)",
+      "note": "Tu peux ajuster ces règles selon la logique backend."
+    },
+
+    "groups": {
+      "title": "Groupes : créer et joindre",
+      "create": "Créer un groupe : choisis un nom, puis invite des amis.",
+      "join": "Joindre un groupe : accepte une invitation ou utilise un code/lien (si disponible).",
+      "role": "Le propriétaire du groupe peut gérer les paramètres et les membres."
+    },
+
+    "footer": "Prophetik évolue : certaines options peuvent varier selon le groupe ou les événements spéciaux."
+  },
+
+  "drawer": {
+    "guest": "Invité",
+    "online": "Connecté",
+    "offline": "Hors ligne",
+
+    "section": {
+      "navigation": "Navigation",
+      "personal": "Personnel"
+    },
+
+    "home": "Accueil",
+    "groups": "Groupes",
+    "challenges": "Défis",
+    "leaderboard": "Classement",
+    "matchLive": "Match en direct",
+
+    "subscriptions":"Abonnement",
+    "shop": "Boutique",
+    "credits": "Crédits",
+    "profile": "Profil",
+    "settings": "Paramètres",
+    "howItWorks": "Comment ça marche",
+
+    "signOut": "Déconnexion"
+  },
+
+  "tabs": {
+    "home": "Accueil",
+    "groups": "Groupes",
+    "challenges": "Défis",
+    "leaderboard": "Classement",
+    "matchLive": "En direct"
+  },
+
+  "subscriptions": {
+    "title": "Abonnements Prophetik",
+    "headerTitle":"Abonnement",
+    "subtitle": "Choisis le plan qui correspond à ton niveau de jeu.",
+
+    "cta": {
+      "choose": "Choisir",
+      "chooseHint": "Changement immédiat.",
+      "current": "Plan actuel",
+      "currentHint": "Tu es déjà sur ce plan."
+    },
+
+    "current": {
+      "label": "Ton plan actuel",
+      "pill": "Actif",
+      "hint": "Tu peux changer de plan à tout moment.",
+      "unknown": "—",
+      "nextGrantLabel": "Prochain octroi",
+      "nextGrantHint": "+{{monthlyCredits}} crédits au prochain octroi"
+    },
+
+    "plan": {
+      "creditsPerMonth": "{{credits}} crédits / mois",
+      "free": {
+        "short": "Gratuit",
+        "title": "Gratuit",
+        "tag": "Découverte",
+        "price": "0 $ / mois",
+        "desc": "10 crédits par mois à réclamer manuellement dans la page Crédits."
+      },
+
+      "base": {
+        "short": "Base",
+        "title": "Base",
+        "price": "4,99 $ CAD / mois",
+        "desc": "Crédits ajoutés automatiquement le jour de l’abonnement, puis chaque 30 jours."
+      },
+
+      "popular": {
+        "short": "Populaire",
+        "title": "Populaire",
+        "tag": "Le plus populaire",
+        "price": "9,99 $ CAD / mois",
+        "desc": "Parfait pour les groupes actifs. Inclut l’accès au défi spécial 6x7."
+      },
+
+      "prophetik": {
+        "short": "Prophetik",
+        "title": "Prophetik",
+        "tag": "Ultime",
+        "price": "14,99 $ CAD / mois",
+        "desc": "Pour les power users : gros volume de crédits et accès complet."
+      }
+    },
+
+    "features": {
+      "autoYes": "Crédits automatiques",
+      "autoNo": "Crédits à réclamer manuellement",
+      "has67": "Accès au défi spécial 6x7"
+    },
+
+    "compare": {
+      "title": "Comparatif rapide",
+      "subtitle": "Un aperçu simple des différences entre les plans.",
+      "feature": "Fonction",
+      "credits": "Crédits / mois",
+      "auto": "Attribution automatique",
+      "has67": "Défi 6x7"
+    },
+
+    "reassure": {
+      "cancelAnytime": "Annule à tout moment.",
+      "secure": "Paiement sécurisé via App Store / Google Play.",
+      "note": "Les prix peuvent varier selon la plateforme. Les crédits et avantages peuvent évoluer avec Prophetik."
+    },
+
+    "alert": {
+      "title": "Confirmer",
+      "body": "Choisir le plan {{plan}} ?"
     }
   }
 } 

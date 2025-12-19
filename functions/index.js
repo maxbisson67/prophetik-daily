@@ -39,3 +39,6 @@ export { deleteGroup, leaveGroup } from "./groupsManagement.js"
 
 // Nhl Live
 export { updateNhlLiveGamesNow, updateNhlLiveGamesCron} from "./nhlLive.js"
+
+// Subscriptions
+export { grantMonthlyCredits,  setPlan  } from "./subscriptions/index.js";

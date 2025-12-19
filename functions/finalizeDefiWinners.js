@@ -3,6 +3,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
+import crypto from "crypto";
 
 // 🔁 NEW: on importe le helper d’ingest
 import { runIngestStatsForDate } from "./ingest.js";
@@ -42,6 +43,31 @@ function readAnyBalance(doc) {
   );
 }
 
+/** Bonus 6x7 déterministe (idempotent) */
+function pickDeterministicFromValues(defiId, values = []) {
+  const arr = Array.isArray(values)
+    ? values.filter((x) => Number.isFinite(Number(x))).map((x) => Number(x))
+    : [];
+  if (!arr.length) return 0;
+
+  const hex = crypto.createHash("sha256").update(String(defiId)).digest("hex");
+  const n = parseInt(hex.slice(0, 8), 16); // 32-bit
+  const idx = n % arr.length;
+  return Number(arr[idx]) || 0;
+}
+
+function computeBonusPerWinner(defiId, defiDoc) {
+  const br = defiDoc?.bonusReward;
+  if (!br || typeof br !== "object") return 0;
+
+  const type = String(br.type || "").toLowerCase();
+  if (type !== "random") return 0;
+
+  const values = br.values || [6, 7];
+  const bonus = pickDeterministicFromValues(defiId, values);
+  return bonus > 0 ? bonus : 0;
+}
+
 /* -------------------- FINALIZATION (daily 5AM) ----------------- */
 /**
  * Règle:
@@ -51,13 +77,17 @@ function readAnyBalance(doc) {
  *
  * Avant de finaliser, on lance une dernière synchro live (runIngestStatsForDate)
  * pour garantir que livePoints est à jour.
+ *
+ * ✅ Bonus optionnel 6x7:
+ * - si le défi contient bonusReward: { type:"random", values:[6,7] }
+ * - on crédite chaque gagnant d’un bonus déterministe (6 ou 7) en plus du pot
+ * - idempotent car le bonus est dérivé du defiId (hash)
  */
 export const finalizeDefiWinners = onSchedule(
   {
     // en prod: "0 5 * * *"
-    // pour l’instant tu avais */2 pour tests
     schedule: "*/2 * * * *",
-    timeZone: APP_TZ, // <— on s’aligne sur le fuseau centralisé
+    timeZone: APP_TZ,
     region: "us-central1",
   },
   async () => {
@@ -69,19 +99,14 @@ export const finalizeDefiWinners = onSchedule(
       await runIngestStatsForDate();
       logger.info("finalizeDefiWinners: ingest done");
     } catch (e) {
-      // On log, mais on ne bloque pas: on considère que les crons précédents ont déjà tourné
       logger.error("finalizeDefiWinners: runIngestStatsForDate failed, using last known livePoints", {
         error: String(e?.message || e),
       });
     }
 
     // 1) Cible: tous les défis dont gameDate ≤ hier (APP_TZ)
-
-    // todayYmd = aujourd’hui dans APP_TZ
-    const todayYmd = appYmd(now); // ex: "2025-12-05" en America/Toronto
-
-    // yYMD = hier dans APP_TZ
-    const yYMD = addDaysToYmd(todayYmd, -1); // ex: "2025-12-04"
+    const todayYmd = appYmd(now);
+    const yYMD = addDaysToYmd(todayYmd, -1);
 
     logger.info(
       `finalizeDefiWinners@5AM: nowUTC=${formatDebug(now, "UTC")} todayApp=${todayYmd} target<=${yYMD}`
@@ -92,11 +117,10 @@ export const finalizeDefiWinners = onSchedule(
     try {
       snap = await db
         .collection("defis")
-        .where("gameDate", "<=", yYMD) // <= hier (APP_TZ)
+        .where("gameDate", "<=", yYMD)
         .where("status", "in", ["open", "live", "awaiting_result"])
         .get();
     } catch (e) {
-      // Si "in" échoue (champ absent, index, etc.), fallback uniquement par date
       logger.warn("finalizeDefiWinners@5AM: status filter failed, fallback date-only", String(e));
       snap = await db.collection("defis").where("gameDate", "<=", yYMD).get();
     }
@@ -111,7 +135,10 @@ export const finalizeDefiWinners = onSchedule(
       const defiId = docSnap.id;
       const d = docSnap.data() || {};
       const status = String(d.status || "").toLowerCase();
-      if (status === "completed") continue; // déjà finalisé
+      if (status === "completed") continue;
+
+      // ✅ Bonus par gagnant (6 ou 7) si configuré sur le défi
+      const bonusPerWinner = computeBonusPerWinner(defiId, d);
 
       // 3) Récupérer toutes les participations avec leurs livePoints
       const partsSnap = await docSnap.ref.collection("participations").get();
@@ -119,7 +146,6 @@ export const finalizeDefiWinners = onSchedule(
         const v = s.data() || {};
         return {
           uid: s.id,
-          // on se base sur livePoints recalculé juste avant
           livePoints: Number(v.livePoints ?? v.finalPoints ?? 0),
         };
       });
@@ -131,6 +157,7 @@ export const finalizeDefiWinners = onSchedule(
             winners: [],
             winnerShares: {},
             completedAt: FieldValue.serverTimestamp(),
+            ...(bonusPerWinner > 0 ? { bonusPerWinner } : {}),
           },
           { merge: true }
         );
@@ -147,17 +174,18 @@ export const finalizeDefiWinners = onSchedule(
         const dRef = db.collection("defis").doc(defiId);
         const fresh = await tx.get(dRef);
         if (!fresh.exists) return;
+
         const cur = fresh.data() || {};
         if (String(cur.status || "").toLowerCase() === "completed") return;
 
-        const pot = Number(cur.pot || d.pot || 0);
+        const pot = Number(cur.pot ?? d.pot ?? 0);
         const shares = splitEven(pot, Math.max(1, winners.length));
         const winnerShares = {};
         winners.forEach((uid, i) => {
           winnerShares[uid] = shares[i] || 0;
         });
 
-        // Marquer complété + sauvegarder le breakdown
+        // Marquer complété + sauvegarder le breakdown (+ bonus si présent)
         tx.set(
           dRef,
           {
@@ -165,6 +193,12 @@ export const finalizeDefiWinners = onSchedule(
             winners,
             winnerShares,
             completedAt: FieldValue.serverTimestamp(),
+            ...(bonusPerWinner > 0
+              ? {
+                  bonusPerWinner,
+                  bonusReward: cur.bonusReward || d.bonusReward || { type: "random", values: [6, 7] },
+                }
+              : {}),
           },
           { merge: true }
         );
@@ -183,37 +217,67 @@ export const finalizeDefiWinners = onSchedule(
           );
         }
 
-        // Créditer les gagnants
+        // Créditer les gagnants (pot + bonus 6x7)
         for (let i = 0; i < winners.length; i++) {
           const uid = winners[i];
-          const amount = shares[i] || 0;
-          if (!(amount > 0)) continue;
+
+          const potAmount = shares[i] || 0;
+          const bonusAmount = bonusPerWinner || 0;
+
+          if (!(potAmount > 0) && !(bonusAmount > 0)) continue;
 
           const uRef = db.collection("participants").doc(uid);
           const uSnap = await tx.get(uRef);
-          const curU = uSnap.exists ? (uSnap.data() || {}) : {};
+          const curU = uSnap.exists ? uSnap.data() || {} : {};
           const curBal = readAnyBalance(curU);
-          const newBal = curBal + amount;
+
+          const add = (potAmount > 0 ? potAmount : 0) + (bonusAmount > 0 ? bonusAmount : 0);
+          const newBal = curBal + add;
 
           tx.set(
             uRef,
-            { credits: { balance: newBal, updatedAt: FieldValue.serverTimestamp() } },
+            {
+              credits: { balance: newBal },
+              updatedAt: FieldValue.serverTimestamp(),
+            },
             { merge: true }
           );
 
-          const logRef = uRef.collection("credit_logs").doc();
-          tx.set(logRef, {
-            type: "defi_payout",
-            amount,
-            fromBalance: curBal,
-            toBalance: newBal,
-            defiId,
-            createdAt: FieldValue.serverTimestamp(),
-          });
+          // Log payout pot (type existant)
+          if (potAmount > 0) {
+            const logRef = uRef.collection("credit_logs").doc();
+            tx.set(logRef, {
+              type: "defi_payout",
+              amount: potAmount,
+              fromBalance: curBal,
+              toBalance: curBal + potAmount,
+              defiId,
+              createdAt: FieldValue.serverTimestamp(),
+            });
+          }
+
+          // Log bonus 6x7 (nouveau type)
+          if (bonusAmount > 0) {
+            const logRef2 = uRef.collection("credit_logs").doc();
+            const from2 = curBal + (potAmount > 0 ? potAmount : 0);
+            tx.set(logRef2, {
+              type: "defi_bonus",
+              amount: bonusAmount,
+              fromBalance: from2,
+              toBalance: from2 + bonusAmount,
+              defiId,
+              createdAt: FieldValue.serverTimestamp(),
+              meta: { concept: "6x7", pickedFrom: (d?.bonusReward?.values || [6, 7]) },
+            });
+          }
         }
       });
 
-      logger.info(`defi ${defiId}: finalized@5AM`, { winners, pot: d.pot || 0 });
+      logger.info(`defi ${defiId}: finalized@5AM`, {
+        winners,
+        pot: d.pot || 0,
+        bonusPerWinner,
+      });
     }
   }
 );

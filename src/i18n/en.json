@@ -1,4 +1,8 @@
 {
+  "app": {
+    "name": "Prophetik"
+  },
+
   "common": {
     "unknownError": "Unknown error",
     "initializing": "Initializing…",
@@ -7,7 +11,8 @@
     "ok": "OK",
     "cancel": "Cancel",
     "or": "or",
-    "continue": "Continue"
+    "continue": "Continue",
+    "loading": "Loading…"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -363,6 +368,22 @@
                 "label": "Group",
                 "choose": "Choose a group"
             },
+
+            "alert": {
+                "saturdayOnly": {
+                "title": "Saturday only",
+                "body": "The 6x7 challenge is available on Saturdays only."
+                }
+            },
+            "saturdayOnlyTag": "Sat",
+            "autoTitle67": "6x7 Challenge",
+                "special67": {
+                    "saturdayOnly": "Saturday only",
+                    "body": "Special Prophetik event. Available on Saturdays only (big NHL day).",
+                    "bonusLine": "🎁 Winner bonus: 6 or 7 credits (random).",
+                    "notSaturdayHint": "Pick a Saturday date to enable creation.",
+                    "badge": "Special event"
+                },
 
             "formatLabel": "Challenge format",
 
@@ -829,6 +850,187 @@
       "body": "New balance: {{credits}}",
       "failTitle": "Top-up failed",
       "betaCta": "+25 free (beta)"
+    }
+  },
+
+  "howItWorks": {
+    "title": "How it works",
+    "headerTitle": "How it works",
+    "subtitle": "Everything you need to know to create a challenge, join it, understand formats, the prize pool, and tie-breakers.",
+    "headerHint": "Quick guides & challenge rules",
+
+    "formats": {
+      "title": "Formats & entry cost",
+      "rule": "Simple rule: cost = number of players you must pick",
+      "costPill": "{{cost}} credit(s)",
+      "picksLabel": "Players to pick",
+      "costLabel": "Cost to join",
+      "special67Note": "Special event (Saturdays only). Winner bonus."
+    },
+
+    "create": {
+      "title": "Create a challenge",
+      "step1": "Go to the Challenges tab.",
+      "step2": "Choose a group.",
+      "step3": "Select a format (1x1, 2x2, …, 6x7).",
+      "step4": "Pick the NHL date.",
+      "step5": "Tap “Create challenge”.",
+      "deadlinePill": "Sign up / edit: until 1 hour before the first game",
+      "deadlineNote": "The “Create” button can be disabled if the deadline has passed (1 hour before the first game)."
+    },
+
+    "join": {
+      "title": "Join a challenge",
+      "step1": "Go to the Challenges tab.",
+      "step2": "Find the challenge (format + date).",
+      "step3": "Tap “Join”.",
+      "step4": "Select the number of players required by the format.",
+      "step5": "Save your picks.",
+      "editPill": "You can change your picks until 1 hour before the first game"
+    },
+
+    "pot": {
+      "title": "Prize pool & winnings",
+      "rule1": "Each entry adds credits to the prize pool.",
+      "rule2": "The winner earns the challenge prize pool.",
+      "exampleTitle": "Example",
+      "exampleBody": "2x2 challenge with 5 players → entry cost 2 credits each → prize pool = 10 credits.",
+      "special67Pill": "6x7: special winner bonus (6 or 7 credits)"
+    },
+
+    "tiebreak": {
+      "title": "Tie-breaker",
+      "intro": "If multiple players have the same score, Prophetik uses an automatic tie-breaker to determine a single winner.",
+      "rule1": "1) Total goals",
+      "rule2": "2) Total assists",
+      "rule3": "3) Fewer unique players used (precision advantage)",
+      "rule4": "4) Entry time (earliest entry wins)",
+      "note": "You can adjust these rules depending on your backend logic."
+    },
+
+    "groups": {
+      "title": "Groups: create & join",
+      "create": "Create a group: choose a name, then invite friends.",
+      "join": "Join a group: accept an invite or use a code/link (if available).",
+      "role": "The group owner can manage settings and members."
+    },
+
+    "footer": "Prophetik evolves: some options may vary depending on the group or special events."
+  },
+
+  "drawer": {
+    "guest": "Guest",
+    "online": "Signed in",
+    "offline": "Offline",
+
+    "section": {
+      "navigation": "Navigation",
+      "personal": "Personal"
+    },
+
+    "home": "Home",
+    "groups": "Groups",
+    "challenges": "Challenges",
+    "leaderboard": "Leaderboard",
+    "matchLive": "Live game",
+
+    "subscriptions":"Subscriptions",
+    "shop": "Shop",
+    "credits": "Credits",
+    "profile": "Profile",
+    "settings": "Settings",
+    "howItWorks": "How it works",
+
+    "signOut": "Sign out"
+  },
+  "tabs": {
+    "home": "Home",
+    "groups": "Groups",
+    "challenges": "Challenges",
+    "leaderboard": "Leaderboard",
+    "matchLive": "Live game"
+  },
+
+  "subscriptions": {
+    "title": "Prophetik Subscriptions",
+    "headerTitle":"Subscriptions",
+    "subtitle": "Choose the plan that matches your level of play.",
+
+    "cta": {
+      "choose": "Choose",
+      "chooseHint": "Instant change.",
+      "current": "Current plan",
+      "currentHint": "You are already on this plan."
+    },
+
+    "current": {
+      "label": "Your current plan",
+      "pill": "Active",
+      "hint": "You can change your plan at any time.",
+      "unknown": "—",
+      "nextGrantLabel": "Next credit grant",
+      "nextGrantHint": "+{{monthlyCredits}} credits on next grant"
+    },
+
+    "plan": {
+      "creditsPerMonth": "{{credits}} credits / month",
+
+      "free": {
+        "short": "Free",
+        "title": "Free",
+        "tag": "Discovery",
+        "price": "$0 / month",
+        "desc": "10 credits per month to be claimed manually on the Credits page."
+      },
+
+      "base": {
+        "short": "Base",
+        "title": "Base",
+        "price": "$4.99 CAD / month",
+        "desc": "Credits are added automatically on subscription day, then every 30 days."
+      },
+
+      "popular": {
+        "short": "Popular",
+        "title": "Popular",
+        "tag": "Most popular",
+        "price": "$9.99 CAD / month",
+        "desc": "Perfect for active groups. Includes access to the special 6x7 challenge."
+      },
+
+      "prophetik": {
+        "short": "Prophetik",
+        "title": "Prophetik",
+        "tag": "Ultimate",
+        "price": "$14.99 CAD / month",
+        "desc": "For power users: high credit volume and full access."
+      }
+    },
+
+    "features": {
+      "autoYes": "Automatic credits",
+      "autoNo": "Manual credit claim",
+      "has67": "Access to special 6x7 challenge"
+    },
+
+    "compare": {
+      "title": "Quick comparison",
+      "subtitle": "A simple overview of plan differences.",
+      "feature": "Feature",
+      "credits": "Credits / month",
+      "auto": "Automatic allocation",
+      "has67": "6x7 challenge"
+    },
+
+    "reassure": {
+      "cancelAnytime": "Cancel anytime.",
+      "secure": "Secure payment via App Store / Google Play.",
+      "note": "Prices may vary by platform. Credits and benefits may evolve with Prophetik."
+    },
+
+    "alert": {
+      "title": "Confirm",
+      "body": "Choose the {{plan}} plan?"
     }
   }
 }    
