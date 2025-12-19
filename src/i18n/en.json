@@ -210,7 +210,10 @@
     "fiveParticipationsTitle": "Take part in 5 challenges",
     "threeDaysTitle": "3 consecutive days",
     "progressLabel": "Progress: {{current}}/{{max}}",
-    "streakLabel": "Streak: {{current}}/{{max}}"
+    "streakLabel": "Streak: {{current}}/{{max}}",
+    "dailyShotTitle": "Daily shot bonus",
+    "dailyShotPeriod": "Monthly cap (period {{period}})",
+    "dailyShotPeriodFallback": "Monthly cap"
   },
   "groups": {
     "detail": {

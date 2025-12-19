@@ -34,69 +34,58 @@ function fmtDateTime(ts) {
  * On garde l’icon + tint en dur ici,
  * mais le label devient une clé i18n (et fallback).
  */
+
+
 const TYPE_META = {
-  defi_entry: {
+  CREDIT_DEFI_ENTRY: {
     labelKey: 'credits.logs.types.defi_entry',
     labelFallback: 'Challenge entry',
     icon: 'ticket-confirmation-outline',
     tint: 'out',
   },
-  defi_payout: {
+  CREDIT_DEFI_PAYOUT: {
     labelKey: 'credits.logs.types.defi_payout',
     labelFallback: 'Challenge payout',
     icon: 'trophy-outline',
     tint: 'in',
   },
   // ✅ remboursement d’un défi annulé (ex: cancelled_ghost)
-  defi_refund: {
+  CREDIT_DEFI_REFUND: {
     labelKey: 'credits.logs.types.defi_refund',
     labelFallback: 'Refund: cancelled challenge',
     icon: 'backup-restore',
     tint: 'in',
   },
-  topup_free: {
-    labelKey: 'credits.logs.types.topup_free',
-    labelFallback: 'Free bonus',
-    icon: 'gift-outline',
-    tint: 'in',
-  },
-  topup_purchase: {
+  CREDIT_SIGNUP_BONUS:
+  { labelKey: 'credits.logs.types.signup_bonus', labelFallback: 'Welcome bonus', icon: 'party-popper', tint: 'in' },
+  CREDIT_DAILY_SHOT:  
+  { labelKey: 'credits.logs.types.daily_shot', labelFallback: 'Daily shot', icon: 'hockey-sticks', tint: 'in' },
+
+  CREDIT_PURCHASE_PACK: {
     labelKey: 'credits.logs.types.topup_purchase',
     labelFallback: 'Credits purchase',
     icon: 'credit-card-outline',
     tint: 'in',
   },
-  adjustment: {
+  CREDIT_ADJUSTMENT: {
     labelKey: 'credits.logs.types.adjustment',
     labelFallback: 'Adjustment',
     icon: 'tune',
     tint: 'neutral',
   },
-  purchase_avatar: {
+  CREDIT_AVATAR_PURCHASE: {
     labelKey: 'credits.logs.types.purchase_avatar',
     labelFallback: 'Avatar purchase',
     icon: 'credit-card-outline',
     tint: 'out',
   },
-  first_defi: {
-    labelKey: 'credits.logs.types.first_defi',
-    labelFallback: 'Reward: 1st challenge created',
-    icon: 'fire',
-    tint: 'in',
-  },
-  first_group: {
-    labelKey: 'credits.logs.types.first_group',
-    labelFallback: 'Reward: 1st group created',
-    icon: 'fire',
-    tint: 'in',
-  },
-  streak3_reward: {
+  CREDIT_STREAK3_REWARD: {
     labelKey: 'credits.logs.types.streak3_reward',
     labelFallback: 'Reward: 3-day streak',
     icon: 'fire',
     tint: 'in',
   },
-  five_particip_reward: {
+  CREDIT_FIVE_PARTICIP_REWARD: {
     labelKey: 'credits.logs.types.five_particip_reward',
     labelFallback: 'Reward: 5 participations',
     icon: 'counter',

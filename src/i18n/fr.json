@@ -209,7 +209,10 @@
     "fiveParticipationsTitle": "Participer à 5 défis",
     "threeDaysTitle": "3 jours consécutifs",
     "progressLabel": "Progression : {{current}}/{{max}}",
-    "streakLabel": "Série : {{current}}/{{max}}"
+    "streakLabel": "Série : {{current}}/{{max}}",
+    "dailyShotTitle": "Bonus tir du jour",
+    "dailyShotPeriod": "Plafond mensuel (période {{period}})",
+    "dailyShotPeriodFallback": "Plafond mensuel"
   },
   "groups": {
      "detail": {
@@ -963,6 +966,7 @@
 
     "plan": {
       "creditsPerMonth": "{{credits}} crédits / mois",
+
       "free": {
         "short": "Gratuit",
         "title": "Gratuit",

@@ -1,4 +1,4 @@
-// app/(tabs)/AccueilScreen.js
+// app/(drawer)/(tabs)/AccueilScreen.js
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import i18n from '@src/i18n/i18n';
 import {
@@ -15,6 +15,10 @@ import { useAuth } from '@src/auth/SafeAuthProvider';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useTheme } from '@src/theme/ThemeProvider';
 import CreateDefiModal from '../defis/CreateDefiModal';
+
+import DailyShotCard from "@src/credits/DailyShotCard";
+
+
 
 /* ----------------------------- Helpers ----------------------------- */
 function fmtTSLocalHM(v) {
@@ -147,10 +151,40 @@ function GoalStatusIcon({ done }) {
     <MaterialCommunityIcons
       name={done ? 'check-circle' : 'progress-clock'}
       size={18}
-      color={done ? '#059669' : '#6B7280'} // vert vs gris neutre
+      color={done ? '#059669' : '#6B7280'}
       style={{ marginRight: 6 }}
     />
   );
+}
+
+// --- Date helpers (APP_TZ côté client) ---
+const APP_TZ = 'America/Toronto';
+
+function toYmdInTzClient(date = new Date(), timeZone = 'UTC') {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  const d = parts.find((p) => p.type === 'day')?.value;
+
+  return `${y}-${m}-${d}`;
+}
+
+function periodKeyYYYYMMInTz(date = new Date(), timeZone = APP_TZ) {
+  const ymd = toYmdInTzClient(date, timeZone); // YYYY-MM-DD
+  return ymd.slice(0, 7).replace('-', ''); // YYYYMM
+}
+
+function msUntilNextLocalMidnight() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return Math.max(1000, next.getTime() - now.getTime());
 }
 
 /* ----------------------------- Screen ----------------------------- */
@@ -174,18 +208,27 @@ export default function AccueilScreen() {
   const [error, setError] = useState(null);
 
   // ---- Métadonnées des groupes (nom, status, avatar) ----
-  const [groupsMeta, setGroupsMeta] = useState({}); // id -> { id, name, status, avatarUrl }
-  const groupMetaUnsubs = useRef(new Map()); // id -> unsub
+  const [groupsMeta, setGroupsMeta] = useState({});
+  const groupMetaUnsubs = useRef(new Map());
 
-  // listeners refs (stable across renders)
+  // ---- Daily shot quota (lecture live) ----
+  const [dailyShot, setDailyShot] = useState({
+    periodKey: null,
+    creditsGranted: 0,
+    monthlyCap: 10,
+    lastDay: null,
+  });
+
+  // listeners refs
   const subs = useRef({
     me: null,
     byUid: null,
     byPid: null,
     ownerCreated: null,
     ownerOwnerId: null,
+    dailyShot: null,
   });
-  const defisUnsubsRef = useRef(new Map()); // Map<groupId, unsub>
+  const defisUnsubsRef = useRef(new Map());
 
   // mémos clés
   const lastGroupIdsKeyRef = useRef('');
@@ -194,7 +237,16 @@ export default function AccueilScreen() {
   // 👉 Modal de création de défi
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Reset au changement d’auth
+  // ✅ Tick quotidien : au prochain minuit (local device), on force un refresh logique
+  const [dayTick, setDayTick] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDayTick((x) => x + 1);
+    }, msUntilNextLocalMidnight());
+    return () => clearTimeout(t);
+  }, [dayTick]);
+
+  // Reset au changement d’auth OU au tick quotidien
   useEffect(() => {
     setMeDoc(null);
     setGroupIds([]);
@@ -206,6 +258,10 @@ export default function AccueilScreen() {
     setGroupsMeta({});
     setShowCreateModal(false);
 
+    lastGroupIdsKeyRef.current = '';
+    lastActiveKeyRef.current = '';
+
+    // stop listeners
     const { me, ...rest } = subs.current;
     Object.values(rest).forEach((un) => {
       try {
@@ -221,12 +277,14 @@ export default function AccueilScreen() {
     try {
       me?.();
     } catch {}
+
     subs.current = {
       me: null,
       byUid: null,
       byPid: null,
       ownerCreated: null,
       ownerOwnerId: null,
+      dailyShot: null,
     };
 
     for (const [, un] of groupMetaUnsubs.current) {
@@ -235,7 +293,14 @@ export default function AccueilScreen() {
       } catch {}
     }
     groupMetaUnsubs.current.clear();
-  }, [authReady, user?.uid]);
+
+    setDailyShot({
+      periodKey: null,
+      creditsGranted: 0,
+      monthlyCap: 10,
+      lastDay: null,
+    });
+  }, [authReady, user?.uid, dayTick]);
 
   /* ---------- 1) Participant (wallet, profil) ---------- */
   useEffect(() => {
@@ -266,7 +331,45 @@ export default function AccueilScreen() {
       } catch {}
       subs.current.me = null;
     };
-  }, [authReady, user?.uid]);
+  }, [authReady, user?.uid, dayTick]);
+
+  /* ---------- 1b) Daily shot quota (system/daily_shot_YYYYMM) ---------- */
+  useEffect(() => {
+    if (!authReady || !user?.uid) return;
+    if (subs.current.dailyShot) return;
+
+    const periodKey = periodKeyYYYYMMInTz(new Date(), APP_TZ);
+    const docId = `daily_shot_${periodKey}`;
+
+    const ref = firestore()
+      .collection('participants')
+      .doc(user.uid)
+      .collection('system')
+      .doc(docId);
+
+    const un = listenRNFB(
+      ref,
+      (snap) => {
+        const data = snap.exists ? snap.data() || {} : {};
+        setDailyShot({
+          periodKey,
+          creditsGranted: Number(data.creditsGranted || 0),
+          monthlyCap: Number(data.monthlyCap || 10),
+          lastDay: data.lastDay || null,
+        });
+      },
+      `participants/self/system/${docId}`
+    );
+
+    subs.current.dailyShot = un;
+
+    return () => {
+      try {
+        subs.current.dailyShot?.();
+      } catch {}
+      subs.current.dailyShot = null;
+    };
+  }, [authReady, user?.uid, dayTick]);
 
   /* ---------- 2) Mes groupes : memberships + ownership ---------- */
   useEffect(() => {
@@ -321,7 +424,8 @@ export default function AccueilScreen() {
       }
     };
 
-    const { me: keepMe, ...rest } = subs.current;
+    // stop old listeners (except me + dailyShot)
+    const { me: keepMe, dailyShot: keepDailyShot, ...rest } = subs.current;
     Object.values(rest).forEach((un) => {
       try {
         un?.();
@@ -329,6 +433,7 @@ export default function AccueilScreen() {
     });
     subs.current = {
       me: keepMe,
+      dailyShot: keepDailyShot,
       byUid: null,
       byPid: null,
       ownerCreated: null,
@@ -369,7 +474,7 @@ export default function AccueilScreen() {
     );
 
     return () => {
-      const { me: keepMe2, ...rest2 } = subs.current;
+      const { me: keepMe2, dailyShot: keepDailyShot2, ...rest2 } = subs.current;
       Object.values(rest2).forEach((un) => {
         try {
           un();
@@ -377,19 +482,19 @@ export default function AccueilScreen() {
       });
       subs.current = {
         me: keepMe2,
+        dailyShot: keepDailyShot2,
         byUid: null,
         byPid: null,
         ownerCreated: null,
         ownerOwnerId: null,
       };
     };
-  }, [authReady, user?.uid]);
+  }, [authReady, user?.uid, dayTick]);
 
   /* ---------- 2b) Métadonnées des groupes ---------- */
   useEffect(() => {
     if (!authReady || !user?.uid) return;
 
-    // Clean listeners des groupes enlevés
     for (const [gid, un] of groupMetaUnsubs.current) {
       if (!groupIds.includes(gid)) {
         try {
@@ -427,7 +532,6 @@ export default function AccueilScreen() {
   useEffect(() => {
     if (!authReady || !user?.uid) return;
 
-    // Retirer listeners des groupes supprimés
     for (const [gid, un] of defisUnsubsRef.current) {
       if (!groupIds.includes(gid)) {
         try {
@@ -476,6 +580,7 @@ export default function AccueilScreen() {
                 ).valueOf?.() || 0;
               return va - vb;
             });
+
             const k = JSON.stringify(
               merged.map((d) => ({
                 id: d.id,
@@ -524,6 +629,7 @@ export default function AccueilScreen() {
         byPid: null,
         ownerCreated: null,
         ownerOwnerId: null,
+        dailyShot: null,
       };
 
       for (const [, un] of groupMetaUnsubs.current) {
@@ -546,21 +652,17 @@ export default function AccueilScreen() {
       : 0;
 
   const st = meDoc?.stats || {};
-  const ach = meDoc?.achievements || {};
   const streak = Number(st.currentStreakDays ?? 0);
 
-  // totalParticipations global
   const totalParticipations = Number(st.totalParticipations ?? 0);
 
   // 🔁 Progression cyclique sur 5 participations
   const cycle5 = totalParticipations % 5;
-  const displayCount5 =
-    totalParticipations === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
+  const displayCount5 = totalParticipations === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
 
   // 🔁 Progression cyclique sur 3 jours consécutifs
   const cycle3 = streak % 3;
-  const displayStreak3 =
-    streak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
+  const displayStreak3 = streak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
 
   const RED_DARK = '#b91c1c';
 
@@ -572,7 +674,6 @@ export default function AccueilScreen() {
     user?.photoURL ??
     null;
 
-  // 👉 Construire la liste de groupes pour CreateDefiModal
   const userGroups = useMemo(
     () =>
       groupIds.map((gid) => {
@@ -591,13 +692,17 @@ export default function AccueilScreen() {
 
   function onPressCreateDefi() {
     if (loadingGroups) return;
-
     if (!userGroups.length) {
       router.push('/(drawer)/(tabs)/GroupsScreen');
       return;
     }
     setShowCreateModal(true);
   }
+
+  // Daily shot progression
+  const dailyGranted = Number(dailyShot.creditsGranted || 0);
+  const dailyCap = Number(dailyShot.monthlyCap || 10);
+  const dailyPct = dailyCap > 0 ? Math.min(100, Math.round((dailyGranted / dailyCap) * 100)) : 0;
 
   /* ----------------------------- UI ----------------------------- */
   return (
@@ -867,10 +972,7 @@ export default function AccueilScreen() {
                       color: '#ef4444',
                     }}
                   >
-                    {activeDefis.reduce(
-                      (sum, d) => sum + Number(d.pot || 0),
-                      0
-                    )}
+                    {activeDefis.reduce((sum, d) => sum + Number(d.pot || 0), 0)}
                   </Text>
                 </View>
               </View>
@@ -929,16 +1031,13 @@ export default function AccueilScreen() {
                     return (
                       <TouchableOpacity
                         key={item.id}
-                        onPress={() =>
-                          router.push(`/(drawer)/defis/${item.id}`)
-                        }
+                        onPress={() => router.push(`/(drawer)/defis/${item.id}`)}
                         style={{
                           paddingVertical: 10,
                           borderBottomWidth: 1,
                           borderColor: colors.border,
                         }}
                       >
-                        {/* HEADER : titre à gauche, statut + cagnotte à droite */}
                         <View
                           style={{
                             flexDirection: 'row',
@@ -946,21 +1045,12 @@ export default function AccueilScreen() {
                             alignItems: 'center',
                           }}
                         >
-                          {/* Titre du défi */}
-                          <Text
-                            style={{
-                              fontWeight: '700',
-                              color: colors.text,
-                            }}
-                          >
+                          <Text style={{ fontWeight: '700', color: colors.text }}>
                             {item.type
-                              ? `${i18n.t('home.challenge')} ${
-                                  item.type
-                                }x${item.type}`
+                              ? `${i18n.t('home.challenge')} ${item.type}x${item.type}`
                               : i18n.t('home.challenge')}
                           </Text>
 
-                          {/* Statut + cagnotte */}
                           <View style={{ alignItems: 'flex-end' }}>
                             <Chip
                               bg={st2.bg}
@@ -993,9 +1083,7 @@ export default function AccueilScreen() {
                           </View>
                         </View>
 
-                        {/* INFOS : date NHL + limite / début */}
                         <View style={{ marginTop: 4 }}>
-                          {/* Date NHL */}
                           <View
                             style={{
                               flexDirection: 'row',
@@ -1009,12 +1097,10 @@ export default function AccueilScreen() {
                               color={colors.subtext}
                             />
                             <Text style={{ color: colors.subtext }}>
-                              {i18n.t('home.challengeDate')}:{' '}
-                              {item.gameDate || '—'}
+                              {i18n.t('home.challengeDate')}: {item.gameDate || '—'}
                             </Text>
                           </View>
 
-                          {/* Limite d’inscription ou heure de début */}
                           <View
                             style={{
                               flexDirection: 'row',
@@ -1030,13 +1116,13 @@ export default function AccueilScreen() {
                             />
                             <Text style={{ color: colors.subtext }}>
                               {item.signupDeadline
-                                ? `${i18n.t(
-                                    'home.challengeLimit'
-                                  )} ${fmtTSLocalHM(item.signupDeadline)}`
+                                ? `${i18n.t('home.challengeLimit')} ${fmtTSLocalHM(
+                                    item.signupDeadline
+                                  )}`
                                 : item.firstGameUTC
-                                ? `${i18n.t(
-                                    'home.challengeStarts'
-                                  )} ${fmtTSLocalHM(item.firstGameUTC)}`
+                                ? `${i18n.t('home.challengeStarts')} ${fmtTSLocalHM(
+                                    item.firstGameUTC
+                                  )}`
                                 : '—'}
                             </Text>
                           </View>
@@ -1048,7 +1134,7 @@ export default function AccueilScreen() {
               )}
             </View>
 
-            {/* === Gamification === */}
+            {/* === Gamification (simplifiée) === */}
             <View
               style={{
                 padding: 14,
@@ -1074,159 +1160,11 @@ export default function AccueilScreen() {
                 {i18n.t('home.creditsToEarn')}
               </Text>
 
-              {/* Premier défi */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  marginBottom: 10,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    <GoalStatusIcon done={!!ach?.firstDefiCreated} />
-                    <Text
-                      style={{ fontWeight: '700', color: colors.text }}
-                    >
-                      {i18n.t('home.firstChallengeCreated')}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: ach?.firstDefiCreated
-                        ? '#059669'
-                        : colors.text,
-                    }}
-                  >
-                    +1
-                  </Text>
-                </View>
-
-                {!ach?.firstDefiCreated && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      marginTop: 6,
-                    }}
-                  >
-                    <Text
-                      style={{ color: colors.subtext, fontSize: 12 }}
-                    >
-                      {i18n.t('home.firstChallengeHint')}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={onPressCreateDefi}
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: '#b91c1c',
-                      }}
-                    >
-                      <Text
-                        style={{ color: '#fff', fontWeight: '700' }}
-                      >
-                        {i18n.t('common.create')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {/* Premier groupe */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  marginBottom: 10,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    <GoalStatusIcon done={!!ach?.firstGroupCreated} />
-                    <Text
-                      style={{ fontWeight: '700', color: colors.text }}
-                    >
-                      {i18n.t('home.firstGroupCreated')}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: ach?.firstGroupCreated
-                        ? '#059669'
-                        : colors.text,
-                    }}
-                  >
-                    +1
-                  </Text>
-                </View>
-
-                {!ach?.firstGroupCreated && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      marginTop: 6,
-                    }}
-                  >
-                    <Text
-                      style={{ color: colors.subtext, fontSize: 12 }}
-                    >
-                      {i18n.t('home.firstGroupHint')}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() =>
-                        router.push('/(drawer)/(tabs)/GroupsScreen')
-                      }
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: '#b91c1c',
-                      }}
-                    >
-                      <Text
-                        style={{ color: '#fff', fontWeight: '700' }}
-                      >
-                        {i18n.t('common.create')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
+              {/* Daily Shot Bonus (max 10 / mois) */}
+              <DailyShotCard
+                variant="card"
+                monthlyCap={10}
+              />
 
               {/* 5 participations */}
               <View
@@ -1246,43 +1184,26 @@ export default function AccueilScreen() {
                     alignItems: 'center',
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <GoalStatusIcon done={displayCount5 === 5} />
-                    <Text
-                      style={{ fontWeight: '700', color: colors.text }}
-                    >
+                    <Text style={{ fontWeight: '700', color: colors.text }}>
                       {i18n.t('home.fiveParticipationsTitle')}
                     </Text>
                   </View>
                   <Text
                     style={{
                       fontWeight: '800',
-                      color:
-                        displayCount5 === 5 ? '#059669' : colors.text,
+                      color: displayCount5 === 5 ? '#059669' : colors.text,
                     }}
                   >
                     +1
                   </Text>
                 </View>
 
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                >
-                  {i18n.t('home.progressLabel', {
-                    current: displayCount5,
-                    max: 5,
-                  })}
+                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4 }}>
+                  {i18n.t('home.progressLabel', { current: displayCount5, max: 5 })}
                 </Text>
+
                 <View
                   style={{
                     height: 8,
@@ -1294,9 +1215,7 @@ export default function AccueilScreen() {
                 >
                   <View
                     style={{
-                      width: `${Math.round(
-                        ((displayCount5 || 0) / 5) * 100
-                      )}%`,
+                      width: `${Math.round(((displayCount5 || 0) / 5) * 100)}%`,
                       height: 8,
                       borderRadius: 99,
                       backgroundColor: '#ef4444',
@@ -1322,43 +1241,26 @@ export default function AccueilScreen() {
                     alignItems: 'center',
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <GoalStatusIcon done={displayStreak3 === 3} />
-                    <Text
-                      style={{ fontWeight: '700', color: colors.text }}
-                    >
+                    <Text style={{ fontWeight: '700', color: colors.text }}>
                       {i18n.t('home.threeDaysTitle')}
                     </Text>
                   </View>
                   <Text
                     style={{
                       fontWeight: '800',
-                      color:
-                        displayStreak3 === 3 ? '#059669' : colors.text,
+                      color: displayStreak3 === 3 ? '#059669' : colors.text,
                     }}
                   >
                     +1
                   </Text>
                 </View>
 
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                >
-                  {i18n.t('home.streakLabel', {
-                    current: displayStreak3,
-                    max: 3,
-                  })}
+                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4 }}>
+                  {i18n.t('home.streakLabel', { current: displayStreak3, max: 3 })}
                 </Text>
+
                 <View
                   style={{
                     height: 8,
@@ -1370,9 +1272,7 @@ export default function AccueilScreen() {
                 >
                   <View
                     style={{
-                      width: `${Math.round(
-                        ((displayStreak3 || 0) / 3) * 100
-                      )}%`,
+                      width: `${Math.round(((displayStreak3 || 0) / 3) * 100)}%`,
                       height: 8,
                       borderRadius: 99,
                       backgroundColor: '#ef4444',

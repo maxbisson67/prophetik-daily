@@ -251,18 +251,6 @@ function CustomDrawerContent(props) {
           )}
       />
 
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.subscriptions', { defaultValue: 'Subscriptions' })}
-        onPress={() => {
-          props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => router.push('/(drawer)/subscriptions'));
-        }}
-        icon={({ size }) => (
-          <Ionicons name="diamond-outline" size={size} color={colors.text} />
-        )}
-      />
-
         <DrawerItem
         {...itemCommonProps}
         label={i18n.t('drawer.credits', { defaultValue: 'Credits' })}

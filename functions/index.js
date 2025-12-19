@@ -41,4 +41,8 @@ export { deleteGroup, leaveGroup } from "./groupsManagement.js"
 export { updateNhlLiveGamesNow, updateNhlLiveGamesCron} from "./nhlLive.js"
 
 // Subscriptions
-export { grantMonthlyCredits,  setPlan  } from "./subscriptions/index.js";
+//export { grantMonthlyCredits,  setPlan  } from "./subscriptions/index.js";
+
+// Credits et dailyShotBonus
+export { dailyShotBonus} from "./credits/dailyShotBonus.js"
+export { purchaseCreditsMock } from "./credits/purchaseCreditsMock.js";
