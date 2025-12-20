@@ -60,7 +60,7 @@
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "POST_NOTIFICATIONS",
-        "BILLING"
+        "com.android.vending.BILLING"
       ],
       "softwareKeyboardLayoutMode": "resize"
     },
