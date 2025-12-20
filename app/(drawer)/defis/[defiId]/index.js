@@ -158,18 +158,27 @@ function fmtLocalDateStr(d) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-function toYMD(v) {
-  if (typeof v === 'string') return v;
-  const d =
-    v?.toDate?.()
-      ? v.toDate()
-      : v instanceof Date
-      ? v
-      : v
-      ? new Date(v)
-      : null;
+
+function fmtUTCDateStr(d) {
   if (!d) return null;
-  return fmtLocalDateStr(d);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+function toYMD(v) {
+  if (!v) return null;
+
+  // Si déjà une string "YYYY-MM-DD", on la garde
+  if (typeof v === "string") {
+    const s = v.trim();
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  }
+
+  const d = v?.toDate?.() ? v.toDate() : v instanceof Date ? v : new Date(v);
+  if (!d || Number.isNaN(d.getTime())) return null;
+
+  // ✅ UTC pour être stable peu importe le timezone
+  return fmtUTCDateStr(d);
 }
 function isPast(ts) {
   if (!ts) return false;
@@ -200,9 +209,11 @@ function headshotUrl(abbr, playerId) {
 /* --------------------------- API NHL --------------------------- */
 async function fetchGamesOn(ymd) {
   try {
+    
     const res = await fetch(
       `https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`
     );
+    
     if (!res.ok) return [];
     const data = await res.json();
     const day = Array.isArray(data?.gameWeek)
@@ -231,7 +242,8 @@ async function fetchGamesOn(ymd) {
         start: g?.startTimeUTC ? new Date(g.startTimeUTC) : null,
       };
     });
-  } catch {
+  } catch (e){
+    console.log("[ERROR:] status =", e);
     return [];
   }
 }
@@ -903,6 +915,11 @@ export default function DefiParticipationScreen() {
     () => toYMD(defi?.gameDate),
     [defi?.gameDate]
   );
+
+  useEffect(() => {
+  console.log("[defi] raw gameDate:", defi?.gameDate);
+  console.log("[defi] gameYMD computed:", gameYMD);
+}, [defi?.gameDate, gameYMD]);
 
   // Équipes & matchs du jour
   useEffect(() => {

@@ -59,7 +59,8 @@
       "package": "com.prophetik",
       "googleServicesFile": "./google-services.json",
       "permissions": [
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "BILLING"
       ],
       "softwareKeyboardLayoutMode": "resize"
     },

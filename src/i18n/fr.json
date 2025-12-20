@@ -212,7 +212,12 @@
     "streakLabel": "Série : {{current}}/{{max}}",
     "dailyShotTitle": "Bonus tir du jour",
     "dailyShotPeriod": "Plafond mensuel (période {{period}})",
-    "dailyShotPeriodFallback": "Plafond mensuel"
+    "dailyShotPeriodFallback": "Plafond mensuel",
+    "dailyShotAlreadyTaken": "Déjà réclamé aujourd’hui. Reviens demain.",
+    "dailyShotCapReached": "Plafond mensuel atteint. Reviens le mois prochain.",
+    "dailyShotHint": "Bouge ton téléphone comme un lancer pour gagner +1 crédit.",
+    "dailyShotLoading": "Capteurs en cours de chargement…",
+    "dailyShotMonthlyCap": "Plafond mensuel: {{current}} / {{max}}" 
   },
   "groups": {
      "detail": {

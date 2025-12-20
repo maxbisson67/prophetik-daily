@@ -210,8 +210,17 @@ export default function CreditsWallet({ credits }) {
           {i18n.t("credits.wallet.buyTitle", "Buy credits")}
         </Text>
 
-        {/* Packs (chips) */}
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                {/* Packs (chips) */}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            rowGap: 10,
+            columnGap: 10,
+            marginBottom: 14,
+          }}
+        >
           {PACKS.map((p) => {
             const active = selectedPack?.id === p.id;
             const borderColor = active ? colors.text : colors.border;
@@ -224,6 +233,7 @@ export default function CreditsWallet({ credits }) {
                 key={p.id}
                 onPress={() => setSelectedPack(p)}
                 style={{
+                  width: "48%",          // ✅ 2 colonnes, 3e passe en dessous
                   borderWidth: active ? 2 : 1,
                   borderColor,
                   backgroundColor: bg,
@@ -245,7 +255,7 @@ export default function CreditsWallet({ credits }) {
             );
           })}
         </View>
-
+        
         {/* Résumé + bouton acheter */}
         <View
           style={{

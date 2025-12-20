@@ -213,7 +213,12 @@
     "streakLabel": "Streak: {{current}}/{{max}}",
     "dailyShotTitle": "Daily shot bonus",
     "dailyShotPeriod": "Monthly cap (period {{period}})",
-    "dailyShotPeriodFallback": "Monthly cap"
+    "dailyShotPeriodFallback": "Monthly cap",
+    "dailyShotAlreadyTaken": "Already claimed today. Come back tomorrow.",
+    "dailyShotCapReached": "Monthly limit reached. Come back next month.",
+    "dailyShotHint": "Shake your phone like a shot to earn +1 credit.",
+    "dailyShotLoading": "Sensors loading…",
+    "dailyShotMonthlyCap": "Monthly cap: {{current}} / {{max}}" 
   },
   "groups": {
     "detail": {

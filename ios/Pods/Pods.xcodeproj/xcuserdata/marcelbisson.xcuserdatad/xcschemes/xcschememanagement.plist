@@ -154,6 +154,11 @@
 			<key>isShown</key>
 			<false/>
 		</dict>
+		<key>ExpoSensors.xcscheme</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+		</dict>
 		<key>ExpoSystemUI-ExpoSystemUI_privacy.xcscheme</key>
 		<dict>
 			<key>isShown</key>

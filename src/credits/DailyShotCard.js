@@ -214,9 +214,12 @@ export default function DailyShotCard({
           <Text style={{ fontWeight: "900", color: colors.text }}>
             {title}
           </Text>
-          <Text style={{ color: colors.subtext, fontSize: 12 }}>
-            {granted}/{cap} • {i18n.t("home.dailyShotMonthlyCap", "Monthly limit")}
-          </Text>
+         <Text style={{ color: colors.subtext, fontSize: 12 }}>
+            {i18n.t("home.dailyShotMonthlyCap", {
+                current: granted,
+                max: cap,
+            })}
+        </Text>
         </View>
 
         {busy && <ActivityIndicator />}
