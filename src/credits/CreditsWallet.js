@@ -21,7 +21,6 @@ const PACKS = [
   { id: "credits_150", credits: 150, bonus: 10, priceCents: 1499, tagKey: "credits.wallet.packs.bestValue", tagFallback: "Best value" },
 ];
 
-
 // format CAD selon langue
 const fmtPrice = (cents) => {
   const amount = (Number(cents) || 0) / 100;
@@ -35,7 +34,6 @@ const fmtPrice = (cents) => {
 
 // idempotence client (double tap)
 function clientTxId() {
-  // crypto.randomUUID dispo dans plusieurs environnements modernes; fallback sinon
   const rnd =
     globalThis?.crypto?.randomUUID?.() ||
     `tx_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -53,7 +51,6 @@ export default function CreditsWallet({ credits }) {
   const [buying, setBuying] = useState(false);
   const [selectedPack, setSelectedPack] = useState(PACKS[0]);
 
-  // ✅ Appel cross-platform de la CF purchaseCreditsMock
   async function callPurchaseCreditsMock(payload) {
     if (Platform.OS === "web") {
       const { getFunctions, httpsCallable } = await import("firebase/functions");
@@ -61,7 +58,6 @@ export default function CreditsWallet({ credits }) {
       const fn = httpsCallable(f, "purchaseCreditsMock");
       return fn(payload);
     } else {
-      // tu utilises RNFirebase sur mobile
       const functions = (await import("@react-native-firebase/functions")).default;
       const fn = functions().httpsCallable("purchaseCreditsMock");
       return fn(payload);
@@ -75,7 +71,6 @@ export default function CreditsWallet({ credits }) {
       setBuying(true);
 
       const txId = clientTxId();
-
       const res = await callPurchaseCreditsMock({
         packKey: selectedPack.id,
         clientTxId: txId,
@@ -86,7 +81,6 @@ export default function CreditsWallet({ credits }) {
       const amount = Number(data?.amount ?? 0);
 
       if (!applied) {
-        // ex: double-tap => already_granted
         Alert.alert(
           i18n.t("credits.wallet.purchaseNotAppliedTitle", { defaultValue: "Purchase already processed" }),
           i18n.t("credits.wallet.purchaseNotAppliedBody", {
@@ -99,8 +93,7 @@ export default function CreditsWallet({ credits }) {
       Alert.alert(
         i18n.t("credits.wallet.purchaseSuccessTitle", { defaultValue: "✅ Credits added" }),
         i18n.t("credits.wallet.purchaseSuccessBody", {
-          defaultValue:
-            "You received +{{amount}} credits.\nYour balance will update shortly.",
+          defaultValue: "You received +{{amount}} credits.\nYour balance will update shortly.",
           amount,
         })
       );
@@ -136,6 +129,27 @@ export default function CreditsWallet({ credits }) {
   };
 
   const isDark = colors.background === "#111827";
+
+  // 🎨 ajustements UI dark
+  const packBgIdle = isDark ? "#0b1220" : colors.card;
+  const packBgActive = isDark ? "#111827" : (colors.card2 || colors.card);
+
+  const packBorderIdle = isDark ? "rgba(255,255,255,0.14)" : colors.border;
+  const packBorderActive = isDark ? "rgba(239,68,68,0.95)" : (colors.primary || colors.text);
+
+  const packShadow = isDark
+    ? {
+        shadowColor: "#000",
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 3,
+      }
+    : {};
+
+  const red = "#ef4444";
+  const redPressed = "#dc2626";
+  const redDisabled = "#9ca3af";
 
   return (
     <View
@@ -192,8 +206,6 @@ export default function CreditsWallet({ credits }) {
               {balance}
             </Text>
           </View>
-
-          {/* (freeTopUp retiré) */}
         </View>
       </LinearGradient>
 
@@ -210,7 +222,7 @@ export default function CreditsWallet({ credits }) {
           {i18n.t("credits.wallet.buyTitle", "Buy credits")}
         </Text>
 
-                {/* Packs (chips) */}
+        {/* Packs */}
         <View
           style={{
             flexDirection: "row",
@@ -223,8 +235,6 @@ export default function CreditsWallet({ credits }) {
         >
           {PACKS.map((p) => {
             const active = selectedPack?.id === p.id;
-            const borderColor = active ? colors.text : colors.border;
-            const bg = active ? (isDark ? "#111827" : colors.card2) : colors.card;
 
             const label = `${p.credits}${p.bonus ? ` +${p.bonus}` : ""}`;
 
@@ -233,44 +243,63 @@ export default function CreditsWallet({ credits }) {
                 key={p.id}
                 onPress={() => setSelectedPack(p)}
                 style={{
-                  width: "48%",          // ✅ 2 colonnes, 3e passe en dessous
+                  width: "48%",
                   borderWidth: active ? 2 : 1,
-                  borderColor,
-                  backgroundColor: bg,
+                  borderColor: active ? packBorderActive : packBorderIdle,
+                  backgroundColor: active ? packBgActive : packBgIdle,
                   paddingVertical: 10,
                   paddingHorizontal: 12,
                   borderRadius: 12,
+
+                  ...(active ? packShadow : null),
                 }}
               >
-                <Text style={{ fontWeight: "800", color: colors.text }}>
+                <Text style={{ fontWeight: "900", color: colors.text }}>
                   {i18n.t("credits.wallet.creditsLabel", {
                     defaultValue: "{{count}} credits",
                     count: label,
                   })}
                 </Text>
-                <Text style={{ color: colors.subtext, fontSize: 12 }}>
+
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    fontSize: 12,
+                    marginTop: 2,
+                  }}
+                >
                   {i18n.t(p.tagKey, p.tagFallback)}
                 </Text>
+
+                {/* petit hint "selected" en dark (optionnel mais utile) */}
+                {active && isDark && (
+                  <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <MaterialCommunityIcons name="check-circle" size={14} color={red} />
+                    <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: "800" }}>
+                      {i18n.t("common.selected", { defaultValue: "Selected" })}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
         </View>
-        
+
         {/* Résumé + bouton acheter */}
         <View
           style={{
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: isDark ? "rgba(255,255,255,0.12)" : colors.border,
             borderRadius: 14,
             padding: 12,
-            backgroundColor: colors.card2,
+            backgroundColor: colors.card2 || (isDark ? "#0b1220" : colors.card),
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
           }}
         >
           <View>
-            <Text style={{ fontWeight: "800", color: colors.text }}>
+            <Text style={{ fontWeight: "900", color: colors.text }}>
               {selectedPack.bonus
                 ? `${selectedPack.credits} + ${selectedPack.bonus}`
                 : `${selectedPack.credits}`}{" "}
@@ -285,11 +314,11 @@ export default function CreditsWallet({ credits }) {
             onPress={onBuy}
             disabled={buying}
             style={({ pressed }) => ({
-              backgroundColor: "#111827",
+              backgroundColor: buying ? redDisabled : pressed ? redPressed : red,
               paddingVertical: 12,
               paddingHorizontal: 18,
               borderRadius: 12,
-              opacity: buying ? 0.6 : pressed ? 0.85 : 1,
+              opacity: buying ? 0.85 : 1,
             })}
           >
             {buying ? (

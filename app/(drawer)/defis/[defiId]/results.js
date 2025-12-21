@@ -251,6 +251,7 @@ export default function DefiResultsScreen() {
 
   const [nhlPlayersReadable, setNhlPlayersReadable] = useState(true);
 
+
   // 🔵 Chat
   const { messages, send, busy, markRead, canSend } = useDefiChat(defiId, {
     pageSize: 50,
@@ -281,6 +282,18 @@ export default function DefiResultsScreen() {
     const rule = String(defi?.splitRule ?? 'winner_takes_all').toLowerCase();
     return rule === 'split_even' ? Math.floor(pot / n) : pot;
   }
+
+  const allPickedIds = useMemo(() => {
+  const ids = new Set();
+  for (const part of parts) {
+    const picks = Array.isArray(part?.picks) ? part.picks : [];
+    for (const p of picks) {
+      const pid = String(p?.playerId ?? '').trim();
+      if (pid) ids.add(pid);
+    }
+  }
+  return Array.from(ids);
+}, [parts]);
 
   /* ----- Leaderboard (mémo) ----- */
   const leaderboard = useMemo(() => {
@@ -328,6 +341,7 @@ export default function DefiResultsScreen() {
       handleCelebrate();
     }
   }, [showReveal, winners, user?.uid]);
+
 
   React.useEffect(() => {
     if (!celebrateNow) hasCelebratedRef.current = false;
@@ -1293,8 +1307,9 @@ function ParticipantsCard({
   playerMap,
   currentUid,
   hideOthersPicks,
-  revealTimeLabel,
+  revealTimeLabel
 }) {
+ 
   if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
     return (
       <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
@@ -1348,193 +1363,190 @@ function ParticipantsCard({
         </Text>
       </View>
 
-      {leaderboard.map((item) => {
-        const info = participantInfoMap[item.uid] || {};
-        const name = namesMap[item.uid] || item.uid;
-        const photo = info.photoURL || null;
+{leaderboard.map((item) => {
+  const info = participantInfoMap[item.uid] || {};
+  const name = namesMap[item.uid] || item.uid;
+  const photo = info.photoURL || null;
 
-        const picks = Array.isArray(item.picks) ? item.picks : [];
-        const rows = [];
-        const seen = new Set();
+  const picks = Array.isArray(item.picks) ? item.picks : [];
+  const rows = [];
+  const seen = new Set();
 
-        for (const p of picks) {
-          const pid = normId(
-            p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id
-          );
-          if (!pid || seen.has(pid)) continue;
-          seen.add(pid);
+  for (const p of picks) {
+    const pid = normId(p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id);
+    if (!pid || seen.has(pid)) continue;
+    seen.add(pid);
 
-          const g = Number(liveStats.playerGoals?.[pid] || 0);
-          const a1 = Number(liveStats.playerA1?.[pid] || 0);
-          const a2 = Number(liveStats.playerA2?.[pid] || 0);
-          const aC = Number(liveStats.playerAssists?.[pid] || 0);
-          const pts = Number(liveStats.playerPoints?.[pid] || 0);
-          const derived = Math.max(0, pts - g);
-          const assists = Math.max(a1 + a2, aC, derived);
+    const g = Number(liveStats.playerGoals?.[pid] || 0);
+    const a1 = Number(liveStats.playerA1?.[pid] || 0);
+    const a2 = Number(liveStats.playerA2?.[pid] || 0);
+    const aC = Number(liveStats.playerAssists?.[pid] || 0);
+    const pts = Number(liveStats.playerPoints?.[pid] || 0);
 
-          rows.push({
-            playerId: pid,
-            playerName:
-              playerMap[pid]?.fullName ??
-              p?.fullName ??
-              p?.name ??
-              'Joueur',
-            teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
-            goals: g,
-            assists,
-          });
-        }
+    const derived = Math.max(0, pts - g);
+    const assists = Math.max(a1 + a2, aC, derived);
 
-        rows.sort(
-          (a, b) =>
-            b.goals + b.assists - (a.goals + a.assists) ||
-            b.goals - a.goals ||
-            a.playerName.localeCompare(b.playerName)
-        );
+    const points = g + assists;
 
-        const isSelf = currentUid && item.uid === currentUid;
-        const cardBg = isSelf ? colors.card2 : colors.card;
-        const cardBorder = isSelf ? colors.primary : colors.border;
+    rows.push({
+      playerId: pid,
+      playerName:
+        playerMap[pid]?.fullName ?? p?.fullName ?? p?.name ?? 'Joueur',
+      teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
+      goals: g,
+      assists,
+      points,
+    });
+  }
 
-        return (
-          <View
-            key={item.uid}
-            style={{
-              paddingVertical: 12,
-              paddingHorizontal: 10,
-              backgroundColor: cardBg,
-              borderWidth: 1,
-              borderColor: cardBorder,
-              borderRadius: 10,
-              marginBottom: 12,
-            }}
-          >
-            {/* En-tête participant */}
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Avatar uri={photo} size={48} />
-              <View style={{ flex: 1 }}>
-                <Text
-                  numberOfLines={1}
-                  style={{ fontWeight: '700', color: colors.text }}
-                >
-                  {name}
-                </Text>
-              </View>
+  rows.sort(
+    (a, b) =>
+      Number(b.points || 0) - Number(a.points || 0) ||
+      Number(b.goals || 0) - Number(a.goals || 0) ||
+      a.playerName.localeCompare(b.playerName)
+  );
+
+  // ✅ IMPORTANT: totalPoints DOIT être ici, dans le map()
+  const totalPoints = rows.reduce((s, r) => s + (Number(r.points) || 0), 0);
+
+  const isSelf = currentUid && item.uid === currentUid;
+  const cardBg = isSelf ? colors.card2 : colors.card;
+  const cardBorder = isSelf ? colors.primary : colors.border;
+
+return (
+  <View
+    key={item.uid}
+    style={{
+      paddingVertical: 12,
+      paddingHorizontal: 10,
+      backgroundColor: isSelf ? colors.card2 : colors.card,
+      borderWidth: 1,
+      borderColor: isSelf ? colors.primary : colors.border, // 🔴 bordure participant courant
+      borderRadius: 12,
+      marginBottom: 12,
+    }}
+  >
+    {/* Header */}
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Avatar uri={photo} size={48} />
+      <View style={{ flex: 1 }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontWeight: "700", color: colors.text }}
+        >
+          {name}
+        </Text>
+      </View>
+
+      {/* totalPoints = livePoints (ou calc si tu veux) */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 6,
+        }}
+      >
+        <MaterialCommunityIcons
+          name="star-circle"
+          size={22}
+          color={colors.text}
+        />
+        <Text style={{ fontSize: 20, fontWeight: "800", color: colors.text }}>
+          {Number(item.livePoints || 0).toFixed(0)}
+        </Text>
+      </View>
+    </View>
+
+    {/* Rows */}
+    {!hideOthersPicks || isSelf ? (
+      <View style={{ marginTop: 10 }}>
+        {rows.map((row) => {
+          const goals = Number(row.goals) || 0;
+          const assists = Number(row.assists) || 0;
+          const points = goals + assists;
+
+          return (
+            <View
+              key={row.playerId}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingVertical: 6,
+              }}
+            >
+              {/* Logo équipe (UNE seule fois) */}
               <View
                 style={{
-                  width: 72,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: 6,
+                  width: 28,
+                  height: 28,
+                  marginRight: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                <MaterialCommunityIcons
-                  name="star-circle"
-                  size={24}
-                  color={colors.text}
-                />
-                <Text
-                  style={{
-                    fontSize: 20,
-                    fontWeight: '800',
-                    color: colors.text,
-                  }}
-                >
-                  {Number(item.livePoints || 0).toFixed(1)}
-                </Text>
+                {row.teamAbbr ? (
+                  <SvgUri
+                    uri={teamLogoUrl(row.teamAbbr)}
+                    width={28}
+                    height={28}
+                  />
+                ) : (
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor: colors.border,
+                    }}
+                  />
+                )}
               </View>
-            </View>
 
-            {/* Liste joueurs */}
-            {rows.length > 0 ? (
-              hideOthersPicks && !isSelf ? (
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    marginTop: 6,
-                    fontStyle: 'italic',
-                  }}
-                >
-                  {i18n.t(
-                    'defi.results.participants.hiddenSelections'
-                  )}
-                </Text>
-              ) : (
-                <View style={{ marginTop: 8, gap: 6 }}>
-                  {rows.map((row) => {
-                    const total = row.goals + row.assists;
-                    return (
-                      <View
-                        key={row.playerId}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingVertical: 6,
-                        }}
-                      >
-                        <View
-                          style={{
-                            width: 28,
-                            height: 28,
-                            marginRight: 10,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {row.teamAbbr ? (
-                            <SvgUri
-                              uri={teamLogoUrl(row.teamAbbr)}
-                              width={28}
-                              height={28}
-                            />
-                          ) : (
-                            <View
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 14,
-                                backgroundColor: colors.card2,
-                              }}
-                            />
-                          )}
-                        </View>
-                        <View style={{ flex: 1, marginRight: 8 }}>
-                          <Text
-                            numberOfLines={1}
-                            style={{ color: colors.text }}
-                          >
-                            {row.playerName}
-                          </Text>
-                        </View>
-                        <Text
-                          style={{
-                            fontWeight: '700',
-                            color: colors.text,
-                            minWidth: 72,
-                            textAlign: 'right',
-                          }}
-                        >
-                          {`${row.goals} – ${row.assists} = ${total}`}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )
-            ) : (
+              {/* Nom */}
+              <Text
+                numberOfLines={1}
+                style={{
+                  flex: 1,
+                  color: colors.text,
+                  fontSize: 14,
+                  fontWeight: "600",
+                  marginRight: 10,
+                }}
+              >
+                {row.playerName}
+              </Text>
+
+              {/* Stats à droite */}
               <Text
                 style={{
-                  color: colors.subtext,
-                  marginTop: 6,
+                  minWidth: 86,
+                  textAlign: "right",
+                  fontWeight: "800",
+                  color: colors.text,
+                  fontVariant: ["tabular-nums"],
                 }}
               >
-                {i18n.t('defi.results.participants.noPlayers')}
+                {`${goals}-${assists}=${points}`}
               </Text>
-            )}
-          </View>
-        );
-      })}
+            </View>
+          );
+        })}
+      </View>
+    ) : (
+      <Text
+        style={{
+          color: colors.subtext,
+          marginTop: 10,
+          fontStyle: "italic",
+        }}
+      >
+        {i18n.t("defi.results.participants.hiddenSelections")}
+      </Text>
+    )}
+  </View>
+);
+})}
     </View>
   );
 }

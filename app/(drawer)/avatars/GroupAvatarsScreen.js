@@ -62,6 +62,28 @@ function Chip({ icon, color, bg, label }) {
   );
 }
 
+// ✅ Détecte si un groupe est archivé selon plusieurs schémas possibles
+function isGroupArchived(g) {
+  if (!g) return false;
+
+  // bool explicite
+  if (g.archived === true) return true;
+  if (g.isArchived === true) return true;
+
+  // status string
+  const status = String(g.status || '').toLowerCase();
+  if (status === 'archived') return true;
+
+  // timestamps
+  if (g.archivedAt) return true;
+  if (g.archivedOn) return true;
+
+  // certains modèles mettent une date de fin / disabled
+  if (g.disabled === true) return true;
+
+  return false;
+}
+
 export default function GroupAvatarsScreen() {
   const params = useLocalSearchParams();
   const groupId = useMemo(
@@ -110,9 +132,7 @@ export default function GroupAvatarsScreen() {
       () => setLoadingMe(false)
     );
     return () => {
-      try {
-        unsub();
-      } catch {}
+      try { unsub(); } catch {}
     };
   }, [user?.uid]);
 
@@ -133,11 +153,11 @@ export default function GroupAvatarsScreen() {
       () => setLoadingGroup(false)
     );
     return () => {
-      try {
-        unsub();
-      } catch {}
+      try { unsub(); } catch {}
     };
   }, [groupId]);
+
+  const groupArchived = useMemo(() => isGroupArchived(group), [group]);
 
   // Catalog (group avatars)
   useEffect(() => {
@@ -157,9 +177,7 @@ export default function GroupAvatarsScreen() {
       }
     );
     return () => {
-      try {
-        unsub();
-      } catch {}
+      try { unsub(); } catch {}
     };
   }, []);
 
@@ -171,21 +189,13 @@ export default function GroupAvatarsScreen() {
     if (typeof meDoc.balance === 'number') return meDoc.balance;
 
     if (meDoc.credits && typeof meDoc.credits === 'object') {
-      if (typeof meDoc.credits.balance === 'number')
-        return meDoc.credits.balance;
-      if (
-        typeof meDoc.credits.total === 'number' &&
-        typeof meDoc.credits.spent === 'number'
-      ) {
+      if (typeof meDoc.credits.balance === 'number') return meDoc.credits.balance;
+      if (typeof meDoc.credits.total === 'number' && typeof meDoc.credits.spent === 'number') {
         return meDoc.credits.total - meDoc.credits.spent;
       }
     }
 
-    if (
-      meDoc.wallets &&
-      meDoc.wallets.main &&
-      typeof meDoc.wallets.main.balance === 'number'
-    ) {
+    if (meDoc.wallets && meDoc.wallets.main && typeof meDoc.wallets.main.balance === 'number') {
       return meDoc.wallets.main.balance;
     }
     if (typeof meDoc.creditBalance === 'number') return meDoc.creditBalance;
@@ -212,11 +222,21 @@ export default function GroupAvatarsScreen() {
     !!group &&
     (group.ownerId === user.uid ||
       group.createdBy === user.uid ||
-      String(group.ownerUid || '').toLowerCase() ===
-        String(user.uid).toLowerCase() ||
+      String(group.ownerUid || '').toLowerCase() === String(user.uid).toLowerCase() ||
       (Array.isArray(group.admins) && group.admins.includes(user.uid)));
 
   async function handleBuy() {
+    // ✅ Blocage UI si groupe archivé (bug actuel)
+    if (groupArchived) {
+      return Alert.alert(
+        i18n.t('groupAvatars.alerts.archivedTitle', 'Groupe archivé'),
+        i18n.t(
+          'groupAvatars.alerts.archivedBody',
+          'Ce groupe est archivé. Tu ne peux pas changer l’avatar.'
+        )
+      );
+    }
+
     if (!user?.uid) {
       return Alert.alert(
         i18n.t('groupAvatars.alerts.loginRequiredTitle', 'Connexion requise'),
@@ -350,19 +370,30 @@ export default function GroupAvatarsScreen() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   marginTop: 8,
+                  gap: 10,
                 }}
               >
-                <Chip
-                  icon={canManage ? 'shield-check' : 'lock'}
-                  // note: couleurs simples; tu peux les rendre theme-aware si tu veux
-                  color={canManage ? '#065F46' : '#991B1B'}
-                  bg={canManage ? '#ECFDF5' : '#FEE2E2'}
-                  label={
-                    canManage
-                      ? i18n.t('groupAvatars.access.owner', 'Tu es propriétaire')
-                      : i18n.t('groupAvatars.access.readOnly', 'Lecture seule')
-                  }
-                />
+                <View style={{ gap: 6 }}>
+                  <Chip
+                    icon={canManage ? 'shield-check' : 'lock'}
+                    color={canManage ? '#065F46' : '#991B1B'}
+                    bg={canManage ? '#ECFDF5' : '#FEE2E2'}
+                    label={
+                      canManage
+                        ? i18n.t('groupAvatars.access.owner', 'Tu es propriétaire')
+                        : i18n.t('groupAvatars.access.readOnly', 'Lecture seule')
+                    }
+                  />
+
+                  {groupArchived && (
+                    <Chip
+                      icon="archive"
+                      color="#92400E"
+                      bg="#FEF3C7"
+                      label={i18n.t('groupAvatars.access.archived', 'Groupe archivé')}
+                    />
+                  )}
+                </View>
 
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={{ fontSize: 12, color: colors.subtext }}>
@@ -434,10 +465,12 @@ export default function GroupAvatarsScreen() {
                       : DEFAULT_PRICE
                     : DEFAULT_PRICE;
 
-                  const disabled = busy || !selectedItem || !canManage;
+                  const disabled = busy || !selectedItem || !canManage || groupArchived;
 
                   const btnLabel = busy
                     ? i18n.t('groupAvatars.actions.processing', 'Traitement…')
+                    : groupArchived
+                    ? i18n.t('groupAvatars.actions.archivedDisabled', 'Groupe archivé')
                     : selectedItem
                     ? i18n.t('groupAvatars.actions.buyForGroup', {
                         defaultValue: 'Acheter pour le groupe ({{price}} crédits)',
@@ -469,6 +502,15 @@ export default function GroupAvatarsScreen() {
                     </TouchableOpacity>
                   );
                 })()}
+
+                {groupArchived && (
+                  <Text style={{ marginTop: 10, color: colors.subtext, fontSize: 12, textAlign: 'center' }}>
+                    {i18n.t(
+                      'groupAvatars.hints.archivedExplain',
+                      'Ce groupe est archivé : les modifications (avatar, achats, etc.) sont désactivées.'
+                    )}
+                  </Text>
+                )}
               </View>
             </View>
 

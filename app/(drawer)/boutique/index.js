@@ -39,6 +39,24 @@ function dedupeById(arr) {
   return Array.from(m.values());
 }
 
+// ✅ Archivé? (même logique que CF)
+function isArchivedGroup(g) {
+  if (!g) return false;
+
+  if (g.archived === true) return true;
+  if (g.isArchived === true) return true;
+
+  const status = String(g.status || '').toLowerCase();
+  if (status === 'archived') return true;
+
+  if (g.archivedAt) return true;
+  if (g.archivedOn) return true;
+
+  if (g.disabled === true) return true;
+
+  return false;
+}
+
 // hook: groupes dont je suis owner (couvre plusieurs schémas)
 function useOwnedGroups(uid) {
   const [owned, setOwned] = React.useState([]);
@@ -218,6 +236,7 @@ export default function BoutiqueScreen() {
   const headerTitle = i18n.t('boutique.title', 'Boutique');
 
   // Fusion: tout groupe dont je suis owner, qu'il vienne de useGroups ou du hook owned
+  // ✅ + filtre des groupes archivés
   const groupsOwned = React.useMemo(() => {
     const ownedFromMembership = (groups || []).filter((g) => {
       const role = String(g.role || '').toLowerCase();
@@ -229,7 +248,10 @@ export default function BoutiqueScreen() {
       );
     });
 
-    return dedupeById([...(ownedGroups || []), ...ownedFromMembership]);
+    const merged = dedupeById([...(ownedGroups || []), ...ownedFromMembership]);
+
+    // ✅ Exclure archivés
+    return merged.filter((g) => !isArchivedGroup(g));
   }, [groups, ownedGroups, user?.uid]);
 
   // 👂 Participant live (réagit aux changements d’avatar)
@@ -408,7 +430,7 @@ export default function BoutiqueScreen() {
             <Text style={styles.textSubtle}>
               {i18n.t(
                 'boutique.groupsCard.emptyOwner',
-                'Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.'
+                'Tu n’es propriétaire d’aucun groupe actif. Crée-en un dans l’onglet Groupes.'
               )}
             </Text>
           ) : (

@@ -2,7 +2,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, FieldValue, logger } from "../utils.js";
 import { APP_TZ, toYmdInTz, addDaysToYmd } from "../ProphetikDate.js";
-import { grantCreditsTx } from "./credits/grantCredits.js"; // ajuste le path si besoin
+import { grantCreditsTx } from "./grantCredits.js"; // ajuste le path si besoin
 
 const MONTHLY_CAP_DEFAULT = 10;
 

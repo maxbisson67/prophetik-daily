@@ -5,7 +5,9 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Vibration
+  Vibration,
+  Animated,
+  Easing,
 } from "react-native";
 import { Accelerometer, Gyroscope } from "expo-sensors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -18,6 +20,7 @@ const UPDATE_MS = 80;
 const ACC_THRESHOLD = 2.2;
 const GYRO_THRESHOLD = 3.0;
 const COOLDOWN_MS = 2500;
+const ORBIT_DURATION = 900;
 
 /* -------------------- API -------------------- */
 async function callDailyShotBonus(payload) {
@@ -41,12 +44,9 @@ function mag3({ x = 0, y = 0, z = 0 }) {
 }
 
 function hapticShot() {
-  if (Platform.OS === "ios") {
-    Vibration.vibrate(20);
-  } else {
-    Vibration.vibrate(30);
-  }
+  Vibration.vibrate(Platform.OS === "ios" ? 20 : 30);
 }
+
 /* -------------------- COMPONENT -------------------- */
 export default function DailyShotCard({
   monthlyCap = 10,
@@ -57,6 +57,7 @@ export default function DailyShotCard({
 
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showFx, setShowFx] = useState(false);
 
   const [acc, setAcc] = useState({ x: 0, y: 0, z: 0 });
   const [gyro, setGyro] = useState({ x: 0, y: 0, z: 0 });
@@ -64,44 +65,46 @@ export default function DailyShotCard({
   const [progress, setProgress] = useState({
     creditsGranted: 0,
     monthlyCap,
-    periodKey: null,
-    nextAvailableDay: null,
-    status: "idle", // idle | already_today | cap_reached | ok
+    status: "idle",
   });
 
   const lastTriggerAtRef = useRef(0);
+  const orbitAnim = useRef(new Animated.Value(0)).current;
 
   const accMag = useMemo(() => mag3(acc), [acc]);
   const gyroMag = useMemo(() => mag3(gyro), [gyro]);
 
-  /* ---------- START sensors on mount ---------- */
+  /* ---------- START sensors ---------- */
   useEffect(() => {
-    let subA = null;
-    let subG = null;
+    let subA, subG;
+    try {
+      Accelerometer.setUpdateInterval(UPDATE_MS);
+      Gyroscope.setUpdateInterval(UPDATE_MS);
 
-    async function start() {
-      try {
-        Accelerometer.setUpdateInterval(UPDATE_MS);
-        Gyroscope.setUpdateInterval(UPDATE_MS);
-
-        subA = Accelerometer.addListener((d) => setAcc(d || {}));
-        subG = Gyroscope.addListener((d) => setGyro(d || {}));
-
-        setListening(true);
-      } catch {
-        setListening(false);
-      }
-    }
-
-    function stop() {
-      try { subA?.remove?.(); } catch {}
-      try { subG?.remove?.(); } catch {}
+      subA = Accelerometer.addListener((d) => setAcc(d || {}));
+      subG = Gyroscope.addListener((d) => setGyro(d || {}));
+      setListening(true);
+    } catch {
       setListening(false);
     }
-
-    start();
-    return () => stop();
+    return () => {
+      subA?.remove?.();
+      subG?.remove?.();
+    };
   }, []);
+
+  /* ---------- FX animation ---------- */
+  function playFx() {
+    setShowFx(true);
+    orbitAnim.setValue(0);
+
+    Animated.timing(orbitAnim, {
+      toValue: 1,
+      duration: ORBIT_DURATION,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setShowFx(false));
+  }
 
   /* ---------- Detect shot ---------- */
   useEffect(() => {
@@ -115,25 +118,21 @@ export default function DailyShotCard({
 
     lastTriggerAtRef.current = now;
 
-    // 🔔 VIBRATION COURTE AU TRIGGER
     hapticShot();
-
+    playFx();
     attemptGrant();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accMag, gyroMag, listening, busy]);
 
-  /* ---------- Grant logic ---------- */
+  /* ---------- Grant ---------- */
   async function attemptGrant() {
     try {
       setBusy(true);
-
       const data = await callDailyShotBonus({ monthlyCap });
 
       setProgress({
         creditsGranted: data?.creditsGranted ?? progress.creditsGranted,
         monthlyCap: data?.monthlyCap ?? monthlyCap,
-        periodKey: data?.periodKey ?? null,
-        nextAvailableDay: data?.nextAvailableDay ?? null,
         status: "ok",
       });
 
@@ -147,28 +146,15 @@ export default function DailyShotCard({
         })
       );
     } catch (e) {
-      const code = e?.code || "";
       const msg = e?.message || "";
-      const details = e?.details || {};
-
-      if (code === "failed-precondition" && msg === "ALREADY_TAKEN_TODAY") {
-        setProgress((p) => ({
-          ...p,
-          ...details,
-          status: "already_today",
-        }));
+      if (msg === "ALREADY_TAKEN_TODAY") {
+        setProgress((p) => ({ ...p, status: "already_today" }));
         return;
       }
-
-      if (code === "failed-precondition" && msg === "MONTHLY_CAP_REACHED") {
-        setProgress((p) => ({
-          ...p,
-          ...details,
-          status: "cap_reached",
-        }));
+      if (msg === "MONTHLY_CAP_REACHED") {
+        setProgress((p) => ({ ...p, status: "cap_reached" }));
         return;
       }
-
       Alert.alert(i18n.t("common.unknownError", "Unknown error"), msg);
     } finally {
       setBusy(false);
@@ -176,61 +162,94 @@ export default function DailyShotCard({
   }
 
   /* ---------- UI ---------- */
-  const title = i18n.t("home.dailyShotTitle", "Daily shot bonus");
-
-  const granted = Number(progress.creditsGranted || 0);
-  const cap = Number(progress.monthlyCap || monthlyCap);
+  const granted = progress.creditsGranted;
+  const cap = progress.monthlyCap;
   const pct = cap > 0 ? Math.min(100, Math.round((granted / cap) * 100)) : 0;
+
+  const spin = orbitAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
 
   return (
     <View
       style={{
+        position: "relative",
         padding: variant === "compact" ? 12 : 14,
         borderWidth: 1,
         borderRadius: 12,
         backgroundColor: colors.card,
         borderColor: colors.border,
+        overflow: "hidden",
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <View
+      {/* FX ORBIT */}
+      {showFx && (
+        <Animated.View
+          pointerEvents="none"
           style={{
-            width: 38,
-            height: 38,
-            borderRadius: 10,
-            backgroundColor: colors.card2,
-            alignItems: "center",
-            justifyContent: "center",
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            width: 120,
+            height: 120,
+            marginLeft: -60,
+            marginTop: -60,
+            transform: [{ rotate: spin }],
+            opacity: 0.9,
           }}
         >
-          <MaterialCommunityIcons
-            name="hockey-sticks"
-            size={20}
-            color={colors.text}
-          />
-        </View>
+          {[
+            { icon: "hockey-puck", x: 0, y: -48 },
+            { icon: "baseball", x: 48, y: 0 },
+            { icon: "basketball", x: 0, y: 48 },
+            { icon: "football", x: -48, y: 0 },
+          ].map((s, i) => (
+            <View
+              key={i}
+              style={{
+                position: "absolute",
+                left: 60 + s.x - 14,
+                top: 60 + s.y - 14,
+              }}
+            >
+              <MaterialCommunityIcons
+                name={s.icon}
+                size={28}
+                color={colors.primary}
+              />
+            </View>
+          ))}
+        </Animated.View>
+      )}
 
+      {/* HEADER */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <MaterialCommunityIcons
+          name="gesture-swipe"
+          size={22}
+          color={colors.text}
+        />
         <View style={{ flex: 1 }}>
           <Text style={{ fontWeight: "900", color: colors.text }}>
-            {title}
+            {i18n.t("home.dailyShotTitle", "Daily shot bonus")}
           </Text>
-         <Text style={{ color: colors.subtext, fontSize: 12 }}>
+          <Text style={{ color: colors.subtext, fontSize: 12 }}>
             {i18n.t("home.dailyShotMonthlyCap", {
-                current: granted,
-                max: cap,
+              current: granted,
+              max: cap,
             })}
-        </Text>
+          </Text>
         </View>
-
         {busy && <ActivityIndicator />}
       </View>
 
-      {/* Progress bar */}
+      {/* PROGRESS */}
       <View
         style={{
           height: 8,
           borderRadius: 99,
-          backgroundColor: "#f3f4f6",
+          backgroundColor: "#e5e7eb",
           marginTop: 10,
           overflow: "hidden",
         }}
@@ -239,7 +258,6 @@ export default function DailyShotCard({
           style={{
             width: `${pct}%`,
             height: 8,
-            borderRadius: 99,
             backgroundColor: "#ef4444",
           }}
         />
@@ -247,21 +265,12 @@ export default function DailyShotCard({
 
       <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8 }}>
         {progress.status === "already_today"
-          ? i18n.t(
-              "home.dailyShotAlreadyTaken",
-              "Already claimed today. Come back tomorrow."
-            )
+          ? i18n.t("home.dailyShotAlreadyTaken")
           : progress.status === "cap_reached"
-          ? i18n.t(
-              "home.dailyShotCapReached",
-              "Monthly limit reached. Come back next month."
-            )
+          ? i18n.t("home.dailyShotCapReached")
           : listening
-          ? i18n.t(
-              "home.dailyShotHint",
-              "Shake your phone like a shot to earn +1 credit."
-            )
-          : i18n.t("home.dailyShotLoading", "Sensors loading…")}
+          ? i18n.t("home.dailyShotHint")
+          : i18n.t("home.dailyShotLoading")}
       </Text>
     </View>
   );

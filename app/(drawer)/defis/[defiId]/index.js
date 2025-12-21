@@ -42,6 +42,8 @@ import { useTheme } from '@src/theme/ThemeProvider';
 // ✅ i18n
 import i18n from '@src/i18n/i18n';
 
+import { getDefiRules, validatePicks, getTierByIndex } from '@src/credits/tiersRules';
+
 /* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
   ANA: require('../../../../assets/nhl-logos/ANA.png'),
@@ -206,6 +208,44 @@ function headshotUrl(abbr, playerId) {
     : null;
 }
 
+
+function TierBadge({ tier }) {
+  const { colors } = useTheme();
+  const t = String(tier || 'T3');
+
+  const styles = {
+    T1: { bg: 'rgba(245,158,11,0.14)', border: 'rgba(245,158,11,0.35)', fg: '#b45309' }, // amber
+    T2: { bg: 'rgba(59,130,246,0.14)', border: 'rgba(59,130,246,0.35)', fg: '#1d4ed8' }, // blue
+    T3: { bg: 'rgba(107,114,128,0.14)', border: colors.border, fg: colors.subtext },     // neutral
+  }[t] || { bg: 'rgba(107,114,128,0.14)', border: colors.border, fg: colors.subtext };
+
+  return (
+    <View
+      style={{
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 999,
+        backgroundColor: styles.bg,
+        borderWidth: 1,
+        borderColor: styles.border,
+        alignSelf: 'center',
+        transform: [{ translateY: 1 }],
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 12,
+          fontWeight: '800',
+          color: styles.fg,
+          lineHeight: 14,
+        }}
+      >
+        {t}
+      </Text>
+    </View>
+  );
+}
+
 /* --------------------------- API NHL --------------------------- */
 async function fetchGamesOn(ymd) {
   try {
@@ -311,7 +351,7 @@ function ttlForSeason(seasonId, now = new Date()) {
 }
 
 // ✅ Version du cache (augmente si structure change)
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const cacheKeyForSeason = (seasonId) =>
   `${CACHE_VERSION}_nhl_stats_current_${seasonId}`;
 
@@ -331,21 +371,32 @@ async function loadAllSkaterStatsForSeason(seasonId) {
 
       snap.forEach((docSnap) => {
         const s = docSnap.data() || {};
-        const pid = String(s.playerId ?? '');
+        const pid = String(s.playerId ?? "");
         if (!pid) return;
+
         const g = Number(s.goals ?? 0);
         const a = Number(s.assists ?? 0);
-        const p = Number.isFinite(s.points) ? Number(s.points) : g + a;
+        const pts = Number.isFinite(s.points) ? Number(s.points) : g + a;
+
+        const coeff = Number(s.coeff);
+        const safeCoeff = Number.isFinite(coeff) ? coeff : 1;
+
         map[pid] = {
           goals: g,
           assists: a,
-          points: p,
-          teamAbbr: s.teamAbbr ?? null,
-          fullName: s.fullName ?? null,
+          points: pts,
+
+          // ✅ champs d’ingestion (ton nhlIngest écrit skaterFullName / teamAbbrevs)
+          teamAbbr: (s.teamAbbrevs ?? s.teamAbbr ?? "").toUpperCase() || null,
+          fullName: s.skaterFullName ?? s.fullName ?? null,
+
+          // ✅ nouveau
+          coeff: safeCoeff,
+          positionCode: s.positionCode ?? null,
+
           playerId: pid,
         };
       });
-
       const last = snap.docs[snap.docs.length - 1];
       pageQ = firestore()
         .collection('nhl_player_stats_current')
@@ -371,18 +422,29 @@ async function loadAllSkaterStatsForSeason(seasonId) {
         if (snap.empty) break;
         snap.forEach((docSnap) => {
           const s = docSnap.data() || {};
-          if (String(s.seasonId) !== String(seasonId)) return;
-          const pid = String(s.playerId ?? '');
+          const pid = String(s.playerId ?? "");
           if (!pid) return;
+
           const g = Number(s.goals ?? 0);
           const a = Number(s.assists ?? 0);
-          const p = Number.isFinite(s.points) ? Number(s.points) : g + a;
+          const pts = Number.isFinite(s.points) ? Number(s.points) : g + a;
+
+          const coeff = Number(s.coeff);
+          const safeCoeff = Number.isFinite(coeff) ? coeff : 1;
+
           map[pid] = {
             goals: g,
             assists: a,
-            points: p,
-            teamAbbr: s.teamAbbr ?? null,
-            fullName: s.fullName ?? null,
+            points: pts,
+
+            // ✅ champs d’ingestion (ton nhlIngest écrit skaterFullName / teamAbbrevs)
+            teamAbbr: (s.teamAbbrevs ?? s.teamAbbr ?? "").toUpperCase() || null,
+            fullName: s.skaterFullName ?? s.fullName ?? null,
+
+            // ✅ nouveau
+            coeff: safeCoeff,
+            positionCode: s.positionCode ?? null,
+
             playerId: pid,
           };
         });
@@ -649,12 +711,12 @@ function PlayerSelectModal({ visible, onClose, options, onPick }) {
                     color: colors.subtext,
                   }}
                 >
-                  {(item.goals ?? 0) +
-                    '-' +
-                    (item.assists ?? 0) +
-                    '-' +
-                    (item.points ?? 0)}
+                  {(item.goals ?? 0) + "-" + (item.assists ?? 0) + "-" + (item.points ?? 0)}
                 </Text>
+
+                <View style={{ marginLeft: 10 }}>
+                  <TierBadge tier={item.tier} />
+                </View>
               </TouchableOpacity>
             )}
           />
@@ -663,6 +725,7 @@ function PlayerSelectModal({ visible, onClose, options, onPick }) {
     </Modal>
   );
 }
+
 
 /* ----------------------- Ligne de sélection ---------------------- */
 function PlayerPickerRow({ label, value, onEdit, locked }) {
@@ -719,6 +782,14 @@ function PlayerPickerRow({ label, value, onEdit, locked }) {
               {value.fullName}{' '}
               {value.teamAbbr ? `• ${value.teamAbbr}` : ''}
             </Text>
+             {/* ✅ Stats + coeff sous le nom */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                {(value.goals ?? 0) + "-" + (value.assists ?? 0) + "-" + (value.points ?? 0)}
+                {value.rank ? `  •  #${value.rank}` : ''}
+              </Text>
+              <TierBadge tier={value.tier} />
+            </View>
           </View>
           {!locked && (
             <TouchableOpacity
@@ -1051,26 +1122,63 @@ export default function DefiParticipationScreen() {
     return base;
   }, [defi]);
 
-  const playersWithStats = useMemo(() => {
-    const arr = (players || []).map((p) => {
-      const st = statsById[String(p.playerId)] || {};
-      const g = Number(st.goals ?? 0);
-      const a = Number(st.assists ?? 0);
-      const pts = Number.isFinite(st.points) ? Number(st.points) : g + a;
-      return {
-        ...p,
-        goals: g,
-        assists: a,
-        points: pts,
-      };
-    });
-    arr.sort(
-      (x, y) =>
-        Number(y.points ?? 0) - Number(x.points ?? 0) ||
-        String(x.fullName || '').localeCompare(String(y.fullName || ''))
-    );
-    return arr;
-  }, [players, statsById]);
+const playersWithStats = useMemo(() => {
+  const arr = (players || []).map((p) => {
+    const st = statsById[String(p.playerId)] || {};
+    const g = Number(st.goals ?? 0);
+    const a = Number(st.assists ?? 0);
+    const pts = Number.isFinite(st.points) ? Number(st.points) : g + a;
+    return {
+      ...p,
+      goals: g,
+      assists: a,
+      points: pts,
+      positionCode: st.positionCode ?? null,
+    };
+  });
+
+  // tri par points (desc)
+  arr.sort(
+    (x, y) =>
+      Number(y.points ?? 0) - Number(x.points ?? 0) ||
+      String(x.fullName || '').localeCompare(String(y.fullName || ''))
+  );
+
+  // ✅ ajoute rank + tier (sur la liste du soir)
+  return arr.map((p, idx) => ({
+    ...p,
+    rank: idx + 1,
+    tier: getTierByIndex(idx),
+  }));
+}, [players, statsById]);
+
+const tierById = useMemo(() => {
+  const m = {};
+  for (const p of playersWithStats) {
+    if (p?.playerId) m[String(p.playerId)] = { tier: p.tier, rank: p.rank };
+  }
+  return m;
+}, [playersWithStats]);
+
+const selectedWithStats = useMemo(() => {
+  return (selected || []).map((p) => {
+    if (!p?.playerId) return p;
+    const st = statsById[String(p.playerId)] || {};
+    const g = Number(st.goals ?? 0);
+    const a = Number(st.assists ?? 0);
+    const pts = Number.isFinite(st.points) ? Number(st.points) : g + a;
+
+    const extra = tierById[String(p.playerId)] || {};
+    return {
+      ...p,
+      goals: g,
+      assists: a,
+      points: pts,
+      tier: extra.tier || 'T3',
+      rank: extra.rank || null,
+    };
+  });
+}, [selected, statsById, tierById]);
 
   const openPicker = useCallback((index) => {
     setPickerIndex(index);
@@ -1078,29 +1186,63 @@ export default function DefiParticipationScreen() {
     Keyboard.dismiss();
   }, []);
 
-  const handlePick = useCallback(
-    (p) => {
-      setSelected((prev) => {
-        const alreadyUsed = prev.some(
-          (pl, idx) => pl?.playerId === p.playerId && idx !== pickerIndex
+const handlePick = useCallback(
+  (p) => {
+    const rules = getDefiRules(defi?.type);
+
+    setSelected((prev) => {
+      // ✅ duplicate player (déjà chez toi)
+      const alreadyUsed = prev.some(
+        (pl, idx) => pl?.playerId === p.playerId && idx !== pickerIndex
+      );
+      if (alreadyUsed) {
+        Alert.alert(
+          i18n.t('defi.alerts.playerDuplicateTitle'),
+          i18n.t('defi.alerts.playerDuplicateMessage', { name: p.fullName }),
+          [{ text: i18n.t('common.ok') }]
         );
-        if (alreadyUsed) {
-          Alert.alert(
-            i18n.t('defi.alerts.playerDuplicateTitle'),
-            i18n.t('defi.alerts.playerDuplicateMessage', {
-              name: p.fullName,
-            }),
-            [{ text: i18n.t('common.ok') }]
-          );
-          return prev;
+        return prev;
+      }
+
+      // ✅ on simule le remplacement
+      const next = [...prev];
+      next[pickerIndex] = p;
+
+      // on ne valide que les picks choisis (évite null)
+      const chosen = next.filter(Boolean);
+
+      // ✅ règle “picks exact” : on attend d’avoir le bon nombre avant de valider
+      if (chosen.length === rules.picks) {
+        const err = validatePicks(chosen, rules);
+        if (err) {
+          Alert.alert('Règles de tiers', err, [{ text: 'OK' }]);
+          return prev; // refuse le pick
         }
-        const next = [...prev];
-        next[pickerIndex] = p;
-        return next;
-      });
-    },
-    [pickerIndex]
-  );
+      } else {
+        // ✅ blocage immédiat si on dépasse un quota de tier (ex: 2e T1)
+        const count = { T1: 0, T2: 0, T3: 0 };
+        for (const pl of chosen) {
+          const t = pl?.tier || 'T3';
+          count[t] = (count[t] || 0) + 1;
+        }
+
+        for (const tier of ['T1', 'T2', 'T3']) {
+          if (count[tier] > rules[tier]) {
+            Alert.alert(
+              'Règles de tiers',
+              `Tu as dépassé la limite ${tier} (${rules[tier]} max) pour ce défi.`,
+              [{ text: 'OK' }]
+            );
+            return prev; // refuse le pick
+          }
+        }
+      }
+
+      return next; // ✅ accepte
+    });
+  },
+  [pickerIndex, defi?.type]
+);
 
   const allChosen = useMemo(
     () => selected.filter(Boolean).length === maxChoices,
@@ -1531,13 +1673,22 @@ export default function DefiParticipationScreen() {
             >
               {i18n.t('defi.pickersCard.title')}
             </Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+            <TierBadge tier="T1" />
+            <TierBadge tier="T2" />
+            <TierBadge tier="T3" />
+          </View>
+          <Text style={{ textAlign: 'center', color: colors.subtext, fontSize: 12, marginBottom: 8 }}>
+            T1 = Top 10 • T2 = 11–20 • T3 = 21+
+          </Text>
             {Array.from({ length: maxChoices }).map((_, i) => (
               <PlayerPickerRow
                 key={`choice-${i}`}
                 label={i18n.t('defi.pickersCard.choiceLabel', {
                   index: i + 1,
                 })}
-                value={selected[i]}
+                value={selectedWithStats[i]} 
                 onEdit={() => {
                   openPicker(i);
                 }}
