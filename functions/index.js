@@ -45,4 +45,6 @@ export { updateNhlLiveGamesNow, updateNhlLiveGamesCron} from "./nhlLive.js"
 
 // Credits et dailyShotBonus
 export { dailyShotBonus} from "./credits/dailyShotBonus.js"
-export { purchaseCreditsMock } from "./credits/purchaseCreditsMock.js";
+export { purchaseCredits } from "./credits/purchaseCredits.js";
+
+export { revenuecatWebhook } from "./credits/revenuecatWebhook.js";

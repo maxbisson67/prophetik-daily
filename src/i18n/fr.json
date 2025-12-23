@@ -483,7 +483,13 @@
         "pickersCard": {
             "title": "Sélectionne tes joueurs",
             "choiceLabel": "Choix {{index}}",
-            "summary": "{{current}}/{{max}} sélection(s)"
+            "summary": "{{current}}/{{max}} sélection(s)",
+            "requirementsPrefix": "Tu dois choisir :"
+        }, 
+        "rules": {
+            "wrongPickCount": "Tu dois sélectionner exactement {{expected}} joueurs.",
+            "tierMissingCount": "Il te manque {{missing}} {{tierLabel}}.",
+            "tierTooMany": "Tu as dépassé la limite {{tierLabel}} (max {{max}})."
         },
         "errors": {
             "notFoundMessage": "Aucun défi trouvé."

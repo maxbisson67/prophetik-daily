@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,39 +7,146 @@ import {
   Alert,
   Pressable,
   Platform,
+  Animated,
+  ToastAndroid,
+  Easing,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { app } from "@src/lib/firebase";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import Purchases from "react-native-purchases";
 
-// ✅ Packs alignés sur le backend (functions/credits/packs.js)
+// ✅ Packs (UI/bonus). Le prix vient de RevenueCat.
 const PACKS = [
-  { id: "credits_25", credits: 25, bonus: 0, priceCents: 499, tagKey: "credits.wallet.packs.starter", tagFallback: "Starter" },
-  { id: "credits_75", credits: 75, bonus: 5, priceCents: 999, tagKey: "credits.wallet.packs.popular", tagFallback: "Popular" },
-  { id: "credits_150", credits: 150, bonus: 10, priceCents: 1499, tagKey: "credits.wallet.packs.bestValue", tagFallback: "Best value" },
+  { id: "credits_25", credits: 25, bonus: 0, tagKey: "credits.wallet.packs.starter", tagFallback: "Starter" },
+  { id: "credits_75", credits: 75, bonus: 5, tagKey: "credits.wallet.packs.popular", tagFallback: "Popular" },
+  { id: "credits_150", credits: 150, bonus: 10, tagKey: "credits.wallet.packs.bestValue", tagFallback: "Best value" },
 ];
 
-// format CAD selon langue
-const fmtPrice = (cents) => {
-  const amount = (Number(cents) || 0) / 100;
-  const locale = i18n?.locale || i18n?.language || "fr-CA";
-  try {
-    return amount.toLocaleString(locale, { style: "currency", currency: "CAD" });
-  } catch {
-    return amount.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
-  }
-};
+// -----------------------------
+// Animated number hook
+// -----------------------------
+export function useAnimatedNumber(
+  targetNumber,
+  {
+    duration = 2400, // ✅ plus lent par défaut
+    onComplete,
+  } = {}
+) {
+  const anim = useRef(new Animated.Value(targetNumber)).current;
+  const [display, setDisplay] = useState(targetNumber);
+  const prev = useRef(targetNumber);
 
-// idempotence client (double tap)
-function clientTxId() {
-  const rnd =
-    globalThis?.crypto?.randomUUID?.() ||
-    `tx_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  return String(rnd);
+  useEffect(() => {
+    if (targetNumber === prev.current) return;
+
+    const from = prev.current;
+    const to = targetNumber;
+    prev.current = targetNumber;
+
+    anim.setValue(from);
+
+    const id = anim.addListener(({ value }) => {
+      setDisplay(Math.floor(value));
+    });
+
+    Animated.timing(anim, {
+      toValue: to,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      anim.removeListener(id);
+      if (finished && typeof onComplete === "function") onComplete(to);
+    });
+
+    return () => {
+      try {
+        anim.removeListener(id);
+      } catch {}
+    };
+  }, [targetNumber, duration, onComplete, anim]);
+
+  return display;
 }
 
+// -----------------------------
+// Mini toast (Android natif + iOS custom)
+// -----------------------------
+function useMiniToast() {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+  const [msg, setMsg] = useState("");
+  const [visible, setVisible] = useState(false);
+  const hideTimer = useRef(null);
+
+  const show = useCallback(
+    (text) => {
+      if (Platform.OS === "android") {
+        ToastAndroid.show(text, ToastAndroid.SHORT);
+        return;
+      }
+
+      setMsg(text);
+      setVisible(true);
+
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+
+      opacity.setValue(0);
+      translateY.setValue(10);
+
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 180, useNativeDriver: true }),
+      ]).start();
+
+      hideTimer.current = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+          Animated.timing(translateY, { toValue: 10, duration: 180, useNativeDriver: true }),
+        ]).start(() => setVisible(false));
+      }, 2000);
+    },
+    [opacity, translateY]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  const ToastView = visible ? (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: 16,
+        right: 16,
+        bottom: 18,
+        opacity,
+        transform: [{ translateY }],
+        backgroundColor: "rgba(0,0,0,0.85)",
+        borderRadius: 14,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <MaterialCommunityIcons name="check-circle" size={16} color="#fff" />
+      <Text style={{ color: "#fff", fontWeight: "800" }}>{msg}</Text>
+    </Animated.View>
+  ) : null;
+
+  return { show, ToastView };
+}
+
+// -----------------------------
+// Component
+// -----------------------------
 export default function CreditsWallet({ credits }) {
   const { colors } = useTheme();
 
@@ -48,89 +155,97 @@ export default function CreditsWallet({ credits }) {
     [credits]
   );
 
+  const { show: showToast, ToastView } = useMiniToast();
+
+  // ✅ queue du toast (on l’affiche à la FIN de l’animation)
+  const toastQueueRef = useRef(null); // { delta: number } | null
+
+  const animatedBalance = useAnimatedNumber(balance, {
+    duration: 2600, // ✅ encore un peu plus lent
+    onComplete: () => {
+      const q = toastQueueRef.current;
+      if (q?.delta) {
+        toastQueueRef.current = null;
+        showToast(`+${q.delta} credits ✅`);
+      }
+    },
+  });
+
   const [buying, setBuying] = useState(false);
   const [selectedPack, setSelectedPack] = useState(PACKS[0]);
 
-  async function callPurchaseCreditsMock(payload) {
-    if (Platform.OS === "web") {
-      const { getFunctions, httpsCallable } = await import("firebase/functions");
-      const f = getFunctions(app, "us-central1");
-      const fn = httpsCallable(f, "purchaseCreditsMock");
-      return fn(payload);
-    } else {
-      const functions = (await import("@react-native-firebase/functions")).default;
-      const fn = functions().httpsCallable("purchaseCreditsMock");
-      return fn(payload);
+  const [rcPackagesById, setRcPackagesById] = useState({});
+  const [loadingRc, setLoadingRc] = useState(true);
+
+  // UX delivery
+  const [deliveryState, setDeliveryState] = useState("idle"); // idle | waiting | delivered
+  const pendingStartBalanceRef = useRef(null);
+  const waitingTimerRef = useRef(null);
+
+  // ✅ Load offerings
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const offerings = await Purchases.getOfferings();
+        const pkgs = offerings?.current?.availablePackages || [];
+
+        const map = {};
+        for (const pkg of pkgs) {
+          const pid = pkg?.product?.identifier; // credits_25...
+          if (pid) map[pid] = pkg;
+        }
+
+        if (alive) setRcPackagesById(map);
+      } catch (e) {
+        console.log("[RevenueCat] getOfferings error", e?.message || e);
+      } finally {
+        if (alive) setLoadingRc(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // ✅ Detect delivery: si on est en "waiting" et que le balance augmente
+  useEffect(() => {
+    if (deliveryState !== "waiting") return;
+
+    const start = pendingStartBalanceRef.current;
+    if (typeof start !== "number") return;
+
+    if (typeof balance === "number" && balance > start) {
+      const delta = balance - start;
+
+      // queue le toast -> affiché après l’animation (onComplete)
+      toastQueueRef.current = { delta };
+
+      setDeliveryState("delivered");
+      pendingStartBalanceRef.current = null;
+
+      if (waitingTimerRef.current) clearTimeout(waitingTimerRef.current);
+      waitingTimerRef.current = setTimeout(() => {
+        setDeliveryState("idle");
+      }, 2500);
     }
+  }, [balance, deliveryState]);
+
+  useEffect(() => {
+    return () => {
+      if (waitingTimerRef.current) clearTimeout(waitingTimerRef.current);
+    };
+  }, []);
+
+  function priceLabelForPack(packId) {
+    const pkg = rcPackagesById?.[packId];
+    return pkg?.product?.priceString || "—";
   }
-
-  const onBuy = async () => {
-    try {
-      if (!selectedPack?.id) return;
-
-      setBuying(true);
-
-      const txId = clientTxId();
-      const res = await callPurchaseCreditsMock({
-        packKey: selectedPack.id,
-        clientTxId: txId,
-      });
-
-      const data = res?.data || {};
-      const applied = data?.applied === true;
-      const amount = Number(data?.amount ?? 0);
-
-      if (!applied) {
-        Alert.alert(
-          i18n.t("credits.wallet.purchaseNotAppliedTitle", { defaultValue: "Purchase already processed" }),
-          i18n.t("credits.wallet.purchaseNotAppliedBody", {
-            defaultValue: "This purchase was already applied (idempotent).",
-          })
-        );
-        return;
-      }
-
-      Alert.alert(
-        i18n.t("credits.wallet.purchaseSuccessTitle", { defaultValue: "✅ Credits added" }),
-        i18n.t("credits.wallet.purchaseSuccessBody", {
-          defaultValue: "You received +{{amount}} credits.\nYour balance will update shortly.",
-          amount,
-        })
-      );
-    } catch (e) {
-      console.log("[purchaseCreditsMock] error:", e);
-      const code = e?.code || "";
-      const message = e?.message || String(e);
-
-      if (code === "unauthenticated") {
-        Alert.alert(
-          i18n.t("credits.wallet.loginRequiredTitle", { defaultValue: "Sign-in required" }),
-          i18n.t("credits.wallet.loginRequiredBody", {
-            defaultValue: "You must be logged in to buy credits.",
-          })
-        );
-        return;
-      }
-
-      if (code === "permission-denied") {
-        Alert.alert(
-          i18n.t("credits.wallet.mockDisabledTitle", { defaultValue: "Disabled" }),
-          i18n.t("credits.wallet.mockDisabledBody", {
-            defaultValue: "Mock purchases are disabled in production.",
-          })
-        );
-        return;
-      }
-
-      Alert.alert(i18n.t("common.unknownError", { defaultValue: "Unknown error" }), message);
-    } finally {
-      setBuying(false);
-    }
-  };
 
   const isDark = colors.background === "#111827";
 
-  // 🎨 ajustements UI dark
   const packBgIdle = isDark ? "#0b1220" : colors.card;
   const packBgActive = isDark ? "#111827" : (colors.card2 || colors.card);
 
@@ -150,6 +265,97 @@ export default function CreditsWallet({ credits }) {
   const red = "#ef4444";
   const redPressed = "#dc2626";
   const redDisabled = "#9ca3af";
+
+  const canBuy =
+    !buying &&
+    !loadingRc &&
+    !!rcPackagesById?.[selectedPack?.id] &&
+    Platform.OS !== "web";
+
+  const onBuy = async () => {
+    try {
+      if (Platform.OS === "web") {
+        Alert.alert(
+          i18n.t("common.info", { defaultValue: "Info" }),
+          i18n.t("credits.wallet.webNotSupported", {
+            defaultValue: "In-app purchases are not available on web. Please use the mobile app.",
+          })
+        );
+        return;
+      }
+
+      if (!selectedPack?.id) return;
+
+      const pkg = rcPackagesById[selectedPack.id];
+      if (!pkg) {
+        Alert.alert(
+          i18n.t("common.error", { defaultValue: "Error" }),
+          i18n.t("credits.wallet.noStoreProduct", {
+            defaultValue: "This product is not available in the store yet. Try again in a moment.",
+          })
+        );
+        return;
+      }
+
+      setBuying(true);
+
+      pendingStartBalanceRef.current = typeof balance === "number" ? balance : 0;
+      setDeliveryState("waiting");
+
+      await Purchases.purchasePackage(pkg);
+
+      Alert.alert(
+        i18n.t("credits.wallet.purchasePendingTitle", { defaultValue: "✅ Purchase successful" }),
+        i18n.t("credits.wallet.purchasePendingBody", {
+          defaultValue: "Your credits will be delivered shortly.",
+        })
+      );
+    } catch (e) {
+      if (e?.userCancelled) {
+        setDeliveryState("idle");
+        pendingStartBalanceRef.current = null;
+        toastQueueRef.current = null;
+        return;
+      }
+
+      console.log("[RevenueCat] purchase error", e);
+
+      setDeliveryState("idle");
+      pendingStartBalanceRef.current = null;
+      toastQueueRef.current = null;
+
+      Alert.alert(
+        i18n.t("common.unknownError", { defaultValue: "Unknown error" }),
+        e?.message || String(e)
+      );
+    } finally {
+      setBuying(false);
+    }
+  };
+
+  const deliveryLine = (() => {
+    if (deliveryState === "waiting") {
+      return (
+        <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <ActivityIndicator />
+          <Text style={{ color: colors.subtext, fontSize: 12 }}>
+            {i18n.t("credits.wallet.deliveryWaiting", { defaultValue: "Waiting for delivery…" })}
+          </Text>
+        </View>
+      );
+    }
+    if (deliveryState === "delivered") {
+      return (
+        <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <MaterialCommunityIcons name="check-decagram" size={16} color={red} />
+          <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "800" }}>
+            {i18n.t("credits.wallet.deliveryDelivered", { defaultValue: "Delivered ✅" })}
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  })();
 
   return (
     <View
@@ -186,41 +392,49 @@ export default function CreditsWallet({ credits }) {
           </View>
 
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: "#9CA3AF",
-                fontWeight: "700",
-                letterSpacing: 0.4,
-              }}
-            >
+            <Text style={{ color: "#9CA3AF", fontWeight: "700", letterSpacing: 0.4 }}>
               {i18n.t("credits.wallet.balanceLabel", "MY BALANCE")}
             </Text>
-            <Text
-              style={{
-                color: "#fff",
-                fontWeight: "900",
-                fontSize: 34,
-                marginTop: 2,
-              }}
-            >
-              {balance}
+            <Text style={{ color: "#fff", fontWeight: "900", fontSize: 34, marginTop: 2 }}>
+              {animatedBalance}
             </Text>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Corps : packs + action */}
+      {/* Corps */}
       <View style={{ backgroundColor: colors.card, padding: 16 }}>
-        <Text
-          style={{
-            fontWeight: "900",
-            fontSize: 16,
-            marginBottom: 10,
-            color: colors.text,
-          }}
-        >
+        <Text style={{ fontWeight: "900", fontSize: 16, marginBottom: 10, color: colors.text }}>
           {i18n.t("credits.wallet.buyTitle", "Buy credits")}
         </Text>
+
+        {loadingRc ? (
+          <View style={{ paddingVertical: 12, alignItems: "center" }}>
+            <ActivityIndicator />
+            <Text style={{ marginTop: 8, color: colors.subtext }}>
+              {i18n.t("credits.wallet.loadingStore", { defaultValue: "Loading store…" })}
+            </Text>
+          </View>
+        ) : null}
+
+        {Platform.OS === "web" ? (
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 12,
+              padding: 10,
+              backgroundColor: colors.card2 || colors.card,
+              marginBottom: 12,
+            }}
+          >
+            <Text style={{ color: colors.subtext, fontSize: 12 }}>
+              {i18n.t("credits.wallet.webNotSupported", {
+                defaultValue: "In-app purchases are not available on web. Please use the mobile app.",
+              })}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Packs */}
         <View
@@ -235,13 +449,14 @@ export default function CreditsWallet({ credits }) {
         >
           {PACKS.map((p) => {
             const active = selectedPack?.id === p.id;
-
             const label = `${p.credits}${p.bonus ? ` +${p.bonus}` : ""}`;
+            const available = !!rcPackagesById?.[p.id];
 
             return (
               <TouchableOpacity
                 key={p.id}
                 onPress={() => setSelectedPack(p)}
+                disabled={buying}
                 style={{
                   width: "48%",
                   borderWidth: active ? 2 : 1,
@@ -250,7 +465,7 @@ export default function CreditsWallet({ credits }) {
                   paddingVertical: 10,
                   paddingHorizontal: 12,
                   borderRadius: 12,
-
+                  opacity: available ? 1 : 0.55,
                   ...(active ? packShadow : null),
                 }}
               >
@@ -261,17 +476,20 @@ export default function CreditsWallet({ credits }) {
                   })}
                 </Text>
 
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                    marginTop: 2,
-                  }}
-                >
+                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>
                   {i18n.t(p.tagKey, p.tagFallback)}
                 </Text>
 
-                {/* petit hint "selected" en dark (optionnel mais utile) */}
+                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 6 }}>
+                  {priceLabelForPack(p.id)}
+                </Text>
+
+                {!available && !loadingRc ? (
+                  <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 6 }}>
+                    {i18n.t("credits.wallet.notAvailableYet", { defaultValue: "Not available yet" })}
+                  </Text>
+                ) : null}
+
                 {active && isDark && (
                   <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <MaterialCommunityIcons name="check-circle" size={14} color={red} />
@@ -285,7 +503,7 @@ export default function CreditsWallet({ credits }) {
           })}
         </View>
 
-        {/* Résumé + bouton acheter */}
+        {/* Résumé + bouton */}
         <View
           style={{
             borderWidth: 1,
@@ -300,25 +518,23 @@ export default function CreditsWallet({ credits }) {
         >
           <View>
             <Text style={{ fontWeight: "900", color: colors.text }}>
-              {selectedPack.bonus
-                ? `${selectedPack.credits} + ${selectedPack.bonus}`
-                : `${selectedPack.credits}`}{" "}
+              {selectedPack.bonus ? `${selectedPack.credits} + ${selectedPack.bonus}` : `${selectedPack.credits}`}{" "}
               {i18n.t("credits.wallet.creditsWord", { defaultValue: "credits" })}
             </Text>
             <Text style={{ color: colors.subtext, marginTop: 2 }}>
-              {fmtPrice(selectedPack.priceCents)}
+              {priceLabelForPack(selectedPack.id)}
             </Text>
           </View>
 
           <Pressable
             onPress={onBuy}
-            disabled={buying}
+            disabled={!canBuy}
             style={({ pressed }) => ({
-              backgroundColor: buying ? redDisabled : pressed ? redPressed : red,
+              backgroundColor: !canBuy ? redDisabled : pressed ? redPressed : red,
               paddingVertical: 12,
               paddingHorizontal: 18,
               borderRadius: 12,
-              opacity: buying ? 0.85 : 1,
+              opacity: !canBuy ? 0.85 : 1,
             })}
           >
             {buying ? (
@@ -331,18 +547,13 @@ export default function CreditsWallet({ credits }) {
           </Pressable>
         </View>
 
-        <Text
-          style={{
-            color: colors.subtext,
-            fontSize: 12,
-            marginTop: 10,
-          }}
-        >
-          {i18n.t(
-            "credits.wallet.footerNote",
-            "Secure payments • Receipts by email • Credits delivered instantly"
-          )}
+        {deliveryLine}
+
+        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 10 }}>
+          {i18n.t("credits.wallet.footerNote", "Secure payments • Receipts by email • Credits delivered shortly")}
         </Text>
+
+        {ToastView}
       </View>
     </View>
   );

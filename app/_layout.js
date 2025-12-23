@@ -27,6 +27,8 @@ import SplashRingsRotating from "@src/ui/SplashRingsRotating";
 
 import * as SystemUI from "expo-system-ui";
 
+import { initPurchases } from "@src/lib/purchases/initPurchases";
+
 SystemUI.setBackgroundColorAsync("#ffffff");
 
 Notifications.setNotificationHandler({
@@ -196,6 +198,10 @@ function RootLayoutInner() {
       } catch {}
       onboardingUnsubRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    initPurchases();
   }, []);
 
   useEffect(() => {

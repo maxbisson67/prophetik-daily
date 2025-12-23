@@ -61,6 +61,23 @@ export function torontoYMD(date = new Date()) {
 }
 
 // --- NHL helpers partagés ---
-export const apiWebSchedule = (ymd) => safeFetchJson(`https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`);
-export const apiWebPbp      = (gid) => safeFetchJson(`https://api-web.nhle.com/v1/gamecenter/${encodeURIComponent(gid)}/play-by-play`);
-export const apiWebRoster   = (t)   => safeFetchJson(`https://api-web.nhle.com/v1/roster/${encodeURIComponent(t.abbr)}/current`);
+// --- NHL helpers partagés ---
+// Schedule: parfois lent → timeout + long, moins de retries mais backoff
+export const apiWebSchedule = (ymd) =>
+  safeFetchJson(
+    `https://api-web.nhle.com/v1/schedule/${encodeURIComponent(ymd)}`,
+    { timeoutMs: 25000, retries: 2 }
+  );
+
+// PBP: aussi parfois lent, mais un peu moins que schedule
+export const apiWebPbp = (gid) =>
+  safeFetchJson(
+    `https://api-web.nhle.com/v1/gamecenter/${encodeURIComponent(gid)}/play-by-play`,
+    { timeoutMs: 20000, retries: 2 }
+  );
+
+export const apiWebRoster = (t) =>
+  safeFetchJson(
+    `https://api-web.nhle.com/v1/roster/${encodeURIComponent(t.abbr)}/current`,
+    { timeoutMs: 20000, retries: 2 }
+  );

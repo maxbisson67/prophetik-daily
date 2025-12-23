@@ -483,7 +483,13 @@
         "pickersCard": {
             "title": "Select your players",
             "choiceLabel": "Pick {{index}}",
-            "summary": "{{current}}/{{max}} pick(s)"
+            "summary": "{{current}}/{{max}} pick(s)",
+            "requirementsPrefix": "You must pick:"
+        },
+        "rules": {
+            "wrongPickCount": "You must select exactly {{expected}} players.",
+            "tierMissingCount": "You are missing {{missing}} {{tierLabel}}.",
+            "tierTooMany": "You exceeded the limit for {{tierLabel}} (max {{max}})."
         },
         "errors": {
             "notFoundMessage": "No challenge found."

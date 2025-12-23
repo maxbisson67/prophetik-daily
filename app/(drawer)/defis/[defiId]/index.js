@@ -42,7 +42,7 @@ import { useTheme } from '@src/theme/ThemeProvider';
 // ✅ i18n
 import i18n from '@src/i18n/i18n';
 
-import { getDefiRules, validatePicks, getTierByIndex } from '@src/credits/tiersRules';
+import { getDefiRules, validatePicks, getTierByIndex } from '@src/defis/tiersRules';
 
 /* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
@@ -134,6 +134,25 @@ function LoadingOverlay({
       </View>
     </View>
   );
+}
+
+function getPickPrefix() {
+  // FR = C (Choix), EN = P (Pick)
+  const lang = String(i18n.locale || "").toLowerCase();
+  return lang.startsWith("fr") ? "C" : "P";
+}
+
+function fmtTierRequirements(rules) {
+  const prefix = getPickPrefix();
+
+  // mapping T1->(C1/P1), T2->(C2/P2), T3->(C3/P3)
+  const parts = [
+    rules?.T1 ? `${rules.T1} ${prefix}1` : null,
+    rules?.T2 ? `${rules.T2} ${prefix}2` : null,
+    rules?.T3 ? `${rules.T3} ${prefix}3` : null,
+  ].filter(Boolean);
+
+  return parts.join(", ");
 }
 
 /* --------------------------- helpers --------------------------- */
@@ -945,6 +964,13 @@ export default function DefiParticipationScreen() {
     return Number.isFinite(t) && t > 0 ? t : 1;
   }, [defi?.type]);
 
+  const rules = useMemo(() => getDefiRules(defi?.type), [defi?.type]);
+
+  const requirementsText = useMemo(() => {
+    if (!rules) return null;
+    return fmtTierRequirements(rules);
+  }, [rules]);
+
   useEffect(() => {
     setSelected((prev) =>
       Array.from({ length: maxChoices }, (_, i) => prev?.[i] ?? null)
@@ -1213,7 +1239,7 @@ const handlePick = useCallback(
 
       // ✅ règle “picks exact” : on attend d’avoir le bon nombre avant de valider
       if (chosen.length === rules.picks) {
-        const err = validatePicks(chosen, rules);
+        const err = validatePicks(chosen, rules, i18n);
         if (err) {
           Alert.alert('Règles de tiers', err, [{ text: 'OK' }]);
           return prev; // refuse le pick
@@ -1673,6 +1699,20 @@ const handlePick = useCallback(
             >
               {i18n.t('defi.pickersCard.title')}
             </Text>
+
+            {/* ✅ RÈGLES DU DÉFI */}
+            {!!requirementsText && (
+              <Text
+                style={{
+                  textAlign: "center",
+                  color: colors.text,
+                  fontWeight: "700",
+                  marginBottom: 8,
+                }}
+              >
+                {i18n.t("defi.pickersCard.requirementsPrefix")} {requirementsText}.
+              </Text>
+            )}
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
             <TierBadge tier="T1" />

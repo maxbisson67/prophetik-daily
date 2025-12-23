@@ -1,38 +1,36 @@
 // src/auth/AuthProvider.js
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, signOut as fbSignOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../lib/firebase";
 
-import { db } from '@src/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from "@src/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 import {
   registerCurrentFcmToken,
   startFcmTokenRefreshListener,
   stopFcmTokenRefreshListener,
-} from '@src/lib/push/registerFcmToken';
+} from "@src/lib/push/registerFcmToken";
+
 
 const AuthCtx = createContext(undefined);
-
-// Dédup simple au niveau module pour l'enregistrement du token push
 let __lastRegisteredUid = null;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [ready, setReady] = useState(false); // true après le 1er onAuthStateChanged
+  const [ready, setReady] = useState(false);
+
   const tokenListenerUidRef = useRef(null);
 
-  // --- Nouveau: état Firestore participant + profil fusionné
   const [participant, setParticipant] = useState(null);
-  const [participantReady, setParticipantReady] = useState(false); // prêt après 1er snapshot (ou sign-out)
+  const [participantReady, setParticipantReady] = useState(false);
 
-  // Écoute de l'état d'auth (SDK Web)
+  // 1) Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
       setReady(true);
 
-      // Reset dédup si l'UID change
       const uid = u?.uid || null;
       if (__lastRegisteredUid && __lastRegisteredUid !== uid) {
         __lastRegisteredUid = null;
@@ -41,12 +39,13 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // Enregistre/MAJ le token push + lance l'écoute "refresh" une seule fois par UID
+
+
+  // 3) Push token setup (ton code, sans le useEffect imbriqué)
   useEffect(() => {
     const uid = user?.uid || null;
 
     if (!uid) {
-      // plus d'utilisateur => stop listener
       if (tokenListenerUidRef.current) {
         stopFcmTokenRefreshListener();
         tokenListenerUidRef.current = null;
@@ -54,7 +53,7 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    if (__lastRegisteredUid === uid) return; // déjà fait pour cet UID
+    if (__lastRegisteredUid === uid) return;
     __lastRegisteredUid = uid;
 
     (async () => {
@@ -64,39 +63,33 @@ export function AuthProvider({ children }) {
         startFcmTokenRefreshListener(uid);
         tokenListenerUidRef.current = uid;
       } catch (err) {
-        console.log('Push setup failed:', err?.message || String(err));
+        console.log("Push setup failed:", err?.message || String(err));
       }
     })();
   }, [user?.uid]);
 
-  // --- Nouveau: abonnement Firestore au document participant/{uid}
+  // 4) Participant doc
   useEffect(() => {
-    // reset à chaque changement d'utilisateur
     setParticipant(null);
     setParticipantReady(false);
 
     const uid = user?.uid;
     if (!uid) {
-      // pas connecté => on considère participant prêt (null)
       setParticipantReady(true);
       return;
     }
 
-    const ref = doc(db, 'participants', uid);
+    const ref = doc(db, "participants", uid);
     const unsub = onSnapshot(
       ref,
       (snap) => {
-        if (snap.exists()) {
-          setParticipant({ id: snap.id, ...snap.data() });
-        } else {
-          setParticipant(null);
-        }
+        setParticipant(snap.exists() ? { id: snap.id, ...snap.data() } : null);
         setParticipantReady(true);
       },
       (err) => {
-        console.log('participants onSnapshot error:', err?.message || err);
+        console.log("participants onSnapshot error:", err?.message || err);
         setParticipant(null);
-        setParticipantReady(true); // ne bloque pas l'app
+        setParticipantReady(true);
       }
     );
 
@@ -105,37 +98,22 @@ export function AuthProvider({ children }) {
     };
   }, [user?.uid]);
 
-  // Profil fusionné pratique pour l’UI (fallback sur l’objet Firebase)
   const profile = {
     displayName: participant?.displayName ?? user?.displayName ?? null,
     photoURL: participant?.photoURL ?? user?.photoURL ?? null,
     email: participant?.email ?? user?.email ?? null,
   };
 
-  const doSignOut = async () => {
-    try {
-      __lastRegisteredUid = null;
-      stopFcmTokenRefreshListener();
-      tokenListenerUidRef.current = null;
-      await fbSignOut(auth);
-      // La redirection est gérée par _layout (AuthGateMount)
-    } catch (e) {
-      console.log('Sign out failed:', e?.code || e?.message || String(e));
-    }
-  };
-
-  const booting = !ready; // compat historique
-  const fullyReady = ready && participantReady; // si tu veux savoir quand tout est hydraté
+  const fullyReady = ready && participantReady;
 
   return (
     <AuthCtx.Provider
       value={{
         user,
-        participant,        // ← Firestore (peut être null)
-        profile,            // ← fusion pratique pour l’UI
-        ready: fullyReady,  // ← devient true quand auth + participant sont prêts
-        booting,            // optionnel: garde l’ancien sémantique
-        signOut: doSignOut,
+        participant,
+        profile,
+        ready: fullyReady,
+        booting: !ready,
       }}
     >
       {children}
@@ -145,6 +123,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthCtx);
-  if (!ctx) throw new Error('useAuth must be used within <AuthProvider>');
+  if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
   return ctx;
 }

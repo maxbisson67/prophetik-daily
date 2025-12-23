@@ -3,7 +3,8 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import RNFBAuth from "@react-native-firebase/auth";
 import { webAuth } from "@src/lib/firebase";
 import { signOut as webSignOut } from "firebase/auth";
-//import { bridgeWebAuthOnce } from "./bridgeWebAuth";
+import Purchases from "react-native-purchases";
+import { initPurchases } from "@src/lib/purchases/initPurchases";
 
 
 
@@ -82,6 +83,31 @@ export function AuthProvider({ children }) {
     if (authReady) run();
     return () => { cancelled = true; };
   }, [authReady, user?.uid]);
+
+  // 3) RevenueCat: configure + logIn/logOut aligné sur Firebase UID
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Configure le SDK (idempotent via ton initPurchases)
+        initPurchases?.();
+
+        if (!user?.uid) {
+          await Purchases.logOut();
+          return;
+        }
+
+        await Purchases.logIn(String(user.uid));
+      } catch (e) {
+        if (!cancelled) {
+          console.log("[RevenueCat] logIn/logOut error", e?.message || e);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.uid]);
 
   const value = useMemo(() => {
     const initializing = !authReady;
