@@ -919,6 +919,13 @@ export default function DefiParticipationScreen() {
   const [refreshNote, setRefreshNote] = useState(null);
 
   const [saving, setSaving] = useState(false);
+
+    
+
+  // snapshot des picks "déjà sauvegardés" (pour détecter une modification)
+  const savedPicksRef = useRef(null); // array de picks normalisés
+  const [hasSavedOnce, setHasSavedOnce] = useState(false);
+
   const savingRef = useRef(false);
 
   // Saison & cache
@@ -989,6 +996,15 @@ export default function DefiParticipationScreen() {
         if (snap.exists) {
           const p = snap.data() || {};
           const picks = Array.isArray(p.picks) ? p.picks : [];
+
+          // ✅ flag "déjà sauvegardé"
+          setHasSavedOnce(picks.length > 0);
+
+          // ✅ mémorise les picks sauvegardés pour comparer avant save
+          savedPicksRef.current = picks.map((x) => ({
+            playerId: String(x?.playerId ?? ""),
+          }));
+
           setSelected((prev) =>
             Array.from({ length: maxChoices }, (_, i) => {
               const x = picks[i];
@@ -1001,6 +1017,9 @@ export default function DefiParticipationScreen() {
                 : prev?.[i] ?? null;
             })
           );
+        } else {
+          setHasSavedOnce(false);
+          savedPicksRef.current = null;
         }
       } catch (e) {
         setError(e);
@@ -1110,6 +1129,16 @@ export default function DefiParticipationScreen() {
     };
   }, [seasonId]);
 
+  function normalizeCurrentPickIds(selectedArr) {
+    return (selectedArr || []).map((p) => String(p?.playerId ?? ""));
+  }
+
+  function sameIds(a = [], b = []) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (String(a[i]) !== String(b[i])) return false;
+    return true;
+  }
+
   // Changement de saison → force reload
   const setSeasonId = useCallback((val) => {
     setStatsById({});
@@ -1212,12 +1241,21 @@ const selectedWithStats = useMemo(() => {
     Keyboard.dismiss();
   }, []);
 
+  function withTier(pl, tierById) {
+    if (!pl?.playerId) return pl;
+    const extra = tierById?.[String(pl.playerId)];
+    return {
+      ...pl,
+      tier: pl.tier || extra?.tier || "T3",
+      rank: pl.rank || extra?.rank || null,
+    };
+  }
+
 const handlePick = useCallback(
   (p) => {
     const rules = getDefiRules(defi?.type);
 
     setSelected((prev) => {
-      // ✅ duplicate player (déjà chez toi)
       const alreadyUsed = prev.some(
         (pl, idx) => pl?.playerId === p.playerId && idx !== pickerIndex
       );
@@ -1230,22 +1268,22 @@ const handlePick = useCallback(
         return prev;
       }
 
-      // ✅ on simule le remplacement
       const next = [...prev];
       next[pickerIndex] = p;
 
-      // on ne valide que les picks choisis (évite null)
-      const chosen = next.filter(Boolean);
+      // ✅ Enrichit TOUS les picks avec tier/rank avant validation
+      const chosen = next
+        .filter(Boolean)
+        .map((pl) => withTier(pl, tierById));
 
-      // ✅ règle “picks exact” : on attend d’avoir le bon nombre avant de valider
       if (chosen.length === rules.picks) {
         const err = validatePicks(chosen, rules, i18n);
         if (err) {
           Alert.alert('Règles de tiers', err, [{ text: 'OK' }]);
-          return prev; // refuse le pick
+          return prev;
         }
       } else {
-        // ✅ blocage immédiat si on dépasse un quota de tier (ex: 2e T1)
+        // ✅ Comptage sur les tiers enrichis
         const count = { T1: 0, T2: 0, T3: 0 };
         for (const pl of chosen) {
           const t = pl?.tier || 'T3';
@@ -1259,15 +1297,15 @@ const handlePick = useCallback(
               `Tu as dépassé la limite ${tier} (${rules[tier]} max) pour ce défi.`,
               [{ text: 'OK' }]
             );
-            return prev; // refuse le pick
+            return prev;
           }
         }
       }
 
-      return next; // ✅ accepte
+      return next;
     });
   },
-  [pickerIndex, defi?.type]
+  [pickerIndex, defi?.type, tierById] // ✅ ajoute tierById ici
 );
 
   const allChosen = useMemo(
@@ -1300,6 +1338,36 @@ const handlePick = useCallback(
     }, 400);
 
     try {
+      // ✅ Avertissement: modification après 1ère sauvegarde = 1 crédit
+      const savedIds = Array.isArray(savedPicksRef.current)
+        ? savedPicksRef.current.map((x) => String(x.playerId ?? ""))
+        : null;
+
+      const currentIds = normalizeCurrentPickIds(selected);
+
+      const isEditAfterFirstSave =
+        hasSavedOnce &&
+        savedIds &&
+        savedIds.length === currentIds.length &&
+        !sameIds(savedIds, currentIds);
+
+      if (isEditAfterFirstSave) {
+        const proceed = await new Promise((resolve) => {
+          Alert.alert(
+            i18n.t("credits.editWarningTitle", { defaultValue: "Modify picks?" }),
+            i18n.t("credits.editWarningBody", {
+              defaultValue:
+                "Changing your selection after your first save costs 1 credit. Continue?",
+            }),
+            [
+              { text: i18n.t("common.cancel", { defaultValue: "Cancel" }), style: "cancel", onPress: () => resolve(false) },
+              { text: i18n.t("common.continue", { defaultValue: "Continue" }), style: "destructive", onPress: () => resolve(true) },
+            ]
+          );
+        });
+
+        if (!proceed) return;
+      }
       const call = functions().httpsCallable('participateInDefi');
       const res = await call({
         defiId: defi.id,
@@ -1320,6 +1388,11 @@ const handlePick = useCallback(
                 count: newPot,
               })
             : i18n.t('defi.alerts.successPotMessageSimple');
+
+        // ✅ met à jour la référence des picks sauvegardés
+        setHasSavedOnce(true);
+        savedPicksRef.current = selected.map((p) => ({ playerId: String(p?.playerId ?? "") }));
+
         Alert.alert(
           i18n.t('defi.alerts.successTitle'),
           i18n.t('defi.alerts.successMessage', {

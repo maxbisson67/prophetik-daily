@@ -191,10 +191,30 @@ export default function CreditsWallet({ credits }) {
   const [rcPackagesById, setRcPackagesById] = useState({});
   const [loadingRc, setLoadingRc] = useState(true);
 
+
+
   // UX delivery
   const [deliveryState, setDeliveryState] = useState("idle"); // idle | waiting | delivered
   const pendingStartBalanceRef = useRef(null);
   const waitingTimerRef = useRef(null);
+
+
+   useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const id = await Purchases.getAppUserID();
+        if (alive) setRcUserId(id || "n/a");
+      } catch (e) {
+        console.log(e)
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Load offerings
   useEffect(() => {
@@ -203,17 +223,27 @@ export default function CreditsWallet({ credits }) {
     (async () => {
       try {
         const offerings = await Purchases.getOfferings();
-        const pkgs = offerings?.current?.availablePackages || [];
 
+        const pkgs = offerings?.current?.availablePackages || [];
         const map = {};
+        const ids = [];
+
         for (const pkg of pkgs) {
-          const pid = pkg?.product?.identifier; // credits_25...
-          if (pid) map[pid] = pkg;
+          const pid = pkg?.product?.identifier;
+          if (pid) {
+            map[pid] = pkg;
+            ids.push(pid);
+          }
         }
 
-        if (alive) setRcPackagesById(map);
+        if (alive) {
+          setRcPackagesById(map);
+        
+        }
       } catch (e) {
         console.log("[RevenueCat] getOfferings error", e?.message || e);
+
+     
       } finally {
         if (alive) setLoadingRc(false);
       }

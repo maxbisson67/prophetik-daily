@@ -37,18 +37,26 @@ function fmtDateTime(ts) {
 
 
 const TYPE_META = {
-  CREDIT_DEFI_ENTRY: {
+ 
+   "defi_entry": {
     labelKey: 'credits.logs.types.defi_entry',
     labelFallback: 'Challenge entry',
     icon: 'ticket-confirmation-outline',
     tint: 'out',
   },
-  CREDIT_DEFI_PAYOUT: {
-    labelKey: 'credits.logs.types.defi_payout',
-    labelFallback: 'Challenge payout',
-    icon: 'trophy-outline',
+  "defi_edit": {
+    labelKey: 'credits.logs.types.defi_edit',
+    labelFallback: 'Modified challenge',
+    icon: 'ticket-confirmation-outline',
     tint: 'in',
   },
+  "defi_payout": {
+    labelKey: 'credits.logs.types.defi_payout',
+    labelFallback: 'Challenge payout',
+    icon: 'ticket-confirmation-outline',
+    tint: 'out',
+  },
+
   // ✅ remboursement d’un défi annulé (ex: cancelled_ghost)
   CREDIT_DEFI_REFUND: {
     labelKey: 'credits.logs.types.defi_refund',
@@ -56,9 +64,10 @@ const TYPE_META = {
     icon: 'backup-restore',
     tint: 'in',
   },
-  CREDIT_SIGNUP_BONUS:
+  "signup_bonus":
   { labelKey: 'credits.logs.types.signup_bonus', labelFallback: 'Welcome bonus', icon: 'party-popper', tint: 'in' },
-  CREDIT_DAILY_SHOT:  
+  
+  "daily_shot":  
   { labelKey: 'credits.logs.types.daily_shot', labelFallback: 'Daily shot', icon: 'hockey-sticks', tint: 'in' },
 
   CREDIT_PURCHASE_PACK: {
@@ -67,7 +76,7 @@ const TYPE_META = {
     icon: 'credit-card-outline',
     tint: 'in',
   },
-  CREDIT_ADJUSTMENT: {
+  "adjustment": {
     labelKey: 'credits.logs.types.adjustment',
     labelFallback: 'Adjustment',
     icon: 'tune',
@@ -79,19 +88,21 @@ const TYPE_META = {
     icon: 'credit-card-outline',
     tint: 'out',
   },
-  CREDIT_STREAK3_REWARD: {
+  "streak3_reward": {
     labelKey: 'credits.logs.types.streak3_reward',
     labelFallback: 'Reward: 3-day streak',
     icon: 'fire',
     tint: 'in',
   },
-  CREDIT_FIVE_PARTICIP_REWARD: {
+  "five_particip_reward": {
     labelKey: 'credits.logs.types.five_particip_reward',
     labelFallback: 'Reward: 5 participations',
     icon: 'counter',
     tint: 'in',
-  },
+  }
 };
+
+
 
 function typeMeta(type, amount) {
   const base = TYPE_META[type] || {

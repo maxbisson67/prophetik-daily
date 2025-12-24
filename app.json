@@ -16,7 +16,8 @@
     },
     "updates": {
       "checkAutomatically": "ON_ERROR_RECOVERY",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/b58db99d-83c8-4770-a5ff-e940f63c5883"
     },
     "notification": {
       "icon": "./assets/notification-icon.png"
@@ -37,6 +38,9 @@
       "router": {},
       "eas": {
         "projectId": "b58db99d-83c8-4770-a5ff-e940f63c5883"
+      },
+      "buildEnv": {
+        "note": "Channel is read at runtime from Constants.easConfig.channel"
       }
     },
     "ios": {
@@ -60,12 +64,15 @@
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "POST_NOTIFICATIONS",
+        "com.android.vending.BILLING",
+        "POST_NOTIFICATIONS",
         "com.android.vending.BILLING"
       ],
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "favicon": "./assets/prophetik_red_192.png"
-    }
+    },
+    "runtimeVersion": "1.0.0"
   }
 }

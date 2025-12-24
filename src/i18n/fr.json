@@ -760,6 +760,10 @@
     "title": "Crédits",
     "loginHint": "Connecte-toi…",
 
+    "editWarningTitle": "Modifier vos choix ?",
+    "editWarningBody": "Après votre première sauvegarde, chaque modification coûte 1 crédit. Voulez-vous continuer ?",
+    "editChargedToast": "1 crédit a été débité pour la modification.",
+
     "goals": {
       "title": "Objectifs",
       "firstDefi": "Premier défi créé",
@@ -777,6 +781,7 @@
       "unknownType": "Mouvement",
       "types": {
         "defi_entry": "Inscription à un défi",
+        "defi_edit": "Modifier un défi",
         "defi_payout": "Gain de défi",
         "defi_refund": "Remboursement : défi annulé",
         "topup_free": "Bonus gratuit",
@@ -786,7 +791,8 @@
         "first_defi": "Récompense : 1er défi créé",
         "first_group": "Récompense : 1er groupe créé",
         "streak3_reward": "Récompense : 3 jours d’affilée",
-        "five_particip_reward": "Récompense : 5 participations"
+        "five_particip_reward": "Récompense : 5 participations",
+        "daily_shot": "Bonus shake",
       },
 
       "wallet": {

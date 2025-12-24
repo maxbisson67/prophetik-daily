@@ -773,6 +773,10 @@
     "title": "Credits",
     "loginHint": "Log in…",
 
+    "editWarningTitle": "Modify your picks?",
+    "editWarningBody": "After your first save, each change costs 1 credit. Do you want to continue?",
+    "editChargedToast": "1 credit was charged for the modification.",
+
     "goals": {
       "title": "Goals",
       "firstDefi": "First challenge created",
@@ -790,6 +794,7 @@
       "unknownType": "Activity",
       "types": {
         "defi_entry": "Challenge entry",
+        "defi_edit": "Edited challenge",
         "defi_payout": "Challenge payout",
         "defi_refund": "Refund: cancelled challenge",
         "topup_free": "Free bonus",
@@ -799,7 +804,8 @@
         "first_defi": "Reward: 1st challenge created",
         "first_group": "Reward: 1st group created",
         "streak3_reward": "Reward: 3-day streak",
-        "five_particip_reward": "Reward: 5 participations"
+        "five_particip_reward": "Reward: 5 participations",
+        "daily_shot": "Reward: phone shaked"
       }
     },
 

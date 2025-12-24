@@ -3,24 +3,32 @@
     "version": ">= 3.18.0",
     "appVersionSource": "remote"
   },
-  "build": {
+   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development",
+      "env": { "EAS_BUILD_PROFILE": "development" }
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "channel": "preview",
+      "android": { "buildType": "apk" },
+      "env": { "EAS_BUILD_PROFILE": "preview" }
     },
     "internal": {
       "distribution": "store",
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" }
+      "channel": "internal",
+      "android": { "buildType": "app-bundle" },
+      "env": { "EAS_BUILD_PROFILE": "internal" }
     },
     "production": {
       "distribution": "store",
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" }
+      "channel": "production",
+      "android": { "buildType": "app-bundle" },
+      "env": { "EAS_BUILD_PROFILE": "production" }
     }
   },
   "submit": {
