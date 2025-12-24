@@ -20,7 +20,13 @@ const UPDATE_MS = 80;
 const ACC_THRESHOLD = 2.2;
 const GYRO_THRESHOLD = 3.0;
 const COOLDOWN_MS = 2500;
-const ORBIT_DURATION = 900;
+
+// ✅ Plus long
+const ORBIT_DURATION = 1800;
+
+// ✅ Vibration plus “longue” (pattern)
+const VIBE_PATTERN_IOS = [0, 25, 40, 25, 40, 25];
+const VIBE_PATTERN_ANDROID = [0, 35, 50, 35, 50, 35];
 
 /* -------------------- API -------------------- */
 async function callDailyShotBonus(payload) {
@@ -44,15 +50,19 @@ function mag3({ x = 0, y = 0, z = 0 }) {
 }
 
 function hapticShot() {
-  Vibration.vibrate(Platform.OS === "ios" ? 20 : 30);
+  // Pattern = plus long + plus “premium”
+  const pattern = Platform.OS === "ios" ? VIBE_PATTERN_IOS : VIBE_PATTERN_ANDROID;
+
+  // Sur certains Android, le pattern peut être ignoré; fallback en durée.
+  try {
+    Vibration.vibrate(pattern);
+  } catch {
+    Vibration.vibrate(Platform.OS === "ios" ? 60 : 90);
+  }
 }
 
 /* -------------------- COMPONENT -------------------- */
-export default function DailyShotCard({
-  monthlyCap = 10,
-  variant = "card",
-  onGranted,
-}) {
+export default function DailyShotCard({ monthlyCap = 10, variant = "card", onGranted }) {
   const { colors } = useTheme();
 
   const [listening, setListening] = useState(false);
@@ -69,7 +79,10 @@ export default function DailyShotCard({
   });
 
   const lastTriggerAtRef = useRef(0);
+
+  // ✅ Animation orbit + petite opacité pour fade-out
   const orbitAnim = useRef(new Animated.Value(0)).current;
+  const fxOpacity = useRef(new Animated.Value(0)).current;
 
   const accMag = useMemo(() => mag3(acc), [acc]);
   const gyroMag = useMemo(() => mag3(gyro), [gyro]);
@@ -96,14 +109,29 @@ export default function DailyShotCard({
   /* ---------- FX animation ---------- */
   function playFx() {
     setShowFx(true);
-    orbitAnim.setValue(0);
 
-    Animated.timing(orbitAnim, {
-      toValue: 1,
-      duration: ORBIT_DURATION,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => setShowFx(false));
+    orbitAnim.setValue(0);
+    fxOpacity.setValue(0);
+
+    // ✅ On “fade in”, puis rotation, puis “fade out”
+    Animated.sequence([
+      Animated.timing(fxOpacity, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(orbitAnim, {
+        toValue: 1,
+        duration: ORBIT_DURATION,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fxOpacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowFx(false));
   }
 
   /* ---------- Detect shot ---------- */
@@ -123,6 +151,28 @@ export default function DailyShotCard({
     attemptGrant();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accMag, gyroMag, listening, busy]);
+
+  useEffect(() => {
+  let alive = true;
+
+  (async () => {
+    try {
+      const data = await callDailyShotBonus({ monthlyCap, mode: "status" });
+      if (!alive) return;
+
+      setProgress((p) => ({
+        ...p,
+        creditsGranted: Number(data?.creditsGranted ?? 0),
+        monthlyCap: Number(data?.monthlyCap ?? monthlyCap),
+        status: data?.status || "idle",
+      }));
+    } catch (e) {
+      console.log("[DailyShot] status load failed", e?.message || e);
+    }
+  })();
+
+  return () => { alive = false; };
+}, [monthlyCap]);
 
   /* ---------- Grant ---------- */
   async function attemptGrant() {
@@ -168,7 +218,7 @@ export default function DailyShotCard({
 
   const spin = orbitAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
+    outputRange: ["0deg", "540deg"], // ✅ un peu plus “wow” (1.5 tours)
   });
 
   return (
@@ -196,7 +246,7 @@ export default function DailyShotCard({
             marginLeft: -60,
             marginTop: -60,
             transform: [{ rotate: spin }],
-            opacity: 0.9,
+            opacity: fxOpacity, // ✅ fade-in/out
           }}
         >
           {[
@@ -213,11 +263,7 @@ export default function DailyShotCard({
                 top: 60 + s.y - 14,
               }}
             >
-              <MaterialCommunityIcons
-                name={s.icon}
-                size={28}
-                color={colors.primary}
-              />
+              <MaterialCommunityIcons name={s.icon} size={28} color={colors.primary} />
             </View>
           ))}
         </Animated.View>
@@ -225,20 +271,13 @@ export default function DailyShotCard({
 
       {/* HEADER */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <MaterialCommunityIcons
-          name="gesture-swipe"
-          size={22}
-          color={colors.text}
-        />
+        <MaterialCommunityIcons name="gesture-swipe" size={22} color={colors.text} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontWeight: "900", color: colors.text }}>
             {i18n.t("home.dailyShotTitle", "Daily shot bonus")}
           </Text>
           <Text style={{ color: colors.subtext, fontSize: 12 }}>
-            {i18n.t("home.dailyShotMonthlyCap", {
-              current: granted,
-              max: cap,
-            })}
+            {i18n.t("home.dailyShotMonthlyCap", { current: granted, max: cap })}
           </Text>
         </View>
         {busy && <ActivityIndicator />}
@@ -254,13 +293,7 @@ export default function DailyShotCard({
           overflow: "hidden",
         }}
       >
-        <View
-          style={{
-            width: `${pct}%`,
-            height: 8,
-            backgroundColor: "#ef4444",
-          }}
-        />
+        <View style={{ width: `${pct}%`, height: 8, backgroundColor: "#ef4444" }} />
       </View>
 
       <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8 }}>

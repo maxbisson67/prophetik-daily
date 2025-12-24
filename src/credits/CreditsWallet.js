@@ -9,7 +9,6 @@ import {
   Platform,
   Animated,
   ToastAndroid,
-  Easing,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -25,48 +24,61 @@ const PACKS = [
 ];
 
 // -----------------------------
-// Animated number hook
+// ✅ Animated number hook (RAF) – plus fiable que Animated.Value.addListener
 // -----------------------------
 export function useAnimatedNumber(
   targetNumber,
-  {
-    duration = 2400, // ✅ plus lent par défaut
-    onComplete,
-  } = {}
+  { duration = 2600, onComplete } = {}
 ) {
-  const anim = useRef(new Animated.Value(targetNumber)).current;
-  const [display, setDisplay] = useState(targetNumber);
-  const prev = useRef(targetNumber);
+  const [display, setDisplay] = useState(
+    typeof targetNumber === "number" ? targetNumber : 0
+  );
+
+  const prevRef = useRef(typeof targetNumber === "number" ? targetNumber : 0);
+  const rafRef = useRef(null);
 
   useEffect(() => {
-    if (targetNumber === prev.current) return;
+    const to = typeof targetNumber === "number" ? targetNumber : 0;
 
-    const from = prev.current;
-    const to = targetNumber;
-    prev.current = targetNumber;
+    // Si pas de changement → on sync (important si parent re-render)
+    if (to === prevRef.current) {
+      setDisplay(to);
+      return;
+    }
 
-    anim.setValue(from);
+    const from = prevRef.current;
+    prevRef.current = to;
 
-    const id = anim.addListener(({ value }) => {
-      setDisplay(Math.floor(value));
-    });
+    // Annule une animation en cours
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-    Animated.timing(anim, {
-      toValue: to,
-      duration,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start(({ finished }) => {
-      anim.removeListener(id);
-      if (finished && typeof onComplete === "function") onComplete(to);
-    });
+    const startTs = Date.now();
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+    const tick = () => {
+      const now = Date.now();
+      const t = Math.min(1, (now - startTs) / Math.max(1, duration));
+      const eased = easeOutCubic(t);
+      const v = from + (to - from) * eased;
+
+      setDisplay(Math.floor(v));
+
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        setDisplay(to);
+        rafRef.current = null;
+        if (typeof onComplete === "function") onComplete(to);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
 
     return () => {
-      try {
-        anim.removeListener(id);
-      } catch {}
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     };
-  }, [targetNumber, duration, onComplete, anim]);
+  }, [targetNumber, duration, onComplete]);
 
   return display;
 }
@@ -157,18 +169,20 @@ export default function CreditsWallet({ credits }) {
 
   const { show: showToast, ToastView } = useMiniToast();
 
-  // ✅ queue du toast (on l’affiche à la FIN de l’animation)
+  // ✅ On met le delta ici, et on l’affiche quand l’animation a fini.
   const toastQueueRef = useRef(null); // { delta: number } | null
 
+  const onAnimComplete = useCallback(() => {
+    const q = toastQueueRef.current;
+    if (q?.delta) {
+      toastQueueRef.current = null;
+      showToast(`+${q.delta} credits ✅`);
+    }
+  }, [showToast]);
+
   const animatedBalance = useAnimatedNumber(balance, {
-    duration: 2600, // ✅ encore un peu plus lent
-    onComplete: () => {
-      const q = toastQueueRef.current;
-      if (q?.delta) {
-        toastQueueRef.current = null;
-        showToast(`+${q.delta} credits ✅`);
-      }
-    },
+    duration: 2600,
+    onComplete: onAnimComplete,
   });
 
   const [buying, setBuying] = useState(false);
@@ -182,7 +196,7 @@ export default function CreditsWallet({ credits }) {
   const pendingStartBalanceRef = useRef(null);
   const waitingTimerRef = useRef(null);
 
-  // ✅ Load offerings
+  // Load offerings
   useEffect(() => {
     let alive = true;
 
@@ -210,7 +224,7 @@ export default function CreditsWallet({ credits }) {
     };
   }, []);
 
-  // ✅ Detect delivery: si on est en "waiting" et que le balance augmente
+  // Detect delivery
   useEffect(() => {
     if (deliveryState !== "waiting") return;
 
@@ -220,7 +234,7 @@ export default function CreditsWallet({ credits }) {
     if (typeof balance === "number" && balance > start) {
       const delta = balance - start;
 
-      // queue le toast -> affiché après l’animation (onComplete)
+      // ✅ queue le toast → sera affiché quand le compteur a fini
       toastQueueRef.current = { delta };
 
       setDeliveryState("delivered");
@@ -245,10 +259,8 @@ export default function CreditsWallet({ credits }) {
   }
 
   const isDark = colors.background === "#111827";
-
   const packBgIdle = isDark ? "#0b1220" : colors.card;
   const packBgActive = isDark ? "#111827" : (colors.card2 || colors.card);
-
   const packBorderIdle = isDark ? "rgba(255,255,255,0.14)" : colors.border;
   const packBorderActive = isDark ? "rgba(239,68,68,0.95)" : (colors.primary || colors.text);
 
@@ -530,7 +542,7 @@ export default function CreditsWallet({ credits }) {
             onPress={onBuy}
             disabled={!canBuy}
             style={({ pressed }) => ({
-              backgroundColor: !canBuy ? redDisabled : pressed ? redPressed : red,
+              backgroundColor: !canBuy ? redDisabled : pressed ? "#dc2626" : "#ef4444",
               paddingVertical: 12,
               paddingHorizontal: 18,
               borderRadius: 12,

@@ -31,6 +31,7 @@ export const dailyShotBonus = onCall(
     const periodKey = periodKeyYYYYMM(now);
 
     const monthlyCapRaw = req.data?.monthlyCap;
+    const mode = String(req.data?.mode || "grant"); // "grant" | "status"
     const monthlyCap =
       Number.isFinite(Number(monthlyCapRaw)) && Number(monthlyCapRaw) > 0
         ? Number(monthlyCapRaw)
@@ -45,6 +46,34 @@ export const dailyShotBonus = onCall(
 
       const lastDay = String(q.lastDay || "");
       const granted = Number(q.creditsGranted || 0);
+
+      // ✅ STATUS-ONLY: ne crédite pas, ne throw pas
+        if (mode === "status") {
+            const status =
+            lastDay === todayYmd
+                ? "already_today"
+                : granted >= monthlyCap
+                ? "cap_reached"
+                : "idle";
+
+            return {
+            ok: true,
+            mode: "status",
+            todayYmd,
+            periodKey,
+            creditsGranted: granted,
+            monthlyCap,
+            lastDay: lastDay || null,
+            nextAvailableDay:
+                status === "already_today"
+                ? addDaysToYmd(todayYmd, 1)
+                : status === "cap_reached"
+                ? nextMonthStartYmd(now)
+                : todayYmd,
+            status,
+            };
+        }
+
 
       if (lastDay === todayYmd) {
         throw new HttpsError("failed-precondition", "ALREADY_TAKEN_TODAY", {
