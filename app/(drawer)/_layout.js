@@ -20,6 +20,7 @@ import { usePublicProfile } from '@src/profile/usePublicProfile';
 
 // ✅ i18n (uniforme partout)
 import i18n from '@src/i18n/i18n';
+import ProphetikToken from '@src/ui/ProphetikToken';
 
 /* =========================================================
    Helpers
@@ -40,7 +41,7 @@ function getHeaderTitle(route) {
       return i18n.t('drawer.challenges', { defaultValue: 'Challenges' });
 
     case 'credits/index':
-      return i18n.t('drawer.credits', { defaultValue: 'Credits' });
+      return i18n.t('drawer.tokens', { defaultValue: 'Tokens' });
 
     case 'boutique/index':
       return i18n.t('drawer.shop', { defaultValue: 'Shop' });
@@ -192,9 +193,11 @@ function DrawerHeader() {
    Drawer Content
 ========================================================= */
 function CustomDrawerContent(props) {
-  const { colors } = useTheme();
+  const { colors,isDark } = useTheme();
   const router = useRouter();
   const { signOut } = useAuth();
+
+
 
   const goTab = useCallback(
     (screenName) => {
@@ -251,18 +254,24 @@ function CustomDrawerContent(props) {
           )}
       />
 
-        <DrawerItem
+     <DrawerItem
         {...itemCommonProps}
-        label={i18n.t('drawer.credits', { defaultValue: 'Credits' })}
+        label={i18n.t('drawer.tokens', { defaultValue: 'Tokens' })}
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
           requestAnimationFrame(() => router.push('/(drawer)/credits'));
         }}
-        icon={({ size }) => (
-          <Ionicons name="card" size={size} color={colors.text} />
+        icon={() => (
+          <View style={{ width: 28, alignItems: "center", justifyContent: "center" }}>
+            <ProphetikToken
+              iconOnly
+              size="lg"
+              variant="badge"
+              forceVariant={isDark ? "light" : "dark"} 
+            />
+          </View>
         )}
       />
-
 
       <DrawerItem
         {...itemCommonProps}

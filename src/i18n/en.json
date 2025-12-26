@@ -12,7 +12,8 @@
     "cancel": "Cancel",
     "or": "or",
     "continue": "Continue",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "selected":"Selected"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -792,7 +793,7 @@
 
     "logs": {
       "unknownType": "Activity",
-      "types": {
+      "types":{
         "defi_entry": "Challenge entry",
         "defi_edit": "Edited challenge",
         "defi_payout": "Challenge payout",
@@ -806,30 +807,37 @@
         "streak3_reward": "Reward: 3-day streak",
         "five_particip_reward": "Reward: 5 participations",
         "daily_shot": "Reward: phone shaked"
-      }
-    },
+      },
+    
 
     "wallet": {
       "balanceLabel": "MY BALANCE",
       "bonusButton": "+25 Bonus",
-      "buyTitle": "Buy credits",
-      "creditsLabel": "{{count}} credits",
-      "buyButton": "Buy",
-      "footerNote": "Secure payments • Receipts by email • Credits delivered instantly",
+      "buyTitle": "Buy Prophetik Tokens",
+      "creditsLabel": "{{count}}",
+      "buyButton":"Buy",
+      "footerNote": "Secure payments • Prophetik Tokens delivered instantly",
+      "tokenDisclaimer":  "Tokens are usable in-app only and cannot be exchanged for money.",
 
       "bonusSuccessTitle": "🎉 Bonus credited",
-      "bonusSuccessBody": "You just received +{{amount}} credits.\nYour balance will update shortly.",
+      "bonusSuccessBody": "You just received +{{amount}} token(s).\nYour balance will update shortly.",
 
+      "bonusLine":"{{bonus}} bonus token",
       "bonusAlreadyUsedTitle": "Bonus already used",
-      "bonusAlreadyUsedBody": "You have already used your bonus recently.\nYou can request it again starting {{date}}.",
+      "bonusAlreadyUsedBody": "You have already used your bonus recently.\nYou can request another one starting on {{date}}.",
 
-      "loginRequiredTitle": "Sign-in required",
-      "loginRequiredBody": "You must be logged in to request a credit bonus.",
+      "loginRequiredTitle": "Login required",
+      "loginRequiredBody": "You must be logged in to request Prophetik Tokens.",
 
       "comingSoonTitle": "Coming soon",
-      "comingSoonBody": "Purchase of {{credits}} credits ({{price}})",
+      "comingSoonBody": "Purchase of {{credits}} tokens ({{price}})",
 
       "paymentTitle": "Payment",
+
+      "purchasePendingTitle": "✅ Purchase successful",
+      "purchasePendingBody": "Your Prophetik Tokens will be delivered shortly.",
+      "deliveryWaiting":"Waiting for delivery…",
+      "deliveryDelivered": "Delivered ✅",
 
       "packs": {
         "starter": "Starter",
@@ -837,6 +845,7 @@
         "bestValue": "Best value"
       }
     }
+  }
   },
   "profile": {
     "title": "Profile",
@@ -956,7 +965,7 @@
 
     "subscriptions":"Subscriptions",
     "shop": "Shop",
-    "credits": "Credits",
+    "tokens": "Tokens",
     "profile": "Profile",
     "settings": "Settings",
     "howItWorks": "How it works",

@@ -1,4 +1,5 @@
 // functions/nhlIngest.js
+// Ingère les statistiques cumullé de l'année en cours et de l'année précédente
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -353,7 +354,7 @@ export const ingestSkaterStatsForSeason = onCall(
 
 /** 🕗 Cron quotidienne 8h (America/Toronto) sur la saison courante détectée */
 export const cronIngestSkaterStatsDaily = onSchedule(
-  { schedule: "0 8 * * *", timeZone: "America/Toronto", region: "us-central1" },
+  { schedule: "every 5 minutes", timeZone: "America/Toronto", region: "us-central1" },
   // every 5 minutes
   //  0 8 * * * 
   async () => {

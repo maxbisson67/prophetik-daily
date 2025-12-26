@@ -13,6 +13,8 @@ import { useTheme } from '@src/theme/ThemeProvider';
 // i18n
 import i18n from '@src/i18n/i18n';
 
+import ProphetikToken from "@src/ui/ProphetikToken";
+
 /* ---------- Helpers ---------- */
 
 function fmtDateTime(ts) {
@@ -411,7 +413,13 @@ export default function CreditsScreen() {
                       <Text style={{ fontWeight: '700', color: colors.text }}>
                         {meta.label}
                       </Text>
-                      <AmountPill amount={item.amount} />
+                      <ProphetikToken
+                        amount={Number(item.amount) || 0}
+                        prefixPlus
+                        size="sm"
+                        variant="badge"
+                        iconPosition="after"
+                      />
                     </View>
 
                     {!!subtitleParts.length && (
@@ -491,14 +499,16 @@ export default function CreditsScreen() {
                     </Text>
                   </View>
 
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: g.done ? '#059669' : colors.text,
-                    }}
-                  >
-                    {g.reward}
-                  </Text>
+                <ProphetikToken
+                  amount={g.reward}      // "+1"
+                  size="sm"
+                  variant="flat"
+                  showIcon
+                  iconOnly={false}
+                  iconPosition="after"
+                  style={{ opacity: g.done ? 1 : 1 }}
+                  textStyle={{ color: g.done ? "#059669" : colors.text }}
+                />
                 </View>
               ))}
             </View>

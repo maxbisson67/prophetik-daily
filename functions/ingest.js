@@ -1,4 +1,6 @@
 // functions/ingest.js
+// NHL live game
+// Ingère le pointage, temps restant, période et les buts/assits
 import { onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {

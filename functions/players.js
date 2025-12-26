@@ -8,7 +8,7 @@ async function runRefreshNhlPlayers() {
     { abbr:"MTL"},{ abbr:"TOR"},{ abbr:"OTT"},{ abbr:"BOS"},{ abbr:"NYR"},{ abbr:"NJD"},
     { abbr:"BUF"},{ abbr:"TBL"},{ abbr:"FLA"},{ abbr:"DET"},{ abbr:"CHI"},{ abbr:"COL"},
     { abbr:"DAL"},{ abbr:"EDM"},{ abbr:"CGY"},{ abbr:"VAN"},{ abbr:"SEA"},{ abbr:"LAK"},
-    { abbr:"ANA"},{ abbr:"ARI"},{ abbr:"WPG"},{ abbr:"MIN"},{ abbr:"NSH"},{ abbr:"STL"},
+    { abbr:"ANA"},{ abbr:"UTA"},{ abbr:"WPG"},{ abbr:"MIN"},{ abbr:"NSH"},{ abbr:"STL"},
     { abbr:"VGK"},{ abbr:"SJS"},{ abbr:"CBJ"},{ abbr:"PIT"},{ abbr:"PHI"},{ abbr:"WSH"},
     { abbr:"CAR"}
   ];
@@ -36,7 +36,9 @@ async function runRefreshNhlPlayers() {
 export const refreshNhlPlayers = onCall(async () => { await runRefreshNhlPlayers(); return { ok:true }; });
 
 export const refreshNhlPlayersCron = onSchedule(
-  { schedule: "0 3 * * *", timeZone: "America/Toronto", region: "us-central1" },
+  //every 5 minutes
+  // 0 3 * * * = à 3 AM tous les jours 
+  { schedule: "0 5 * * *", timeZone: "America/Toronto", region: "us-central1" },
   async () => { await runRefreshNhlPlayers(); }
 );
 

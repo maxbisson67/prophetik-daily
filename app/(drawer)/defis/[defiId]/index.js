@@ -714,6 +714,7 @@ function PlayerSelectModal({ visible, onClose, options, onPick }) {
                   >
                     {item.fullName}
                   </Text>
+                  <InjuryIcon injury={item.injury} size={16} />
                   {!!item.teamAbbr && (
                     <Image
                       source={teamLogo(item.teamAbbr)}
@@ -801,6 +802,7 @@ function PlayerPickerRow({ label, value, onEdit, locked }) {
               {value.fullName}{' '}
               {value.teamAbbr ? `• ${value.teamAbbr}` : ''}
             </Text>
+            <InjuryIcon injury={value.injury} size={16} />
              {/* ✅ Stats + coeff sous le nom */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
               <Text style={{ color: colors.subtext, fontSize: 12 }}>
@@ -892,6 +894,34 @@ function SeasonToggle({ seasonId, onChange }) {
         active={seasonId === prev}
       />
     </View>
+  );
+}
+
+function InjuryIcon({ injury, size = 16 }) {
+  const { colors } = useTheme();
+  const status = String(injury?.status || "").toLowerCase();
+  if (!status || status === "active") return null;
+
+  // mapping simple
+  const iconName =
+    status === "out" ? "medkit" :
+    status === "daytoday" ? "warning" :
+    status === "questionable" ? "help-circle" :
+    status === "probable" ? "pulse" :
+    "alert-circle";
+
+  const color =
+    status === "out" ? "#ef4444" :        // rouge
+    status === "daytoday" ? "#f59e0b" :   // orange
+    colors.subtext;                       // neutre
+
+  return (
+    <Ionicons
+      name={iconName}
+      size={size}
+      color={color}
+      style={{ marginLeft: 6 }}
+    />
   );
 }
 
@@ -1081,6 +1111,7 @@ export default function DefiParticipationScreen() {
               playerId: p.playerId,
               fullName: p.fullName,
               teamAbbr: (p.teamAbbr || '').toUpperCase(),
+              injury: p.injury || null
             });
           });
         }
@@ -1168,6 +1199,8 @@ export default function DefiParticipationScreen() {
     return isPast(defi.signupDeadline);
   }, [defi]);
 
+
+
   const headerTitle = useMemo(() => {
     const base =
       defi?.title ||
@@ -1183,12 +1216,14 @@ const playersWithStats = useMemo(() => {
     const g = Number(st.goals ?? 0);
     const a = Number(st.assists ?? 0);
     const pts = Number.isFinite(st.points) ? Number(st.points) : g + a;
+
     return {
       ...p,
       goals: g,
       assists: a,
       points: pts,
       positionCode: st.positionCode ?? null,
+      injury: p.injury || null, // ✅ conserve injury Firestore
     };
   });
 
@@ -1199,7 +1234,7 @@ const playersWithStats = useMemo(() => {
       String(x.fullName || '').localeCompare(String(y.fullName || ''))
   );
 
-  // ✅ ajoute rank + tier (sur la liste du soir)
+  // rank + tier
   return arr.map((p, idx) => ({
     ...p,
     rank: idx + 1,
@@ -1207,9 +1242,17 @@ const playersWithStats = useMemo(() => {
   }));
 }, [players, statsById]);
 
+const injuryById = useMemo(() => {
+  const m = {};
+  for (const p of (playersWithStats || [])) {
+    if (p?.playerId) m[String(p.playerId)] = p.injury || null;
+  }
+  return m;
+}, [playersWithStats]);
+
 const tierById = useMemo(() => {
   const m = {};
-  for (const p of playersWithStats) {
+  for (const p of (playersWithStats || [])) {
     if (p?.playerId) m[String(p.playerId)] = { tier: p.tier, rank: p.rank };
   }
   return m;
@@ -1218,6 +1261,7 @@ const tierById = useMemo(() => {
 const selectedWithStats = useMemo(() => {
   return (selected || []).map((p) => {
     if (!p?.playerId) return p;
+
     const st = statsById[String(p.playerId)] || {};
     const g = Number(st.goals ?? 0);
     const a = Number(st.assists ?? 0);
@@ -1231,9 +1275,10 @@ const selectedWithStats = useMemo(() => {
       points: pts,
       tier: extra.tier || 'T3',
       rank: extra.rank || null,
+      injury: injuryById[String(p.playerId)] || null,
     };
   });
-}, [selected, statsById, tierById]);
+}, [selected, statsById, tierById, injuryById]);
 
   const openPicker = useCallback((index) => {
     setPickerIndex(index);

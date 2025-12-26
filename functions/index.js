@@ -48,3 +48,5 @@ export { dailyShotBonus} from "./credits/dailyShotBonus.js"
 export { purchaseCredits } from "./credits/purchaseCredits.js";
 
 export { revenuecatWebhook } from "./credits/revenuecatWebhook.js";
+
+export { syncNhlInjuries } from "./nhlInjuriesSync.js";

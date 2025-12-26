@@ -798,24 +798,31 @@
       "wallet": {
         "balanceLabel": "MON SOLDE",
         "bonusButton": "+25 Bonus",
-        "buyTitle": "Acheter des crédits",
-        "creditsLabel": "{{count}} crédits",
+        "buyTitle": "Acheter des tokens Prophetik",
+        "creditsLabel": "{{count}}",
         "buyButton": "Acheter",
-        "footerNote": "Paiements sécurisés • Reçus envoyés par courriel • Crédits livrés instantanément",
+        "footerNote": "Paiements sécurisés • Token Prophetik livrés instantanément",
+        "tokenDisclaimer":  "Les tokens sont utilisables uniquement dans l’application et ne peuvent pas être échangés contre de l’argent.",
 
         "bonusSuccessTitle": "🎉 Bonus crédité",
-        "bonusSuccessBody": "Tu viens de recevoir +{{amount}} crédits.\nTon solde va se mettre à jour.",
+        "bonusSuccessBody": "Tu viens de recevoir +{{amount}} token(s).\nTon solde va se mettre à jour.",
 
+        "bonusLine":"{{bonus}} tokens en bonus",
         "bonusAlreadyUsedTitle": "Bonus déjà utilisé",
         "bonusAlreadyUsedBody": "Tu as déjà utilisé ton bonus récemment.\nTu pourras en redemander à partir du {{date}}.",
 
         "loginRequiredTitle": "Connexion requise",
-        "loginRequiredBody": "Tu dois être connecté pour demander un bonus de crédits.",
+        "loginRequiredBody": "Tu dois être connecté pour demander un bonus de token prophetik.",
 
         "comingSoonTitle": "Bientôt",
-        "comingSoonBody": "Achat de {{credits}} crédits ({{price}})",
+        "comingSoonBody": "Achat de {{credits}} tokens ({{price}})",
 
         "paymentTitle": "Paiement",
+
+        "purchasePendingTitle": "✅ Achat réussi",
+        "purchasePendingBody": "Tes tokens prophetik seront livrés sous peu.",
+        "deliveryWaiting":"En attente de la livraison des tokens...",
+        "deliveryDelivered": "Tokens livrés ✅",
 
         "packs": {
             "starter": "Starter",
@@ -944,7 +951,7 @@
 
     "subscriptions":"Abonnement",
     "shop": "Boutique",
-    "credits": "Crédits",
+    "tokens": "Tokens",
     "profile": "Profil",
     "settings": "Paramètres",
     "howItWorks": "Comment ça marche",

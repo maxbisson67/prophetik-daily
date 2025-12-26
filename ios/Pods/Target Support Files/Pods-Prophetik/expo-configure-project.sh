@@ -49,4 +49,4 @@ with_node \
   --entitlement "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/ios/Prophetik/Prophetik.entitlements" \
    \
   --platform "apple" \
-  --packages "expo" "expo-application" "expo-asset" "expo-av" "expo-constants" "expo-dev-launcher" "expo-dev-menu" "expo-file-system" "expo-font" "expo-haptics" "expo-image" "expo-image-picker" "expo-keep-awake" "expo-linear-gradient" "expo-linking" "expo-localization" "expo-notifications" "expo-router" "expo-sensors" "expo-system-ui"
+  --packages "expo" "expo-application" "expo-asset" "expo-av" "expo-constants" "expo-dev-launcher" "expo-dev-menu" "expo-eas-client" "expo-file-system" "expo-font" "expo-haptics" "expo-image" "expo-image-picker" "expo-keep-awake" "expo-linear-gradient" "expo-linking" "expo-localization" "expo-notifications" "expo-router" "expo-sensors" "expo-system-ui" "expo-updates"

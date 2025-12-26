@@ -11,6 +11,7 @@ import EXApplication
 import ExpoAsset
 import EXAV
 import EXConstants
+import EASClient
 import ExpoFileSystem
 import ExpoFont
 import ExpoHaptics
@@ -24,6 +25,7 @@ import EXNotifications
 import ExpoHead
 import ExpoSensors
 import ExpoSystemUI
+import EXUpdates
 #if EXPO_CONFIGURATION_DEBUG
 import EXDevLauncher
 import EXDevMenu
@@ -39,6 +41,7 @@ public class ExpoModulesProvider: ModulesProvider {
       AssetModule.self,
       VideoViewModule.self,
       ConstantsModule.self,
+      EASClientModule.self,
       FileSystemModule.self,
       FileSystemLegacyModule.self,
       FontLoaderModule.self,
@@ -70,6 +73,7 @@ public class ExpoModulesProvider: ModulesProvider {
       MagnetometerUncalibratedModule.self,
       PedometerModule.self,
       ExpoSystemUIModule.self,
+      UpdatesModule.self,
       DevMenuModule.self,
       DevMenuInternalModule.self,
       DevMenuPreferences.self
@@ -81,6 +85,7 @@ public class ExpoModulesProvider: ModulesProvider {
       AssetModule.self,
       VideoViewModule.self,
       ConstantsModule.self,
+      EASClientModule.self,
       FileSystemModule.self,
       FileSystemLegacyModule.self,
       FontLoaderModule.self,
@@ -111,7 +116,8 @@ public class ExpoModulesProvider: ModulesProvider {
       MagnetometerModule.self,
       MagnetometerUncalibratedModule.self,
       PedometerModule.self,
-      ExpoSystemUIModule.self
+      ExpoSystemUIModule.self,
+      UpdatesModule.self
     ]
     #endif
   }
@@ -138,11 +144,13 @@ public class ExpoModulesProvider: ModulesProvider {
   public override func getReactDelegateHandlers() -> [ExpoReactDelegateHandlerTupleType] {
     #if EXPO_CONFIGURATION_DEBUG
     return [
+      (packageName: "expo-updates", handler: ExpoUpdatesReactDelegateHandler.self),
       (packageName: "expo-dev-launcher", handler: ExpoDevLauncherReactDelegateHandler.self),
       (packageName: "expo-dev-menu", handler: ExpoDevMenuReactDelegateHandler.self)
     ]
     #else
     return [
+      (packageName: "expo-updates", handler: ExpoUpdatesReactDelegateHandler.self)
     ]
     #endif
   }
