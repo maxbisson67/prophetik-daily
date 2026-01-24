@@ -20,7 +20,7 @@ import { usePublicProfile } from '@src/profile/usePublicProfile';
 
 // ✅ i18n (uniforme partout)
 import i18n from '@src/i18n/i18n';
-import ProphetikToken from '@src/ui/ProphetikToken';
+import ProphetikIcons from '@src/ui/ProphetikIcons';
 
 /* =========================================================
    Helpers
@@ -254,37 +254,17 @@ function CustomDrawerContent(props) {
           )}
       />
 
-     <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.tokens', { defaultValue: 'Tokens' })}
-        onPress={() => {
-          props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => router.push('/(drawer)/credits'));
-        }}
-        icon={() => (
-          <View style={{ width: 28, alignItems: "center", justifyContent: "center" }}>
-            <ProphetikToken
-              iconOnly
-              size="lg"
-              variant="badge"
-              forceVariant={isDark ? "light" : "dark"} 
-            />
-          </View>
-        )}
-      />
-
       <DrawerItem
         {...itemCommonProps}
-        label={i18n.t('drawer.shop', { defaultValue: 'Shop' })}
+        label={i18n.t('drawer.subscriptions', { defaultValue: 'Forfaits' })}
         onPress={() => {
           props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => router.push('/(drawer)/boutique'));
+          requestAnimationFrame(() => router.push('/(drawer)/subscriptions'));
         }}
         icon={({ size }) => (
-          <MaterialCommunityIcons name="shopping" size={size} color={colors.text} />
+          <MaterialCommunityIcons name="crown-outline" size={size} color={colors.text} />
         )}
       />
-
     
       <DrawerItem
         {...itemCommonProps}

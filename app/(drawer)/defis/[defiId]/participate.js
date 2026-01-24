@@ -109,6 +109,13 @@ export default function ParticipateScreen() {
     })();
   }, [defiId, user?.uid]);
 
+  useEffect(() => {
+  if (!gameYMD) return;
+  const yyyymmdd = ymdCompact(gameYMD);
+  console.log("[matchups] gameYMD=", gameYMD, "yyyymmdd=", yyyymmdd);
+  
+}, [gameYMD]);
+
   // Met à jour le titre quand le défi arrive
   useLayoutEffect(() => {
     const title =

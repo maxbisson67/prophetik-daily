@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 // i18n
@@ -21,16 +20,14 @@ import i18n from '@src/i18n/i18n';
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useTheme } from '@src/theme/ThemeProvider';
 
-const DEFAULT_PRICE = 5;
-
 // ⚠️ Fallback (dev only) – noms non traduits ici
 const FALLBACK = [
-  { id: 'wolves', name: 'Les Loups', url: 'https://picsum.photos/seed/wolves/400', sort: 10, price: 5 },
-  { id: 'titans', name: 'Les Titans', url: 'https://picsum.photos/seed/titans/400', sort: 20, price: 5 },
-  { id: 'visions', name: 'Les Visionnaires', url: 'https://picsum.photos/seed/visions/400', sort: 30, price: 5 },
-  { id: 'dragons', name: 'Les Dragons', url: 'https://picsum.photos/seed/dragons/400', sort: 40, price: 5 },
-  { id: 'skaters', name: 'Les Patineurs Fous', url: 'https://picsum.photos/seed/skaters/400', sort: 50, price: 5 },
-  { id: 'blizzard', name: 'Le Blizzard', url: 'https://picsum.photos/seed/blizzard/400', sort: 60, price: 5 },
+  { id: 'wolves', name: 'Les Loups', url: 'https://picsum.photos/seed/wolves/400', sort: 10 },
+  { id: 'titans', name: 'Les Titans', url: 'https://picsum.photos/seed/titans/400', sort: 20 },
+  { id: 'visions', name: 'Les Visionnaires', url: 'https://picsum.photos/seed/visions/400', sort: 30 },
+  { id: 'dragons', name: 'Les Dragons', url: 'https://picsum.photos/seed/dragons/400', sort: 40 },
+  { id: 'skaters', name: 'Les Patineurs Fous', url: 'https://picsum.photos/seed/skaters/400', sort: 50 },
+  { id: 'blizzard', name: 'Le Blizzard', url: 'https://picsum.photos/seed/blizzard/400', sort: 60 },
 ];
 
 function Chip({ icon, color, bg, label }) {
@@ -66,19 +63,15 @@ function Chip({ icon, color, bg, label }) {
 function isGroupArchived(g) {
   if (!g) return false;
 
-  // bool explicite
   if (g.archived === true) return true;
   if (g.isArchived === true) return true;
 
-  // status string
   const status = String(g.status || '').toLowerCase();
   if (status === 'archived') return true;
 
-  // timestamps
   if (g.archivedAt) return true;
   if (g.archivedOn) return true;
 
-  // certains modèles mettent une date de fin / disabled
   if (g.disabled === true) return true;
 
   return false;
@@ -87,9 +80,7 @@ function isGroupArchived(g) {
 export default function GroupAvatarsScreen() {
   const params = useLocalSearchParams();
   const groupId = useMemo(
-    () =>
-      (Array.isArray(params.groupId) ? params.groupId[0] : params.groupId) ||
-      '',
+    () => (Array.isArray(params.groupId) ? params.groupId[0] : params.groupId) || '',
     [params.groupId]
   );
 
@@ -97,9 +88,6 @@ export default function GroupAvatarsScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
   const isDark = colors.background === '#111827';
-
-  const [me, setMe] = useState(null);
-  const [loadingMe, setLoadingMe] = useState(true);
 
   const [group, setGroup] = useState(null);
   const [loadingGroup, setLoadingGroup] = useState(true);
@@ -114,27 +102,6 @@ export default function GroupAvatarsScreen() {
     () => (items || []).find((a) => a.id === selectedId) || null,
     [items, selectedId]
   );
-
-  // Me (credits)
-  useEffect(() => {
-    if (!user?.uid) {
-      setMe(null);
-      setLoadingMe(false);
-      return;
-    }
-    setLoadingMe(true);
-    const ref = firestore().doc(`participants/${user.uid}`);
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        setMe(snap.exists ? { uid: snap.id, ...snap.data() } : null);
-        setLoadingMe(false);
-      },
-      () => setLoadingMe(false)
-    );
-    return () => {
-      try { unsub(); } catch {}
-    };
-  }, [user?.uid]);
 
   // Group meta
   useEffect(() => {
@@ -165,6 +132,7 @@ export default function GroupAvatarsScreen() {
     const qRef = firestore()
       .collection('catalog_group_avatars')
       .orderBy('sort', 'asc');
+
     const unsub = qRef.onSnapshot(
       (snap) => {
         const rows = snap?.docs?.map((d) => ({ id: d.id, ...d.data() })) || [];
@@ -176,46 +144,11 @@ export default function GroupAvatarsScreen() {
         setLoadingItems(false);
       }
     );
+
     return () => {
       try { unsub(); } catch {}
     };
   }, []);
-
-  // 🔧 util crédit(s) – couvre plusieurs schémas possibles
-  function readCredits(meDoc) {
-    if (!meDoc) return 0;
-
-    if (typeof meDoc.credits === 'number') return meDoc.credits;
-    if (typeof meDoc.balance === 'number') return meDoc.balance;
-
-    if (meDoc.credits && typeof meDoc.credits === 'object') {
-      if (typeof meDoc.credits.balance === 'number') return meDoc.credits.balance;
-      if (typeof meDoc.credits.total === 'number' && typeof meDoc.credits.spent === 'number') {
-        return meDoc.credits.total - meDoc.credits.spent;
-      }
-    }
-
-    if (meDoc.wallets && meDoc.wallets.main && typeof meDoc.wallets.main.balance === 'number') {
-      return meDoc.wallets.main.balance;
-    }
-    if (typeof meDoc.creditBalance === 'number') return meDoc.creditBalance;
-
-    const candidates = [
-      meDoc.credits,
-      meDoc.balance,
-      meDoc?.credits?.balance,
-      meDoc?.wallets?.main?.balance,
-      meDoc.creditBalance,
-    ].filter((v) => typeof v === 'string');
-    for (const s of candidates) {
-      const n = Number(s);
-      if (Number.isFinite(n)) return n;
-    }
-
-    return 0;
-  }
-
-  const credits = useMemo(() => readCredits(me), [me]);
 
   const canManage =
     !!user?.uid &&
@@ -225,8 +158,8 @@ export default function GroupAvatarsScreen() {
       String(group.ownerUid || '').toLowerCase() === String(user.uid).toLowerCase() ||
       (Array.isArray(group.admins) && group.admins.includes(user.uid)));
 
-  async function handleBuy() {
-    // ✅ Blocage UI si groupe archivé (bug actuel)
+  async function handleApply() {
+    // Blocage si groupe archivé
     if (groupArchived) {
       return Alert.alert(
         i18n.t('groupAvatars.alerts.archivedTitle', 'Groupe archivé'),
@@ -240,21 +173,24 @@ export default function GroupAvatarsScreen() {
     if (!user?.uid) {
       return Alert.alert(
         i18n.t('groupAvatars.alerts.loginRequiredTitle', 'Connexion requise'),
-        i18n.t('groupAvatars.alerts.loginRequiredBody', 'Connecte-toi pour acheter un avatar.')
+        i18n.t('groupAvatars.alerts.loginRequiredBody', 'Connecte-toi pour modifier un avatar.')
       );
     }
+
     if (!group?.id) {
       return Alert.alert(
         i18n.t('groupAvatars.alerts.groupRequiredTitle', 'Groupe requis'),
         i18n.t('groupAvatars.alerts.groupRequiredBody', 'Aucun groupe n’a été fourni.')
       );
     }
+
     if (!selectedItem) {
       return Alert.alert(
         i18n.t('groupAvatars.alerts.selectRequiredTitle', 'Choisis un avatar'),
-        i18n.t('groupAvatars.alerts.selectRequiredBody', 'Sélectionne un avatar avant d’acheter.')
+        i18n.t('groupAvatars.alerts.selectRequiredBody', 'Sélectionne un avatar avant d’appliquer.')
       );
     }
+
     if (!canManage) {
       return Alert.alert(
         i18n.t('groupAvatars.alerts.accessDeniedTitle', 'Accès refusé'),
@@ -262,34 +198,34 @@ export default function GroupAvatarsScreen() {
       );
     }
 
-    const price = Number.isFinite(selectedItem.price) ? selectedItem.price : DEFAULT_PRICE;
-
     try {
       setBusy(true);
-      const call = functions().httpsCallable('purchaseGroupAvatar');
-      const res = await call({
-        groupId: group.id,
-        avatarId: selectedItem.id,
-        price,
-        avatarUrl: selectedItem.url,
-      });
 
-      if (res?.data?.ok) {
-        const groupName = group?.name || group?.title || group?.id || '—';
-        Alert.alert(
-          i18n.t('groupAvatars.alerts.successTitle', 'Avatar défini 🎉'),
-          i18n.t('groupAvatars.alerts.successBody', {
-            defaultValue: 'Le groupe “{{name}}” a un nouvel avatar !',
-            name: groupName,
-          }),
-          [{ text: i18n.t('common.ok', 'OK'), onPress: () => router.back() }]
+      // ✅ Simple "apply" côté client : on met avatarId + avatarUrl sur groups/{groupId}
+      await firestore()
+        .doc(`groups/${group.id}`)
+        .set(
+          {
+            avatarId: selectedItem.id,
+            avatarUrl: selectedItem.url,
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
         );
-      } else {
-        throw new Error(res?.data?.error || i18n.t('common.unknownError', 'Erreur inconnue'));
-      }
+
+      const groupName = group?.name || group?.title || group?.id || '—';
+
+      Alert.alert(
+        i18n.t('groupAvatars.alerts.appliedTitle', '✅ Avatar appliqué'),
+        i18n.t('groupAvatars.alerts.appliedBody', {
+          defaultValue: 'Le groupe “{{name}}” a un nouvel avatar.',
+          name: groupName,
+        }),
+        [{ text: i18n.t('common.ok', 'OK'), onPress: () => router.back() }]
+      );
     } catch (e) {
       Alert.alert(
-        i18n.t('groupAvatars.alerts.purchaseFailedTitle', 'Achat impossible'),
+        i18n.t('groupAvatars.alerts.applyFailedTitle', 'Impossible de modifier'),
         String(e?.message || e)
       );
     } finally {
@@ -306,7 +242,7 @@ export default function GroupAvatarsScreen() {
           title: headerTitle,
           headerLeft: () => (
             <TouchableOpacity
-              onPress={() => router.replace('/(drawer)/boutique')}
+              onPress={() => router.back()}
               style={{ paddingHorizontal: 10 }}
             >
               <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -332,7 +268,7 @@ export default function GroupAvatarsScreen() {
         }}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
-            {/* Bandeau groupe + crédits */}
+            {/* Bandeau groupe (sans crédits) */}
             <View
               style={{
                 padding: 14,
@@ -347,14 +283,7 @@ export default function GroupAvatarsScreen() {
                 shadowOffset: { width: 0, height: 3 },
               }}
             >
-              <Text
-                style={{
-                  fontWeight: '800',
-                  fontSize: 16,
-                  marginBottom: 6,
-                  color: colors.text,
-                }}
-              >
+              <Text style={{ fontWeight: '800', fontSize: 16, marginBottom: 6, color: colors.text }}>
                 {i18n.t('groupAvatars.group.title', 'Groupe')}
               </Text>
 
@@ -368,7 +297,7 @@ export default function GroupAvatarsScreen() {
                 style={{
                   flexDirection: 'row',
                   justifyContent: 'space-between',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   marginTop: 8,
                   gap: 10,
                 }}
@@ -384,7 +313,6 @@ export default function GroupAvatarsScreen() {
                         : i18n.t('groupAvatars.access.readOnly', 'Lecture seule')
                     }
                   />
-
                   {groupArchived && (
                     <Chip
                       icon="archive"
@@ -394,23 +322,10 @@ export default function GroupAvatarsScreen() {
                     />
                   )}
                 </View>
-
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ fontSize: 12, color: colors.subtext }}>
-                    {i18n.t('groupAvatars.group.myCreditsLabel', 'Tes crédits')}
-                  </Text>
-                  {loadingMe ? (
-                    <ActivityIndicator color={colors.primary} />
-                  ) : (
-                    <Text style={{ fontWeight: '900', fontSize: 20, color: colors.text }}>
-                      {credits}
-                    </Text>
-                  )}
-                </View>
               </View>
             </View>
 
-            {/* Aperçu sélection + bouton achat */}
+            {/* Aperçu sélection + bouton appliquer */}
             <View
               style={{
                 padding: 12,
@@ -459,12 +374,6 @@ export default function GroupAvatarsScreen() {
                 )}
 
                 {(() => {
-                  const price = selectedItem
-                    ? Number.isFinite(selectedItem.price)
-                      ? selectedItem.price
-                      : DEFAULT_PRICE
-                    : DEFAULT_PRICE;
-
                   const disabled = busy || !selectedItem || !canManage || groupArchived;
 
                   const btnLabel = busy
@@ -472,19 +381,16 @@ export default function GroupAvatarsScreen() {
                     : groupArchived
                     ? i18n.t('groupAvatars.actions.archivedDisabled', 'Groupe archivé')
                     : selectedItem
-                    ? i18n.t('groupAvatars.actions.buyForGroup', {
-                        defaultValue: 'Acheter pour le groupe ({{price}} crédits)',
-                        price,
-                      })
+                    ? i18n.t('groupAvatars.actions.applyButton', 'Appliquer')
                     : i18n.t('groupAvatars.actions.chooseFirst', 'Choisis un avatar');
 
                   return (
                     <TouchableOpacity
-                      onPress={handleBuy}
+                      onPress={handleApply}
                       disabled={disabled}
                       style={{
                         marginTop: 12,
-                        backgroundColor: disabled ? '#9ca3af' : '#ef4444',
+                        backgroundColor: disabled ? '#9ca3af' : colors.primary,
                         paddingVertical: 14,
                         paddingHorizontal: 16,
                         borderRadius: 12,
@@ -507,7 +413,7 @@ export default function GroupAvatarsScreen() {
                   <Text style={{ marginTop: 10, color: colors.subtext, fontSize: 12, textAlign: 'center' }}>
                     {i18n.t(
                       'groupAvatars.hints.archivedExplain',
-                      'Ce groupe est archivé : les modifications (avatar, achats, etc.) sont désactivées.'
+                      'Ce groupe est archivé : les modifications sont désactivées.'
                     )}
                   </Text>
                 )}
@@ -531,7 +437,6 @@ export default function GroupAvatarsScreen() {
         }
         renderItem={({ item }) => {
           const active = selectedId === item.id;
-          const price = Number.isFinite(item.price) ? item.price : DEFAULT_PRICE;
 
           return (
             <TouchableOpacity
@@ -565,11 +470,7 @@ export default function GroupAvatarsScreen() {
                 {item.name || item.id}
               </Text>
               <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                {i18n.t('groupAvatars.catalog.priceLine', {
-                  defaultValue: '{{price}} crédit{{s}}',
-                  price,
-                  s: price > 1 ? 's' : '',
-                })}
+                {i18n.t('groupAvatars.catalog.freeLine', 'Gratuit')}
               </Text>
             </TouchableOpacity>
           );
@@ -578,8 +479,8 @@ export default function GroupAvatarsScreen() {
           <View style={{ gap: 8, marginTop: 12, marginBottom: 16 }}>
             <Text style={{ color: colors.subtext, fontSize: 12, textAlign: 'center' }}>
               {i18n.t(
-                'groupAvatars.footer.legal',
-                'En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement.'
+                'groupAvatars.footer.note',
+                'Les avatars de groupe sont gratuits.'
               )}
             </Text>
           </View>

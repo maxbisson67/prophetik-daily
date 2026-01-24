@@ -354,7 +354,7 @@ export const ingestSkaterStatsForSeason = onCall(
 
 /** 🕗 Cron quotidienne 8h (America/Toronto) sur la saison courante détectée */
 export const cronIngestSkaterStatsDaily = onSchedule(
-  { schedule: "every 5 minutes", timeZone: "America/Toronto", region: "us-central1" },
+  { schedule: "0 8 * * *", timeZone: "America/Toronto", region: "us-central1" },
   // every 5 minutes
   //  0 8 * * * 
   async () => {

@@ -61,6 +61,20 @@
         "backgroundColor": "#E11D48"
       },
       "package": "com.prophetik",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "capitaine.web.app",
+              "pathPrefix": "/email-link"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "POST_NOTIFICATIONS",

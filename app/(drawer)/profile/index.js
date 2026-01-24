@@ -1,5 +1,5 @@
 // app/profile/index.js
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -8,41 +8,36 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-} from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { Stack, useRouter } from 'expo-router';
+} from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { Stack, useRouter } from "expo-router";
 
 // 🔁 RN Firebase Firestore
-import firestore from '@react-native-firebase/firestore';
+import firestore from "@react-native-firebase/firestore";
 
 // Auth web (tu peux garder ton provider actuel)
-import { signInAnonymously, updateProfile } from 'firebase/auth';
+import { signInAnonymously, updateProfile } from "firebase/auth";
 
 // Safe auth
-import { useAuth } from '@src/auth/SafeAuthProvider';
-
-// crédits
-import CreditsWallet from '@src/credits/CreditsWallet';
-import { useCredits } from '@src/credits/useCredits';
+import { useAuth } from "@src/auth/SafeAuthProvider";
 
 // Si tu utilises encore auth web dans ton SafeAuthProvider :
-import { auth } from '@src/lib/firebase';
+import { auth } from "@src/lib/firebase";
 
 // Thème
-import { useTheme } from '@src/theme/ThemeProvider';
+import { useTheme } from "@src/theme/ThemeProvider";
 
 // i18n (singleton)
-import i18n from '@src/i18n/i18n';
+import i18n from "@src/i18n/i18n";
 
 export default function ProfileScreen() {
   const { user, authReady, signOut } = useAuth();
   const router = useRouter();
-  const { loading: creditsLoading, topUpFree } = useCredits();
   const { colors } = useTheme();
 
-  const isDark = colors.background === '#111827';
+  const isDark = colors.background === "#111827";
 
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || null);
   const [busy, setBusy] = useState(false);
   const [participant, setParticipant] = useState(null);
@@ -52,42 +47,46 @@ export default function ProfileScreen() {
 
   // --- sync visuel sur changement d'UID
   useEffect(() => {
-    setDisplayName(user?.displayName || '');
+    setDisplayName(user?.displayName || "");
     setPhotoURL(user?.photoURL ?? null);
   }, [user?.uid]);
 
-  // --- fetch participant (RNFirebase)
+  // --- fetch participant (LIVE)
   useEffect(() => {
-    let cancelled = false;
+    if (!user?.uid) {
+      setParticipant(null);
+      setParticipantLoaded(true);
+      return;
+    }
 
-    (async () => {
-      setParticipantLoaded(false);
+    setParticipantLoaded(false);
 
-      if (!user?.uid) {
-        setParticipant(null);
-        setParticipantLoaded(true);
-        return;
-      }
-
-      try {
-        const snap = await firestore().doc(`participants/${user.uid}`).get();
-        if (cancelled) return;
-
+    const ref = firestore().doc(`participants/${user.uid}`);
+    const unsub = ref.onSnapshot(
+      (snap) => {
         if (snap.exists) {
           const p = snap.data() || {};
-          setDisplayName(p?.displayName || user.displayName || '');
-          setPhotoURL(p?.photoURL ?? p?.avatarUrl ?? user.photoURL ?? null);
           setParticipant({ id: snap.id, ...p });
+
+          setDisplayName(p?.displayName || user.displayName || "");
+
+          const nextPhoto = p?.photoURL ?? p?.avatarUrl ?? user?.photoURL ?? null;
+          setPhotoURL(nextPhoto);
         } else {
           setParticipant(null);
         }
-      } finally {
-        if (!cancelled) setParticipantLoaded(true);
+
+        setParticipantLoaded(true);
+      },
+      () => {
+        setParticipantLoaded(true);
       }
-    })();
+    );
 
     return () => {
-      cancelled = true;
+      try {
+        unsub();
+      } catch {}
     };
   }, [user?.uid]);
 
@@ -95,7 +94,7 @@ export default function ProfileScreen() {
     !!user?.uid &&
     participantLoaded &&
     (!participant?.onboarding ||
-      typeof participant?.onboarding?.welcomeSeen !== 'boolean');
+      typeof participant?.onboarding?.welcomeSeen !== "boolean");
 
   // --- patch onboarding (une seule fois)
   useEffect(() => {
@@ -138,14 +137,16 @@ export default function ProfileScreen() {
           photoURL: u.photoURL || null,
           createdAt: firestore.FieldValue.serverTimestamp(),
           updatedAt: firestore.FieldValue.serverTimestamp(),
-          credits: { balance: 0 },
           betaEligible: true,
           onboarding: { welcomeSeen: false },
+
+          // ✅ Optionnel: tu peux garder/enlever selon ton modèle de données
+          // credits: { balance: 0 },
         },
         { merge: true }
       );
 
-      router.replace('/onboarding/welcome');
+      router.replace("/onboarding/welcome");
     }
   };
 
@@ -157,12 +158,14 @@ export default function ProfileScreen() {
       await ensureParticipantDoc(res.user);
 
       Alert.alert(
-        i18n.t('profile.alert.connectedTitle', { defaultValue: 'Connected' }),
-        i18n.t('profile.alert.connectedBody', { defaultValue: 'Welcome!' })
+        i18n.t("profile.alert.connectedTitle", { defaultValue: "Connected" }),
+        i18n.t("profile.alert.connectedBody", { defaultValue: "Welcome!" })
       );
     } catch (e) {
       Alert.alert(
-        i18n.t('profile.alert.signInFailTitle', { defaultValue: 'Unable to sign in' }),
+        i18n.t("profile.alert.signInFailTitle", {
+          defaultValue: "Unable to sign in",
+        }),
         String(e?.message || e)
       );
     } finally {
@@ -176,11 +179,13 @@ export default function ProfileScreen() {
       await signOut();
 
       Alert.alert(
-        i18n.t('profile.alert.signedOutTitle', { defaultValue: 'Signed out' })
+        i18n.t("profile.alert.signedOutTitle", { defaultValue: "Signed out" })
       );
     } catch (e) {
       Alert.alert(
-        i18n.t('profile.alert.signOutFailTitle', { defaultValue: 'Unable to sign out' }),
+        i18n.t("profile.alert.signOutFailTitle", {
+          defaultValue: "Unable to sign out",
+        }),
         String(e?.message || e)
       );
     } finally {
@@ -192,8 +197,10 @@ export default function ProfileScreen() {
   const saveProfile = async () => {
     if (!user?.uid) {
       Alert.alert(
-        i18n.t('profile.alert.notLoggedTitle', { defaultValue: 'Not logged in' }),
-        i18n.t('profile.alert.notLoggedBody', { defaultValue: 'Please sign in first.' })
+        i18n.t("profile.alert.notLoggedTitle", { defaultValue: "Not logged in" }),
+        i18n.t("profile.alert.notLoggedBody", {
+          defaultValue: "Please sign in first.",
+        })
       );
       return;
     }
@@ -225,17 +232,20 @@ export default function ProfileScreen() {
           {
             displayName: displayName || null,
             email: user.email || null,
-            credits: { balance: 0 },
             betaEligible: true,
             createdAt: firestore.FieldValue.serverTimestamp(),
             updatedAt: firestore.FieldValue.serverTimestamp(),
             onboarding: { welcomeSeen: false },
+
             ...(newPhotoURL ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL } : {}),
+
+            // ✅ Optionnel: tu peux garder/enlever selon ton modèle de données
+            // credits: { balance: 0 },
           },
           { merge: true }
         );
 
-        router.replace('/onboarding/welcome');
+        router.replace("/onboarding/welcome");
         return;
       }
 
@@ -257,11 +267,11 @@ export default function ProfileScreen() {
       }
 
       Alert.alert(
-        i18n.t('profile.alert.savedTitle', { defaultValue: 'Profile updated' })
+        i18n.t("profile.alert.savedTitle", { defaultValue: "Profile updated" })
       );
     } catch (e) {
       Alert.alert(
-        i18n.t('profile.alert.saveFailTitle', { defaultValue: 'Save failed' }),
+        i18n.t("profile.alert.saveFailTitle", { defaultValue: "Save failed" }),
         String(e?.message || e)
       );
     } finally {
@@ -274,33 +284,24 @@ export default function ProfileScreen() {
       <View
         style={{
           flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
+          alignItems: "center",
+          justifyContent: "center",
           backgroundColor: colors.background,
         }}
       >
         <ActivityIndicator color={colors.primary} />
         <Text style={{ color: colors.text, marginTop: 8 }}>
-          {i18n.t('common.initializing', { defaultValue: 'Initializing…' })}
+          {i18n.t("common.initializing", { defaultValue: "Initializing…" })}
         </Text>
       </View>
     );
   }
 
-  const creditsValue =
-    typeof participant?.credits === 'number'
-      ? participant.credits
-      : typeof participant?.credits?.balance === 'number'
-      ? participant.credits.balance
-      : typeof participant?.balance === 'number'
-      ? participant.balance
-      : 0;
-
   return (
     <>
       <Stack.Screen
         options={{
-          title: i18n.t('profile.title', { defaultValue: 'Profile' }),
+          title: i18n.t("profile.title", { defaultValue: "Profile" }),
           headerStyle: { backgroundColor: colors.card },
           headerTitleStyle: { color: colors.text },
           headerTintColor: colors.text,
@@ -322,9 +323,6 @@ export default function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="always"
       >
-        {/* Solde de crédits */}
-        <CreditsWallet credits={creditsValue} />
-
         {/* Carte profil */}
         <View
           style={{
@@ -334,53 +332,59 @@ export default function ProfileScreen() {
             borderColor: colors.border,
             backgroundColor: colors.card,
             elevation: 3,
-            shadowColor: '#000',
+            shadowColor: "#000",
             shadowOpacity: 0.08,
             shadowRadius: 6,
             shadowOffset: { width: 0, height: 3 },
             gap: 16,
           }}
         >
-          <View style={{ alignItems: 'center', gap: 12 }}>
+          <View style={{ alignItems: "center", gap: 12 }}>
             <Image
               source={
                 photoURL
                   ? { uri: photoURL }
-                  : require('@src/assets/avatar-placeholder.png')
+                  : require("@src/assets/avatar-placeholder.png")
               }
               style={{
                 width: 96,
                 height: 96,
                 borderRadius: 48,
-                backgroundColor: colors.card2 || '#1f2937',
+                backgroundColor: colors.card2 || "#1f2937",
               }}
             />
 
             <TouchableOpacity
-              onPress={() => router.push('/avatars/AvatarsScreen')}
+              onPress={() => router.push("/avatars/AvatarsScreen")}
               style={{
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 borderRadius: 10,
-                backgroundColor: '#ef4444',
-                alignItems: 'center',
+                backgroundColor: "#ef4444",
+                alignItems: "center",
               }}
             >
-              <Text style={{ color: '#fff', fontWeight: '700' }}>
-                {i18n.t('profile.chooseAvatarCta', { defaultValue: '🎨 Choose an avatar' })}
+              <Text style={{ color: "#fff", fontWeight: "700" }}>
+                {i18n.t("profile.chooseAvatarCta", {
+                  defaultValue: "🎨 Choose an avatar",
+                })}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={{ gap: 6 }}>
-            <Text style={{ fontWeight: '600', color: colors.text }}>
-              {i18n.t('profile.displayNameLabel', { defaultValue: 'Display name' })}
+            <Text style={{ fontWeight: "600", color: colors.text }}>
+              {i18n.t("profile.displayNameLabel", {
+                defaultValue: "Display name",
+              })}
             </Text>
 
             <TextInput
               value={displayName}
               onChangeText={setDisplayName}
-              placeholder={i18n.t('profile.displayNamePlaceholder', { defaultValue: 'Your name' })}
+              placeholder={i18n.t("profile.displayNamePlaceholder", {
+                defaultValue: "Your name",
+              })}
               placeholderTextColor={colors.subtext}
               style={{
                 borderWidth: 1,
@@ -402,14 +406,14 @@ export default function ProfileScreen() {
             <TouchableOpacity
               onPress={saveProfile}
               style={{
-                backgroundColor: '#111827',
+                backgroundColor: "#111827",
                 padding: 14,
                 borderRadius: 10,
-                alignItems: 'center',
+                alignItems: "center",
               }}
             >
-              <Text style={{ color: '#fff', fontWeight: '600' }}>
-                {i18n.t('profile.save', { defaultValue: 'Save' })}
+              <Text style={{ color: "#fff", fontWeight: "600" }}>
+                {i18n.t("profile.save", { defaultValue: "Save" })}
               </Text>
             </TouchableOpacity>
 
@@ -418,19 +422,19 @@ export default function ProfileScreen() {
               style={{
                 padding: 14,
                 borderRadius: 10,
-                alignItems: 'center',
+                alignItems: "center",
                 borderWidth: 1,
-                backgroundColor: isDark ? '#450a0a' : '#fff5f5',
-                borderColor: isDark ? '#fecaca' : '#ffd6d6',
+                backgroundColor: isDark ? "#450a0a" : "#fff5f5",
+                borderColor: isDark ? "#fecaca" : "#ffd6d6",
               }}
             >
               <Text
                 style={{
-                  color: isDark ? '#fecaca' : '#b00020',
-                  fontWeight: '600',
+                  color: isDark ? "#fecaca" : "#b00020",
+                  fontWeight: "600",
                 }}
               >
-                {i18n.t('profile.signOut', { defaultValue: 'Sign out' })}
+                {i18n.t("profile.signOut", { defaultValue: "Sign out" })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -438,50 +442,17 @@ export default function ProfileScreen() {
           <TouchableOpacity
             onPress={onSignIn}
             style={{
-              backgroundColor: '#111827',
+              backgroundColor: "#111827",
               padding: 14,
               borderRadius: 10,
-              alignItems: 'center',
+              alignItems: "center",
             }}
           >
-            <Text style={{ color: '#fff', fontWeight: '600' }}>
-              {i18n.t('auth.login', { defaultValue: 'Log in' })}
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              {i18n.t("auth.login", { defaultValue: "Log in" })}
             </Text>
           </TouchableOpacity>
         )}
-
-        {user && !creditsLoading && creditsValue < 5 ? (
-          <TouchableOpacity
-            onPress={async () => {
-              try {
-                const res = await topUpFree();
-                Alert.alert(
-                  i18n.t('profile.topup.title', { defaultValue: 'Top-up' }),
-                  i18n.t('profile.topup.body', {
-                    defaultValue: 'New balance: {{credits}}',
-                    credits: Number(res?.credits ?? 0),
-                  })
-                );
-              } catch (e) {
-                Alert.alert(
-                  i18n.t('profile.topup.failTitle', { defaultValue: 'Top-up failed' }),
-                  String(e?.message || e)
-                );
-              }
-            }}
-            style={{
-              marginTop: 8,
-              backgroundColor: '#111827',
-              padding: 12,
-              borderRadius: 10,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '600' }}>
-              {i18n.t('profile.topup.betaCta', { defaultValue: '+25 free (beta)' })}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
       </KeyboardAwareScrollView>
     </>
   );

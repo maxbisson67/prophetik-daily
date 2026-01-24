@@ -705,17 +705,6 @@ export default function ChallengesScreen() {
             </Text>
           </View>
 
-          {/* Coût participation – seulement pour les actifs */}
-          {isActive && !isGhostCancelled && (
-            <Text
-              style={{ marginTop: 4, color: colors.subtext }}
-            >
-              {i18n.t('challenges.entryCostLabel', {
-                count: entryCost,
-              })}
-            </Text>
-          )}
-
           {/* Info remboursement si ghost */}
           {isGhostCancelled && (
             <Text

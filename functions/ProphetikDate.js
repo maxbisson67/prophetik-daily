@@ -142,3 +142,15 @@ export function todayAppYmd() {
 export function todayNhlYmd() {
   return nhlYmd();
 }
+
+/**
+ * Retourne une Date "ajustée" pour que la semaine commence
+ * le dimanche à 08:00 AM (APP_TZ).
+ *
+ * Stratégie: on soustrait 8h avant le calcul ISO.
+ */
+export function weekAnchorDate(now = new Date()) {
+  const d = new Date(now.getTime());
+  d.setHours(d.getHours() - 8);
+  return d;
+}

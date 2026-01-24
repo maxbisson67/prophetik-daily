@@ -85,8 +85,8 @@ function computeBonusPerWinner(defiId, defiDoc) {
  */
 export const finalizeDefiWinners = onSchedule(
   {
-    // en prod: "0 5 * * *"
-    schedule: "*/2 * * * *",
+
+    schedule: "0 5 * * *",
     timeZone: APP_TZ,
     region: "us-central1",
   },
@@ -281,6 +281,3 @@ export const finalizeDefiWinners = onSchedule(
     }
   }
 );
-
-// Ancien alias conservé pour compat
-export const finalizeAwaitingDefis = finalizeDefiWinners;

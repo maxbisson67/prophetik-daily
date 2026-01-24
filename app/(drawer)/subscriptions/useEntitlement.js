@@ -1,40 +1,70 @@
-// src/subscriptions/useEntitlement.js
-import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@src/lib/firebase"; // ajuste si ton export s'appelle autrement
+// (drawer)/subscriptions/useEntitlement.js
+import { useEffect, useMemo, useState } from "react";
+import firestore from "@react-native-firebase/firestore";
 
-export function useEntitlement(uid) {
-  const [entitlement, setEntitlement] = useState(null);
+/**
+ * Source de vérité (MVP):
+ * entitlements/{uid}
+ * {
+ *   tier: "free" | "pro" | "vip",
+ *   active: true,
+ *   updatedAt: serverTimestamp()
+ * }
+ *
+ * Si doc absent -> free
+ */
+export default function useEntitlement(uid) {
   const [loading, setLoading] = useState(!!uid);
+  const [tier, setTier] = useState("free");
+  const [active, setActive] = useState(true);
   const [error, setError] = useState(null);
 
+  const key = useMemo(() => String(uid || ""), [uid]);
+
   useEffect(() => {
+    setError(null);
+    setTier("free");
+    setActive(true);
+
     if (!uid) {
-      setEntitlement(null);
       setLoading(false);
-      setError(null);
       return;
     }
 
     setLoading(true);
-    const ref = doc(db, "entitlements", uid);
 
-    const unsub = onSnapshot(
-      ref,
+    const ref = firestore().collection("entitlements").doc(String(uid));
+
+    const unsub = ref.onSnapshot(
       (snap) => {
-        setEntitlement(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+        if (!snap.exists) {
+          setTier("free");
+          setActive(true);
+          setLoading(false);
+          return;
+        }
+
+        const d = snap.data() || {};
+        const t = String(d.tier || "free").toLowerCase();
+
+        setTier(t === "vip" || t === "pro" ? t : "free");
+        setActive(d.active !== false);
         setLoading(false);
-        setError(null);
       },
       (e) => {
-        setEntitlement(null);
-        setLoading(false);
         setError(e);
+        setTier("free");
+        setActive(true);
+        setLoading(false);
       }
     );
 
-    return () => unsub();
-  }, [uid]);
+    return () => {
+      try {
+        unsub?.();
+      } catch {}
+    };
+  }, [key]);
 
-  return { entitlement, loading, error };
+  return { loading, tier, active, error };
 }

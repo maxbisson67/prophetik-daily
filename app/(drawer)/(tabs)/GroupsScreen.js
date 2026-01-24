@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@src/auth/SafeAuthProvider';
-import { createGroupService } from '@src/groups/services';
+import { createGroupService } from '@src/groups/createGroupService';
 import { useTheme } from '@src/theme/ThemeProvider';
 import i18n from '@src/i18n/i18n'; // 👈 i18n
 
@@ -309,20 +309,38 @@ export default function GroupsScreen() {
 
     try {
       setCreating(true);
+
+      // ✅ Appel Cloud Function via createGroupService()
       const { groupId } = await createGroupService({
         name: name.trim(),
         description: description.trim(),
-        uid: user.uid,
-        displayName: user.displayName || null,
-        avatarUrl: user.photoURL || null,
       });
+
       setCreating(false);
       setCreateOpen(false);
-      setName(''); setDescription('');
+      setName('');
+      setDescription('');
+
       router.push({ pathname: '/(drawer)/groups/[groupId]', params: { groupId } });
     } catch (e) {
       setCreating(false);
-      Alert.alert(i18n.t('groups.alertErrorTitle'), String(e?.message || e));
+
+      const msg = String(e?.message || "");
+      const details = e?.details || {};
+
+      if (msg.includes("OWNER_GROUP_LIMIT_REACHED")) {
+        const max = details?.max ?? 5;
+        Alert.alert(
+          i18n.t("groups.cap.ownerTitle", { defaultValue: "Limite atteinte" }),
+          i18n.t("groups.cap.ownerBody", {
+            max,
+            defaultValue: `Tu as atteint la limite de ${max} groupes (Propriétaire) pour ton forfait.`,
+          })
+        );
+        return;
+      }
+
+      Alert.alert(i18n.t("groups.alertErrorTitle"), String(e?.message || e));
     }
   }
 

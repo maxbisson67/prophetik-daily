@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
 
 // i18n
 import i18n from '@src/i18n/i18n';
@@ -21,37 +20,31 @@ import { useAuth } from '@src/auth/SafeAuthProvider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@src/theme/ThemeProvider';
 
-const DEFAULT_PRICE = 5;
-
-// ⚠️ Ces items sont “fallback dev”. Leurs name/tags ne sont pas traduits (normal).
+// ⚠️ Fallback dev
 const FALLBACK_AVATARS = [
   {
     id: 'rough-01',
     name: 'Le Rought',
     url: 'https://picsum.photos/seed/rough/400',
     tags: ['hockey', 'barbu'],
-    price: 5,
   },
   {
     id: 'clown-01',
     name: 'Le Clown',
     url: 'https://picsum.photos/seed/clown/400',
     tags: ['fun'],
-    price: 5,
   },
   {
     id: 'espi-01',
     name: "L'Espiègle",
     url: 'https://picsum.photos/seed/espi/400',
     tags: ['malin'],
-    price: 5,
   },
   {
     id: 'fresh-01',
     name: 'Le Fresh',
     url: 'https://picsum.photos/seed/fresh/400',
     tags: ['stylé'],
-    price: 5,
   },
 ];
 
@@ -90,73 +83,21 @@ function Chip({ icon, color, bg, label }) {
   );
 }
 
-/* -------- helpers prix/état -------- */
-function readCredits(me) {
-  if (typeof me?.credits === 'number') return me.credits;
-  if (typeof me?.credits?.balance === 'number') return me.credits.balance;
-  if (typeof me?.balance === 'number') return me.balance;
-  return 0;
-}
-function hasBoughtAvatarBefore(me) {
-  if (!me) return false;
-  if (me.avatarId) return true;
-  if (me.avatarPurchasedAt) return true;
-  if (Array.isArray(me.avatarHistory) && me.avatarHistory.length > 0)
-    return true;
-  return false;
-}
-/** Prix:
- * - 5 crédits si premier achat
- * - 1 crédit pour (ré)activer n’importe quel avatar déjà ou actuellement utilisé (y compris le même)
- */
-function getEffectivePrice({ me, selectedItem }) {
-  const FIRST_PRICE = 5;
-  const SWITCH_PRICE = 1;
-  if (!selectedItem) return FIRST_PRICE;
-  const already = hasBoughtAvatarBefore(me);
-  return already ? SWITCH_PRICE : FIRST_PRICE;
-}
-
 export default function AvatarsScreen() {
   const r = useRouter();
   const { user } = useAuth();
   const { colors } = useTheme();
   const isDark = colors.background === '#111827';
 
-  const [me, setMe] = useState(null);
-  const [loadingMe, setLoadingMe] = useState(true);
-
   const [storeAvatars, setStoreAvatars] = useState(null);
   const [loadingAvatars, setLoadingAvatars] = useState(true);
 
   const [selectedId, setSelectedId] = useState(null);
+
   const selectedItem = useMemo(
     () => (storeAvatars || []).find((a) => a.id === selectedId) || null,
     [storeAvatars, selectedId]
   );
-
-  // Participant (solde)
-  useEffect(() => {
-    if (!user?.uid) {
-      setMe(null);
-      setLoadingMe(false);
-      return;
-    }
-    setLoadingMe(true);
-    const ref = firestore().doc(`participants/${user.uid}`);
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        setMe(snap.exists ? { uid: snap.id, ...snap.data() } : null);
-        setLoadingMe(false);
-      },
-      () => setLoadingMe(false)
-    );
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, [user?.uid]);
 
   // Avatars store
   useEffect(() => {
@@ -164,7 +105,7 @@ export default function AvatarsScreen() {
     const qRef = firestore().collection('catalog_avatars').orderBy('sort', 'asc');
     const unsub = qRef.onSnapshot(
       (snap) => {
-        const rows = snap?.docs?.map((d) => ({ id: d.id, ...d.data() })) || [];
+        const rows = snap?.docs?.map((d) => ({ ...d.data(), id: d.id })) || [];
         setStoreAvatars(rows.length ? rows : FALLBACK_AVATARS);
         setLoadingAvatars(false);
       },
@@ -180,49 +121,28 @@ export default function AvatarsScreen() {
     };
   }, []);
 
-  const credits = useMemo(() => readCredits(me), [me]);
-  const alreadyBought = useMemo(() => hasBoughtAvatarBefore(me), [me]);
-  const effectivePrice = useMemo(
-    () => getEffectivePrice({ me, selectedItem }),
-    [me, selectedItem]
-  );
-
-  async function handleBuy() {
+  async function handleApply() {
     if (!user?.uid) {
       return Alert.alert(
         i18n.t('avatars.alerts.loginRequiredTitle', 'Connexion requise'),
-        i18n.t('avatars.alerts.loginRequiredBody', 'Connecte-toi pour acheter un avatar.')
+        i18n.t(
+          'avatars.alerts.loginRequiredBody',
+          'Connecte-toi pour modifier ton avatar.'
+        )
       );
     }
     if (!selectedItem) {
       return Alert.alert(
         i18n.t('avatars.alerts.selectRequiredTitle', 'Choisis un avatar'),
-        i18n.t('avatars.alerts.selectRequiredBody', 'Sélectionne un avatar avant d’acheter.')
-      );
-    }
-    if (credits < effectivePrice) {
-      return Alert.alert(
-        i18n.t('avatars.alerts.insufficientCreditsTitle', 'Crédits insuffisants'),
-        i18n.t('avatars.alerts.insufficientCreditsBody', {
-          defaultValue: 'Il te faut {{price}} crédit(s) (solde: {{credits}}).',
-          price: effectivePrice,
-          credits,
-        })
+        i18n.t(
+          'avatars.alerts.selectRequiredBody',
+          'Sélectionne un avatar avant de continuer.'
+        )
       );
     }
 
     try {
-      // 1) Débit & droit d’activer via CF (serveur fait foi)
-      const callPurchase = functions().httpsCallable('purchaseAvatar');
-      const payload = {
-        avatarId: selectedItem.id,
-        price: effectivePrice,
-        photoURL: selectedItem.url, // optionnel côté serveur
-      };
-      const res = await callPurchase(payload);
-      if (!res?.data?.ok) throw new Error(res?.data?.error || i18n.t('common.unknownError', 'Erreur inconnue'));
-
-      // 2) Écrit uniquement avatarId (+ updatedAt) → CF onAvatarIdChange mettra avatarUrl
+      // Écrit avatarId (+ updatedAt). Ton CF onAvatarIdChange / listener mettra avatarUrl si tu l’as.
       await firestore()
         .doc(`profiles_public/${user.uid}`)
         .set(
@@ -233,22 +153,17 @@ export default function AvatarsScreen() {
           { merge: true }
         );
 
-      const wasSwitch = effectivePrice === 1;
       Alert.alert(
-        wasSwitch
-          ? i18n.t('avatars.alerts.activatedTitle', '✅ Avatar (ré)activé')
-          : i18n.t('avatars.alerts.purchasedTitle', '🎉 Avatar acheté'),
-        i18n.t('avatars.alerts.purchasedBody', 'Ton profil sera mis à jour dans un instant.'),
-        [
-          {
-            text: i18n.t('common.ok', 'OK'),
-            onPress: () => r.back(),
-          },
-        ]
+        i18n.t('avatars.alerts.appliedTitle', '✅ Avatar appliqué'),
+        i18n.t(
+          'avatars.alerts.appliedBody',
+          'Ton profil sera mis à jour dans un instant.'
+        ),
+        [{ text: i18n.t('common.ok', 'OK'), onPress: () => r.back() }]
       );
     } catch (e) {
       Alert.alert(
-        i18n.t('avatars.alerts.purchaseFailedTitle', 'Achat impossible'),
+        i18n.t('avatars.alerts.applyFailedTitle', 'Impossible de modifier'),
         String(e?.message || e)
       );
     }
@@ -271,7 +186,7 @@ export default function AvatarsScreen() {
           <Text style={{ color: colors.text }}>
             {i18n.t(
               'avatars.loginGate.body',
-              'Connecte-toi pour accéder à la boutique d’avatars.'
+              'Connecte-toi pour choisir ton avatar.'
             )}
           </Text>
           <TouchableOpacity
@@ -302,7 +217,7 @@ export default function AvatarsScreen() {
           title: headerTitle,
           headerLeft: () => (
             <TouchableOpacity
-              onPress={() => r.replace('/(drawer)/boutique')}
+              onPress={() => r.back()}
               style={{ paddingHorizontal: 10 }}
             >
               <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -324,7 +239,7 @@ export default function AvatarsScreen() {
         }}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
-            {/* Carte info / crédits */}
+            {/* Carte info */}
             <View
               style={{
                 padding: 14,
@@ -347,51 +262,27 @@ export default function AvatarsScreen() {
                   color: colors.text,
                 }}
               >
-                {i18n.t('avatars.info.title', 'Avatars exclusifs')}
+                {i18n.t('avatars.info.title', 'Choisis ton avatar')}
               </Text>
 
               <Text style={{ color: colors.text }}>
-                {i18n.t('avatars.info.bodyPrefix', 'Personnalise ton profil avec un avatar unique. Chaque avatar coûte')}{' '}
-                <Text style={{ fontWeight: '800' }}>
-                  {DEFAULT_PRICE} {i18n.t('avatars.common.credits', 'crédits')}
-                </Text>
-                .
+                {i18n.t(
+                  'avatars.info.body',
+                  'Sélectionne un avatar et applique-le à ton profil.'
+                )}
               </Text>
 
-              <View
-                style={{
-                  marginTop: 10,
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
+              <View style={{ marginTop: 10 }}>
                 <Chip
-                  icon="information"
+                  icon="gift"
                   bg={isDark ? '#22c55e' : '#dcfce7'}
                   color={isDark ? '#052e16' : '#166534'}
-                  label={i18n.t('avatars.info.reactivationChip', {
-                    defaultValue: 'Réactivation: {{price}} crédit',
-                    price: 1,
-                  })}
+                  label={i18n.t('avatars.info.freeChip', 'Gratuit')}
                 />
-
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ fontSize: 12, color: colors.subtext }}>
-                    {i18n.t('avatars.info.myCreditsLabel', 'Tes crédits')}
-                  </Text>
-                  {loadingMe ? (
-                    <ActivityIndicator color={colors.primary} />
-                  ) : (
-                    <Text style={{ fontWeight: '900', fontSize: 20, color: colors.text }}>
-                      {credits}
-                    </Text>
-                  )}
-                </View>
               </View>
             </View>
 
-            {/* Aperçu sélection + bouton Achat */}
+            {/* Aperçu sélection + bouton appliquer */}
             <View
               style={{
                 padding: 12,
@@ -401,7 +292,13 @@ export default function AvatarsScreen() {
                 borderColor: colors.border,
               }}
             >
-              <Text style={{ fontWeight: '700', marginBottom: 8, color: colors.text }}>
+              <Text
+                style={{
+                  fontWeight: '700',
+                  marginBottom: 8,
+                  color: colors.text,
+                }}
+              >
                 {i18n.t('avatars.preview.title', 'Aperçu')}
               </Text>
 
@@ -428,71 +325,50 @@ export default function AvatarsScreen() {
                     }}
                   >
                     <Text style={{ color: colors.subtext }}>
-                      {i18n.t('avatars.preview.noneSelected', 'Sélectionne un avatar')}
+                      {i18n.t(
+                        'avatars.preview.noneSelected',
+                        'Sélectionne un avatar'
+                      )}
                     </Text>
                   </View>
                 )}
 
                 {!!selectedItem && (
-                  <Text style={{ marginTop: 8, fontWeight: '700', color: colors.text }}>
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      fontWeight: '700',
+                      color: colors.text,
+                    }}
+                  >
                     {selectedItem.name || selectedItem.id}
                   </Text>
                 )}
 
-                {(() => {
-                  const disabled = !selectedItem || credits < effectivePrice;
-
-                  const btnLabel = !selectedItem
-                    ? i18n.t('avatars.actions.chooseFirst', 'Choisis un avatar')
-                    : i18n.t('avatars.actions.buyButton', {
-                        defaultValue: 'Acheter ({{price}} crédit{{s}})',
-                        price: effectivePrice,
-                        s: effectivePrice > 1 ? 's' : '',
-                      });
-
-                  return (
-                    <>
-                      <TouchableOpacity
-                        onPress={handleBuy}
-                        disabled={disabled}
-                        style={{
-                          backgroundColor: disabled ? '#9ca3af' : '#ef4444',
-                          paddingVertical: 14,
-                          paddingHorizontal: 20,
-                          borderRadius: 12,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          elevation: 3,
-                          shadowColor: '#000',
-                          shadowOpacity: 0.15,
-                          shadowRadius: 4,
-                          shadowOffset: { width: 0, height: 2 },
-                          marginTop: 10,
-                        }}
-                      >
-                        <Text style={{ color: '#fff', fontWeight: '900' }}>
-                          {btnLabel}
-                        </Text>
-                      </TouchableOpacity>
-
-                      {alreadyBought && selectedItem && effectivePrice === 1 && (
-                        <Text
-                          style={{
-                            color: colors.subtext,
-                            fontSize: 12,
-                            marginTop: 6,
-                            textAlign: 'center',
-                          }}
-                        >
-                          {i18n.t(
-                            'avatars.info.reactivationHint',
-                            'Toute (ré)activation d’avatar coûte 1 crédit.'
-                          )}
-                        </Text>
-                      )}
-                    </>
-                  );
-                })()}
+                <TouchableOpacity
+                  onPress={handleApply}
+                  disabled={!selectedItem}
+                  style={{
+                    backgroundColor: !selectedItem ? '#9ca3af' : '#ef4444',
+                    paddingVertical: 14,
+                    paddingHorizontal: 20,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    elevation: 3,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.15,
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 2 },
+                    marginTop: 10,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900' }}>
+                    {!selectedItem
+                      ? i18n.t('avatars.actions.chooseFirst', 'Choisis un avatar')
+                      : i18n.t('avatars.actions.applyButton', 'Appliquer')}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -513,7 +389,6 @@ export default function AvatarsScreen() {
         }
         renderItem={({ item }) => {
           const active = selectedId === item.id;
-          const price = Number.isFinite(item.price) ? item.price : DEFAULT_PRICE;
 
           const cardBg = active
             ? isDark
@@ -543,31 +418,24 @@ export default function AvatarsScreen() {
                 }}
               />
               <Text
-                style={{ marginTop: 8, fontWeight: '700', color: colors.text }}
+                style={{
+                  marginTop: 8,
+                  fontWeight: '700',
+                  color: colors.text,
+                }}
                 numberOfLines={1}
               >
                 {item.name || item.id}
               </Text>
-              <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                {i18n.t('avatars.catalog.priceLine', {
-                  defaultValue: '{{price}} crédit{{s}}',
-                  price,
-                  s: price > 1 ? 's' : '',
-                })}
-              </Text>
+
+              {!!item.tags?.length && (
+                <Text style={{ color: colors.subtext, fontSize: 12 }} numberOfLines={1}>
+                  {item.tags.join(' • ')}
+                </Text>
+              )}
             </TouchableOpacity>
           );
         }}
-        ListFooterComponent={
-          <View style={{ gap: 8, marginTop: 12, marginBottom: 16 }}>
-            <Text style={{ color: colors.subtext, fontSize: 12, textAlign: 'center' }}>
-              {i18n.t(
-                'avatars.footer.legal',
-                'En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement.'
-              )}
-            </Text>
-          </View>
-        }
       />
     </>
   );

@@ -14,6 +14,7 @@ import { AppVisibilityProvider } from "@src/providers/AppVisibilityProvider";
 import "@src/lib/safeAsyncStorage";
 import { ThemeProvider, useTheme  } from "@src/theme/ThemeProvider";
 import { LanguageProvider } from '@src/i18n/LanguageProvider';
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 
 import {
   attachNotificationListeners,
@@ -311,15 +312,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <BottomSheetModalProvider>
         <ThemeProvider>
           <LanguageProvider>
           <AppVisibilityProvider>
             <AuthProvider>
-              <RootLayoutInner />
+                <RootLayoutInner />
             </AuthProvider>
           </AppVisibilityProvider>
           </LanguageProvider>
         </ThemeProvider>
+        </BottomSheetModalProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

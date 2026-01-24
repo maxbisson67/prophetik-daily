@@ -17,8 +17,8 @@ import {
 } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
+import { joinGroupService } from "@src/groups/joinGroupService";
 import firestore from "@react-native-firebase/firestore";
-import functions from "@react-native-firebase/functions";
 
 // Safe auth + thème
 import { useAuth } from "@src/auth/SafeAuthProvider";
@@ -50,6 +50,35 @@ function pickAvatarUrl(profile, user) {
     user?.photoUrl ||
     null
   );
+}
+
+async function buildIdentityFromParticipants(uid, user) {
+  try {
+    const snap = await firestore().doc(`participants/${uid}`).get();
+    const p = snap.exists ? (snap.data() || {}) : {};
+
+    const displayName =
+      (typeof p.displayName === "string" && p.displayName.trim()) ||
+      (p.email ? String(p.email).split("@")[0] : "") ||
+      user?.displayName ||
+      "Invité";
+
+    const avatarUrl =
+      p.photoURL ||
+      p.avatarUrl ||
+      p.photoUrl ||
+      p.avatar ||
+      user?.photoURL ||
+      user?.photoUrl ||
+      null;
+
+    return { displayName, avatarUrl };
+  } catch {
+    return {
+      displayName: user?.displayName || "Invité",
+      avatarUrl: user?.photoURL || user?.photoUrl || null,
+    };
+  }
 }
 
 export default function JoinGroupScreen() {
@@ -115,67 +144,83 @@ export default function JoinGroupScreen() {
   async function onJoin() {
     if (!user?.uid)
       return Alert.alert(
-        i18n.t("join.alertLoginRequiredTitle"),
-        i18n.t("join.alertLoginRequiredMessage")
+        i18n.t("groups.join.alertLoginRequiredTitle"),
+        i18n.t("groups.join.alertLoginRequiredMessage")
       );
 
     if (!validateCode(cleanedCode))
       return Alert.alert(
-        i18n.t("join.alertCodeInvalidTitle"),
-        i18n.t("join.alertCodeInvalidMessage", { len: CODE_LEN })
+        i18n.t("groups.join.alertCodeInvalidTitle"),
+        i18n.t("groups.join.alertCodeInvalidMessage", { len: CODE_LEN })
       );
 
     try {
-      setBusy(true);
+        setBusy(true);
 
-      const identity = {
-        displayName: pickDisplayName(profile, user),
-        avatarUrl: pickAvatarUrl(profile, user),
-      };
+        const identity = await buildIdentityFromParticipants(user.uid, user);
 
-      const joinGroupByCode = functions().httpsCallable("joinGroupByCode");
-      const res = await joinGroupByCode({ code: cleanedCode, identity });
+        const res = await joinGroupService({ code: cleanedCode, identity });
 
-      const groupId = res?.data?.groupId;
-      if (!groupId) throw new Error(i18n.t("join.alertServerUnexpected"));
+        const groupId = res?.groupId;
+        if (!groupId) throw new Error(i18n.t("groups.join.alertServerUnexpected"));
 
-      router.replace({
-        pathname: "/(drawer)/groups/[groupId]",
-        params: { groupId },
-      });
-    } catch (e) {
-      const msg = String(e?.message || e);
+        router.replace({
+          pathname: "/(drawer)/groups/[groupId]",
+          params: { groupId },
+        });
+      } catch (e) {
+        const code = String(e?.code || ""); // ex: functions/failed-precondition
+        const msg = String(e?.message || "");
+        const details = e?.details || null;
 
-      if (msg.includes("not-found"))
-        Alert.alert(
-          i18n.t("join.alertCodeNotFoundTitle"),
-          i18n.t("join.alertCodeNotFoundMessage")
-        );
-      else if (msg.includes("unauthenticated"))
-        Alert.alert(
-          i18n.t("join.alertLoginRequiredTitle"),
-          i18n.t("join.alertLoginRequiredMessage")
-        );
-      else if (msg.includes("permission-denied"))
-        Alert.alert(
-          i18n.t("join.alertAccessDeniedTitle"),
-          i18n.t("join.alertAccessDeniedMessage")
-        );
-      else
-        Alert.alert(
-          i18n.t("join.alertGenericErrorTitle"),
-          msg
-        );
-    } finally {
-      setBusy(false);
-    }
+        console.log("JOIN ERROR", { code, message: msg, details });
+
+        // ✅ Caps (abonnement)
+        if (
+          code.includes("failed-precondition") &&
+          (msg.includes("MEMBER_GROUP_LIMIT_REACHED") || msg.includes("OWNER_GROUP_LIMIT_REACHED"))
+        ) {
+          const tier = details?.tier || "free";
+          const current = details?.current ?? 0;
+          const max = details?.max ?? 0;
+
+          Alert.alert(
+            i18n.t("groups.join.alertLimitTitle"),
+            i18n.t("groups.join.alertLimitMessage", { tier, current, max })
+          );
+          return;
+        }
+
+        // Invalid code
+        if (code.includes("not-found") || msg.toLowerCase().includes("invalid code")) {
+          Alert.alert(
+            i18n.t("groups.join.alertCodeNotFoundTitle"),
+            i18n.t("groups.join.alertCodeNotFoundMessage")
+          );
+          return;
+        }
+
+        // Not logged in
+        if (code.includes("unauthenticated")) {
+          Alert.alert(
+            i18n.t("groups.join.alertLoginRequiredTitle"),
+            i18n.t("groups.join.alertLoginRequiredMessage")
+          );
+          return;
+        }
+
+        // Fallback générique
+        Alert.alert(i18n.t("groups.join.alertGenericErrorTitle"), msg || "Erreur");
+      } finally {
+        setBusy(false);
+      }
   }
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: i18n.t("join.title"),
+          title: i18n.t("groups.join.title"),
           headerLeft: () => (
             <TouchableOpacity onPress={safeBack} style={{ paddingHorizontal: 10 }}>
               <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -212,7 +257,7 @@ export default function JoinGroupScreen() {
               color: colors.text,
             }}
           >
-            {i18n.t("join.ctaTitle")}
+            {i18n.t("groups.join.ctaTitle")}
           </Text>
           <Text
             style={{
@@ -223,7 +268,7 @@ export default function JoinGroupScreen() {
               lineHeight: 22,
             }}
           >
-            {i18n.t("join.ctaSubtitle")}
+            {i18n.t("groups.join.ctaSubtitle")}
           </Text>
         </View>
 
@@ -231,7 +276,7 @@ export default function JoinGroupScreen() {
           value={code}
           onChangeText={(t) => setCode(sanitize(t))}
           autoCapitalize="characters"
-          placeholder={i18n.t("join.placeholderCode")}
+          placeholder={i18n.t("groups.join.placeholderCode")}
           placeholderTextColor={colors.subtext}
           maxLength={CODE_LEN + 2}
           style={{
@@ -262,7 +307,7 @@ export default function JoinGroupScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={{ color: "#fff", fontWeight: "800" }}>
-              {i18n.t("join.btnJoin")}
+              {i18n.t("groups.join.btnJoin")}
             </Text>
           )}
         </TouchableOpacity>
@@ -280,7 +325,7 @@ export default function JoinGroupScreen() {
           }}
         >
           <Text style={{ fontWeight: "600", color: colors.text }}>
-            {i18n.t("join.btnCancel")}
+            {i18n.t("groups.join.btnCancel")}
           </Text>
         </TouchableOpacity>
       </View>

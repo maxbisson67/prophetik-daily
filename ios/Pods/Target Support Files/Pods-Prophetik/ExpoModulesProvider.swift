@@ -10,6 +10,7 @@ import Expo
 import EXApplication
 import ExpoAsset
 import EXAV
+import ExpoBlur
 import EXConstants
 import EASClient
 import ExpoFileSystem
@@ -40,6 +41,7 @@ public class ExpoModulesProvider: ModulesProvider {
       ApplicationModule.self,
       AssetModule.self,
       VideoViewModule.self,
+      BlurViewModule.self,
       ConstantsModule.self,
       EASClientModule.self,
       FileSystemModule.self,
@@ -84,6 +86,7 @@ public class ExpoModulesProvider: ModulesProvider {
       ApplicationModule.self,
       AssetModule.self,
       VideoViewModule.self,
+      BlurViewModule.self,
       ConstantsModule.self,
       EASClientModule.self,
       FileSystemModule.self,

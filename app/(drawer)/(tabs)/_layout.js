@@ -5,6 +5,7 @@ import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import ProphetikIcons from "@src/ui/ProphetikIcons";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
@@ -48,16 +49,21 @@ export default function TabsLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="ChallengesScreen"
-        options={{
-          title: i18n.t("tabs.challenges", { defaultValue: "Challenges" }),
-          headerLeft: (props) => <DrawerToggleButton {...props} />,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy" color={color} size={size} />
-          ),
-        }}
-      />
+    <Tabs.Screen
+      name="ChallengesScreen"
+      options={{
+        title: i18n.t("tabs.challenges", { defaultValue: "Challenges" }),
+        headerLeft: (props) => <DrawerToggleButton {...props} />,
+        tabBarIcon: ({ size }) => (
+          <ProphetikIcons
+            mode="emoji"
+            emoji="🎯"
+            size={size >= 28 ? "lg" : "md"}
+            iconOnly
+          />
+        ),
+      }}
+    />
 
       <Tabs.Screen
         name="ClassementScreen"

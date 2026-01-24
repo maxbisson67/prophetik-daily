@@ -8,15 +8,16 @@ function labelForTier(tier, prefix) {
   return `${prefix}${n}`;
 }
 
-// ✅ règles par type de défi
 export function getDefiRules(defiType) {
   switch (Number(defiType)) {
-    case 1: return { picks: 1, T1: 1, T2: 0, T3: 0 };       // 1x1
-    case 2: return { picks: 2, T1: 1, T2: 1, T3: 0 };       // 2x2
-    case 3: return { picks: 3, T1: 1, T2: 1, T3: 1 };       // 3x3
-    case 4: return { picks: 4, T1: 1, T2: 1, T3: 2 };       // 4x4
-    case 5: return { picks: 5, T1: 1, T2: 2, T3: 2 };       // 5x5
-    case 6: return { picks: 7, T1: 2, T2: 2, T3: 3 };       // 6x7
+    case 1: return { picks: 1, T1: 1, T2: 0, T3: 0 }; // 1x1
+    case 2: return { picks: 2, T1: 1, T2: 1, T3: 0 }; // 2x2
+    case 3: return { picks: 3, T1: 1, T2: 1, T3: 1 }; // 3x3
+    case 4: return { picks: 4, T1: 1, T2: 1, T3: 2 }; // 4x4
+    case 5: return { picks: 5, T1: 1, T2: 2, T3: 2 }; // 5x5
+    case 6: return { picks: 6, T1: 2, T2: 2, T3: 2 }; // 6x6
+    case 7: return { picks: 7, T1: 2, T2: 2, T3: 3 }; // 7x7
+
     default: return { picks: 0, T1: 0, T2: 0, T3: 0 };
   }
 }

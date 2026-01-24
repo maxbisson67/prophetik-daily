@@ -410,10 +410,7 @@ export default function BoutiqueScreen() {
                   color="#fff"
                 />
                 <Text style={styles.btnPrimaryText}>
-                  {i18n.t('boutique.profileCard.changeAvatar', {
-                    defaultValue: "Changer d’avatar ({{price}} crédit)",
-                    price: 1,
-                  })}
+                  {i18n.t('boutique.profileCard.changeAvatar', "Changer d’avatar")}
                 </Text>
               </TouchableOpacity>
             </View>

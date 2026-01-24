@@ -11,9 +11,13 @@
     "ok": "OK",
     "cancel": "Cancel",
     "or": "or",
+    "edit":"Edit",
     "continue": "Continue",
     "loading": "Loading…",
-    "selected":"Selected"
+    "selected":"Selected",
+    "genericError": "Something went wrong. Please try again.",
+    "back": "Back",
+    "next": "Next",
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -182,28 +186,53 @@
   "home": {
     "title": "Home",
     "hello": "Hi",
-    "credits": "Credits",
-    "viewCredits": "View and buy credits",
+    "points": "Points",
+    "viewPoints": "My points",
     "createChallenge": "Create a challenge",
     "activeChallenges": "Active challenges",
-    "totalPot": "Total pot",
+    "unknownGroup": "Group",
+    "totalPot": "Potential Winnings",
     "todayChallenge": "My challenges today",
     "challenge": "Challenge",
     "challengeDate": "NHL date",
     "challengeLimit": "Signup deadline:",
     "challengeStarts": "Starts at",
     "challengeStatus": "Open",
+    "leaderboardTitle": "Leaderboard", 
+    "leaderboardLockedTitle": "Premium leaderboard",
+    "leaderboardLockedBody": "Upgrade to Pro or Vip to see the full leaderboard for your default group.",
+    "leaderboardLockedCta": "View plans",
+    "viewLeaderboard": "Detailed leaderboard", 
+    "upgradeToJoin": "Upgrade to Pro or VIP to join this challenge.",
+    "upgradeCta": "See plans",
+    "launchAscension":"Start an Ascension",
+    "participate":"Participate",
     "status": {
       "open": "Open",
       "live": "Live",
       "awaiting": "Processing",
       "completed": "Completed"
     },
+    "metrics": {
+      "points": "Points",
+      "pointsSubtitle": "{{count}} challenges",
+      "pointsSubtitleEmpty": "No challenges",
+
+      "defirate": "Defirate",
+      "defirateLocked": "Premium metric",
+      "defirateSubtitle": "{{wins}} wins",
+
+      "ppg": "PPG",
+      "ppgLocked": "Premium metric",
+      "ppgSubtitle": "Points per challenge",
+
+      "unlockCta": "Unlock this metric"
+    },
     "loginToAccess": "Log in to access the home screen.",
     "noGroups": "You don’t have any groups yet.",
     "noActiveChallenges": "No active challenges at the moment.",
     "editAvatar": "Edit avatar",
-    "creditsToEarn": "Credits to earn",
+    "creditsToEarn": "Points to earn",
     "firstChallengeCreated": "First challenge created",
     "firstChallengeHint": "Create your first challenge",
     "firstGroupCreated": "First group created",
@@ -248,8 +277,7 @@
         "actionLeaveGroup": "Leave this group",
 
         "ownerOnlyAvatar": "Only the owner can change the avatar",
-        "avatarEdit": "Edit group avatar ({{price}} credit)",
-        "avatarBuy": "Buy a group avatar ({{price}} credits)",
+        "avatarEdit": "Add or change your group avatar",
 
         "shareErrorTitle": "Share failed",
 
@@ -274,7 +302,25 @@
         "deleteErrorMessage": "An error occurred while deleting the group.",
 
         "checkingDefis": "Checking for active challenges…",
-        "cannotDeleteWhileDefis": "You cannot delete this group while challenges are still open / running."
+        "cannotDeleteWhileDefis": "You cannot delete this group while challenges are still open / running.",
+        "transferOwnershipTitle": "Transfer ownership",
+        "transferOwnershipSubtitle": "Choose a member (other than Nova) to become the owner.",
+        "transferNoCandidates": "No eligible members.",
+        "actionTransferOwnership": "Transfer ownership",
+        "transferDoneTitle": "Ownership transferred",
+        "transferDoneMessage": "A new owner has been assigned.",
+        "transferErrorTitle": "Transfer error",
+
+        "leaveOwnerConfirmTitle": "Leave this group?",
+        "leaveOwnerConfirmMessage": "Since you're the owner and only you and Nova remain, the group will be archived.",
+        "actionLeaveOwner": "Leave (archive group)",
+
+        "deleteBlockedOtherMembers": "Other members still exist. Transfer ownership or have them leave before deleting.",
+
+        "deleting": "Deleting…",
+
+        "transferRequiredTitle": "Transfer required",
+        "transferRequiredMessage": "Other members still exist. You must transfer ownership before leaving."
     },
          "title": "Groups",
         "detailTitle": "Group details",
@@ -299,7 +345,7 @@
         "roleMember": "Member",
 
         "emptyTitle": "Create your first group or join your friends",
-        "emptyText": "Organize your challenges, invite your friends, and start earning credits.",
+        "emptyText": "Organize your challenges, invite your friends, and start earning points.",
         "emptyCreate": "Create a group",
         "emptyJoin": "Join",
         "emptyHint": "Tip: you can set a favorite group with the ★ icon",
@@ -320,8 +366,7 @@
         "alertFavoriteReadTitle": "Favorite group",
         "alertErrorTitle": "Error",
         "alertFavoriteTitle": "Favorite",
-        "alertFavoriteMessage": "Unable to update:"
-    },
+        "alertFavoriteMessage": "Unable to update:",
     "join": {
         "title": "Join a group",
         "ctaTitle": "🔑 Enter your invite code",
@@ -340,8 +385,11 @@
         "alertCodeNotFoundMessage": "Check the code and try again.",
         "alertAccessDeniedTitle": "Access denied",
         "alertAccessDeniedMessage": "You are not allowed to join this group.",
-        "alertGenericErrorTitle": "Error"
-    },
+        "alertGenericErrorTitle": "Error",
+        "alertLimitTitle": "Limit reached",
+        "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} groups as a member. You currently have {{current}}. Upgrade to PRO/VIP to increase the limit."
+    }
+  },
     "challenges": {
         "activeTitle": "Active challenges",
         "pastTitle": "Past challenges",
@@ -367,81 +415,85 @@
         "noChallenges": "No challenges to display."
     },
     "defi": {
-        "create": {
-            "title": "New NHL challenge",
-            "autoTitle": "Challenge {{format}}",
+       "create": {
+            "title": "Create a challenge",
 
-            "group": {
-                "noneHint": "No group is available to create a challenge.",
-                "noneBody": "Archived groups cannot receive new challenges.",
-                "label": "Group",
-                "choose": "Choose a group"
+            "wizard": {
+              "step1": "1. Group",
+              "step2": "2. Format",
+              "step3": "3. Date",
+              "step4": "4. Confirm",
+              "confirmTitle": "Confirm challenge",
+              "summary": {
+                "group": "Group",
+                "format": "Format",
+                "date": "Date",
+                "games": "Games",
+                "firstGame": "First game",
+                "deadline": "Deadline"
+              },
+
+              "pickGroup": "Choose a group",
+              "pickFormat": "Choose a format",
+              "pickDate": "Choose a date"
             },
 
-            "alert": {
-                "saturdayOnly": {
-                "title": "Saturday only",
-                "body": "The 6x7 challenge is available on Saturdays only."
-                }
-            },
-            "saturdayOnlyTag": "Sat",
-            "autoTitle67": "6x7 Challenge",
-                "special67": {
-                    "saturdayOnly": "Saturday only",
-                    "body": "Special Prophetik event. Available on Saturdays only (big NHL day).",
-                    "bonusLine": "🎁 Winner bonus: 6 or 7 credits (random).",
-                    "notSaturdayHint": "Pick a Saturday date to enable creation.",
-                    "badge": "Special event"
-                },
+            "unlockOther": "Unlock other challenges",
 
-            "formatLabel": "Challenge format",
-
-            "summary": {
-                "titleLabel": "Title",
-                "costLabel": "Entry cost",
-                "costValue": "{{credits}} credit(s)"
+            "verify": {
+              "loading": "Checking…",
+              "noGames": "No NHL games found for {{date}}.",
+              "okWithTime": "{{count}} games found. First at {{time}}.",
+              "okNoTime": "{{count}} games found.",
+              "error": "Error while checking: {{message}}"
             },
 
             "date": {
-                "labelBase": "NHL date{{meta}}",
-                "matchesShort": "game(s)",
-                "firstAt": "1st game at {{time}}",
-                "deadlineAt": "Deadline {{time}}",
-                "change": "Change"
-            },
-
-            "verify": {
-                "loading": "Checking NHL games…",
-                "noGames": "No NHL game on {{date}}.",
-                "okWithTime": "{{count}} game(s) found. First game at {{time}}.",
-                "okNoTime": "{{count}} game(s) found.",
-                "error": "Unable to check NHL games: {{message}}"
-            },
-
-            "alert": {
-                "noGames": {
-                "title": "No game found",
-                "body": "No game found for {{date}}."
-                },
-                "deadlinePassed": {
-                "title": "Deadline passed",
-                "body": "The signup deadline for {{date}} was {{time}}. The challenge can’t be created."
-                },
-                "error": {
-                "title": "Cannot create challenge",
-                "body": "An error occurred while creating the challenge: {{message}}"
-                }
-            },
-
-            "actions": {
-                "creating": "Creating…",
-                "create": "Create challenge"
+              "labelBase": "NHL date{{meta}}",
+              "matchesShort": "game(s)",
+              "firstAt": "1st at {{time}}",
+              "deadlineAt": "deadline {{time}}",
+              "change": "Change"
             },
 
             "hint": {
-                "signupDeadline": "The signup deadline is set to 1 hour before the first game (local time)."
+              "signupDeadline": "You can join until 1 hour before the first game."
+            },
+
+            "actions": {
+              "create": "Create",
+              "creating": "Creating…",
+              "confirm": "Continue",
+              "createNow": "Create challenge"
+            },
+
+            "alert": {
+              "noGames": {
+                "title": "No NHL games",
+                "body": "No NHL games for {{date}}."
+              },
+              "deadlinePassed": {
+                "title": "Deadline passed",
+                "body": "The deadline has passed ({{date}} at {{time}})."
+              },
+              "error": {
+                "title": "Creation failed",
+                "body": "An error occurred while creating the challenge: {{message}}"
+              }
+            },
+
+            "planLocked": {
+              "title": "{{plan}} challenge — unavailable",
+              "body": "Subscribe to unlock {{size}} and access premium challenges.",
+              "cta": "View subscriptions"
+            },
+
+            "group": {
+              "label": "Group",
+              "choose": "Choose a group",
+              "noneBody": "Create a group to be able to create a challenge."
             }
-        },
+          },
         "header": {
             "defaultTitle": "Challenge",
             "errorTitle": "Error",
@@ -454,6 +506,13 @@
             "statsUpdatingToday": "Updating today’s stats…",
             "statsUpdatingSeason": "Updating stats for this season…",
             "statsGeneric": "Loading stats…"
+        },
+        "tiers": {
+          "legend": "T1 = Top 10 • T2 = 11–20 • T3 = 21+"
+        },
+        "matchup": {
+          "rankShort": "Rank",
+          "diffShort": "+/-"
         },
         "playerSelect": {
             "title": "Select a player",
@@ -472,7 +531,8 @@
             "choicesCount": "Number of picks:",
             "status": "Status:",
             "lockedSuffix": "locked",
-            "pot": "Pot: {{count}} credit(s)"
+            "potLabel": "Prize pool",
+            "pot": "{{count}} point(s)"
         },
         "gamesCard": {
             "title": "Today’s NHL games",
@@ -487,13 +547,23 @@
             "summary": "{{current}}/{{max}} pick(s)",
             "requirementsPrefix": "You must pick:"
         },
-        "rules": {
+        "paywall": {
+          "ctaTitle": "Unlock Matchups + PPG + Rank",
+          "ctaBody": "Go Pro/VIP to optimize your picks."
+        },
+        "rules":  {
+            "title": "Tier rules",
             "wrongPickCount": "You must select exactly {{expected}} players.",
             "tierMissingCount": "You are missing {{missing}} {{tierLabel}}.",
             "tierTooMany": "You exceeded the limit for {{tierLabel}} (max {{max}})."
         },
         "errors": {
-            "notFoundMessage": "No challenge found."
+            "notFoundMessage": "No challenge found.",
+            "planNotAllowed": "This challenge format is not available with your current plan.",
+            "createLimitReached": "You have reached the weekly limit for creating challenges (maximum {{max}}).",
+            "joinLimitReached": "You have reached the weekly limit for joining challenges (maximum {{max}}).",
+            "subscriptionInactive": "Your subscription is inactive. Please update it to join."
+
         },
         "alerts": {
             "playerDuplicateTitle": "Player already selected",
@@ -505,7 +575,7 @@
             "savingSlow": "Creating your entry… (the first participant can take a few seconds)",
             "successTitle": "Entry saved",
             "successMessage": "Good luck! {{potMessage}}",
-            "successPotMessage": "Pot: {{count}} credits",
+            "successPotMessage": "Pot: {{count}} points",
             "successPotMessageSimple": "Entry saved.",
             "genericErrorTitle": "Error"
         },
@@ -518,7 +588,7 @@
             "header": {
             "defaultTitle": "Results",
             "groupFallback": "Group",
-            "pot": "Prize pool of {{count}} credits",
+            "pot": "Prize pool of {{count}} points",
             "startsAt": "Starts at",
             "scoring": "Scoring: Goal = +1 • Assist = +1"
             },
@@ -555,33 +625,7 @@
             }
         }
     },
-    "leaderboard": {
-        "title": "Leaderboard",
-        "loginToSee": "Log in to see the leaderboards.",
-        "loading": "Loading…",
-        "errorPrefix": "Error: {{message}}",
-
-        "legend": {
-            "name": "Name",
-            "wins": "Challenges won",
-            "gainTotal": "Total winnings",
-            "gainAvg": "Average gain per challenge"
-        },
-
-        "rebuild": {
-            "button": "Rebuild",
-            "loading": "Rebuilding…"
-        },
-
-        "group": {
-            "noStats": "No stats yet for this group."
-        },
-
-        "empty": {
-            "noGroups": "You don’t have any groups yet."
-        }
-    },
-    "live": {
+  "live": {
     "title": "Live Games",
     "loading": "Loading games…",
 
@@ -661,7 +705,7 @@
     "profileCard": {
         "title": "Profile avatar",
         "hint": "Customize your identity in the app.",
-        "changeAvatar": "Change avatar ({{price}} credit)"
+        "changeAvatar": "Change avatar"
     },
 
     "groupsCard": {
@@ -675,7 +719,7 @@
   "avatars": {
     "title": "Avatars",
     "headerTitle": "My avatar",
-    "common": { "credits": "credits" },
+    "common": { "credits": "points" },
 
     "loginGate": {
       "body": "Log in to access the avatar shop."
@@ -685,8 +729,10 @@
       "title": "Exclusive avatars",
       "bodyPrefix": "Customize your profile with a unique avatar. Each avatar costs",
       "reactivationChip": "Re-activate: {{price}} credit",
-      "myCreditsLabel": "Your credits",
-      "reactivationHint": "Any avatar re-activation costs 1 credit."
+      "myCreditsLabel": "Your points",
+      "reactivationHint": "Any avatar re-activation costs 1 credit.",
+      "body": "Select an avatar and apply it to your profile.",
+      "freeChip": "Free"
     },
 
     "preview": {
@@ -701,7 +747,8 @@
 
     "actions": {
       "chooseFirst": "Choose an avatar",
-      "buyButton": "Buy ({{price}} credit{{s}})"
+      "buyButton": "Buy ({{price}} credit{{s}})",
+      "applyButton": "Apply"
     },
 
     "alerts": {
@@ -709,12 +756,15 @@
       "loginRequiredBody": "Log in to buy an avatar.",
       "selectRequiredTitle": "Choose an avatar",
       "selectRequiredBody": "Select an avatar before buying.",
-      "insufficientCreditsTitle": "Not enough credits",
-      "insufficientCreditsBody": "You need {{price}} credit(s) (balance: {{credits}}).",
+      "insufficientCreditsTitle": "Not enough points",
+      "insufficientCreditsBody": "You need {{price}} point(s) (balance: {{credits}}).",
       "activatedTitle": "✅ Avatar re-activated",
       "purchasedTitle": "🎉 Avatar purchased",
       "purchasedBody": "Your profile will update in a moment.",
-      "purchaseFailedTitle": "Purchase failed"
+      "purchaseFailedTitle": "Purchase failed",
+      "appliedTitle": "✅ Avatar applied",
+      "appliedBody": "Your profile will be updated shortly.",
+      "applyFailedTitle": "Unable to apply"
     },
 
     "footer": {
@@ -727,7 +777,7 @@
 
     "group": {
       "title": "Group",
-      "myCreditsLabel": "Your credits"
+      "myCreditsLabel": "Your points"
     },
 
     "access": {
@@ -742,13 +792,15 @@
 
     "catalog": {
       "title": "Catalog",
-      "priceLine": "{{price}} credit{{s}}"
+      "priceLine": "{{price}} credit{{s}}",
+       "freeLine": "Free"
     },
 
     "actions": {
       "processing": "Processing…",
       "chooseFirst": "Choose an avatar",
-      "buyForGroup": "Buy for the group ({{price}} credits)"
+      "buyForGroup": "Buy for the group ({{price}} points)",
+      "applyButton": "Apply"
     },
 
     "alerts": {
@@ -762,16 +814,20 @@
       "accessDeniedBody": "Only the group owner can change its avatar.",
       "successTitle": "Avatar set 🎉",
       "successBody": "The group “{{name}}” has a new avatar!",
-      "purchaseFailedTitle": "Purchase failed"
+      "purchaseFailedTitle": "Purchase failed",
+      "appliedTitle": "✅ Avatar applied",
+      "appliedBody": "The group “{{name}}” has a new avatar.",
+      "applyFailedTitle": "Unable to update"
     },
 
     "footer": {
-      "legal": "By purchasing, you agree to personal use in the app. No refunds."
+      "legal": "By purchasing, you agree to personal use in the app. No refunds.",
+      "note": "Group avatars are free."
     }
   },
 
   "credits": {
-    "title": "Credits",
+    "title": "Points",
     "loginHint": "Log in…",
 
     "editWarningTitle": "Modify your picks?",
@@ -799,7 +855,7 @@
         "defi_payout": "Challenge payout",
         "defi_refund": "Refund: cancelled challenge",
         "topup_free": "Free bonus",
-        "topup_purchase": "Credits purchase",
+        "topup_purchase": "Points purchase",
         "adjustment": "Adjustment",
         "purchase_avatar": "Avatar purchase",
         "first_defi": "Reward: 1st challenge created",
@@ -830,7 +886,7 @@
       "loginRequiredBody": "You must be logged in to request Prophetik Tokens.",
 
       "comingSoonTitle": "Coming soon",
-      "comingSoonBody": "Purchase of {{credits}} tokens ({{price}})",
+      "comingSoonBody": "Purchase of {{credits}} points ({{price}})",
 
       "paymentTitle": "Payment",
 
@@ -920,11 +976,11 @@
 
     "pot": {
       "title": "Prize pool & winnings",
-      "rule1": "Each entry adds credits to the prize pool.",
+      "rule1": "Each entry adds points to the prize pool.",
       "rule2": "The winner earns the challenge prize pool.",
       "exampleTitle": "Example",
-      "exampleBody": "2x2 challenge with 5 players → entry cost 2 credits each → prize pool = 10 credits.",
-      "special67Pill": "6x7: special winner bonus (6 or 7 credits)"
+      "exampleBody": "2x2 challenge with 5 players → entry cost 2 points each → prize pool = 10 points.",
+      "special67Pill": "6x7: special winner bonus (6 or 7 points)"
     },
 
     "tiebreak": {
@@ -982,84 +1038,326 @@
 
   "subscriptions": {
     "title": "Prophetik Subscriptions",
-    "headerTitle":"Subscriptions",
-    "subtitle": "Choose the plan that matches your level of play.",
+    "subtitle": "Leaderboard access is per participant (your plan). Other members can stay Free.",
 
-    "cta": {
-      "choose": "Choose",
-      "chooseHint": "Instant change.",
-      "current": "Current plan",
-      "currentHint": "You are already on this plan."
+    "loginToManage": "Log in to manage your subscription.",
+    "yourPlan": "Your plan",
+    "active": "Active",
+    "currentPlan": "Current plan",
+
+    "perMonth": "/month",
+
+    "chooseFree": "Choose Free",
+    "upgradePro": "Upgrade to Pro",
+    "upgradeVip": "Upgrade to Vip",
+    "downgradeTitle": "Switch to Free?",
+    "downgradeBody": "You’ll lose access to premium features. You can upgrade again anytime.",
+
+    "badge":  {
+      "popular": "Popular",
+      "best": "Best value"
     },
 
-    "current": {
-      "label": "Your current plan",
-      "pill": "Active",
-      "hint": "You can change your plan at any time.",
-      "unknown": "—",
-      "nextGrantLabel": "Next credit grant",
-      "nextGrantHint": "+{{monthlyCredits}} credits on next grant"
-    },
-
-    "plan": {
-      "creditsPerMonth": "{{credits}} credits / month",
-
+    "highlights": {
       "free": {
-        "short": "Free",
-        "title": "Free",
-        "tag": "Discovery",
-        "price": "$0 / month",
-        "desc": "10 credits per month to be claimed manually on the Credits page."
+        "1": "1 group (owner or participant)",
+        "2": "Available formats: 1x1 to 3x3",
+        "3": "Limited weekly participation"
       },
-
-      "base": {
-        "short": "Base",
-        "title": "Base",
-        "price": "$4.99 CAD / month",
-        "desc": "Credits are added automatically on subscription day, then every 30 days."
+      "pro": {
+        "1": "Access to advanced leaderboard",
+        "2": "Available formats: 1x1 to 5x5",
+        "3": "More groups and higher weekly limits"
       },
-
-      "popular": {
-        "short": "Popular",
-        "title": "Popular",
-        "tag": "Most popular",
-        "price": "$9.99 CAD / month",
-        "desc": "Perfect for active groups. Includes access to the special 6x7 challenge."
-      },
-
-      "prophetik": {
-        "short": "Prophetik",
-        "title": "Prophetik",
-        "tag": "Ultimate",
-        "price": "$14.99 CAD / month",
-        "desc": "For power users: high credit volume and full access."
+      "vip": {
+        "1": "Available formats: 1x1 to 6x7",
+        "2": "Advanced player stats with AI insights",
+        "3": "Optional Nova AI participant (can be disabled)"
       }
     },
 
+    "plans": {
+      "free": {
+        "title": "Free",
+        "subtitle": "Essential to get started",
+        "h1": "Basic access",
+        "h2": "Standard participation",
+        "h3": "Limited features"
+      },
+      "pro": {
+        "title": "Pro",
+        "subtitle": "Track your performance",
+        "h1": "Leaderboard access (for you)",
+        "h2": "Full history",
+        "h3": "Better stats visibility"
+      },
+      "vip": {
+        "title": "Vip",
+        "subtitle": "Unlock Prophetik’s full potential",
+        "h1": "Leaderboard + advanced stats",
+        "h2": "AI analysis (decision help)",
+        "h3": "Advanced notifications"
+      }
+    },
+
+    "compareTitle": "Comparison",
+    "compareSubtitle": "✅ included • ⭐ premium advantage",
+
     "features": {
-      "autoYes": "Automatic credits",
-      "autoNo": "Manual credit claim",
-      "has67": "Access to special 6x7 challenge"
-    },
-
-    "compare": {
-      "title": "Quick comparison",
-      "subtitle": "A simple overview of plan differences.",
-      "feature": "Feature",
-      "credits": "Credits / month",
-      "auto": "Automatic allocation",
-      "has67": "6x7 challenge"
-    },
-
-    "reassure": {
-      "cancelAnytime": "Cancel anytime.",
-      "secure": "Secure payment via App Store / Google Play.",
-      "note": "Prices may vary by platform. Credits and benefits may evolve with Prophetik."
-    },
-
-    "alert": {
-      "title": "Confirm",
-      "body": "Choose the {{plan}} plan?"
+      "challenges": "Challenges (participation)",
+      "leaderboard": "Leaderboard",
+      "ai": "AI analysis"
     }
+  },
+
+ "leaderboard": {
+    "title": "Leaderboard",
+
+    "loginToSee": "Log in to see leaderboards.",
+    "loading": "Loading…",
+    "errorPrefix": "Error: {{message}}",
+
+    "seasonLine": "Season {{seasonId}} · {{from}} → {{to}}",
+
+    "group": {
+      "noStats": "No stats yet for this group."
+    },
+
+    "empty": {
+      "noGroups": "You don’t have any groups yet."
+    },
+
+    "upgradeCta": {
+      "freeTitle": "Unlock Pro & VIP",
+      "freeBody": "Go Pro to see your win rate and open participant details. VIP also adds advanced stats and charts.",
+      "button": "View plans",
+
+      "proTitle": "Go VIP for the full experience",
+      "proBody": "VIP adds advanced stats, real charts, and the PPG column (more participant details).",
+      "vipButton": "Go VIP"
+    },
+
+    "premiumOnly": {
+      "title": "Premium leaderboard",
+      "body": "Upgrade to Starter, Pro, or VIP to view leaderboards for all your groups.",
+      "cta": "View plans"
+    },
+
+    "legend": {
+      "title": "Leaderboard legend",
+      "name": "Name",
+
+      "subtitleFree": "Unlock detailed leaderboards with Pro or VIP.",
+      "subtitlePro": "Compact view (Pro).",
+      "subtitleVip": "Full performance view (VIP).",
+
+      "pointsTotal": "Total points",
+      "pointsTotalHelp": "Total Prophetik points earned in this group (all challenges combined).",
+
+      "winRate": "Win rate",
+      "winRateHelp": "Wins ÷ participations (overall).",
+
+      "ppg": "PPG (selections)",
+      "ppgHelp": "Real points generated by your selections ÷ matches (overall).",
+      "cta": {
+        "free": {
+          "eyebrow": "Why Pro?",
+          "title": "Unlock the detailed leaderboard",
+          "body": "With Pro, you see win rate and can open participant details.",
+          "b1": "Win rate + advanced stats",
+          "b2": "Access participant details",
+          "b3": "Better performance insights",
+          "button": "Go Pro"
+        },
+        "pro": {
+          "eyebrow": "Why VIP?",
+          "title": "Full leaderboard experience",
+          "body": "VIP unlocks PPG (selections) and advanced participant insights.",
+          "b1": "Charts & trends",
+          "b2": "PPG (selections) + advanced stats",
+          "b3": "Richer comparisons",
+          "button": "Go VIP"
+        }
+      },
+
+      "vipDetails": {
+        "title": "Participant details (VIP)",
+        "body": "Each participant is clickable: tap a row to open detailed performance.",
+
+        "b1": "Comparison: total points vs group average",
+        "b2": "Overall win rate and win rate by challenge format",
+        "b3": "PPG (selections) overall and by challenge format",
+        "b4": "Advanced charts and detailed insights"
+      },
+
+      "freeFootnote": "🔒 Some statistics are available to subscribers only."
+    }
+  },
+  "leaderboardMember": {
+    "header": {
+      "title": "Participant details",
+      "othersCount": "{{count}} others"
+    },
+    "upgrade": {
+      "title": "Unlock VIP",
+      "body": "Advanced comparisons + trends"
+    },
+    "common": {
+      "me": "You",
+      "others": "Others",
+      "avgOthers": "Others average",
+      "avgOthersShort": "Avg. others",
+      "avgShort": "Avg.",
+      "typesCount": "{{count}} types",
+      "noDataByType": "No data by type.",
+      "challengesCount": "({{count}} challenges)",
+      "meValue": "You: {{value}}",
+      "avgShortValue": "Avg.: {{value}}",
+      "difference": "Difference",
+      "diffShort": "Diff.",
+      "gamesCount": "{{count}} games",
+      "pointsShort": "{{value}} pts",
+      "ppg": "PPG"
+    },
+    "charts": {
+      "compareBar": {
+        "title": "Comparison",
+        "maxScale": "Max scale:"
+      }
+    },
+    "cards": {
+      "points": {
+        "title": "Points",
+        "subtitle": "Compared to the weighted average of other participants",
+        "byTypeTitle": "Breakdown by challenge type"
+      },
+      "winRate": {
+        "title": "Challenge conversion rate",
+        "subtitle": "Overall win rate + by type (weighted by number of challenges).",
+        "byTypeTitle": "Win rate by challenge type"
+      },
+      "nhl": {
+        "title": "Player performance",
+        "subtitle": "Real points generated by your picks (PPG = points / games).",
+        "byTypeTitle": "PPG by challenge type",
+        "diffPpg": "PPG diff."
+      }
+    },
+    "footer": "Data: {{plays}} challenges, {{wins}} wins · Compared against {{others}} others."
+  },
+
+  "ascension": {
+    "create": {
+      "title": "Create an Ascension",
+      "wizard": {
+        "step1": "1. Concept",
+        "step2": "2. Group",
+        "step3": "3. Format",
+        "step4": "4. Start",
+        "step5": "5. Confirm",
+        "pickGroup": "Pick a group",
+        "pickType": "Pick a format",
+        "pickStartDate": "Start date"
+      },
+      "concept": {
+        "title": "What is an Ascension?",
+        "body1": "An Ascension is a multi-day challenge. You start on a specific date, progress through stages, and compare your performance to other members in the group.",
+        "quickTitle": "Quick summary",
+        "quick1": "• Ascension 4: shorter format (recommended start: Wednesday).",
+        "quick2": "• Ascension 7: full format (recommended start: Sunday)."
+      },
+      "group": {
+        "noneBody": "Create a group to launch an Ascension."
+      },
+      "type": {
+        "label": "Ascension {{n}}",
+        "lockedHint": "Ascension 7 is for subscribers."
+      },
+      "unlockOther": "Unlock Ascension 7",
+      "startDate": {
+        "recoA7": "Recommended: Sunday (new week).",
+        "recoA4": "Recommended: Wednesday (4-day format).",
+        "quickTomorrow": "Tomorrow",
+        "quickSunday": "Sunday",
+        "quickWednesday": "Wednesday"
+      },
+      "planLocked": "Your plan doesn’t allow this format.",
+      "confirm": {
+        "title": "Confirm",
+        "group": "Group",
+        "type": "Format",
+        "startDate": "Start",
+        "note": "You can invite group members right after creation."
+      },
+      "actions": {
+        "creating": "Creating…",
+        "createNow": "Create Ascension"
+      },
+      "alert": {
+        "cannot": {
+          "title": "Cannot create",
+          "body": "Check the steps and try again."
+        },
+        "error": {
+          "title": "Creation failed"
+        }
+      }
+    }
+  },
+
+  "nova": {
+    "common": {
+      "next": "Great, let’s move on.",
+      "confirm": "Everything is ready. You can create it now."
+    },
+
+    "defi": {
+      "step1": {
+        "title": "Choose a group",
+        "body": "Select the group where you want to create this challenge."
+      },
+      "step2": {
+        "title": "Choose a format",
+        "body": "Each format has its own rules. Pick the one that fits you best."
+      },
+      "step3": {
+        "title": "Choose a date",
+        "body": "Select a day with NHL games."
+      },
+      "confirm": {
+        "title": "Review",
+        "body": "Double-check the details before creating the challenge."
+      },
+      "success": {
+        "title": "Challenge created",
+        "body": "Great choice. The challenge is now open to participants."
+      }
+    },
+
+    "ascension": {
+      "intro": {
+        "title": "Ascension mode",
+        "body": "Ascension is a multi-day challenge where participants climb step by step."
+      },
+      "step1": {
+        "title": "Choose a group",
+        "body": "Select the group that will take part in this Ascension."
+      },
+      "step2": {
+        "title": "Choose Ascension type",
+        "body": "Ascension 4 is shorter. Ascension 7 requires more strategy."
+      },
+      "step3": {
+        "title": "Start date",
+        "body": "Ascension always starts on a specific date. Choose carefully."
+      },
+      "confirm": {
+        "title": "Ready to launch",
+        "body": "Everything is set. You can now launch the Ascension."
+      }
+    } 
   }
-}    
+}
+
+
+  

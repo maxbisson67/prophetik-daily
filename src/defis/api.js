@@ -1,72 +1,63 @@
 // src/defis/api.js (RNFB)
-import firestore from '@react-native-firebase/firestore';
+import firestore from "@react-native-firebase/firestore";
+import functions from "@react-native-firebase/functions";
+import i18n from "@src/i18n/i18n";
 
-const APP_TZ = 'America/Toronto'; // ⚠️ DOIT rester aligné avec ProphetikDate côté backend
+const APP_TZ = "America/Toronto"; // aligné backend
 
-/** Client-side check: membre actif OU owner du groupe */
+/* -------------------- helpers -------------------- */
+
 async function isGroupMemberOrOwnerClientCheck(groupId, uid) {
   try {
     if (!groupId || !uid) return false;
 
-    const gmRef  = firestore().doc(`group_memberships/${groupId}_${uid}`);
+    const gmRef = firestore().doc(`group_memberships/${groupId}_${uid}`);
     const gmSnap = await gmRef.get();
     if (gmSnap.exists) {
       const gm = gmSnap.data() || {};
       const isActive = gm.active !== false;
-      const role = String(gm.role || 'member').toLowerCase();
-      if (isActive && (role === 'member' || role === 'owner')) return true;
+      const role = String(gm.role || "member").toLowerCase();
+      if (isActive && (role === "member" || role === "owner")) return true;
     }
 
-    const gRef  = firestore().doc(`groups/${String(groupId)}`);
+    const gRef = firestore().doc(`groups/${String(groupId)}`);
     const gSnap = await gRef.get();
     if (gSnap.exists && gSnap.data()?.ownerId === uid) return true;
 
     return false;
   } catch (e) {
-    console.warn('[isGroupMemberOrOwnerClientCheck]', e?.code || e?.message || e);
+    console.warn("[isGroupMemberOrOwnerClientCheck]", e?.code || e?.message || e);
     return false;
   }
 }
 
-/**
- * Normalise gameDate:
- * - si string => on garde "YYYY-MM-DD" (on tronque au besoin)
- * - si Date   => on convertit en YMD dans APP_TZ (America/Toronto)
- */
 function normalizeGameDate(gameDate) {
-  if (!gameDate) throw new Error('gameDate requis');
+  if (!gameDate) throw new Error("gameDate requis");
 
-  // 1) String → on suppose déjà "YYYY-MM-DD" ou "YYYY-MM-DDTHH:mm"
-  if (typeof gameDate === 'string') {
-    if (gameDate.length >= 10) {
-      return gameDate.slice(0, 10); // ex: "2025-12-05"
-    }
+  if (typeof gameDate === "string") {
+    if (gameDate.length >= 10) return gameDate.slice(0, 10);
     throw new Error('gameDate string doit être au format "YYYY-MM-DD"');
   }
 
-  // 2) Date → on convertit dans APP_TZ pour obtenir le YMD
   if (gameDate instanceof Date) {
     try {
-      const parts = new Intl.DateTimeFormat('en-CA', {
+      const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone: APP_TZ,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
       }).formatToParts(gameDate);
 
-      const y = parts.find(p => p.type === 'year')?.value;
-      const m = parts.find(p => p.type === 'month')?.value;
-      const d = parts.find(p => p.type === 'day')?.value;
-
-      if (!y || !m || !d) throw new Error('formatToParts incomplet');
-
+      const y = parts.find((p) => p.type === "year")?.value;
+      const m = parts.find((p) => p.type === "month")?.value;
+      const d = parts.find((p) => p.type === "day")?.value;
+      if (!y || !m || !d) throw new Error("formatToParts incomplet");
       return `${y}-${m}-${d}`;
     } catch (e) {
-      console.warn('[normalizeGameDate] Intl error, fallback local getters', e);
-      // Fallback: on utilise les getters locaux de Date (moins parfait, mais mieux que rien)
+      console.warn("[normalizeGameDate] Intl error, fallback local getters", e);
       const y = gameDate.getFullYear();
-      const m = String(gameDate.getMonth() + 1).padStart(2, '0');
-      const d = String(gameDate.getDate()).padStart(2, '0');
+      const m = String(gameDate.getMonth() + 1).padStart(2, "0");
+      const d = String(gameDate.getDate()).padStart(2, "0");
       return `${y}-${m}-${d}`;
     }
   }
@@ -74,67 +65,135 @@ function normalizeGameDate(gameDate) {
   throw new Error('gameDate doit être une string "YYYY-MM-DD" ou un Date');
 }
 
-const toDate = (v) => (v instanceof Date ? v : v ? new Date(v) : null);
+function toIsoOrNull(v) {
+  if (!v) return null;
+  const d = v instanceof Date ? v : v?.toDate?.() ? v.toDate() : new Date(v);
+  return Number.isFinite(d?.getTime?.()) ? d.toISOString() : null;
+}
+
+function friendlyCallableError(e) {
+  const details = e?.details || {};
+  const reason = details.reason;
+
+  switch (reason) {
+    case "PLAN_NOT_ALLOWED":
+      return i18n.t("groups.defi.errors.planNotAllowed");
+
+    case "CREATE_LIMIT_REACHED":
+      return i18n.t("groups.defi.errors.createLimitReached", {
+        max: details.max,
+      });
+
+    case "JOIN_LIMIT_REACHED":
+      return i18n.t("groups.defi.errors.joinLimitReached", {
+        max: details.max,
+      });
+
+    default:
+      // fallback safe
+      return i18n.t("common.genericError");
+  }
+}
+
+/* -------------------- callables -------------------- */
+
+function callDefisCreate() {
+  return functions().httpsCallable("defisCreate");
+}
+
+function callDefisJoin() {
+  return functions().httpsCallable("defisJoin");
+}
+
+function parseCallableError(e) {
+  const details = e?.details || {};
+  return {
+    code: e?.code || null,
+    message: e?.message || null,
+    reason: details.reason || null,
+    max: details.max ?? null,
+  };
+}
+
+/* -------------------- API -------------------- */
 
 /**
- * Crée un défi (RNFB).
- * Requis:  { groupId, title, type, gameDate, createdBy }
- * Optionnels: { participationCost, status='active', firstGameUTC, signupDeadline }
- * Règles Firestore attendues: isGroupOwner(groupId) && createdBy == request.auth.uid
+ * Crée un défi via Cloud Function (source de vérité + quotas + tiers).
+ * Input: { groupId, title, type, gameDate, participationCost?, status?, firstGameUTC?, signupDeadline?, format?, availability?, bonusReward?, isSpecial? }
+ * Retour: { id, weekKey, tier }
  */
 export async function createDefi(input = {}) {
   const {
     groupId,
     title,
     type,
-    gameDate,            // string "YYYY-MM-DD" OU Date
-    createdBy,           // uid
-    participationCost,   // number | null
-    status = 'active',
-    firstGameUTC = null,     // Date | ISO | null
-    signupDeadline = null,   // Date | ISO | null
-
-    format = null,          // { picks, pool }
-    availability = null,    // { days: ["SATURDAY"], timezone: "America/Toronto" }
-    bonusReward = null,     // { type: "random", values: [6,7] }
-    isSpecial = null,
+    gameDate, // string ou Date
+    participationCost,
+    status = "active",
+    firstGameUTC = null,
+    signupDeadline = null,
+    format,
+    availability,
+    bonusReward,
+    isSpecial,
+    // ⚠️ createdBy volontairement ignoré (req.auth.uid = source de vérité)
+    createdBy,
   } = input;
 
-  if (!groupId)   throw new Error('groupId requis');
-  if (!title)     throw new Error('title requis');
-  if (!type && type !== 0) throw new Error('type requis');
-  if (!gameDate)  throw new Error('gameDate requis');
-  if (!createdBy) throw new Error('createdBy (uid) requis');
+  if (!groupId) throw new Error("groupId requis");
+  if (!title) throw new Error("title requis");
+  if (!Number.isFinite(Number(type)) || Number(type) <= 0) throw new Error("type requis");
+  if (!gameDate) throw new Error("gameDate requis");
 
-  // Vérif UI (les règles restent l’ultime source de vérité)
-  const okOwner = await isGroupMemberOrOwnerClientCheck(groupId, createdBy);
-  if (!okOwner) throw new Error("Création refusée: l'utilisateur n'est pas owner/membre actif du groupe.");
-
-  // 🔑 Normalisation fuseau → YMD dans APP_TZ
-  const gameDateYmd = normalizeGameDate(gameDate);
+  // UI-only check (optionnel)
+  if (createdBy) {
+    const ok = await isGroupMemberOrOwnerClientCheck(groupId, createdBy);
+    if (!ok) throw new Error("Création refusée: utilisateur non membre/owner actif du groupe.");
+  }
 
   const payload = {
     groupId: String(groupId),
     title: String(title),
     type: Number(type),
-    gameDate: gameDateYmd,
-    createdBy: String(createdBy),
+    gameDate: normalizeGameDate(gameDate),
     participationCost: participationCost ?? null,
     status: String(status),
-    // Ces champs sont des instants précis → Firestore stocke en UTC
-    firstGameUTC: toDate(firstGameUTC) || undefined,
-    signupDeadline: toDate(signupDeadline) || undefined,
-    format: format || undefined,
-    availability: availability || undefined,
-    bonusReward: bonusReward || undefined,
-    isSpecial: typeof isSpecial === 'boolean' ? isSpecial : undefined,
-    createdAt: firestore.FieldValue.serverTimestamp(),
-    updatedAt: firestore.FieldValue.serverTimestamp(),
+
+    // ISO strings
+    firstGameUTC: toIsoOrNull(firstGameUTC),
+    signupDeadline: toIsoOrNull(signupDeadline),
+
+    // ✅ préfère undefined plutôt que null (plus clean)
+    format: format ?? undefined,
+    availability: availability ?? undefined,
+    bonusReward: bonusReward ?? undefined,
+    isSpecial: typeof isSpecial === "boolean" ? isSpecial : undefined,
   };
 
-  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  try {
+    const fn = callDefisCreate();
+    const res = await fn(payload);
+    return res?.data || null;
+  } catch (e) {
+    return { ok: false, error: parseCallableError(e) };
+  }
+}
 
-  const col = firestore().collection('defis');
-  const ref = await col.add(payload);
-  return { id: ref.id };
+/**
+ * Join un défi via Cloud Function.
+ * Input: { defiId }
+ * Retour: { ok, defiId, weekKey, tier }
+ */
+/** Rejoindre un défi (débite stakes) */
+export async function joinDefi(defiId, { picks = [], clientMutationId = null } = {}) {
+  const id = String(defiId || "");
+  if (!id) throw new Error("defiId requis");
+
+  try {
+    const fn = callDefisJoin();
+    const res = await fn({ defiId: id, picks, clientMutationId });
+    return res?.data || null;
+  } catch (e) {
+    return { ok: false, error: parseCallableError(e) };
+  }
 }

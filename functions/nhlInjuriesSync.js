@@ -2,8 +2,8 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db, FieldValue, logger } from "./utils.js";
 import { defineSecret } from "firebase-functions/params";
+import { FieldPath } from "firebase-admin/firestore";
 
-// ✅ Sportradar endpoint (league injuries)
 const SPORTRADAR_URL =
   "https://api.sportradar.com/nhl/trial/v7/en/league/injuries.json";
 
@@ -14,12 +14,16 @@ function normalizeStr(v) {
   return s ? s : null;
 }
 
-// Normalisation légère des statuts Sportradar -> ce que ton UI attend
+function ymdUTC(date = new Date()) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function normalizeStatus(srStatus) {
   const s = String(srStatus || "").trim().toLowerCase();
   if (!s) return null;
-
-  // Sportradar renvoie souvent: "Day To Day", "Out", etc.
   if (s.includes("day")) return "DayToDay";
   if (s === "out" || s.includes("out")) return "Out";
   if (s.includes("question")) return "Questionable";
@@ -27,61 +31,142 @@ function normalizeStatus(srStatus) {
   return "Unknown";
 }
 
-// Construit le snapshot "injury" dans ton format app
 function mapInjuryFromSportradar(player) {
   const injuries = Array.isArray(player?.injuries) ? player.injuries : [];
   if (!injuries.length) return null;
 
-  // ✅ MVP: on prend la plus récente (par update_date si présent)
   const sorted = injuries
     .slice()
-    .sort((a, b) => String(b?.update_date || "").localeCompare(String(a?.update_date || "")));
+    .sort((a, b) =>
+      String(b?.update_date || "").localeCompare(String(a?.update_date || ""))
+    );
 
   const inj = sorted[0] || null;
   if (!inj) return null;
 
   const status = normalizeStatus(inj?.status);
-  // Si status absent mais injury existe, on garde Unknown
   const safeStatus = status || "Unknown";
-
-  const short = normalizeStr(inj?.desc);          // ex: "Illness"
-  const description = normalizeStr(inj?.comment); // ex: "did not play..."
 
   return {
     status: safeStatus,
-    short,
-    description,
+    short: normalizeStr(inj?.desc),
+    description: normalizeStr(inj?.comment),
     startDate: normalizeStr(inj?.start_date) ?? null,
-    expectedReturn: null, // Sportradar "league injuries" n'a pas toujours expected return
+    expectedReturn: null,
     updatedDate: normalizeStr(inj?.update_date) ?? null,
     source: "sportradar",
     updatedAt: FieldValue.serverTimestamp(),
   };
 }
 
+async function commitBatch(batch, count) {
+  if (count > 0) await batch.commit();
+}
+
+async function clearDocsBySnaps(docs, reason) {
+  if (!docs?.length) return 0;
+
+  let b = db.batch();
+  let c = 0;
+  let cleared = 0;
+
+  for (const docSnap of docs) {
+    if (docSnap.id === "8478403") {
+      logger.info("[injuries] clearing EICHEL", { reason, docId: docSnap.id });
+    }
+
+    b.set(
+      docSnap.ref,
+      {
+        injury: FieldValue.delete(),
+        injuryClearedAt: FieldValue.serverTimestamp(),
+        injuryClearReason: reason,
+      },
+      { merge: true }
+    );
+
+    c++;
+    cleared++;
+
+    if (c >= 450) {
+      await commitBatch(b, c);
+      b = db.batch();
+      c = 0;
+    }
+  }
+
+  await commitBatch(b, c);
+  return cleared;
+}
+
+/**
+ * ✅ Purge robuste:
+ * - scan tous les docs ayant injury.source == "sportradar"
+ * - clear si injuryRunId !== runId (inclut: champ manquant)
+ */
+async function purgeStaleByScan({ runId }) {
+  let scanned = 0;
+  let cleared = 0;
+
+  let last = null;
+
+  while (true) {
+    let q = db
+      .collection("nhl_players")
+      .where("injury.source", "==", "sportradar")
+      .orderBy(FieldPath.documentId())
+      .limit(400);
+
+    if (last) q = q.startAfter(last);
+
+    const snap = await q.get();
+    if (snap.empty) break;
+
+    scanned += snap.size;
+
+    const toClear = [];
+    for (const docSnap of snap.docs) {
+      const d = docSnap.data() || {};
+      const docRunId = d.injuryRunId; // peut être undefined
+      if (docRunId !== runId) toClear.push(docSnap);
+    }
+
+    if (toClear.length) {
+      cleared += await clearDocsBySnaps(toClear, "stale_injuryRunId_or_missing");
+    }
+
+    last = snap.docs[snap.docs.length - 1];
+    if (snap.size < 400) break;
+  }
+
+  return { scanned, cleared };
+}
+
 export const syncNhlInjuries = onSchedule(
   {
+    //schedule: "*/2 * * * *", // test
     schedule: "0 9 * * *",
     timeZone: "America/Toronto",
     region: "us-central1",
     secrets: [SPORTRADAR_API_KEY],
   },
   async () => {
-   const apiKey = SPORTRADAR_API_KEY.value();
+    const apiKey = SPORTRADAR_API_KEY.value();
     if (!apiKey) {
-      logger.error("Missing SPORTRADAR_API_KEY env var");
+      logger.error("Missing SPORTRADAR_API_KEY");
       return;
     }
 
+    const runId = String(Date.now());
+    const runYmd = ymdUTC(new Date());
+    logger.info("[injuries] sync start", { runId, runYmd });
+
     const res = await fetch(SPORTRADAR_URL, {
-      headers: {
-        accept: "application/json",
-        "x-api-key": apiKey,
-      },
+      headers: { accept: "application/json", "x-api-key": apiKey },
     });
 
     if (!res.ok) {
-      const txt = await res.text();
+      const txt = await res.text().catch(() => "");
       logger.error(`[injuries] Sportradar error ${res.status}`, {
         body: txt?.slice?.(0, 300),
       });
@@ -89,8 +174,6 @@ export const syncNhlInjuries = onSchedule(
     }
 
     const payload = await res.json();
-
-    // Selon Sportradar: payload.teams[].players[]
     const teams = Array.isArray(payload?.teams) ? payload.teams : [];
     if (!teams.length) {
       logger.error("[injuries] Invalid payload (no teams[])");
@@ -101,36 +184,64 @@ export const syncNhlInjuries = onSchedule(
     let batchCount = 0;
 
     let playersSeen = 0;
-    let playersUpdated = 0;
+    let playersTouched = 0;
+    let injuredCount = 0;
+    let clearedInline = 0;
     let skippedNoReference = 0;
 
+    // 1) Upsert joueurs blessés (payload Sportradar = blessés)
     for (const team of teams) {
       const players = Array.isArray(team?.players) ? team.players : [];
       for (const p of players) {
         playersSeen++;
 
-        // ✅ Ton Firestore id = NHL playerId, et Sportradar le donne via "reference"
         const nhlPlayerId = String(p?.reference ?? "").trim();
         if (!nhlPlayerId) {
           skippedNoReference++;
           continue;
         }
 
+        if (nhlPlayerId === "8478403") {
+          logger.info("[injuries] EICHEL in payload", {
+            reference: nhlPlayerId,
+            rawInjuriesCount: Array.isArray(p?.injuries) ? p.injuries.length : 0,
+            latestUpdate: p?.injuries?.[0]?.update_date || null,
+            status: p?.injuries?.[0]?.status || null,
+            desc: p?.injuries?.[0]?.desc || null,
+          });
+        }
+
         const injurySnapshot = mapInjuryFromSportradar(p);
         const ref = db.collection("nhl_players").doc(nhlPlayerId);
 
-        // ✅ IMPORTANT: set+merge pour ne pas écraser les autres champs
-        // et pour éviter l'erreur "No document to update"
         if (injurySnapshot) {
-          batch.set(ref, { injury: injurySnapshot }, { merge: true });
+          injuredCount++;
+          batch.set(
+            ref,
+            {
+              injury: injurySnapshot,
+              injurySyncYmd: runYmd,
+              injuryRunId: runId,
+            },
+            { merge: true }
+          );
         } else {
-          batch.set(ref, { injury: FieldValue.delete() }, { merge: true });
+          // (rare) si un joueur est présent sans injuries[]
+          clearedInline++;
+          batch.set(
+            ref,
+            {
+              injury: FieldValue.delete(),
+              injurySyncYmd: runYmd,
+              injuryRunId: runId,
+            },
+            { merge: true }
+          );
         }
 
         batchCount++;
-        playersUpdated++;
+        playersTouched++;
 
-        // limite batch Firestore
         if (batchCount >= 450) {
           await batch.commit();
           batch = db.batch();
@@ -139,12 +250,21 @@ export const syncNhlInjuries = onSchedule(
       }
     }
 
-    if (batchCount > 0) await batch.commit();
+    await commitBatch(batch, batchCount);
+
+    // 2) Purge robuste des stale (inclut champs manquants)
+    const purge = await purgeStaleByScan({ runId });
 
     logger.info("[injuries] Sync completed (Sportradar)", {
+      runId,
+      runYmd,
       playersSeen,
-      playersUpdated,
+      playersTouched,
+      injuredCount,
+      clearedInline,
       skippedNoReference,
+      staleScanned: purge.scanned,
+      staleCleared: purge.cleared,
     });
   }
 );

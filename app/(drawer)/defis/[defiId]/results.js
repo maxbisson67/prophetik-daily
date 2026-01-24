@@ -628,6 +628,11 @@ export default function DefiResultsScreen() {
     return allTalliedIds.filter((id) => !playerMap[id]);
   }, [allTalliedIds, playerMap]);
 
+  const participantsUiCount = React.useMemo(() => {
+    if (Array.isArray(parts) && parts.length > 0) return parts.length;
+    return Number(defi?.participantsCount ?? 0);
+  }, [parts, defi?.participantsCount]);
+
   useEffect(() => {
     if (missingPlayerMeta.length === 0 || !nhlPlayersReadable) return;
     let cancelled = false;
@@ -876,7 +881,7 @@ export default function DefiResultsScreen() {
                       color: colors.text,
                     }}
                   >
-                    {defi?.participantsCount ?? 0}
+                    {participantsUiCount}
                   </Text>
                 </View>
               </View>

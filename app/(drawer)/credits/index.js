@@ -13,7 +13,7 @@ import { useTheme } from '@src/theme/ThemeProvider';
 // i18n
 import i18n from '@src/i18n/i18n';
 
-import ProphetikToken from "@src/ui/ProphetikToken";
+import ProphetikIcons from "@src/ui/ProphetikIcons";
 
 /* ---------- Helpers ---------- */
 
@@ -413,7 +413,7 @@ export default function CreditsScreen() {
                       <Text style={{ fontWeight: '700', color: colors.text }}>
                         {meta.label}
                       </Text>
-                      <ProphetikToken
+                      <ProphetikIcons
                         amount={Number(item.amount) || 0}
                         prefixPlus
                         size="sm"
@@ -499,7 +499,7 @@ export default function CreditsScreen() {
                     </Text>
                   </View>
 
-                <ProphetikToken
+                <ProphetikIcons
                   amount={g.reward}      // "+1"
                   size="sm"
                   variant="flat"

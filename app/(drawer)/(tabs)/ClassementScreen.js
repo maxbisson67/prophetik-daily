@@ -1,155 +1,41 @@
-// app/(drawer)/(tabs)/ClassementScreen.js
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+// app/(tabs)/ClassementScreen.js
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
   ActivityIndicator,
-  TouchableOpacity,
   FlatList,
   RefreshControl,
-  Image,
-} from 'react-native';
-import { Stack } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
+  TouchableOpacity,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Stack, useRouter } from "expo-router";
 
-import { useAuth } from '@src/auth/SafeAuthProvider';
-import { useGroups } from '@src/groups/useGroups';
-import { useTheme } from '@src/theme/ThemeProvider';
+import { useAuth } from "@src/auth/SafeAuthProvider";
+import { useGroups } from "@src/groups/useGroups";
+import { useTheme } from "@src/theme/ThemeProvider";
+import i18n from "@src/i18n/i18n";
 
-// ✅ i18n central
-import i18n from '@src/i18n/i18n';
+import firestore from "@react-native-firebase/firestore";
+import useEntitlement from "../subscriptions/useEntitlement";
 
-// ⬇️ RNFirebase
-import firestore from '@react-native-firebase/firestore';
+import GroupLeaderboardCard from "@src/leaderboard/GroupLeaderboardCard";
+import { dedupeById } from "@src/leaderboard/utils";
+import { getColumnsForTier } from "@src/leaderboard/leaderboardColumns";
+import LeaderboardMemberModal from "@src/leaderboard/LeaderboardMemberModal";
+import LeaderboardLegend from "@src/leaderboard/LeaderboardLegend";
 
-const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
-const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
+// ✅ hooks (leaderboards saison)
+import useCurrentSeason from "@src/hooks/useCurrentSeason";
 
-/* ---------------- Leaderboards hook ---------------- */
-function useLeaderboards(groupIds) {
-  const [loading, setLoading] = useState(true);
-  const [all, setAll] = useState({});
-
-  useEffect(() => {
-    if (!groupIds?.length) {
-      setAll({});
-      setLoading(false);
-      return;
-    }
-    const unsubs = [];
-    setLoading(true);
-
-    groupIds.forEach((gid) => {
-      const ref = firestore()
-        .collection('groups')
-        .doc(String(gid))
-        .collection('leaderboard');
-
-      const unsub = ref.onSnapshot(
-        (snap) => {
-          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setAll((prev) => ({ ...prev, [gid]: rows }));
-        },
-        () => {
-          // en cas d'erreur de permissions, on laisse vide
-          setAll((prev) => ({ ...prev, [gid]: [] }));
-        }
-      );
-
-      // ✅ bon nom de variable
-      unsubs.push(unsub);
-    });
-
-    setLoading(false);
-    return () =>
-      unsubs.forEach((u) => {
-        try {
-          u && u();
-        } catch {}
-      });
-  }, [JSON.stringify(groupIds)]);
-
-  return { loading, all };
-}
-
-/* ---------------- helpers cache-bust ---------------- */
-function withCacheBust(url, tsMillis) {
-  if (!url) return null;
-  const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
-  return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
-}
-
-/* ----------- profils publics (profiles_public) pour un set dynamique d'uids ----------- */
-function usePublicProfilesFor(uids) {
-  const [map, setMap] = useState({}); // uid -> { displayName, avatarUrl, updatedAt }
-
-  useEffect(() => {
-    const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
-    if (ids.length === 0) {
-      setMap({});
-      return;
-    }
-
-    const unsubs = new Map();
-
-    ids.forEach((uid) => {
-      if (unsubs.has(uid)) return;
-      const ref = firestore().collection('profiles_public').doc(uid);
-      const un = ref.onSnapshot(
-        (snap) => {
-          if (!snap.exists) {
-            setMap((prev) => {
-              if (prev[uid]) {
-                const next = { ...prev };
-                delete next[uid];
-                return next;
-              }
-              return prev;
-            });
-            return;
-          }
-          const d = snap.data() || {};
-          setMap((prev) => ({
-            ...prev,
-            [uid]: {
-              displayName: d.displayName || 'Invité',
-              avatarUrl: d.avatarUrl || null,
-              updatedAt: d.updatedAt || null,
-            },
-          }));
-        },
-        () => {
-          // on laisse l’entrée telle quelle en cas d’erreur
-        }
-      );
-      unsubs.set(uid, un);
-    });
-
-    return () => {
-      for (const [, un] of unsubs) {
-        try {
-          un();
-        } catch {}
-      }
-    };
-  }, [JSON.stringify(uids || [])]);
-
-  return map;
-}
-
-// 🔧 util: dédupliquer par id
-function dedupeById(arr) {
-  const map = new Map();
-  for (const g of arr || []) map.set(String(g.id), g);
-  return Array.from(map.values());
-}
+const SUBSCRIBE_ROUTE = "/(drawer)/subscriptions";
 
 /* 🔎 hook: tous les groupes dont je suis owner (ownerId == uid OU createdBy == uid) */
 function useOwnedGroups(uid) {
-  const [owned, setOwned] = React.useState([]);
-  const [loading, setLoading] = React.useState(!!uid);
+  const [owned, setOwned] = useState([]);
+  const [loading, setLoading] = useState(!!uid);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!uid) {
       setOwned([]);
       setLoading(false);
@@ -164,13 +50,10 @@ function useOwnedGroups(uid) {
         (snap) => {
           results[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-          const merged = dedupeById([
-            ...results.ownerId,
-            ...results.createdBy,
-          ]).filter((g) => {
-            const status = String(g?.status || '').toLowerCase();
+          const merged = dedupeById([...results.ownerId, ...results.createdBy]).filter((g) => {
+            const status = String(g?.status || "").toLowerCase();
             if (g?.active === false) return false;
-            if (status === 'archived' || status === 'deleted') return false;
+            if (status === "archived" || status === "deleted") return false;
             return true;
           });
 
@@ -179,27 +62,21 @@ function useOwnedGroups(uid) {
         },
         () => setLoading(false)
       );
+
       unsubs.push(un);
     }
 
     try {
-      attach(
-        firestore().collection('groups').where('ownerId', '==', String(uid)),
-        'ownerId'
-      );
-    } catch (e) {}
-
+      attach(firestore().collection("groups").where("ownerId", "==", String(uid)), "ownerId");
+    } catch {}
     try {
-      attach(
-        firestore().collection('groups').where('createdBy', '==', String(uid)),
-        'createdBy'
-      );
-    } catch (e) {}
+      attach(firestore().collection("groups").where("createdBy", "==", String(uid)), "createdBy");
+    } catch {}
 
     return () => {
       unsubs.forEach((u) => {
         try {
-          u && u();
+          u?.();
         } catch {}
       });
     };
@@ -208,383 +85,342 @@ function useOwnedGroups(uid) {
   return { owned, loading };
 }
 
-/* ---------------- Legend ---------------- */
-function Legend({ colors }) {
-  const t = i18n.t.bind(i18n);
-
-  const Item = ({ left, text }) => (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginRight: 16,
-        marginBottom: 6,
-      }}
-    >
-      {left}
-      <Text style={{ color: colors.subtext, fontSize: 12 }}>{text}</Text>
-    </View>
-  );
-
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginBottom: 10,
-      }}
-    >
-      <Item
-        left={<Ionicons name="person" size={14} color={colors.subtext} />}
-        text={t('leaderboard.legend.name')}
-      />
-      <Item
-        left={<Ionicons name="trophy" size={14} color={colors.subtext} />}
-        text={t('leaderboard.legend.wins')}
-      />
-      <Item
-        left={
-          <FontAwesome6
-            name="sack-dollar"
-            size={14}
-            color={colors.subtext}
-          />
-        }
-        text={t('leaderboard.legend.gainTotal')}
-      />
-      <Item
-        left={
-          <MaterialCommunityIcons
-            name="sack-percent"
-            size={18}
-            color={colors.subtext}
-          />
-        }
-        text={t('leaderboard.legend.gainAvg')}
-      />
-    </View>
-  );
+function computeMode({ user, tierLower, tierActive }) {
+  if (!user) return "anon";
+  if (tierActive === false) return "free";
+  if (tierLower === "vip") return "vip";
+  if (tierLower === "pro") return "pro";
+  if (tierLower === "starter") return "pro";
+  return "free";
 }
 
-function HeaderCol({
-  icon,
-  iconSet = 'mci',
-  labelText,
-  sortKey,
-  currentSort,
-  onSort,
-  colors,
-  flex,
-  center,
-}) {
-  const isActive = currentSort?.key === sortKey;
-  const direction = isActive ? currentSort?.dir : null;
-  const IconSet = iconSet === 'fa6' ? FontAwesome6 : MaterialCommunityIcons;
-  const iconSize = iconSet === 'mci' && icon === 'sack-percent' ? 20 : 18;
+/**
+ * ✅ hook: écoute un leaderboard "members" pour chaque groupeId / seasonId
+ * - FREE: tri simple pointsTotal desc
+ * - PRO/VIP: tri wins desc, pointsTotal desc, participations desc
+ * Retour: { all: { [groupId]: rows[] }, loading }
+ */
+function useLeaderboardsSeasonForGroups({ groupIds, seasonId, enabled, mode }) {
+  const [all, setAll] = useState({});
+  const [loading, setLoading] = useState(!!enabled);
 
-  return (
-    <TouchableOpacity
-      onPress={() => onSort(sortKey)}
-      style={{
-        flex: flex || (center ? 1 : undefined),
-        alignItems: center ? 'center' : 'flex-start',
-        flexDirection: 'row',
-        justifyContent: center ? 'center' : 'flex-start',
-        gap: 6,
-      }}
-    >
-      {icon && (
-        <IconSet
-          name={icon}
-          size={iconSize}
-          color={isActive ? colors.primary : colors.text}
-        />
-      )}
-      {labelText && (
-        <Text
-          style={{
-            color: isActive ? colors.primary : colors.text,
-            fontWeight: isActive ? '700' : '500',
-          }}
-        >
-          {labelText}
-        </Text>
-      )}
-      {isActive && (
-        <MaterialCommunityIcons
-          name={direction === 'asc' ? 'chevron-up' : 'chevron-down'}
-          size={24}
-          color={colors.primary}
-          style={{ marginLeft: 2 }}
-        />
-      )}
-    </TouchableOpacity>
-  );
-}
+  useEffect(() => {
+    if (!enabled || !seasonId || !Array.isArray(groupIds)) {
+      setAll({});
+      setLoading(false);
+      return;
+    }
 
-/* ---------------- Leaderboard table ---------------- */
-function LeaderboardTable({ rows, colors }) {
-  const [sort, setSort] = useState({ key: 'wins', dir: 'desc' });
+    if (!groupIds.length) {
+      setAll({});
+      setLoading(false);
+      return;
+    }
 
-  // 🔁 Liste des uids visibles dans la table
-  const uids = useMemo(() => rows.map((r) => String(r.id)), [rows]);
+    setLoading(true);
 
-  // 🔵 Profils publics pour ces uids
-  const publicProfiles = usePublicProfilesFor(uids);
+    const unsubs = [];
+    let alive = true;
 
-  const sorted = useMemo(() => {
-    const copy = [...rows];
-    copy.sort((a, b) => {
-      const av = a?.[sort.key] ?? 0;
-      const bv = b?.[sort.key] ?? 0;
-      if (av === bv) return 0;
-      return sort.dir === 'asc'
-        ? av < bv
-          ? -1
-          : 1
-        : av > bv
-        ? -1
-        : 1;
+    const initial = {};
+    groupIds.forEach((gid) => (initial[String(gid)] = []));
+    setAll(initial);
+
+    groupIds.forEach((gid) => {
+      const groupId = String(gid);
+      const base = firestore().collection(`groups/${groupId}/leaderboards/${seasonId}/members`);
+
+      const q =
+        mode === "free"
+          ? base.orderBy("pointsTotal", "desc").limit(50)
+          : base
+              .orderBy("wins", "desc")
+              .orderBy("pointsTotal", "desc")
+              .orderBy("participations", "desc")
+              .limit(50);
+
+      const un = q.onSnapshot(
+        (snap) => {
+          if (!alive) return;
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setAll((prev) => ({ ...(prev || {}), [groupId]: rows }));
+          setLoading(false);
+        },
+        (err) => {
+          console.log("[LB] ERROR", err?.code, err?.message);
+          setLoading(false);
+        }
+      );
+
+      unsubs.push(un);
     });
-    return copy;
-  }, [rows, sort]);
 
-  const toggleSort = useCallback((key) => {
-    setSort((s) =>
-      s.key === key
-        ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
-        : { key, dir: 'desc' }
-    );
-  }, []);
+    return () => {
+      alive = false;
+      unsubs.forEach((u) => {
+        try {
+          u?.();
+        } catch {}
+      });
+    };
+  }, [enabled, seasonId, mode, JSON.stringify(groupIds || [])]);
 
+  return { all, loading };
+}
+
+// ✅ Normalisation: on s'assure que l'app utilise pointsTotal
+function normalizeMemberRow(row) {
+  const r = row || {};
+
+  const pointsTotal = Number(r.pointsTotal ?? 0) || 0;
+
+  const wins = Number(r.wins ?? 0) || 0;
+  const participations = Number(r.participations ?? r.plays ?? 0) || 0;
+
+  // winRate global (0..1)
+  const winRate = participations > 0 ? wins / participations : 0;
+
+  // sport-agnostique: garde les champs historiques si existants
+  const nhlPointsTotal = Number(r.nhlPointsTotal ?? 0) || 0;
+  const nhlGamesTotal = Number(r.nhlGamesTotal ?? 0) || 0;
+
+  const nhlPPG = Number.isFinite(Number(r.nhlPPG))
+    ? Number(r.nhlPPG)
+    : nhlGamesTotal > 0
+    ? nhlPointsTotal / nhlGamesTotal
+    : 0;
+
+  return {
+    ...r,
+    pointsTotal,
+    wins,
+    participations,
+    winRate,
+    nhlPointsTotal,
+    nhlGamesTotal,
+    nhlPPG,
+  };
+}
+
+function LeaderboardUpgradeFooterFree({ colors, onPress }) {
+  const t = i18n.t.bind(i18n);
   return (
     <View
       style={{
+        marginTop: 12,
+        padding: 12,
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: 12,
-        overflow: 'hidden',
         backgroundColor: colors.card,
       }}
     >
-      {/* header */}
-      <View
+      <Text style={{ color: colors.text, fontWeight: "900" }}>
+        {t("leaderboard.upgradeCta.freeTitle", { defaultValue: "Débloque Pro & VIP" })}
+      </Text>
+      <Text style={{ color: colors.subtext, marginTop: 6 }}>
+        {t("leaderboard.upgradeCta.freeBody", {
+          defaultValue:
+            "Passe à Pro pour voir ton win rate et ouvrir le détail des participants. VIP ajoute aussi les stats avancées et graphiques.",
+        })}
+      </Text>
+
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.85}
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          paddingVertical: 10,
+          marginTop: 10,
+          alignSelf: "flex-start",
           paddingHorizontal: 12,
-          backgroundColor: colors.card2,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
+          paddingVertical: 10,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
         }}
       >
-        <View style={{ width: 40 }} />
-        <HeaderCol
-          icon="account"
-          sortKey="displayName"
-          currentSort={sort}
-          onSort={toggleSort}
-          colors={colors}
-          flex={1.5}
-        />
-        <HeaderCol
-          icon="trophy"
-          sortKey="wins"
-          currentSort={sort}
-          onSort={toggleSort}
-          colors={colors}
-          center
-        />
-        <HeaderCol
-          iconSet="fa6"
-          icon="sack-dollar"
-          sortKey="potTotal"
-          currentSort={sort}
-          onSort={toggleSort}
-          colors={colors}
-          center
-        />
-        <HeaderCol
-          icon="sack-percent"
-          sortKey="potAvg"
-          currentSort={sort}
-          onSort={toggleSort}
-          colors={colors}
-          center
-        />
-      </View>
-
-      {/* rows */}
-      {sorted.map((r, idx) => {
-        const prof = publicProfiles[r.id] || {};
-        const version = prof?.updatedAt?.toMillis?.()
-          ? prof.updatedAt.toMillis()
-          : 0;
-
-        const display = prof.displayName || r.displayName || r.id;
-        const shortName =
-          display.length > 10 ? display.slice(0, 10) + '…' : display;
-        const uri = prof.avatarUrl
-          ? withCacheBust(prof.avatarUrl, version)
-          : null;
-
-        return (
-          <View
-            key={r.id}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingVertical: 10,
-              paddingHorizontal: 12,
-              borderBottomWidth: idx === sorted.length - 1 ? 0 : 1,
-              borderBottomColor: colors.border,
-              backgroundColor: idx % 2 ? colors.rowAlt : colors.card,
-            }}
-          >
-            <Image
-              key={`${version}:${uri || 'placeholder'}`}
-              source={uri ? { uri } : AVATAR_PLACEHOLDER}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                marginRight: 8,
-                backgroundColor: colors.border,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-              onError={() => {
-                if (__DEV__) {
-                  console.warn('[Classement] avatar load error:', uri);
-                }
-              }}
-            />
-            <View style={{ flex: 1.5 }}>
-              <Text
-                style={{ color: colors.text, fontWeight: '700' }}
-                numberOfLines={1}
-              >
-                {shortName}
-              </Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: colors.text, textAlign: 'center' }}>
-                {r.wins ?? 0}
-              </Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: colors.text, textAlign: 'center' }}>
-                {(r.potTotal ?? 0).toLocaleString('fr-CA', {
-                  style: 'currency',
-                  currency: 'CAD',
-                  maximumFractionDigits: 0,
-                })}
-              </Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: colors.text, textAlign: 'center' }}>
-                {(r.potAvg ?? 0).toLocaleString('fr-CA', {
-                  style: 'currency',
-                  currency: 'CAD',
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </View>
-          </View>
-        );
-      })}
+        <Text style={{ color: colors.primary, fontWeight: "900" }}>
+          {t("leaderboard.upgradeCta.button", { defaultValue: "Voir les forfaits" })}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
-/* ---------------- Screen ---------------- */
+function LeaderboardUpgradeFooterPro({ colors, onPress }) {
+  const t = i18n.t.bind(i18n);
+  return (
+    <View
+      style={{
+        marginTop: 12,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 12,
+        backgroundColor: colors.card,
+      }}
+    >
+      <Text style={{ color: colors.text, fontWeight: "900" }}>
+        {t("leaderboard.upgradeCta.proTitle", { defaultValue: "Passe VIP pour la version complète" })}
+      </Text>
+      <Text style={{ color: colors.subtext, marginTop: 6 }}>
+        {t("leaderboard.upgradeCta.proBody", {
+          defaultValue:
+            "VIP ajoute les stats avancées, les graphiques réels, et la colonne PPG (plus de détails par participant).",
+        })}
+      </Text>
+
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.85}
+        style={{
+          marginTop: 10,
+          alignSelf: "flex-start",
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
+        }}
+      >
+        <Text style={{ color: colors.primary, fontWeight: "900" }}>
+          {t("leaderboard.upgradeCta.vipButton", { defaultValue: "Passer VIP" })}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function ClassementScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const { colors } = useTheme();
   const t = i18n.t.bind(i18n);
 
-  // 1) Groupes où je suis MEMBRE
-  const {
-    groups: memberGroups,
-    loading: loadingMemberGroups,
-    error,
-  } = useGroups(user?.uid);
+  const insets = useSafeAreaInsets();
 
-  // 2) Groupes dont je suis OWNER
-  const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(
-    user?.uid
-  );
+  const { tier: userTier, loading: loadingTier, active: tierActive } = useEntitlement(user?.uid);
+  const tierLower = String(userTier || "free").toLowerCase();
+  const mode = computeMode({ user, tierLower, tierActive });
 
-  // 3) Fusion dédupliquée
-  const groups = useMemo(
-    () =>
-      dedupeById([...(memberGroups || []), ...(ownedGroups || [])]).filter(
-        (g) => {
-          const status = String(g?.status || '').toLowerCase();
-          if (g?.active === false) return false;
-          if (status === 'archived' || status === 'deleted') return false;
-          return true;
-        }
-      ),
-    [memberGroups, ownedGroups]
-  );
+  // ✅ Saison courante
+  const { season, loading: loadingSeason } = useCurrentSeason();
+  const seasonId = String(season?.seasonId || "");
+
+  // groupes membre
+  const { groups: memberGroups, loading: loadingMemberGroups, error } = useGroups(user?.uid);
+  // groupes owner
+  const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(user?.uid);
+
+  const groups = useMemo(() => {
+    return dedupeById([...(memberGroups || []), ...(ownedGroups || [])]).filter((g) => {
+      const status = String(g?.status || "").toLowerCase();
+      if (g?.active === false) return false;
+      if (status === "archived" || status === "deleted") return false;
+      return true;
+    });
+  }, [memberGroups, ownedGroups]);
 
   const groupIds = useMemo(() => groups.map((g) => String(g.id)), [groups]);
-  const { loading: loadingBoards, all } = useLeaderboards(groupIds);
+
+  // ✅ FREE inclut maintenant la charge
+  const canLoad = mode !== "anon" && !!seasonId;
+
+  const { all, loading: loadingBoards } = useLeaderboardsSeasonForGroups({
+    groupIds: canLoad ? groupIds : [],
+    seasonId,
+    enabled: canLoad,
+    mode,
+  });
 
   const [refreshing, setRefreshing] = useState(false);
-  const [rebuilding, setRebuilding] = useState({});
 
-  const baseUrl = `https://us-central1-capitaine.cloudfunctions.net/rebuildLeaderboardForGroup`;
-
-  const handleRebuild = useCallback(async (gid) => {
-    try {
-      setRebuilding((s) => ({ ...s, [gid]: true }));
-      const res = await fetch(
-        `${baseUrl}?groupId=${encodeURIComponent(gid)}`
-      );
-      if (!res.ok) throw new Error(await res.text());
-    } catch (e) {
-      console.log('rebuild leaderboard error:', e?.message || e);
-    } finally {
-      setRebuilding((s) => ({ ...s, [gid]: false }));
-    }
-  }, []);
+  // ✅ endpoint saison (HTTP)
+  const baseUrl =
+    "https://us-central1-capitaine.cloudfunctions.net/rebuildLeaderboardSeasonForGroup";
 
   const onRefresh = useCallback(async () => {
-    if (!groupIds.length) return;
+    if (!groupIds.length || !seasonId) return;
+
     try {
       setRefreshing(true);
+
+      const fromYmd = String(season?.fromYmd || "");
+      const toYmd = String(season?.toYmd || "");
+
       await Promise.all(
         groupIds.map((gid) =>
-          fetch(`${baseUrl}?groupId=${encodeURIComponent(gid)}`)
+          fetch(
+            `${baseUrl}?groupId=${encodeURIComponent(gid)}&seasonId=${encodeURIComponent(
+              seasonId
+            )}&fromYmd=${encodeURIComponent(fromYmd)}&toYmd=${encodeURIComponent(toYmd)}`
+          )
         )
       );
     } catch (e) {
-      console.log('refresh leaderboard error:', e?.message || e);
+      console.log("refresh leaderboard season error:", e?.message || e);
     } finally {
       setRefreshing(false);
     }
-  }, [groupIds]);
+  }, [groupIds, seasonId, season?.fromYmd, season?.toYmd]);
+
+  // ✅ IMPORTANT: getColumnsForTier(tierLower) seulement
+  const columns = useMemo(
+    () => getColumnsForTier(tierLower, colors),
+    [tierLower, colors]
+  );
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [selectedPeers, setSelectedPeers] = useState([]);
+
+  function openMember(row, peers) {
+    setSelectedRow(row);
+    setSelectedPeers(peers || []);
+    setModalOpen(true);
+  }
+
+  const canOpenMember = mode === "pro" || mode === "vip";
+
+  // ✅ CTA stratégiques
+  const showFooterFree = mode === "free";
+  const showFooterPro = mode === "pro";
 
   if (!user) {
     return (
       <>
-        <Stack.Screen options={{ title: t('leaderboard.title') }} />
+        <Stack.Screen options={{ title: t("leaderboard.title") }} />
         <View
           style={{
             flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
+            alignItems: "center",
+            justifyContent: "center",
             padding: 16,
             backgroundColor: colors.background,
           }}
         >
-          <Text style={{ color: colors.text }}>
-            {t('leaderboard.loginToSee')}
+          <Text style={{ color: colors.text }}>{t("leaderboard.loginToSee")}</Text>
+        </View>
+      </>
+    );
+  }
+
+  if (loadingTier || loadingSeason) {
+    return (
+      <>
+        <Stack.Screen options={{ title: t("leaderboard.title") }} />
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.background,
+          }}
+        >
+          <ActivityIndicator color={colors.primary} />
+          <Text style={{ marginTop: 8, color: colors.subtext }}>
+            {t("common.loading", { defaultValue: "Chargement…" })}
           </Text>
         </View>
       </>
@@ -594,18 +430,18 @@ export default function ClassementScreen() {
   if (loadingMemberGroups || loadingOwned || loadingBoards) {
     return (
       <>
-        <Stack.Screen options={{ title: t('leaderboard.title') }} />
+        <Stack.Screen options={{ title: t("leaderboard.title") }} />
         <View
           style={{
             flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
+            alignItems: "center",
+            justifyContent: "center",
             backgroundColor: colors.background,
           }}
         >
           <ActivityIndicator color={colors.primary} />
           <Text style={{ marginTop: 8, color: colors.subtext }}>
-            {t('leaderboard.loading')}
+            {t("leaderboard.loading")}
           </Text>
         </View>
       </>
@@ -615,20 +451,18 @@ export default function ClassementScreen() {
   if (error) {
     return (
       <>
-        <Stack.Screen options={{ title: t('leaderboard.title') }} />
+        <Stack.Screen options={{ title: t("leaderboard.title") }} />
         <View
           style={{
             flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
+            alignItems: "center",
+            justifyContent: "center",
             padding: 16,
             backgroundColor: colors.background,
           }}
         >
           <Text style={{ color: colors.text }}>
-            {t('leaderboard.errorPrefix', {
-              message: String(error),
-            })}
+            {t("leaderboard.errorPrefix", { message: String(error) })}
           </Text>
         </View>
       </>
@@ -637,10 +471,55 @@ export default function ClassementScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: t('leaderboard.title') }} />
+      <Stack.Screen options={{ title: t("leaderboard.title") }} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
+        {/* ✅ Modal seulement PRO/VIP */}
+        <LeaderboardMemberModal
+          visible={modalOpen && canOpenMember}
+          onClose={() => setModalOpen(false)}
+          row={selectedRow ? normalizeMemberRow(selectedRow) : null}
+          peerRows={selectedPeers}
+          colors={colors}
+          tierLower={tierLower}
+          onUpgrade={() => router.push(SUBSCRIBE_ROUTE)}
+        />
+
         <FlatList
-          contentContainerStyle={{ padding: 16, gap: 16 }}
+          ListHeaderComponent={
+            <View style={{ gap: 12 }}>
+              <LeaderboardLegend colors={colors} tierLower={tierLower} onUpgrade={() => router.push(SUBSCRIBE_ROUTE)}/>
+              {!!seasonId ? (
+                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "800" }}>
+                  {t("leaderboard.seasonLine", {
+                    seasonId,
+                    from: season?.fromYmd,
+                    to: season?.toYmd,
+                    defaultValue: `Saison ${seasonId} · ${season?.fromYmd} → ${season?.toYmd}`,
+                  })}
+                </Text>
+              ) : null}
+            </View>
+          }
+          ListFooterComponent={
+            showFooterFree ? (
+              <LeaderboardUpgradeFooterFree
+                colors={colors}
+                onPress={() => router.push(SUBSCRIBE_ROUTE)}
+              />
+            ) : showFooterPro ? (
+              <LeaderboardUpgradeFooterPro
+                colors={colors}
+                onPress={() => router.push(SUBSCRIBE_ROUTE)}
+              />
+            ) : null
+          }
+          contentInsetAdjustmentBehavior="automatic"
+          automaticallyAdjustContentInsets
+          contentContainerStyle={{
+            padding: 16,
+            gap: 16,
+            paddingBottom: 16 + insets.bottom,
+          }}
           data={groups}
           keyExtractor={(g) => String(g.id)}
           refreshControl={
@@ -650,103 +529,34 @@ export default function ClassementScreen() {
               tintColor={colors.primary}
             />
           }
-          ListHeaderComponent={<Legend colors={colors} />}
           renderItem={({ item }) => {
-            const rows = all?.[item.id] || [];
+            const gid = String(item.id);
+            const rawRows = all?.[gid] || [];
+            const rows = rawRows.map(normalizeMemberRow);
+
             return (
-              <View
-                style={{
-                  padding: 14,
-                  borderRadius: 12,
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  shadowColor: '#000',
-                  shadowOpacity: 0.05,
-                  shadowRadius: 6,
-                  shadowOffset: { width: 0, height: 3 },
-                  elevation: 2,
+              <GroupLeaderboardCard
+                group={item}
+                rows={rows}
+                colors={colors}
+                columns={columns}
+                emptyText={t("leaderboard.group.noStats", {
+                  defaultValue: "Aucun classement disponible.",
+                })}
+                onRowPress={(row) => {
+                  if (!canOpenMember) {
+                    // ✅ CTA soft: en FREE, un tap sur un participant amène aux forfaits
+                    router.push(SUBSCRIBE_ROUTE);
+                    return;
+                  }
+                  openMember(row, rows);
                 }}
-              >
-                {/* --- Header de la carte --- */}
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 8,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Image
-                      source={
-                        item.avatarUrl
-                          ? { uri: item.avatarUrl }
-                          : GROUP_PLACEHOLDER
-                      }
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        marginRight: 8,
-                        backgroundColor: colors.border,
-                      }}
-                    />
-                    <Text
-                      style={{
-                        fontWeight: '900',
-                        color: colors.text,
-                      }}
-                    >
-                      {item.name || item.id}
-                    </Text>
-                  </View>
-
-                  {/* (optionnel) bouton rebuild si owner */}
-                  {item?.role === 'owner' && (
-                    <TouchableOpacity
-                      onPress={() => handleRebuild(item.id)}
-                      disabled={!!rebuilding[item.id]}
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: rebuilding[item.id]
-                          ? colors.subtext
-                          : colors.primary,
-                      }}
-                    >
-                      <Text
-                        style={{ color: '#fff', fontWeight: '700' }}
-                      >
-                        {rebuilding[item.id]
-                          ? t('leaderboard.rebuild.loading')
-                          : t('leaderboard.rebuild.button')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {rows.length === 0 ? (
-                  <Text style={{ color: colors.subtext }}>
-                    {t('leaderboard.group.noStats')}
-                  </Text>
-                ) : (
-                  <LeaderboardTable rows={rows} colors={colors} />
-                )}
-              </View>
+              />
             );
           }}
           ListEmptyComponent={() => (
-            <View style={{ alignItems: 'center', marginTop: 40 }}>
-              <Text style={{ color: colors.subtext }}>
-                {t('leaderboard.empty.noGroups')}
-              </Text>
+            <View style={{ alignItems: "center", marginTop: 40 }}>
+              <Text style={{ color: colors.subtext }}>{t("leaderboard.empty.noGroups")}</Text>
             </View>
           )}
         />

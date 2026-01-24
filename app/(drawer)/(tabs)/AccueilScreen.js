@@ -1,5 +1,5 @@
 // app/(drawer)/(tabs)/AccueilScreen.js
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import i18n from '@src/i18n/i18n';
 import {
   View,
@@ -8,107 +8,117 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  StyleSheet,
 } from 'react-native';
+
+import {
+  fmtTSLocalHM,
+  toDateOrNull,
+  computeUiStatus,
+  statusStyle,
+  allowedTypesForTierUi,
+  canJoinDefiUi,
+  friendlyError,
+  readPointsBalanceAny,
+  shortUid,
+  withCacheBust,
+  isAscensionDefi,
+  ascLabel,
+  normalDefiLabel,
+} from "@src/home/homeUtils";
+
+import useMeDoc from "@src/home/hooks/useMeDoc";
+
+// Components UI
+import ProfileHeaderCard from "@src/home/components/ProfileHeaderCard";
+import DefiListSection from "@src/home/components/DefiListSection";
+import QuickStatsRow from "@src/home/components/QuickStatsRow";
+import MainMetricsRow from "@src/home/components/MainMetricsRow";
+import ProphetikIcons from "@src/ui/ProphetikIcons";
+
+// Ascensions
+import useAscensionGlobalState from "@src/ascensions/useAscensionGlobalState";
+import { ascGlobalUi } from "@src/ascensions/utils/ascensionGlobalUi";
+import AscensionSection from "@src/ascensions/components/AscensionSection";
+import AscensionProgressModal from "@src/ascensions/components/AscensionProgressModal";
+
+
 import { useRouter, Stack } from 'expo-router';
 import firestore from '@react-native-firebase/firestore';
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useTheme } from '@src/theme/ThemeProvider';
 import CreateDefiModal from '../defis/CreateDefiModal';
+import CreateAscensionModal from "@src/ascensions/CreateAscensionModal";
 
-import DailyShotCard from "@src/credits/DailyShotCard";
+
+import useEntitlement from '../subscriptions/useEntitlement'; // ajuste le chemin si besoin
+
+import useCurrentSeason from "@src/hooks/useCurrentSeason";
+
+const AVATAR_PLACEHOLDER = require('../../../assets/avatar-placeholder.png');
 
 
+function usePublicProfilesFor(uids) {
+  const [map, setMap] = useState({}); // uid -> { displayName, avatarUrl, updatedAt }
+
+  useEffect(() => {
+    const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
+    if (!ids.length) {
+      setMap({});
+      return;
+    }
+
+    const unsubs = new Map();
+
+    ids.forEach((uid) => {
+      const ref = firestore().collection('profiles_public').doc(uid);
+      const un = ref.onSnapshot(
+        (snap) => {
+          if (!snap.exists) {
+            setMap((prev) => {
+              if (!prev[uid]) return prev;
+              const next = { ...prev };
+              delete next[uid];
+              return next;
+            });
+            return;
+          }
+          const d = snap.data() || {};
+          setMap((prev) => ({
+            ...prev,
+            [uid]: {
+              displayName: d.displayName || null,
+              avatarUrl: d.avatarUrl || null,
+              updatedAt: d.updatedAt || null,
+            },
+          }));
+        },
+        () => {}
+      );
+      unsubs.set(uid, un);
+    });
+
+    return () => {
+      for (const [, un] of unsubs) {
+        try {
+          un();
+        } catch {}
+      }
+    };
+  }, [JSON.stringify(uids || [])]);
+
+  return map;
+}
 
 /* ----------------------------- Helpers ----------------------------- */
-function fmtTSLocalHM(v) {
-  try {
-    const d = v?.toDate?.()
-      ? v.toDate()
-      : v instanceof Date
-      ? v
-      : v
-      ? new Date(v)
-      : null;
-    if (!d) return '—';
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-  } catch {
-    return '—';
-  }
-}
 
-function toDateOrNull(v) {
-  try {
-    if (!v) return null;
-    if (v?.toDate) return v.toDate();
-    if (v instanceof Date) return v;
-    return new Date(v);
-  } catch {
-    return null;
-  }
-}
 
-// Status UI basé sur le temps réel (firstGameUTC)
-function computeUiStatus(defi) {
-  const raw = String(defi?.status || '').toLowerCase();
+function isSignupClosed(defi) {
   const now = new Date();
-  const firstGame = toDateOrNull(defi.firstGameUTC); // ⚠️ bien "firstGameUTC"
-
-  // Ces statuts-là ne sont pas surchargés
-  if (raw === 'completed' || raw === 'awaiting_result' || raw === 'live') {
-    return raw;
-  }
-
-  // Si statut Firestore = open mais que le premier match a commencé → live
-  if (raw === 'open') {
-    if (firstGame && firstGame.getTime() <= now.getTime()) {
-      return 'live';
-    }
-    return 'open';
-  }
-
-  // Fallback
-  return raw;
-}
-
-function statusStyle(s) {
-  const k = String(s || '').toLowerCase();
-  if (k === 'open')
-    return {
-      bg: '#ECFDF5',
-      fg: '#065F46',
-      icon: 'clock-outline',
-      label: i18n.t('home.status.open'),
-    };
-  if (k === 'live')
-    return {
-      bg: '#EFF6FF',
-      fg: '#1D4ED8',
-      icon: 'broadcast',
-      label: i18n.t('home.status.live'),
-    };
-  if (k === 'awaiting_result')
-    return {
-      bg: '#FFF7ED',
-      fg: '#9A3412',
-      icon: 'timer-sand',
-      label: i18n.t('home.status.awaiting'),
-    };
-  if (k === 'completed')
-    return {
-      bg: '#F3F4F6',
-      fg: '#111827',
-      icon: 'check-decagram',
-      label: i18n.t('home.status.completed'),
-    };
-  return {
-    bg: '#F3F4F6',
-    fg: '#374151',
-    icon: 'help-circle-outline',
-    label: s || '—',
-  };
+  const d = toDateOrNull(defi?.signupDeadline);
+  if (!d) return false;
+  return d.getTime() <= now.getTime();
 }
 
 function Chip({ bg, fg, icon, label }) {
@@ -132,53 +142,20 @@ function Chip({ bg, fg, icon, label }) {
   );
 }
 
-function friendlyError(e) {
-  if (!e) return i18n.t('common.unknownError');
-  if (e?.code === 'permission-denied')
-    return i18n.t('errors.firestorePermission');
-  return String(e?.message || e);
-}
 
 // Petit helper homogène pour onSnapshot
-function listenRNFB(refOrQuery, onNext, tag) {
-  return refOrQuery.onSnapshot(onNext, (e) => {
-    console.log(`[FS:${tag}]`, e?.code, e?.message);
-  });
-}
-
-function GoalStatusIcon({ done }) {
-  return (
-    <MaterialCommunityIcons
-      name={done ? 'check-circle' : 'progress-clock'}
-      size={18}
-      color={done ? '#059669' : '#6B7280'}
-      style={{ marginRight: 6 }}
-    />
+function listenRNFB(refOrQuery, onNext, tag, onError) {
+  return refOrQuery.onSnapshot(
+    onNext,
+    (e) => {
+      console.log(`[FS:${tag}]`, e?.code, e?.message);
+      onError?.(e);
+    }
   );
 }
 
-// --- Date helpers (APP_TZ côté client) ---
+/* ----------------------------- Date helpers ----------------------------- */
 const APP_TZ = 'America/Toronto';
-
-function toYmdInTzClient(date = new Date(), timeZone = 'UTC') {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-
-  const y = parts.find((p) => p.type === 'year')?.value;
-  const m = parts.find((p) => p.type === 'month')?.value;
-  const d = parts.find((p) => p.type === 'day')?.value;
-
-  return `${y}-${m}-${d}`;
-}
-
-function periodKeyYYYYMMInTz(date = new Date(), timeZone = APP_TZ) {
-  const ymd = toYmdInTzClient(date, timeZone); // YYYY-MM-DD
-  return ymd.slice(0, 7).replace('-', ''); // YYYYMM
-}
 
 function msUntilNextLocalMidnight() {
   const now = new Date();
@@ -187,15 +164,137 @@ function msUntilNextLocalMidnight() {
   return Math.max(1000, next.getTime() - now.getTime());
 }
 
+
+function AscBadge({ ascKey, colors }) {
+  const k = String(ascKey || "");
+  const label = k === "ASC7" ? "ASC7" : k === "ASC4" ? "ASC4" : "ASC";
+  return (
+    <View
+      style={{
+        alignSelf: "flex-start",
+        paddingVertical: 3,
+        paddingHorizontal: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.card2,
+      }}
+    >
+      <Text style={{ fontSize: 11, fontWeight: "900", color: colors.text }}>
+        🏔 {label}
+      </Text>
+    </View>
+  );
+}
+
+function SectionHeader({
+  colors,
+  icon,        // legacy (MaterialCommunityIcons)
+  leftIcon,    // ✅ NOUVEAU (ReactNode)
+  title,
+  subtitle,
+  rightAction,
+  flat = false,
+}) {
+  return (
+    <View
+      style={[
+        {
+          padding: 12,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
+          marginBottom: 8,
+        },
+        flat && {
+          backgroundColor: "transparent",
+          borderWidth: 0,
+          padding: 0,
+          marginBottom: 0,
+        },
+      ]}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          
+          {/* ✅ Priorité à leftIcon */}
+          {leftIcon ? (
+            <View style={{ marginRight: 10 }}>
+              {leftIcon}
+            </View>
+          ) : icon ? (
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 12,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: colors.card2,
+                borderWidth: 1,
+                borderColor: colors.border,
+                marginRight: 10,
+              }}
+            >
+              <MaterialCommunityIcons name={icon} size={18} color={colors.text} />
+            </View>
+          ) : null}
+
+          <View>
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: "900" }}>
+              {title}
+            </Text>
+
+            {subtitle ? (
+              <Text style={{ color: colors.subtext, marginTop: 2 }}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        {rightAction}
+      </View>
+    </View>
+  );
+}
+
+function cardShadow() {
+  return {
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 }, // iOS
+    elevation: 4, // Android
+  };
+}
+
 /* ----------------------------- Screen ----------------------------- */
 export default function AccueilScreen() {
   const { user, authReady } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
 
-  // ---- participant / wallet ----
-  const [meDoc, setMeDoc] = useState(null);
-  const [loadingMe, setLoadingMe] = useState(true);
+  const {
+    tier: userTier,
+    loading: loadingTier,
+    active: tierActive,
+  } = useEntitlement(user?.uid);
+
+  const [myPlays, setMyPlays] = useState(0);
+  const [myWins, setMyWins] = useState(0);
+  const [myNhlPPG, setMyNhlPPG] = useState(0);
+
+  // ✅ Leaderboard = uniquement selon entitlement participant (plus de group_entitlements)
+  const tierLower = String(userTier || 'free').toLowerCase();
+
 
   // ---- groupes → ids ----
   const [groupIds, setGroupIds] = useState([]);
@@ -211,13 +310,46 @@ export default function AccueilScreen() {
   const [groupsMeta, setGroupsMeta] = useState({});
   const groupMetaUnsubs = useRef(new Map());
 
-  // ---- Daily shot quota (lecture live) ----
-  const [dailyShot, setDailyShot] = useState({
-    periodKey: null,
-    creditsGranted: 0,
-    monthlyCap: 10,
-    lastDay: null,
+  // ---- Groupe par défaut ----
+  const [defaultGroupId, setDefaultGroupId] = useState(null);
+
+  // ---- Groupe sélectionné (UI) ----
+  const [currentGroupId, setCurrentGroupId] = useState(null);
+
+  // ---- Classement top ----
+  const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+
+  const [defaultGroupPoints, setDefaultGroupPoints] = useState(0);
+  const [loadingDefaultGroupPoints, setLoadingDefaultGroupPoints] = useState(true);
+
+  const groupsAttachedForUidRef = useRef(null);
+
+  const { season, loading: loadingSeason } = useCurrentSeason();
+  const seasonId = season?.seasonId;
+
+  // Ascensions
+
+  const [ascModalVisible, setAscModalVisible] = useState(false);
+  const { state: asc4State, loading: loadingAsc4 } = useAscensionGlobalState({
+    groupId: currentGroupId,
+    ascKey: "ASC4",
+    enabled: !!currentGroupId,
   });
+
+  const { state: asc7State, loading: loadingAsc7 } = useAscensionGlobalState({
+    groupId: currentGroupId,
+    ascKey: "ASC7",
+    enabled: !!currentGroupId,
+  });
+
+  const asc4Ui = ascGlobalUi("ASC4", asc4State);
+  const asc7Ui = ascGlobalUi("ASC7", asc7State);
+
+  const [ascProgressOpen, setAscProgressOpen] = useState(false);
+  const [ascProgressKey, setAscProgressKey] = useState("ASC4"); // ou ASC7  
+
+
 
   // listeners refs
   const subs = useRef({
@@ -226,7 +358,8 @@ export default function AccueilScreen() {
     byPid: null,
     ownerCreated: null,
     ownerOwnerId: null,
-    dailyShot: null,
+    leaderboard: null,
+    defaultGroupPoints: null,
   });
   const defisUnsubsRef = useRef(new Map());
 
@@ -248,35 +381,43 @@ export default function AccueilScreen() {
 
   // Reset au changement d’auth OU au tick quotidien
   useEffect(() => {
-    setMeDoc(null);
     setGroupIds([]);
     setActiveDefis([]);
     setError(null);
-    setLoadingMe(!!(authReady && user?.uid));
+
     setLoadingGroups(!!(authReady && user?.uid));
     setLoadingDefis(!!(authReady && user?.uid));
+
     setGroupsMeta({});
     setShowCreateModal(false);
+
+    setDefaultGroupId(null);
+
+    setLeaderboardRows([]);
+    setLoadingLeaderboard(true);
+
+    setDefaultGroupPoints(0);
+    setLoadingDefaultGroupPoints(true);
 
     lastGroupIdsKeyRef.current = '';
     lastActiveKeyRef.current = '';
 
     // stop listeners
-    const { me, ...rest } = subs.current;
+    const { me, defaultGroupPoints, ...rest } = subs.current;
+
     Object.values(rest).forEach((un) => {
-      try {
-        un?.();
-      } catch {}
+      try { un?.(); } catch {}
     });
+
+    try { defaultGroupPoints?.(); } catch {}
+    try { me?.(); } catch {}
+
     for (const [, un] of defisUnsubsRef.current) {
       try {
         un();
       } catch {}
     }
     defisUnsubsRef.current.clear();
-    try {
-      me?.();
-    } catch {}
 
     subs.current = {
       me: null,
@@ -284,7 +425,8 @@ export default function AccueilScreen() {
       byPid: null,
       ownerCreated: null,
       ownerOwnerId: null,
-      dailyShot: null,
+      leaderboard: null,
+      defaultGroupPoints: null,
     };
 
     for (const [, un] of groupMetaUnsubs.current) {
@@ -293,88 +435,33 @@ export default function AccueilScreen() {
       } catch {}
     }
     groupMetaUnsubs.current.clear();
-
-    setDailyShot({
-      periodKey: null,
-      creditsGranted: 0,
-      monthlyCap: 10,
-      lastDay: null,
-    });
   }, [authReady, user?.uid, dayTick]);
 
   /* ---------- 1) Participant (wallet, profil) ---------- */
-  useEffect(() => {
-    if (!authReady || !user?.uid) {
-      setLoadingMe(false);
-      return;
-    }
-    if (subs.current.me) {
-      setLoadingMe(false);
-      return;
-    }
-
-    const ref = firestore().collection('participants').doc(user.uid);
-
-    const un = listenRNFB(
-      ref,
-      (snap) => {
-        setMeDoc(snap.exists ? { uid: snap.id, ...snap.data() } : null);
-        setLoadingMe(false);
-      },
-      'participants/self'
-    );
-
-    subs.current.me = un;
-    return () => {
-      try {
-        subs.current.me?.();
-      } catch {}
-      subs.current.me = null;
-    };
-  }, [authReady, user?.uid, dayTick]);
-
-  /* ---------- 1b) Daily shot quota (system/daily_shot_YYYYMM) ---------- */
-  useEffect(() => {
-    if (!authReady || !user?.uid) return;
-    if (subs.current.dailyShot) return;
-
-    const periodKey = periodKeyYYYYMMInTz(new Date(), APP_TZ);
-    const docId = `daily_shot_${periodKey}`;
-
-    const ref = firestore()
-      .collection('participants')
-      .doc(user.uid)
-      .collection('system')
-      .doc(docId);
-
-    const un = listenRNFB(
-      ref,
-      (snap) => {
-        const data = snap.exists ? snap.data() || {} : {};
-        setDailyShot({
-          periodKey,
-          creditsGranted: Number(data.creditsGranted || 0),
-          monthlyCap: Number(data.monthlyCap || 10),
-          lastDay: data.lastDay || null,
-        });
-      },
-      `participants/self/system/${docId}`
-    );
-
-    subs.current.dailyShot = un;
-
-    return () => {
-      try {
-        subs.current.dailyShot?.();
-      } catch {}
-      subs.current.dailyShot = null;
-    };
-  }, [authReady, user?.uid, dayTick]);
+  const { meDoc, loadingMe, error: meError } = useMeDoc({ authReady, uid: user?.uid, dayTick });
 
   /* ---------- 2) Mes groupes : memberships + ownership ---------- */
   useEffect(() => {
     setError(null);
-    setGroupIds([]);
+
+    // ✅ si pas connecté
+    if (!authReady || !user?.uid) {
+      groupsAttachedForUidRef.current = null;
+      setGroupIds([]);
+      setLoadingGroups(false);
+      return;
+    }
+
+    // ✅ IMPORTANT: si déjà attaché pour ce user, on ne relance pas un loading infini
+    if (groupsAttachedForUidRef.current === user.uid && subs.current.byUid && subs.current.byPid && subs.current.ownerCreated && subs.current.ownerOwnerId) {
+      setLoadingGroups(false);
+      return;
+    }
+
+    // ✅ ici, on sait qu'on va (ré)attacher des listeners
+    groupsAttachedForUidRef.current = user.uid;
+  
+
     if (!authReady || !user?.uid) {
       setLoadingGroups(false);
       return;
@@ -405,39 +492,38 @@ export default function AccueilScreen() {
         if (st) return ['open', 'active', 'approved'].includes(st);
         return m?.active !== false;
       });
-      const gidsFromMemberships = memberships
-        .map((m) => m.groupId)
-        .filter(Boolean);
+
+      const gidsFromMemberships = memberships.map((m) => m.groupId).filter(Boolean);
       const gidsFromOwner = [...rowsOwnerCreated, ...rowsOwnerOwnerId]
         .map((g) => g.id)
         .filter(Boolean);
-      const union = Array.from(
-        new Set([...gidsFromMemberships, ...gidsFromOwner])
-      );
-      const unionSorted = union.sort();
+
+      const unionSorted = Array.from(new Set([...gidsFromMemberships, ...gidsFromOwner])).sort();
       const key = JSON.stringify(unionSorted);
 
       if (key !== lastGroupIdsKeyRef.current) {
         lastGroupIdsKeyRef.current = key;
         setGroupIds(unionSorted);
-        setLoadingGroups(false);
       }
+
+      setLoadingGroups(false);
     };
 
-    // stop old listeners (except me + dailyShot)
-    const { me: keepMe, dailyShot: keepDailyShot, ...rest } = subs.current;
+    // stop old listeners (except me + leaderboard)
+    const { me: keepMe, leaderboard: keepLeaderboard, defaultGroupPoints: keepDefaultGroupPoints, ...rest } = subs.current;
+
     Object.values(rest).forEach((un) => {
-      try {
-        un?.();
-      } catch {}
+      try { un?.(); } catch {}
     });
+
     subs.current = {
       me: keepMe,
-      dailyShot: keepDailyShot,
       byUid: null,
       byPid: null,
       ownerCreated: null,
       ownerOwnerId: null,
+      leaderboard: keepLeaderboard,
+      defaultGroupPoints: keepDefaultGroupPoints, // ✅ on le conserve
     };
 
     subs.current.byUid = listenRNFB(
@@ -446,47 +532,72 @@ export default function AccueilScreen() {
         rowsByUid = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
-      'group_memberships:uid'
+      'group_memberships:uid',
+      (e) => {
+        setLoadingGroups(false);
+        setError(e);
+      }
     );
+
     subs.current.byPid = listenRNFB(
       qByPid,
       (snap) => {
         rowsByPid = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
-      'group_memberships:participantId'
+      'group_memberships:participantId',
+      (e) => {
+        setLoadingGroups(false);
+        setError(e);
+      }
     );
+
     subs.current.ownerCreated = listenRNFB(
       qOwnerCreated,
       (snap) => {
         rowsOwnerCreated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
-      'groups:createdBy'
+      'groups:createdBy',
+      (e) => {
+        setLoadingGroups(false);
+        setError(e);
+      }
     );
+
     subs.current.ownerOwnerId = listenRNFB(
       qOwnerOwnerId,
       (snap) => {
         rowsOwnerOwnerId = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
-      'groups:ownerId'
+      'groups:ownerId',
+      (e) => {
+        setLoadingGroups(false);
+        setError(e);
+      }
     );
 
     return () => {
-      const { me: keepMe2, dailyShot: keepDailyShot2, ...rest2 } = subs.current;
+      const {
+        me: keepMe2,
+        leaderboard: keepLeaderboard2,
+        defaultGroupPoints: keepDefaultGroupPoints2,
+        ...rest2
+      } = subs.current;
+
       Object.values(rest2).forEach((un) => {
-        try {
-          un();
-        } catch {}
+        try { un?.(); } catch {}
       });
+
       subs.current = {
         me: keepMe2,
-        dailyShot: keepDailyShot2,
         byUid: null,
         byPid: null,
         ownerCreated: null,
         ownerOwnerId: null,
+        leaderboard: keepLeaderboard2,
+        defaultGroupPoints: keepDefaultGroupPoints2, // ✅ on le conserve
       };
     };
   }, [authReady, user?.uid, dayTick]);
@@ -506,6 +617,7 @@ export default function AccueilScreen() {
 
     groupIds.forEach((gid) => {
       if (groupMetaUnsubs.current.has(gid)) return;
+
       const ref = firestore().collection('groups').doc(gid);
       const un = listenRNFB(
         ref,
@@ -519,91 +631,202 @@ export default function AccueilScreen() {
               name: data.name || data.title || gid,
               status: data.status || null,
               avatarUrl: data.avatarUrl || null,
+              ownerId: data.ownerId || data.createdBy || null,
             },
           }));
         },
-        `groups:meta:${gid}`
+        `groups:meta:${gid}`,
+        (e) => setError(e)
       );
+
       groupMetaUnsubs.current.set(gid, un);
     });
   }, [authReady, user?.uid, groupIds]);
 
-  /* ---------- 3) Défis actifs/live par groupId ---------- */
+  /* ---------- 2c) Déterminer groupe courant (sélection UI) ---------- */
   useEffect(() => {
     if (!authReady || !user?.uid) return;
 
-    for (const [gid, un] of defisUnsubsRef.current) {
-      if (!groupIds.includes(gid)) {
-        try {
-          un();
-        } catch {}
-        defisUnsubsRef.current.delete(gid);
-      }
+    const fav = meDoc?.favoriteGroupId || null;
+
+    // Si currentGroupId est valide, on ne touche pas
+    if (currentGroupId && groupIds.includes(currentGroupId)) return;
+
+    // Sinon, on choisit un groupe initial
+    let next = null;
+    if (fav && groupIds.includes(fav)) next = fav;
+    else if (groupIds.length >= 1) next = groupIds[0];
+    else next = null;
+
+    setCurrentGroupId(next);
+  }, [authReady, user?.uid, meDoc?.favoriteGroupId, groupIds, currentGroupId]);
+
+  // ---- Points du groupe par défaut (leaderboards/{seasonId}/members/{uid}.pointsTotal) ----
+  useEffect(() => {
+    setDefaultGroupPoints(0);
+    setLoadingDefaultGroupPoints(true);
+
+    try { subs.current.defaultGroupPoints?.(); } catch {}
+    subs.current.defaultGroupPoints = null;
+
+    if (!authReady || !user?.uid || !currentGroupId || !seasonId) {
+      setLoadingDefaultGroupPoints(false);
+      return;
     }
 
-    if (!groupIds.length) {
+    const ref = firestore()
+      .collection("groups")
+      .doc(String(currentGroupId))
+      .collection("leaderboards")
+      .doc(String(seasonId))
+      .collection("members")
+      .doc(String(user.uid));
+
+    const un = listenRNFB(
+      ref,
+      (snap) => {
+        const data = snap.data() || {};
+        setDefaultGroupPoints(Number(data.pointsTotal || 0));
+        setLoadingDefaultGroupPoints(false);
+        const plays = Number(data.participations ?? data.plays ?? 0);
+        const wins = Number(data.wins ?? 0);
+        setMyPlays(plays);
+        setMyWins(wins);
+        const nhlPPG = Number(data.nhlPPG ?? 0);
+        setMyNhlPPG(nhlPPG);
+
+      },
+      `leaderboards:mePoints:${currentGroupId}:${seasonId}:${user.uid}`,
+      (e) => {
+        setLoadingDefaultGroupPoints(false);
+        setError(e);
+      }
+    );
+
+    subs.current.defaultGroupPoints = un;
+
+
+
+    return () => {
+      try { subs.current.defaultGroupPoints?.(); } catch {}
+      subs.current.defaultGroupPoints = null;
+    };
+  }, [authReady, user?.uid, currentGroupId, seasonId, dayTick]);
+
+  /* ---------- 2d) Leaderboard (seasonId) ---------- */
+  useEffect(() => {
+    setLeaderboardRows([]);
+    setLoadingLeaderboard(true);
+
+    try { subs.current.leaderboard?.(); } catch {}
+    subs.current.leaderboard = null;
+
+    if (!authReady || !user?.uid || !currentGroupId || !seasonId) {
+      setLoadingLeaderboard(false);
+      return;
+    }
+
+    const q = firestore()
+      .collection("groups")
+      .doc(String(currentGroupId))
+      .collection("leaderboards")
+      .doc(String(seasonId))
+      .collection("members")
+      .orderBy("pointsTotal", "desc")
+      .limit(10);
+
+    const un = listenRNFB(
+      q,
+      (snap) => {
+        const rows = snap.docs.map((d) => {
+          const data = d.data() || {};
+          const uid = data.uid || d.id;
+          return {
+            id: d.id,
+            uid,
+            displayName: data.displayName || null,
+            points: Number(data.pointsTotal || 0),
+          };
+        });
+
+        setLeaderboardRows(rows);
+        setLoadingLeaderboard(false);
+      },
+      `leaderboards:list:${currentGroupId}:${seasonId}`,
+      (e) => {
+        setLoadingLeaderboard(false);
+        setError(e);
+      }
+    );
+
+    subs.current.leaderboard = un;
+
+    return () => {
+      try { subs.current.leaderboard?.(); } catch {}
+      subs.current.leaderboard = null;
+    };
+  }, [authReady, user?.uid, currentGroupId, seasonId, dayTick]);
+
+  /* ---------- 3) Défis actifs/live par groupId ---------- */
+  useEffect(() => {
+    try {
+      for (const [, un] of defisUnsubsRef.current) {
+        try { un(); } catch {}
+      }
+      defisUnsubsRef.current.clear();
+    } catch {}
+
+    if (!authReady || !user?.uid || !currentGroupId) {
       setActiveDefis([]);
       setLoadingDefis(false);
       return;
     }
 
-    groupIds.forEach((gid) => {
-      if (defisUnsubsRef.current.has(gid)) return;
+    setLoadingDefis(true);
 
-      const qActiveLive = firestore()
-        .collection('defis')
-        .where('groupId', '==', gid)
-        .where('status', 'in', ['open', 'live'])
-        .limit(50);
+    const qActiveLive = firestore()
+      .collection("defis")
+      .where("groupId", "==", String(currentGroupId))
+      .where("status", "in", ["open", "live"])
+      .limit(50);
 
-      const un = listenRNFB(
-        qActiveLive,
-        (snap) => {
-          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setActiveDefis((prev) => {
-            const others = prev.filter((x) => x.groupId !== gid);
-            const merged = [...others, ...rows];
-            merged.sort((a, b) => {
-              const va =
-                (
-                  a.signupDeadline?.toDate?.() ??
-                  a.firstGameUTC?.toDate?.() ??
-                  a.createdAt?.toDate?.() ??
-                  0
-                ).valueOf?.() || 0;
-              const vb =
-                (
-                  b.signupDeadline?.toDate?.() ??
-                  b.firstGameUTC?.toDate?.() ??
-                  b.createdAt?.toDate?.() ??
-                  0
-                ).valueOf?.() || 0;
-              return va - vb;
-            });
+    const un = listenRNFB(
+      qActiveLive,
+      (snap) => {
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rows.sort((a, b) => {
+          const va = (
+            a.signupDeadline?.toDate?.() ??
+            a.firstGameUTC?.toDate?.() ??
+            a.createdAt?.toDate?.() ??
+            0
+          ).valueOf?.() || 0;
+          const vb = (
+            b.signupDeadline?.toDate?.() ??
+            b.firstGameUTC?.toDate?.() ??
+            b.createdAt?.toDate?.() ??
+            0
+          ).valueOf?.() || 0;
+          return va - vb;
+        });
 
-            const k = JSON.stringify(
-              merged.map((d) => ({
-                id: d.id,
-                status: d.status,
-                pot: Number(d.pot || 0),
-                sd: d.signupDeadline?.seconds,
-                fg: d.firstGameUTC?.seconds,
-              }))
-            );
-            if (k !== lastActiveKeyRef.current) {
-              lastActiveKeyRef.current = k;
-              return merged;
-            }
-            return prev;
-          });
-          setLoadingDefis(false);
-        },
-        `defis:active:${gid}`
-      );
+        setActiveDefis(rows);
+        setLoadingDefis(false);
+      },
+      `defis:active:${currentGroupId}`,
+      (e) => {
+        setLoadingDefis(false);
+        setError(e);
+      }
+    );
 
-      defisUnsubsRef.current.set(gid, un);
-    });
-  }, [authReady, user?.uid, groupIds]);
+    defisUnsubsRef.current.set(currentGroupId, un);
+
+    return () => {
+      try { un?.(); } catch {}
+      defisUnsubsRef.current.clear();
+    };
+  }, [authReady, user?.uid, currentGroupId]);
 
   /* ---------- Cleanup global ---------- */
   useEffect(() => {
@@ -614,22 +837,26 @@ export default function AccueilScreen() {
           un();
         } catch {}
       });
+
       for (const [, un] of defisUnsubsRef.current) {
         try {
           un();
         } catch {}
       }
       defisUnsubsRef.current.clear();
+
       try {
         me?.();
       } catch {}
+
       subs.current = {
         me: null,
         byUid: null,
         byPid: null,
         ownerCreated: null,
         ownerOwnerId: null,
-        dailyShot: null,
+        leaderboard: null,
+        defaultGroupPoints: null, // ✅ manquant
       };
 
       for (const [, un] of groupMetaUnsubs.current) {
@@ -642,29 +869,10 @@ export default function AccueilScreen() {
   }, []);
 
   /* ----------------------------- Derived UI data ----------------------------- */
-  const credits =
-    typeof meDoc?.credits === 'number'
-      ? meDoc.credits
-      : typeof meDoc?.credits?.balance === 'number'
-      ? meDoc.credits.balance
-      : typeof meDoc?.balance === 'number'
-      ? meDoc.balance
-      : 0;
-
-  const st = meDoc?.stats || {};
-  const streak = Number(st.currentStreakDays ?? 0);
-
-  const totalParticipations = Number(st.totalParticipations ?? 0);
-
-  // 🔁 Progression cyclique sur 5 participations
-  const cycle5 = totalParticipations % 5;
-  const displayCount5 = totalParticipations === 0 ? 0 : cycle5 === 0 ? 5 : cycle5;
-
-  // 🔁 Progression cyclique sur 3 jours consécutifs
-  const cycle3 = streak % 3;
-  const displayStreak3 = streak === 0 ? 0 : cycle3 === 0 ? 3 : cycle3;
-
+  const points = readPointsBalanceAny(meDoc || {});
   const RED_DARK = '#b91c1c';
+  const combinedError = error || meError;
+
 
   const avatarUrl =
     meDoc?.photoURL ??
@@ -699,17 +907,32 @@ export default function AccueilScreen() {
     setShowCreateModal(true);
   }
 
-  // Daily shot progression
-  const dailyGranted = Number(dailyShot.creditsGranted || 0);
-  const dailyCap = Number(dailyShot.monthlyCap || 10);
-  const dailyPct = dailyCap > 0 ? Math.min(100, Math.round((dailyGranted / dailyCap) * 100)) : 0;
+  function onSelectGroup(gid) {
+    setCurrentGroupId(String(gid));
+
+    // OPTIONNEL: mémoriser comme favori
+    // firestore()
+    //   .collection("participants")
+    //   .doc(user.uid)
+    //   .set({ favoriteGroupId: String(gid) }, { merge: true })
+    //   .catch(() => {});
+  }
+
+  const defaultGroupName =
+    (currentGroupId && groupsMeta[currentGroupId]?.name) ||
+    (currentGroupId || i18n.t('home.unknownGroup'));
+
+  const topRows = useMemo(() => leaderboardRows.slice(0, 5), [leaderboardRows]);
+  const topUids = useMemo(() => topRows.map((r) => String(r.uid || r.id)), [topRows]);
+  const publicProfiles = usePublicProfilesFor(topUids);
+
+  const showLocked = false;
 
   /* ----------------------------- UI ----------------------------- */
   return (
     <>
       <Stack.Screen options={{ title: i18n.t('home.title') }} />
 
-      {/* 👉 Modal centralisée pour création de défi */}
       <CreateDefiModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -720,59 +943,44 @@ export default function AccueilScreen() {
         }}
       />
 
+      <CreateAscensionModal
+        visible={ascModalVisible}
+        onClose={() => setAscModalVisible(false)}
+        groups={userGroups}                 // ou groupId direct selon ton API
+        initialGroupId={currentGroupId}     // ou favoriteGroupId
+        onCreated={(defiId) => {
+          setAscModalVisible(false);
+          if (defiId) router.push("/(drawer)/defis/" + defiId);
+        }}
+      />
+
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         {!authReady ? (
-          <View
-            style={{
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 24,
-            }}
-          >
+          <View style={styles.center}>
             <ActivityIndicator />
             <Text style={{ marginTop: 8, color: colors.subtext }}>
               {i18n.t('common.initializing')}
             </Text>
           </View>
         ) : !user ? (
-          <View
-            style={{
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 24,
-            }}
-          >
+          <View style={styles.center}>
             <Text style={{ color: colors.text }}>
               {i18n.t('home.loginToAccess')}
             </Text>
             <TouchableOpacity
               onPress={() => router.push('/(auth)/auth-choice')}
-              style={{
-                marginTop: 12,
-                backgroundColor: '#111',
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                borderRadius: 10,
-              }}
+              style={styles.loginBtn}
             >
               <Text style={{ color: '#fff', fontWeight: '700' }}>
                 {i18n.t('auth.login')}
               </Text>
             </TouchableOpacity>
           </View>
-        ) : error ? (
-          <View
-            style={{
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-            }}
-          >
+        ) : combinedError ? (
+          <View style={styles.center}>
             <Text style={{ color: colors.text }}>
-              {i18n.t('common.errorLabel')} {friendlyError(error)}
+              {i18n.t("common.errorLabel")}{" "}
+              {String(friendlyError(combinedError) ?? "")}
             </Text>
           </View>
         ) : (
@@ -780,510 +988,153 @@ export default function AccueilScreen() {
             contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
           >
             {/* === Header profil === */}
-            <View
-              style={{
-                padding: 14,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                elevation: 4,
-                shadowColor: RED_DARK,
-                shadowOpacity: 0.18,
-                shadowRadius: 8,
-                shadowOffset: { width: 0, height: 4 },
-              }}
-            >
-              <View style={{ alignItems: 'center', marginBottom: 12 }}>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel={i18n.t('home.editAvatar')}
-                  onPress={() => router.push('/avatars/AvatarsScreen')}
-                  activeOpacity={0.8}
-                >
-                  <Image
-                    source={
-                      avatarUrl
-                        ? { uri: avatarUrl }
-                        : require('@src/assets/avatar-placeholder.png')
-                    }
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: 60,
-                      borderWidth: 3,
-                      borderColor: '#eee',
-                      backgroundColor: '#f3f4f6',
-                    }}
-                  />
-                  <View
-                    style={{
-                      position: 'absolute',
-                      bottom: 6,
-                      right: 6,
-                      backgroundColor: colors.card,
-                      borderRadius: 12,
-                      padding: 4,
-                      shadowColor: '#000',
-                      shadowOpacity: 0.15,
-                      shadowRadius: 3,
-                      shadowOffset: { width: 0, height: 1 },
-                      elevation: 3,
-                    }}
-                  >
-                    <Feather name="edit-2" size={14} color={colors.text} />
-                  </View>
-                </TouchableOpacity>
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    fontSize: 16,
-                    marginTop: 8,
-                    color: colors.text,
-                  }}
-                >
-                  {i18n.t('home.hello')}{' '}
-                  {meDoc?.displayName || meDoc?.name || '—'}
-                </Text>
-              </View>
+        <View style={[cardShadow()]}>
+          <ProfileHeaderCard
+            colors={colors}
+            avatarUrl={avatarUrl}
+            displayName={meDoc?.displayName || meDoc?.name}
+            points={defaultGroupPoints}
+            onEditAvatar={() => router.push("/avatars/AvatarsScreen")}
+            onPressPoints={() => router.push("/(drawer)/credits")}
+            onCreateDefi={onPressCreateDefi}
+            onCreateAscension={() => setAscModalVisible(true)}
 
-              {/* Crédits */}
-              <TouchableOpacity
-                onPress={() => router.push('/(drawer)/credits')}
-                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={i18n.t('home.viewCredits')}
-              >
-                <View />
-                <View style={{ alignItems: 'flex-end', paddingRight: 6 }}>
-                  <Text style={{ fontSize: 12, color: colors.subtext }}>
-                    {i18n.t('home.credits')}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontWeight: '900',
-                        fontSize: 20,
-                        color: colors.text,
-                      }}
-                    >
-                      {credits}
-                    </Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={18}
-                      color={colors.subtext}
-                    />
-                  </View>
-                </View>
-              </TouchableOpacity>
+            // ✅ nouveau: sélecteur de groupe DANS la carte
+            groups={userGroups}
+            currentGroupId={currentGroupId}
+            onSelectGroup={onSelectGroup}
+          />
+        </View>
 
-              {/* Bouton "Créer un défi" */}
-              <View style={{ marginTop: 12 }}>
-                <TouchableOpacity
-                  onPress={onPressCreateDefi}
-                  style={{
-                    backgroundColor: RED_DARK,
-                    paddingVertical: 12,
-                    borderRadius: 10,
-                    alignItems: 'center',
-                    elevation: 2,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '800' }}>
-                    ⚡ {i18n.t('home.createChallenge')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            <View style={[cardShadow()]}>
+              <MainMetricsRow
+                colors={colors}
+                points={defaultGroupPoints}
+                plays={myPlays}
+                wins={myWins}
+                ppg={myNhlPPG}
+                tierLower={tierLower}
+                onUpgrade={() => router.push("/(drawer)/subscriptions")}
+              />
             </View>
+    
 
             {/* === Stats rapides === */}
-            <View
-              style={{
-                padding: 12,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                elevation: 3,
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 3 },
-              }}
-            >
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {/* Défis actifs */}
-                <View
-                  style={{
-                    flex: 1,
-                    padding: 12,
-                    borderRadius: 10,
-                    backgroundColor: colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text style={{ fontSize: 12, color: colors.subtext }}>
-                    {i18n.t('home.activeChallenges')}
-                  </Text>
-                  <Text
-                    style={{
-                      fontWeight: '900',
-                      fontSize: 20,
-                      marginTop: 6,
-                      color: '#ef4444',
-                    }}
-                  >
-                    {activeDefis.length}
-                  </Text>
-                </View>
-
-                {/* Cagnotte totale */}
-                <View
-                  style={{
-                    flex: 1,
-                    padding: 12,
-                    borderRadius: 10,
-                    backgroundColor: colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text style={{ fontSize: 12, color: colors.subtext }}>
-                    {i18n.t('home.totalPot')}
-                  </Text>
-                  <Text
-                    style={{
-                      fontWeight: '900',
-                      fontSize: 20,
-                      marginTop: 6,
-                      color: '#ef4444',
-                    }}
-                  >
-                    {activeDefis.reduce((sum, d) => sum + Number(d.pot || 0), 0)}
-                  </Text>
-                </View>
-              </View>
-            </View>
+             <View style={[cardShadow()]}>
+            <QuickStatsRow colors={colors} activeDefis={activeDefis} />
+             </View>
+           
 
             {/* === Mes défis du jour === */}
-            <View
-              style={{
-                padding: 12,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                elevation: 3,
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 3 },
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    fontSize: 16,
-                    color: colors.text,
-                  }}
-                >
-                  {i18n.t('home.todayChallenge')}
-                </Text>
-                {loadingGroups || loadingDefis ? <ActivityIndicator /> : null}
-              </View>
+             <View style={[cardShadow()]}>
+            <DefiListSection
+              colors={colors}
+              loadingGroups={loadingGroups}
+              loadingDefis={loadingDefis}
+              groupIds={groupIds}
+              activeDefis={activeDefis}
+              groupsMeta={groupsMeta}
+              tierLower={tierLower}
+              onOpenDefi={(defiId) => router.push("/(drawer)/defis/" + defiId)}
+              onUpgrade={() => router.push("/(drawer)/subscriptions")}
+            />
 
-              {!groupIds.length && !loadingGroups ? (
-                <Text style={{ color: colors.subtext }}>
-                  {i18n.t('home.noGroups')}
-                </Text>
-              ) : activeDefis.length === 0 && !loadingDefis ? (
-                <Text style={{ color: colors.subtext }}>
-                  {i18n.t('home.noActiveChallenges')}
-                </Text>
-              ) : (
-                <View>
-                  {activeDefis.map((item) => {
-                    const uiStatus = computeUiStatus(item);
-                    const st2 = statusStyle(uiStatus);
-                    const pot = Number(item.pot || 0);
+            </View>
+            <AscensionProgressModal
+              visible={ascProgressOpen}
+              onClose={() => setAscProgressOpen(false)}
+              colors={colors}
+              groupId={currentGroupId}
+              ascKey={ascProgressKey}
+              includeAllGroupMembers={true}
+            />
 
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        onPress={() => router.push(`/(drawer)/defis/${item.id}`)}
-                        style={{
-                          paddingVertical: 10,
-                          borderBottomWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <Text style={{ fontWeight: '700', color: colors.text }}>
-                            {item.type
-                              ? `${i18n.t('home.challenge')} ${item.type}x${item.type}`
-                              : i18n.t('home.challenge')}
-                          </Text>
+          {/* === SECTION: Ascensions (regroupée) === */}
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 16,
+              padding: 12,
 
-                          <View style={{ alignItems: 'flex-end' }}>
-                            <Chip
-                              bg={st2.bg}
-                              fg={st2.fg}
-                              icon={st2.icon}
-                              label={st2.label}
-                            />
-                            <View
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                marginTop: 4,
-                              }}
-                            >
-                              <MaterialCommunityIcons
-                                name="sack"
-                                size={16}
-                                color={colors.text}
-                              />
-                              <Text
-                                style={{
-                                  marginLeft: 4,
-                                  fontWeight: '700',
-                                  color: colors.text,
-                                }}
-                              >
-                                {pot}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-
-                        <View style={{ marginTop: 4 }}>
-                          <View
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 6,
-                            }}
-                          >
-                            <MaterialCommunityIcons
-                              name="calendar-blank-outline"
-                              size={16}
-                              color={colors.subtext}
-                            />
-                            <Text style={{ color: colors.subtext }}>
-                              {i18n.t('home.challengeDate')}: {item.gameDate || '—'}
-                            </Text>
-                          </View>
-
-                          <View
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 6,
-                              marginTop: 2,
-                            }}
-                          >
-                            <MaterialCommunityIcons
-                              name="clock-outline"
-                              size={16}
-                              color={colors.subtext}
-                            />
-                            <Text style={{ color: colors.subtext }}>
-                              {item.signupDeadline
-                                ? `${i18n.t('home.challengeLimit')} ${fmtTSLocalHM(
-                                    item.signupDeadline
-                                  )}`
-                                : item.firstGameUTC
-                                ? `${i18n.t('home.challengeStarts')} ${fmtTSLocalHM(
-                                    item.firstGameUTC
-                                  )}`
-                                : '—'}
-                            </Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
+              // même ombre que le header (sur le groupe complet)
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 4,
+            }}
+          >
+            {/* Header DANS la carte */}
+            <View style={{ marginBottom: 10 }}>
+              <SectionHeader
+                flat
+                colors={colors}
+                icon={null}
+                leftIcon={
+                <ProphetikIcons
+                  mode="emoji"
+                  emoji="🎯"
+                  size="lg"
+                />
+              }
+                title="Mes Ascensions"
+                subtitle="Quêtes multi-jours (progression)"
+                rightAction={
+                  <TouchableOpacity onPress={() => setAscModalVisible(true)}>
+                    <Text style={{ color: colors.text, fontWeight: "800" }}>Créer</Text>
+                  </TouchableOpacity>
+                }
+              />
             </View>
 
-            {/* === Gamification (simplifiée) === */}
-            <View
-              style={{
-                padding: 14,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                elevation: 3,
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 3 },
-              }}
-            >
-              <Text
-                style={{
-                  fontWeight: '800',
-                  fontSize: 16,
-                  marginBottom: 8,
-                  color: colors.text,
+            {/* Contenu */}
+            <View style={{ gap: 12 }}>
+              <AscensionSection
+                colors={colors}
+                groupId={currentGroupId}
+                ascKey="ASC4"
+                tierLower={tierLower}
+                onPressOpen={() => {
+                  setAscProgressKey("ASC4");
+                  setAscProgressOpen(true);
                 }}
-              >
-                {i18n.t('home.creditsToEarn')}
-              </Text>
-
-              {/* Daily Shot Bonus (max 10 / mois) */}
-              <DailyShotCard
-                variant="card"
-                monthlyCap={10}
               />
 
-              {/* 5 participations */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  marginBottom: 10,
+              <View style={{ height: 1, backgroundColor: colors.border, opacity: 0.6 }} />
+
+              <AscensionSection
+                colors={colors}
+                groupId={currentGroupId}
+                ascKey="ASC7"
+                tierLower={tierLower}
+                onPressOpen={() => {
+                  setAscProgressKey("ASC7");
+                  setAscProgressOpen(true);
                 }}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <GoalStatusIcon done={displayCount5 === 5} />
-                    <Text style={{ fontWeight: '700', color: colors.text }}>
-                      {i18n.t('home.fiveParticipationsTitle')}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: displayCount5 === 5 ? '#059669' : colors.text,
-                    }}
-                  >
-                    +1
-                  </Text>
-                </View>
-
-                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4 }}>
-                  {i18n.t('home.progressLabel', { current: displayCount5, max: 5 })}
-                </Text>
-
-                <View
-                  style={{
-                    height: 8,
-                    borderRadius: 99,
-                    backgroundColor: '#f3f4f6',
-                    marginTop: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${Math.round(((displayCount5 || 0) / 5) * 100)}%`,
-                      height: 8,
-                      borderRadius: 99,
-                      backgroundColor: '#ef4444',
-                    }}
-                  />
-                </View>
-              </View>
-
-              {/* 3 jours consécutifs */}
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <GoalStatusIcon done={displayStreak3 === 3} />
-                    <Text style={{ fontWeight: '700', color: colors.text }}>
-                      {i18n.t('home.threeDaysTitle')}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: displayStreak3 === 3 ? '#059669' : colors.text,
-                    }}
-                  >
-                    +1
-                  </Text>
-                </View>
-
-                <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4 }}>
-                  {i18n.t('home.streakLabel', { current: displayStreak3, max: 3 })}
-                </Text>
-
-                <View
-                  style={{
-                    height: 8,
-                    borderRadius: 99,
-                    backgroundColor: '#f3f4f6',
-                    marginTop: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${Math.round(((displayStreak3 || 0) / 3) * 100)}%`,
-                      height: 8,
-                      borderRadius: 99,
-                      backgroundColor: '#ef4444',
-                    }}
-                  />
-                </View>
-              </View>
+              />
             </View>
+          </View>
           </ScrollView>
         )}
       </View>
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loginBtn: {
+    marginTop: 12,
+    backgroundColor: '#111',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+});

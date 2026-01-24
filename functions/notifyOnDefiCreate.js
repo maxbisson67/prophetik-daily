@@ -5,6 +5,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 
+
 // Init Admin SDK une seule fois
 if (!getApps().length) initializeApp();
 const db = getFirestore();

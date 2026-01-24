@@ -86,6 +86,7 @@ export function AuthProvider({ children }) {
 
   // 3) RevenueCat: configure + logIn/logOut aligné sur Firebase UID
   useEffect(() => {
+    if (!authReady) return;
     let cancelled = false;
 
     (async () => {
@@ -101,13 +102,13 @@ export function AuthProvider({ children }) {
         await Purchases.logIn(String(user.uid));
       } catch (e) {
         if (!cancelled) {
-          console.log("[RevenueCat] logIn/logOut error", e?.message || e);
+          //console.log("[RevenueCat] logIn/logOut error", e?.message || e);
         }
       }
     })();
 
     return () => { cancelled = true; };
-  }, [user?.uid]);
+  }, [authReady,user?.uid]);
 
   const value = useMemo(() => {
     const initializing = !authReady;

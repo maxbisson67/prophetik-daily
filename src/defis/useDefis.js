@@ -1,15 +1,11 @@
-// src/defis/useDefis.js (version RNFB)
-import { useEffect, useState } from 'react';
-import firestore from '@react-native-firebase/firestore';
+// src/defis/useDefis.js (RNFB)
+import { useEffect, useState } from "react";
+import firestore from "@react-native-firebase/firestore";
 
-/**
- * Souscrit en temps réel aux défis d’un groupe.
- * Options possibles : orderBy('createdAt','desc'), filtre de statut, etc.
- */
 export function useGroupDefis(groupId, { status } = {}) {
-  const [defis, setDefis]   = useState([]);
+  const [defis, setDefis] = useState([]);
   const [loading, setLoading] = useState(!!groupId);
-  const [error, setError]   = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!groupId) {
@@ -20,17 +16,15 @@ export function useGroupDefis(groupId, { status } = {}) {
     }
 
     let q = firestore()
-      .collection('defis')
-      .where('groupId', '==', String(groupId));
+      .collection("defis")
+      .where("groupId", "==", String(groupId));
 
-    if (status) q = q.where('status', '==', String(status));
-    // Optionnel : trier (nécessite parfois un index composite si combiné à where)
-    q = q.orderBy('createdAt', 'desc');
+    if (status) q = q.where("status", "==", String(status));
+    q = q.orderBy("createdAt", "desc");
 
     const unsub = q.onSnapshot(
       (snap) => {
-        const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setDefis(rows);
+        setDefis(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
       (e) => {
@@ -39,17 +33,23 @@ export function useGroupDefis(groupId, { status } = {}) {
       }
     );
 
-    return () => { try { unsub(); } catch {} };
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
   }, [groupId, status]);
 
   return { defis, loading, error };
 }
 
 /**
- * Souscrit à MA participation dans un défi donné
+ * Lecture de MA participation (sub)
  * defis/{defiId}/participations/{uid}
+ *
+ * reloadKey: change sa valeur pour forcer une resubscription (optionnel)
  */
-export function useMyDefiParticipation(defiId, uid) {
+export function useMyDefiParticipation(defiId, uid, { reloadKey = 0 } = {}) {
   const [participation, setParticipation] = useState(null);
   const [loading, setLoading] = useState(!!(defiId && uid));
   const [error, setError] = useState(null);
@@ -62,11 +62,15 @@ export function useMyDefiParticipation(defiId, uid) {
       return;
     }
 
-    const ref = firestore().doc(`defis/${String(defiId)}/participations/${String(uid)}`);
+    setLoading(true);
+
+    const ref = firestore().doc(
+      `defis/${String(defiId)}/participations/${String(uid)}`
+    );
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        setParticipation(snap.exists ? ({ id: snap.id, ...snap.data() }) : null);
+        setParticipation(snap.exists ? { id: snap.id, ...snap.data() } : null);
         setLoading(false);
       },
       (e) => {
@@ -75,8 +79,12 @@ export function useMyDefiParticipation(defiId, uid) {
       }
     );
 
-    return () => { try { unsub(); } catch {} };
-  }, [defiId, uid]);
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
+  }, [defiId, uid, reloadKey]);
 
   return { participation, loading, error };
 }

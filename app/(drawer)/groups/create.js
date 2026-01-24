@@ -16,7 +16,7 @@ import firestore from '@react-native-firebase/firestore';
 // Safe auth
 import { useAuth } from '@src/auth/SafeAuthProvider';
 
-import { createGroupService } from '@src/groups/services';
+import { createGroupService } from '@src/groups/createGroupService';
 
 export default function CreateGroupScreen() {
   const { user } = useAuth();

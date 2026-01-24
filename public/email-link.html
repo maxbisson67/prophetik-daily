@@ -1,0 +1,22 @@
+<script>
+  (function () {
+    var u = new URL(window.location.href);
+
+    // Firebase parfois fournit ?link=... (auth/links)
+    // sinon continueUrl arrive avec ?apiKey&oobCode&mode...
+    var payload = u.searchParams.get("link") || window.location.href;
+
+    // ✅ DOUBLE ENCODE pour que même après 1 decode iOS,
+    // le payload contienne encore %26 au lieu de &
+    var encoded = encodeURIComponent(encodeURIComponent(payload));
+
+    // ✅ expo-router path safe (triple slash)
+    var path = "///email-link-complete?link=" + encoded;
+
+    // Dev client puis prod
+    window.location.href = "exp+prophetik-daily:" + path;
+    setTimeout(function () {
+      window.location.href = "prophetik-daily:" + path;
+    }, 600);
+  })();
+</script>

@@ -1,1052 +1,1350 @@
-{
-   "app": {
-    "name": "Prophetik"
-  },
-  "common": {
-    "unknownError": "Erreur inconnue",
-    "initializing": "Initialisation…",
-    "errorLabel": "Erreur :",
-    "create": "Créer",
-    "ok": "OK",
-    "cancel": "Annuler",
-    "or": "ou",
-    "continue": "Continuer",
-    "loading": "Chargement…"
-  },
-  "errors": {
-    "firestorePermission": "Accès refusé par les règles Firestore."
-  },
-  "auth": {
-    "login": "Se connecter",
-    "choice": {
-      "title": "Bienvenue",
-      "headline": "Choisis ton mode d’inscription",
-      "body": "Connecte-toi pour participer aux défis, consulter les résultats en direct et suivre ta progression.",
-      "continueSms": "Continuer avec SMS",
-      "continueEmail": "Continuer avec Email",
-      "createSms": "Créer un compte SMS",
-      "createEmail": "Créer un compte Email",
-      "footer": "En continuant, tu acceptes nos conditions d’utilisation."
+  {
+    "app": {
+      "name": "Prophetik"
     },
-    "signup": {
-      "title": "Créer un compte",
-      "displayNameLabel": "Nom d’affichage",
-      "displayNamePlaceholder": "Ton nom",
-      "emailLabel": "Courriel",
-      "emailPlaceholder": "toi@exemple.com",
-      "passwordLabel": "Mot de passe",
-      "passwordPlaceholder": "••••••••",
-      "confirmPasswordLabel": "Confirmer le mot de passe",
-      "confirmPasswordPlaceholder": "••••••••",
-      "ctaCreateAccount": "Créer le compte",
-
-      "errors": {
-        "requiredTitle": "Champs requis",
-        "requiredBody": "Nom, courriel et mot de passe sont requis.",
-        "passwordTooShortTitle": "Mot de passe trop court",
-        "passwordTooShortBody": "Minimum 6 caractères.",
-        "passwordMismatchTitle": "Mismatch",
-        "passwordMismatchBody": "Les mots de passe ne correspondent pas.",
-
-        "failedTitle": "Création échouée",
-        "emailAlreadyInUse": "Ce courriel est déjà utilisé.",
-        "invalidEmail": "Le format du courriel est invalide.",
-        "network": "Problème réseau. Réessaie.",
-        "notAuthenticated": "Utilisateur non authentifié."
+    "common": {
+      "unknownError": "Erreur inconnue",
+      "initializing": "Initialisation…",
+      "errorLabel": "Erreur :",
+      "create": "Créer",
+      "ok": "OK",
+      "cancel": "Annuler",
+      "or": "ou",
+      "edit":"Modifier",
+      "continue": "Continuer",
+      "back": "Retour",
+      "next": "Suivant",
+      "loading": "Chargement…",
+      "selected":"Sélectionné",
+      "genericError": "Une erreur est survenue. Veuillez réessayer."
+    },
+    "errors": {
+      "firestorePermission": "Accès refusé par les règles Firestore."
+    },
+    "auth": {
+      "login": "Se connecter",
+      "choice": {
+        "title": "Bienvenue",
+        "headline": "Choisis ton mode d’inscription",
+        "body": "Connecte-toi pour participer aux défis, consulter les résultats en direct et suivre ta progression.",
+        "continueSms": "Continuer avec SMS",
+        "continueEmail": "Continuer avec Email",
+        "createSms": "Créer un compte SMS",
+        "createEmail": "Créer un compte Email",
+        "footer": "En continuant, tu acceptes nos conditions d’utilisation."
       },
-
-      "success": {
-        "title": "Compte créé",
-        "body": "Bienvenue !"
-      }
-    },
-
-    "signIn": {
-      "emailTitle": "Connexion email",
-
-      "emailLabel": "Courriel",
-      "emailPlaceholder": "toi@email.com",
-
-      "passwordLabel": "Mot de passe",
-      "passwordPlaceholder": "••••••••",
-
-      "missingFieldsTitle": "Champs manquants",
-      "missingFieldsBody": "Entre un courriel et un mot de passe.",
-
-      "successTitle": "✅ Connexion réussie",
-      "successBody": "Bienvenue dans Prophetik !",
-      "letsGoCta": "Allons-y !",
-
-      "accountCreatedTitle": "🎉 Compte créé",
-      "accountCreatedBody": "Bienvenue ! Tu peux maintenant profiter de Prophetik.",
-      "discoverCta": "Découvrir",
-
-      "cannotCreateAccountTitle": "Impossible de créer le compte",
-
-      "failTitle": "Connexion impossible",
-
-      "errors": {
-        "invalidEmail": "Adresse courriel invalide.",
-        "wrongCredentials": "Courriel ou mot de passe incorrect.",
-        "tooManyRequests": "Trop de tentatives. Réessaie plus tard."
-      }
-    },
-    
-    "phoneLogin": {
-      "title": "Connexion SMS",
-      "h1": "Se connecter par SMS",
-
-      "phoneLabel": "Téléphone (tu peux écrire 5145551234)",
-      "phonePlaceholder": "5145551234",
-      "sendingAs": "Envoi comme : {{phone}}",
-
-      "receiveCodeCta": "Recevoir le code",
-
-      "codeLabel": "Code reçu par SMS",
-      "codePlaceholder": "123456",
-      "confirmCta": "Confirmer",
-      "changeNumberCta": "Changer de numéro / Renvoyer un code",
-
-      "invalidPhoneTitle": "Numéro invalide",
-      "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
-
-      "accountRequiredTitle": "Compte requis",
-      "accountRequiredBody": "Ce numéro n'est pas associé à un compte existant. Crée d'abord un compte (SMS ou Email).",
-
-      "codeSentTitle": "Code envoyé",
-      "codeSentBody": "Vérifie tes SMS.",
-
-      "smsErrorTitle": "Erreur SMS",
-      "smsErrorBody": "Impossible d’envoyer le code.",
-
-      "userNotFound": "Utilisateur introuvable.",
-
-      "invalidCodeTitle": "Code invalide",
-      "invalidCodeBody": "Vérifie le code.",
-
-      "signInFailedTitle": "Échec de connexion"
-    },
-
-    "phoneSignup": {
-      "title": "Créer un compte (SMS)",
-
-      "step1": {
-        "h1": "Inscription par SMS",
-        "subtitle": "Entre un nom d’affichage et ton numéro (ex. 5145551234 ou +15145551234).",
+      "signup": {
+        "title": "Créer un compte",
         "displayNameLabel": "Nom d’affichage",
         "displayNamePlaceholder": "Ton nom",
-        "phoneLabel": "Téléphone",
+        "emailLabel": "Courriel",
+        "emailPlaceholder": "toi@exemple.com",
+        "passwordLabel": "Mot de passe",
+        "passwordPlaceholder": "••••••••",
+        "confirmPasswordLabel": "Confirmer le mot de passe",
+        "confirmPasswordPlaceholder": "••••••••",
+        "ctaCreateAccount": "Créer le compte",
+
+        "errors": {
+          "requiredTitle": "Champs requis",
+          "requiredBody": "Nom, courriel et mot de passe sont requis.",
+          "passwordTooShortTitle": "Mot de passe trop court",
+          "passwordTooShortBody": "Minimum 6 caractères.",
+          "passwordMismatchTitle": "Mismatch",
+          "passwordMismatchBody": "Les mots de passe ne correspondent pas.",
+
+          "failedTitle": "Création échouée",
+          "emailAlreadyInUse": "Ce courriel est déjà utilisé.",
+          "invalidEmail": "Le format du courriel est invalide.",
+          "network": "Problème réseau. Réessaie.",
+          "notAuthenticated": "Utilisateur non authentifié."
+        },
+
+        "success": {
+          "title": "Compte créé",
+          "body": "Bienvenue !"
+        }
+      },
+
+      "signIn": {
+        "emailTitle": "Connexion email",
+
+        "emailLabel": "Courriel",
+        "emailPlaceholder": "toi@email.com",
+
+        "passwordLabel": "Mot de passe",
+        "passwordPlaceholder": "••••••••",
+
+        "missingFieldsTitle": "Champs manquants",
+        "missingFieldsBody": "Entre un courriel et un mot de passe.",
+
+        "successTitle": "✅ Connexion réussie",
+        "successBody": "Bienvenue dans Prophetik !",
+        "letsGoCta": "Allons-y !",
+
+        "accountCreatedTitle": "🎉 Compte créé",
+        "accountCreatedBody": "Bienvenue ! Tu peux maintenant profiter de Prophetik.",
+        "discoverCta": "Découvrir",
+
+        "cannotCreateAccountTitle": "Impossible de créer le compte",
+
+        "failTitle": "Connexion impossible",
+
+        "errors": {
+          "invalidEmail": "Adresse courriel invalide.",
+          "wrongCredentials": "Courriel ou mot de passe incorrect.",
+          "tooManyRequests": "Trop de tentatives. Réessaie plus tard."
+        }
+      },
+      
+      "phoneLogin": {
+        "title": "Connexion SMS",
+        "h1": "Se connecter par SMS",
+
+        "phoneLabel": "Téléphone (tu peux écrire 5145551234)",
         "phonePlaceholder": "5145551234",
         "sendingAs": "Envoi comme : {{phone}}",
-        "sendCodeCta": "Envoyer le code"
-      },
 
-      "step2": {
-        "h1": "Vérification du code",
-        "subtitle": "Un code SMS a été envoyé à {{phone}}.",
-        "codeLabel": "Code reçu (SMS)",
+        "receiveCodeCta": "Recevoir le code",
+
+        "codeLabel": "Code reçu par SMS",
         "codePlaceholder": "123456",
         "confirmCta": "Confirmer",
-        "changeNumberCta": "Changer de numéro / Renvoyer un code"
-      },
+        "changeNumberCta": "Changer de numéro / Renvoyer un code",
 
-      "alerts": {
-        "codeSentTitle": "Code envoyé",
-        "codeSentBody": "Vérifie tes SMS au {{phone}}.",
-        "sendFailedTitle": "Échec de l’envoi",
-        "welcomeTitle": "Bienvenue!",
-        "welcomeBody": "Ton compte a été créé."
-      },
-
-      "errors": {
-        "notAuthenticated": "Non authentifié",
-        "displayNameRequiredTitle": "Nom requis",
-        "displayNameRequiredBody": "Entre un nom d’affichage.",
         "invalidPhoneTitle": "Numéro invalide",
         "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
-        "codeRequiredTitle": "Code requis",
-        "codeRequiredBody": "Entre le code reçu par SMS.",
-        "sessionExpiredTitle": "Session expirée",
-        "sessionExpiredBody": "Réessaie l’envoi du code.",
-        "sessionExpiredBody2": "Redemande un nouveau code.",
-        "userUnavailable": "Utilisateur non disponible après confirmation.",
+
+        "accountRequiredTitle": "Compte requis",
+        "accountRequiredBody": "Ce numéro n'est pas associé à un compte existant. Crée d'abord un compte (SMS ou Email).",
+
+        "codeSentTitle": "Code envoyé",
+        "codeSentBody": "Vérifie tes SMS.",
+
+        "smsErrorTitle": "Erreur SMS",
+        "smsErrorBody": "Impossible d’envoyer le code.",
+
+        "userNotFound": "Utilisateur introuvable.",
+
         "invalidCodeTitle": "Code invalide",
-        "invalidCodeBody": "Vérifie le code et réessaie.",
-        "verifyFailedTitle": "Échec de vérification"
-      }
-    }
-  
-  },
-  "home": {
-    "title": "Accueil",
-    "hello": "Salut",
-    "credits": "Crédits",
-    "viewCredits": "Voir et acheter des crédits",
-    "createChallenge": "Créer un défi",
-    "activeChallenges": "Défis actifs",
-    "totalPot": "Cagnotte totale",
-    "todayChallenge": "Mes défis du jour",
-    "challenge": "Défi",
-    "challengeDate": "Date NHL",
-    "challengeLimit": "Limite d’inscription :",
-    "challengeStarts": "Débute à",
-    "challengeStatus": "Ouvert",          
-    "status": {
-      "open": "Ouvert",
-      "live": "En cours",
-      "awaiting": "Calcul",
-      "completed": "Terminé"
-    },
-    "loginToAccess": "Connecte-toi pour accéder à l’accueil.",
-    "noGroups": "Tu n’as pas encore de groupes.",
-    "noActiveChallenges": "Aucun défi actif pour le moment.",
-    "editAvatar": "Modifier l'avatar",
-    "creditsToEarn": "Crédits à gagner",
-    "firstChallengeCreated": "Premier défi créé",
-    "firstChallengeHint": "Crée ton premier défi",
-    "firstGroupCreated": "Premier groupe créé",
-    "firstGroupHint": "Crée ton premier groupe",
-    "fiveParticipationsTitle": "Participer à 5 défis",
-    "threeDaysTitle": "3 jours consécutifs",
-    "progressLabel": "Progression : {{current}}/{{max}}",
-    "streakLabel": "Série : {{current}}/{{max}}",
-    "dailyShotTitle": "Bonus shake du jour",
-    "dailyShotPeriod": "Plafond mensuel (période {{period}})",
-    "dailyShotPeriodFallback": "Plafond mensuel",
-    "dailyShotAlreadyTaken": "Déjà réclamé aujourd’hui. Reviens demain.",
-    "dailyShotCapReached": "Plafond mensuel atteint. Reviens le mois prochain.",
-    "dailyShotHint": "Shake ton téléphone pour gagner +1 crédit.",
-    "dailyShotLoading": "Capteurs en cours de chargement…",
-    "dailyShotMonthlyCap": "Plafond mensuel: {{current}} / {{max}}" 
-  },
-  "groups": {
-     "detail": {
-        "headerFallback": "Groupe",
+        "invalidCodeBody": "Vérifie le code.",
 
-        "loading": "Chargement du groupe…",
-        "errorPrefix": "Erreur :",
-        "idLabel": "ID : {{id}}",
-        "notFound": "Aucun groupe trouvé (ID : {{id}})",
+        "signInFailedTitle": "Échec de connexion"
+      },
 
-        "sectionDetails": "Détails",
-        "groupType": "Type de groupe",
-        "private": "Privé",
-        "public": "Public",
-        "inviteCode": "Code d’invitation",
-        "createdAt": "Créé le",
-        "signupUntil": "Inscription jusqu’à",
+      "phoneSignup": {
+        "title": "Créer un compte (SMS)",
 
-        "membersSection": "Membres du groupe",
-        "noMembers": "Aucun membre.",
-
-        "actionsSection": "Actions",
-        "actionCreateChallenge": "Créer un défi",
-        "actionShareInvite": "Partager le code d’invitation",
-        "actionShareInviteWithCode": "Partager le code d’invitation ({{code}})",
-        "actionLeaveGroup": "Quitter ce groupe",
-
-        "ownerOnlyAvatar": "Seul le propriétaire peut changer l’avatar",
-        "avatarEdit": "Modifier l’avatar du groupe ({{price}} crédit)",
-        "avatarBuy": "Acheter un avatar de groupe ({{price}} crédits)",
-
-        "shareErrorTitle": "Partage impossible",
-
-        "shareInviteMessage": "Rejoins mon groupe \"{{name}}\" dans Prophetik-daily.\nCode : {{code}}\nID : {{id}}",
-
-        "leaveConfirmTitle": "Groupe quitté",
-        "leaveConfirmMessage": "Tu as quitté ce groupe.",
-        "leaveErrorTitle": "Impossible de quitter",
-        "leaveErrorMessage": "Une erreur est survenue.",
-
-        "deleteBlockedTitle": "Impossible de supprimer",
-        "deleteBlockedMessage": "Il reste des défis actifs ou en cours de calcul dans ce groupe.",
-
-        "deleteConfirmTitle": "Supprimer ce groupe ?",
-        "deleteConfirmMessage": "Cette action est définitive. Les membres ne verront plus ce groupe.",
-        "deleteConfirmCancel": "Annuler",
-        "deleteConfirmOk": "Supprimer",
-
-        "deleteDoneTitle": "Groupe supprimé",
-        "deleteDoneMessage": "Le groupe a été supprimé avec succès.",
-        "deleteErrorTitle": "Suppression impossible",
-        "deleteErrorMessage": "Une erreur est survenue lors de la suppression du groupe.",
-
-        "checkingDefis": "Vérification des défis actifs…",
-        "cannotDeleteWhileDefis": "Tu ne peux pas supprimer ce groupe tant que des défis sont ouverts / en cours."
-    },
-    "title": "Mes groupes",
-    "detailTitle": "Détail du groupe",
-    "loginToSeeGroups": "Connecte-toi pour voir tes groupes.",
-    "login": "Se connecter",
-
-    "headerMine": "Groupes que je gère",
-    "headerMember": "Groupes où je suis membre",
-    "headerMineEmpty": "Aucun groupe pour l’instant.",
-    "headerMemberEmpty": "Tu n’as rejoint aucun groupe pour le moment.",
-
-    "btnCreate": "Créer",
-    "btnJoin": "Joindre",
-
-    "welcomeTitle": "Bienvenue 👋",
-    "welcomeText": "Commence par créer un groupe avec tes amis ou rejoins-en un avec un code d’invitation.",
-
-    "loading": "Chargement…",
-
-    "invitationCode": "Code invitation",
-    "roleOwner": "Propriétaire",
-    "roleMember": "Membre",
-
-    "emptyTitle": "Crée ton premier groupe ou rejoins tes amis",
-    "emptyText": "Organise vos défis, invite tes amis et commence à gagner des crédits.",
-    "emptyCreate": "Créer un groupe",
-    "emptyJoin": "Rejoindre",
-    "emptyHint": "Astuce : tu peux définir un groupe favori avec l’icône ★",
-
-    "modalTitle": "Nouveau groupe",
-    "modalSubtitle": "Rassemble ton crew et dominez les défis.",
-    "fieldNameLabel": "Nom du groupe",
-    "fieldNamePlaceholder": "Ex. Les Snipers du Nord",
-    "fieldDescriptionLabel": "Description (optionnel)",
-    "fieldDescriptionPlaceholder": "Ex. Notre pool du samedi entre amis",
-    "cancel": "Annuler",
-    "create": "Créer",
-
-    "alertNameRequiredTitle": "Nom requis",
-    "alertNameRequiredMessage": "Donne un nom à ton groupe.",
-    "alertNotConnectedTitle": "Non connecté",
-    "alertNotConnectedMessage": "Connecte-toi pour créer un groupe.",
-    "alertFavoriteReadTitle": "Lecture du favori",
-    "alertErrorTitle": "Erreur",
-    "alertFavoriteTitle": "Favori",
-    "alertFavoriteMessage": "Impossible de mettre à jour:"
-    },
-    "join": {
-        "title": "Rejoindre un groupe",
-        "ctaTitle": "🔑 Entrez votre code d’invitation",
-        "ctaSubtitle": "Rejoignez immédiatement un groupe existant et commencez à prédire.",
-        "placeholderCode": "XXXXXXXX",
-        "btnJoin": "Rejoindre le groupe",
-        "btnCancel": "Annuler",
-
-        "alertLoginRequiredTitle": "Connexion requise",
-        "alertLoginRequiredMessage": "Connecte-toi pour rejoindre un groupe.",
-        "alertCodeInvalidTitle": "Code invalide",
-        "alertCodeInvalidMessage": "Le code doit contenir {{len}} caractères (A–Z, sans O et 0).",
-
-        "alertServerUnexpected": "Réponse inattendue du serveur.",
-        "alertCodeNotFoundTitle": "Code introuvable",
-        "alertCodeNotFoundMessage": "Vérifie le code et réessaie.",
-        "alertAccessDeniedTitle": "Accès refusé",
-        "alertAccessDeniedMessage": "Tu n’es pas autorisé à rejoindre ce groupe.",
-        "alertGenericErrorTitle": "Erreur"
-    },
-    "challenges": {
-        "activeTitle": "Défis actifs",
-        "pastTitle": "Défis passés",
-        "status": {
-            "active": "Actif",
-            "awaiting": "À valider",
-            "cancelledGhost": "Annulé (pas assez de joueurs)",
-            "completed": "Terminé"
+        "step1": {
+          "h1": "Inscription par SMS",
+          "subtitle": "Entre un nom d’affichage et ton numéro (ex. 5145551234 ou +15145551234).",
+          "displayNameLabel": "Nom d’affichage",
+          "displayNamePlaceholder": "Ton nom",
+          "phoneLabel": "Téléphone",
+          "phonePlaceholder": "5145551234",
+          "sendingAs": "Envoi comme : {{phone}}",
+          "sendCodeCta": "Envoyer le code"
         },
-        "gameDateLabel": "Date NHL",
-        "signupDeadlineLabel": "Limite d’inscription (heure locale) :",
-        "firstGameLabel": "Premier match (heure locale) :",
-        "potLabel": "Cagnotte : {{count}} crédit(s)",
-        "entryCostLabel": "Coût de participation : {{count}} crédit(s)",
-        "ghostRefundHint": "Les participants ont été automatiquement remboursés.",
-        "winnersTitleSingular": "Gagnant",
-        "winnersTitlePlural": "Gagnants",
-        "seeResults": "Voir résultats",
-        "participate": "Participer",
-        "loginToSee": "Connecte-toi pour voir tes défis.",
-        "loadingChallenges": "Chargement des défis…",
-        "createNhlChallenge": "Créer un défi NHL",
-        "noChallenges": "Aucun défi à afficher."
+
+        "step2": {
+          "h1": "Vérification du code",
+          "subtitle": "Un code SMS a été envoyé à {{phone}}.",
+          "codeLabel": "Code reçu (SMS)",
+          "codePlaceholder": "123456",
+          "confirmCta": "Confirmer",
+          "changeNumberCta": "Changer de numéro / Renvoyer un code"
+        },
+
+        "alerts": {
+          "codeSentTitle": "Code envoyé",
+          "codeSentBody": "Vérifie tes SMS au {{phone}}.",
+          "sendFailedTitle": "Échec de l’envoi",
+          "welcomeTitle": "Bienvenue!",
+          "welcomeBody": "Ton compte a été créé."
+        },
+
+        "errors": {
+          "notAuthenticated": "Non authentifié",
+          "displayNameRequiredTitle": "Nom requis",
+          "displayNameRequiredBody": "Entre un nom d’affichage.",
+          "invalidPhoneTitle": "Numéro invalide",
+          "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
+          "codeRequiredTitle": "Code requis",
+          "codeRequiredBody": "Entre le code reçu par SMS.",
+          "sessionExpiredTitle": "Session expirée",
+          "sessionExpiredBody": "Réessaie l’envoi du code.",
+          "sessionExpiredBody2": "Redemande un nouveau code.",
+          "userUnavailable": "Utilisateur non disponible après confirmation.",
+          "invalidCodeTitle": "Code invalide",
+          "invalidCodeBody": "Vérifie le code et réessaie.",
+          "verifyFailedTitle": "Échec de vérification"
+        }
+      }
+    
     },
-    "defi": {
+    "home": {
+      "title": "Accueil",
+      "hello": "Salut",
+      "points": "Points",
+      "viewPoints": "Mes points",
+      "createChallenge": "Créer un défi",
+      "activeChallenges": "Défis actifs",
+      "unknownGroup": "Groupe",
+      "totalPot": "Gain potentiel",
+      "todayChallenge": "Mes défis du jour",
+      "challenge": "Défi",
+      "challengeDate": "Date NHL",
+      "challengeLimit": "Limite d’inscription :",
+      "challengeStarts": "Débute à",
+      "challengeStatus": "Ouvert", 
+      "leaderboardTitle": "Classement",     
+      "leaderboardLockedTitle": "Classement premium",
+      "leaderboardLockedBody": "Passe à Pro ou Vip pour voir le classement complet de ton groupe par défaut.",  
+      "leaderboardLockedCta": "Voir les forfaits",    
+      "viewLeaderboard": "Classement détaillé", 
+      "upgradeToJoin": "Passe à Pro ou Vip pour participer à ce défi.",
+      "upgradeCta": "Voir les forfaits",   
+      "launchAscension":"Lancer une ascension", 
+      "participate":"Participer",
+      "status": {
+        "open": "Ouvert",
+        "live": "En cours",
+        "awaiting": "Calcul",
+        "completed": "Terminé"
+      },
+      "metrics": {
+        "points": "Points",
+        "pointsSubtitle": "{{count}} défis",
+        "pointsSubtitleEmpty": "Aucun défi",
+
+        "defirate": "Defirate",
+        "defirateLocked": "Statistique premium",
+        "defirateSubtitle": "{{wins}} victoires",
+
+        "ppg": "PPG",
+        "ppgLocked": "Statistique premium",
+        "ppgSubtitle": "Points / défi",
+
+        "unlockCta": "Débloquer cette statistique"
+      },
+      "loginToAccess": "Connecte-toi pour accéder à l’accueil.",
+      "noGroups": "Tu n’as pas encore de groupes.",
+      "noActiveChallenges": "Aucun défi actif pour le moment.",
+      "editAvatar": "Modifier l'avatar",
+      "creditsToEarn": "Points à gagner",
+      "firstChallengeCreated": "Premier défi créé",
+      "firstChallengeHint": "Crée ton premier défi",
+      "firstGroupCreated": "Premier groupe créé",
+      "firstGroupHint": "Crée ton premier groupe",
+      "fiveParticipationsTitle": "Participer à 5 défis",
+      "threeDaysTitle": "3 jours consécutifs",
+      "progressLabel": "Progression : {{current}}/{{max}}",
+      "streakLabel": "Série : {{current}}/{{max}}",
+      "dailyShotTitle": "Bonus shake du jour",
+      "dailyShotPeriod": "Plafond mensuel (période {{period}})",
+      "dailyShotPeriodFallback": "Plafond mensuel",
+      "dailyShotAlreadyTaken": "Déjà réclamé aujourd’hui. Reviens demain.",
+      "dailyShotCapReached": "Plafond mensuel atteint. Reviens le mois prochain.",
+      "dailyShotHint": "Shake ton téléphone pour gagner +1 crédit.",
+      "dailyShotLoading": "Capteurs en cours de chargement…",
+      "dailyShotMonthlyCap": "Plafond mensuel: {{current}} / {{max}}" 
+    },
+    "groups": {
+      "detail": {
+          "headerFallback": "Groupe",
+
+          "loading": "Chargement du groupe…",
+          "errorPrefix": "Erreur :",
+          "idLabel": "ID : {{id}}",
+          "notFound": "Aucun groupe trouvé (ID : {{id}})",
+
+          "sectionDetails": "Détails",
+          "groupType": "Type de groupe",
+          "private": "Privé",
+          "public": "Public",
+          "inviteCode": "Code d’invitation",
+          "createdAt": "Créé le",
+          "signupUntil": "Inscription jusqu’à",
+
+          "membersSection": "Membres du groupe",
+          "noMembers": "Aucun membre.",
+
+          "actionsSection": "Actions",
+          "actionCreateChallenge": "Créer un défi",
+          "actionShareInvite": "Partager le code d’invitation",
+          "actionShareInviteWithCode": "Partager le code d’invitation ({{code}})",
+          "actionLeaveGroup": "Quitter ce groupe",
+
+          "ownerOnlyAvatar": "Seul le propriétaire peut changer l’avatar",
+          "avatarEdit": "Ajouter ou modifier l'avatar du groupe",
+
+          "shareErrorTitle": "Partage impossible",
+
+          "shareInviteMessage": "Rejoins mon groupe \"{{name}}\" dans Prophetik-daily.\nCode : {{code}}\nID : {{id}}",
+
+          "leaveConfirmTitle": "Groupe quitté",
+          "leaveConfirmMessage": "Tu as quitté ce groupe.",
+          "leaveErrorTitle": "Impossible de quitter",
+          "leaveErrorMessage": "Une erreur est survenue.",
+
+          "deleteBlockedTitle": "Impossible de supprimer",
+          "deleteBlockedMessage": "Il reste des défis actifs ou en cours de calcul dans ce groupe.",
+
+          "deleteConfirmTitle": "Supprimer ce groupe ?",
+          "deleteConfirmMessage": "Cette action est définitive. Les membres ne verront plus ce groupe.",
+          "deleteConfirmCancel": "Annuler",
+          "deleteConfirmOk": "Supprimer",
+
+          "deleteDoneTitle": "Groupe supprimé",
+          "deleteDoneMessage": "Le groupe a été supprimé avec succès.",
+          "deleteErrorTitle": "Suppression impossible",
+          "deleteErrorMessage": "Une erreur est survenue lors de la suppression du groupe.",
+
+          "checkingDefis": "Vérification des défis actifs…",
+          "cannotDeleteWhileDefis": "Tu ne peux pas supprimer ce groupe tant que des défis sont ouverts / en cours.",
+
+          
+          "transferOwnershipTitle": "Transférer la propriété",
+          "transferOwnershipSubtitle": "Choisis un membre (autre que Nova) pour devenir propriétaire.",
+          "transferNoCandidates": "Aucun membre éligible.",
+          "actionTransferOwnership": "Transférer la propriété",
+          "transferDoneTitle": "Propriété transférée",
+          "transferDoneMessage": "Le nouveau propriétaire a été assigné.",
+          "transferErrorTitle": "Erreur de transfert",
+
+          "leaveOwnerConfirmTitle": "Quitter le groupe ?",
+          "leaveOwnerConfirmMessage": "Comme tu es le propriétaire et qu'il ne reste que toi et Nova, le groupe sera archivé.",
+          "actionLeaveOwner": "Quitter (archiver le groupe)",
+
+          "deleteBlockedOtherMembers": "Il reste d'autres membres. Transfère la propriété ou fais-les quitter avant de supprimer.",
+
+          "deleting": "Suppression…",
+
+          "transferRequiredTitle": "Transfert requis",
+          "transferRequiredMessage": "Il reste d'autres membres. Tu dois transférer la propriété avant de quitter."
+
+      },
+      "title": "Mes groupes",
+      "detailTitle": "Détail du groupe",
+      "loginToSeeGroups": "Connecte-toi pour voir tes groupes.",
+      "login": "Se connecter",
+
+      "headerMine": "Groupes que je gère",
+      "headerMember": "Groupes où je suis membre",
+      "headerMineEmpty": "Aucun groupe pour l’instant.",
+      "headerMemberEmpty": "Tu n’as rejoint aucun groupe pour le moment.",
+
+      "btnCreate": "Créer",
+      "btnJoin": "Joindre",
+
+      "welcomeTitle": "Bienvenue 👋",
+      "welcomeText": "Commence par créer un groupe avec tes amis ou rejoins-en un avec un code d’invitation.",
+
+      "loading": "Chargement…",
+
+      "invitationCode": "Code invitation",
+      "roleOwner": "Propriétaire",
+      "roleMember": "Membre",
+
+      "emptyTitle": "Crée ton premier groupe ou rejoins tes amis",
+      "emptyText": "Organise vos défis, invite tes amis et commence à gagner des points.",
+      "emptyCreate": "Créer un groupe",
+      "emptyJoin": "Rejoindre",
+      "emptyHint": "Astuce : tu peux définir un groupe favori avec l’icône ★",
+
+      "modalTitle": "Nouveau groupe",
+      "modalSubtitle": "Rassemble ton crew et dominez les défis.",
+      "fieldNameLabel": "Nom du groupe",
+      "fieldNamePlaceholder": "Ex. Les Snipers du Nord",
+      "fieldDescriptionLabel": "Description (optionnel)",
+      "fieldDescriptionPlaceholder": "Ex. Notre pool du samedi entre amis",
+      "cancel": "Annuler",
+      "create": "Créer",
+
+      "alertNameRequiredTitle": "Nom requis",
+      "alertNameRequiredMessage": "Donne un nom à ton groupe.",
+      "alertNotConnectedTitle": "Non connecté",
+      "alertNotConnectedMessage": "Connecte-toi pour créer un groupe.",
+      "alertFavoriteReadTitle": "Lecture du favori",
+      "alertErrorTitle": "Erreur",
+      "alertFavoriteTitle": "Favori",
+      "alertFavoriteMessage": "Impossible de mettre à jour:",
+      "join": {
+          "title": "Rejoindre un groupe",
+          "ctaTitle": "🔑 Entrez votre code d’invitation",
+          "ctaSubtitle": "Rejoignez immédiatement un groupe existant et commencez à prédire.",
+          "placeholderCode": "XXXXXXXX",
+          "btnJoin": "Rejoindre le groupe",
+          "btnCancel": "Annuler",
+
+          "alertLoginRequiredTitle": "Connexion requise",
+          "alertLoginRequiredMessage": "Connecte-toi pour rejoindre un groupe.",
+          "alertCodeInvalidTitle": "Code invalide",
+          "alertCodeInvalidMessage": "Le code doit contenir {{len}} caractères (A–Z, sans O et 0).",
+
+          "alertServerUnexpected": "Réponse inattendue du serveur.",
+          "alertCodeNotFoundTitle": "Code introuvable",
+          "alertCodeNotFoundMessage": "Vérifie le code et réessaie.",
+          "alertAccessDeniedTitle": "Accès refusé",
+          "alertAccessDeniedMessage": "Tu n’es pas autorisé à rejoindre ce groupe.",
+          "alertGenericErrorTitle": "Erreur",
+          "alertLimitTitle": "Limite atteinte",
+          "alertLimitMessage": "Ton abonnement {{tier}} permet max {{max}} groupes en tant que membre. Tu en as déjà {{current}}. Passe à PRO/VIP pour augmenter la limite."
+      }
+    },
+      "challenges": {
+          "activeTitle": "Défis actifs",
+          "pastTitle": "Défis passés",
+          "status": {
+              "active": "Actif",
+              "awaiting": "À valider",
+              "cancelledGhost": "Annulé (pas assez de joueurs)",
+              "completed": "Terminé"
+          },
+          "gameDateLabel": "Date NHL",
+          "signupDeadlineLabel": "Limite d’inscription (heure locale) :",
+          "firstGameLabel": "Premier match (heure locale) :",
+          "potLabel": "Cagnotte : {{count}} crédit(s)",
+          "entryCostLabel": "Coût de participation : {{count}} crédit(s)",
+          "ghostRefundHint": "Les participants ont été automatiquement remboursés.",
+          "winnersTitleSingular": "Gagnant",
+          "winnersTitlePlural": "Gagnants",
+          "seeResults": "Voir résultats",
+          "participate": "Participer",
+          "loginToSee": "Connecte-toi pour voir tes défis.",
+          "loadingChallenges": "Chargement des défis…",
+          "createNhlChallenge": "Créer un défi NHL",
+          "noChallenges": "Aucun défi à afficher."
+      },
+      "defi": {
         "create": {
-            "title": "Nouveau défi NHL",
-            "autoTitle": "Défi {{format}}",
+              "title": "Créer un défi",
 
-            "alert": {
-                "saturdayOnly": {
-                "title": "Samedi seulement",
-                "body": "Le défi 6x7 est disponible uniquement le samedi."
-                }
-            },
-            "saturdayOnlyTag": "Sam",
+              "wizard": {
+                "step1": "1. Groupe",
+                "step2": "2. Format",
+                "step3": "3. Date",
+                "step4": "4. Confirmation",
+                "confirmTitle": "Confirmer le défi",
+                "summary": {
+                  "group": "Groupe",
+                  "format": "Format",
+                  "date": "Date",
+                  "games": "Matchs",
+                  "firstGame": "Premier match",
+                  "deadline": "Date limite"
+                },
+                "pickGroup": "Choix du groupe",
+                "pickFormat": "Choix du format",
+                "pickDate": "Choix de la date",
 
-            "autoTitle67": "Défi 6x7",
-            "special67": {
-                "saturdayOnly": "Samedi seulement",
-                "body": "Événement spécial Prophetik. Disponible uniquement le samedi (grosse journée NHL).",
-                "bonusLine": "🎁 Bonus au gagnant: 6 ou 7 crédits (aléatoire).",
-                "notSaturdayHint": "Choisis une date de samedi pour activer la création.",
-                "badge": "Événement spécial"
-            },
+              },
 
-            "group": {
-                "noneHint": "Aucun groupe disponible pour créer un défi.",
-                "noneBody": "Les groupes archivés ne peuvent pas recevoir de nouveaux défis.",
-                "label": "Groupe",
-                "choose": "Choisis un groupe"
-            },
+              "unlockOther": "Débloquer les autres défis",
 
-            "formatLabel": "Format du défi",
+              "verify": {
+                "loading": "Vérification…",
+                "noGames": "Aucun match NHL trouvé pour {{date}}.",
+                "okWithTime": "{{count}} matchs trouvés. Premier à {{time}}.",
+                "okNoTime": "{{count}} matchs trouvés.",
+                "error": "Erreur lors de la vérification : {{message}}"
+              },
 
-            "summary": {
-                "titleLabel": "Titre",
-                "costLabel": "Coût de participation",
-                "costValue": "{{credits}} crédit(s)"
-            },
-
-            "date": {
+              "date": {
                 "labelBase": "Date NHL{{meta}}",
                 "matchesShort": "match(s)",
                 "firstAt": "1er à {{time}}",
-                "deadlineAt": "Limite {{time}}",
+                "deadlineAt": "limite {{time}}",
                 "change": "Changer"
-            },
+              },
 
-            "verify": {
-                "loading": "Vérification des matchs NHL…",
-                "noGames": "Aucun match NHL le {{date}}.",
-                "okWithTime": "{{count}} match(s) trouvé(s). Premier match à {{time}}.",
-                "okNoTime": "{{count}} match(s) trouvé(s).",
-                "error": "Impossible de vérifier les matchs NHL : {{message}}"
-            },
+              "hint": {
+                "signupDeadline": "Tu peux t'inscrire jusqu'à 1h avant le premier match."
+              },
 
-            "alert": {
+              "actions": {
+                "create": "Créer",
+                "creating": "Création…",
+                "confirm": "Continuer",
+                "createNow": "Créer le défi"
+              },
+
+              "alert": {
                 "noGames": {
-                "title": "Aucun match trouvé",
-                "body": "Aucun match trouvé pour le {{date}}."
+                  "title": "Aucun match NHL",
+                  "body": "Aucun match NHL pour {{date}}."
                 },
                 "deadlinePassed": {
-                "title": "Limite dépassée",
-                "body": "La limite d’inscription pour le {{date}} était {{time}}. Impossible de créer le défi."
+                  "title": "Date limite dépassée",
+                  "body": "La date limite est passée ({{date}} à {{time}})."
                 },
                 "error": {
-                "title": "Création impossible",
-                "body": "Une erreur s’est produite lors de la création du défi : {{message}}"
+                  "title": "Création impossible",
+                  "body": "Une erreur s’est produite lors de la création du défi : {{message}}"
                 }
-            },
+              },
 
-            "actions": {
-                "creating": "Création…",
-                "create": "Créer le défi"
-            },
+              "planLocked": {
+                "title": "Défi {{plan}} — non disponible",
+                "body": "Abonne-toi pour débloquer {{size}} et accéder aux défis premium.",
+                "cta": "Voir les abonnements"
+              },
 
-            "hint": {
-                "signupDeadline": "La limite d’inscription est fixée à 1h avant le premier match (heure locale)."
-            }
-        },
-        "header": {
-            "defaultTitle": "Défi",
-            "errorTitle": "Erreur",
-            "notFoundTitle": "Défi introuvable"
-        },
-        "loading": {
-            "title": "Chargement…",
-            "generic": "Chargement…",
-            "overlayHint": "Cela peut prendre quelques secondes…",
-            "statsUpdatingToday": "Mise à jour des statistiques du jour…",
-            "statsUpdatingSeason": "Mise à jour des statistiques pour la saison…",
-            "statsGeneric": "Chargement des statistiques…"
-        },
-        "playerSelect": {
-            "title": "Sélectionner un joueur",
-            "close": "Fermer",
-            "searchPlaceholder": "Rechercher un joueur…",
-            "emptyChoice": "Choisir un joueur…"
-        },
-        "seasonToggle": {
-            "current": "Saison {{id}}",
-            "previous": "Saison {{id}}"
-        },
-        "infoCard": {
-            "nhlDate": "Date NHL",
-            "signupDeadline": "Limite inscription:",
-            "firstGameUtc": "Premier match (UTC):",
-            "choicesCount": "Nombre de choix:",
-            "status": "Statut:",
-            "lockedSuffix": "verrouillé",
-            "pot": "Cagnotte: {{count}} crédit(s)"
-        },
-        "gamesCard": {
-            "title": "Matchs NHL du jour",
-            "none": "Aucun match trouvé.",
-            "time": "Heure",
-            "away": "Visiteur",
-            "home": "Domicile"
-        },
-        "pickersCard": {
-            "title": "Sélectionne tes joueurs",
-            "choiceLabel": "Choix {{index}}",
-            "summary": "{{current}}/{{max}} sélection(s)",
-            "requirementsPrefix": "Tu dois choisir :"
-        }, 
-        "rules": {
-            "wrongPickCount": "Tu dois sélectionner exactement {{expected}} joueurs.",
-            "tierMissingCount": "Il te manque {{missing}} {{tierLabel}}.",
-            "tierTooMany": "Tu as dépassé la limite {{tierLabel}} (max {{max}})."
-        },
-        "errors": {
-            "notFoundMessage": "Aucun défi trouvé."
-        },
-        "alerts": {
-            "playerDuplicateTitle": "Joueur déjà sélectionné",
-            "playerDuplicateMessage": "{{name}} est déjà choisi pour un autre poste.",
-            "lockedTitle": "Inscription fermée",
-            "lockedMessage": "La date limite est dépassée.",
-            "incompleteTitle": "Sélection incomplète",
-            "incompleteMessage": "Tu dois choisir {{count}} joueur(s).",
-            "savingSlow": "Création de la participation… (le premier participant peut prendre quelques secondes)",
-            "successTitle": "Participation enregistrée",
-            "successMessage": "Bonne chance ! {{potMessage}}",
-            "successPotMessage": "Cagnotte: {{count}} crédits",
-            "successPotMessageSimple": "Participation enregistrée.",
-            "genericErrorTitle": "Erreur"
-        },
-        "actions": {
-            "primarySaving": "Création de la participation…",
-            "primaryLocked": "Inscription fermée",
-            "primaryDefault": "Enregistrer ma participation"
-        },
-        "results": {
-            "header": {
-            "defaultTitle": "Résultats",
-            "groupFallback": "Groupe",
-            "pot": "Cagnotte de {{count}} crédits",
-            "startsAt": "Débute à",
-            "scoring": "Barème : Buteur = +1 • Passe = +1"
-            },
-            "status": {
-            "open": "Ouvert",
-            "live": "En cours",
-            "awaiting": "Calcul en cours",
-            "closed": "Terminé",
-            "unknown": "Inconnu"
-            },
-            "loading": {
-            "generic": "Chargement…"
-            },
-            "errors": {
-            "notFound": "Aucun défi trouvé."
-            },
-            "toast": {
-            "title": "Mise à jour officielle",
-            "empty": "Ajustement appliqué."
-            },
-            "chat": {
-            "title": "Chat du défi",
-            "count": "{{count}} messages",
-            "empty": "Aucun message.",
-            "inputPlaceholder": "Écrire un message…",
-            "send": "Envoyer"
-            },
-            "participants": {
-            "empty": "Aucune participation.",
-            "hiddenUntil": "Les choix des autres participants sont cachés jusqu’au début du premier match{{time}}.",
-            "legend": "Format : buts – passes = total",
-            "hiddenSelections": "Sélections cachées jusqu’au début du premier match.",
-            "noPlayers": "Aucun joueur sélectionné."
-            }
-        }
-    },
-    "leaderboard": {
-        "title": "Classement",
-        "loginToSee": "Connecte-toi pour voir les classements.",
-        "loading": "Chargement…",
-        "errorPrefix": "Erreur : {{message}}",
+              "group": {
+                "label": "Groupe",
+                "choose": "Choisir un groupe",
+                "noneBody": "Crée un groupe pour pouvoir créer un défi."
+              }
+            
+          },
+          "header": {
+              "defaultTitle": "Défi",
+              "errorTitle": "Erreur",
+              "notFoundTitle": "Défi introuvable"
+          },
+          "loading": {
+              "title": "Chargement…",
+              "generic": "Chargement…",
+              "overlayHint": "Cela peut prendre quelques secondes…",
+              "statsUpdatingToday": "Mise à jour des statistiques du jour…",
+              "statsUpdatingSeason": "Mise à jour des statistiques pour la saison…",
+              "statsGeneric": "Chargement des statistiques…"
+          },
+          "tiers": {
+              "legend": "T1 = Top 10 • T2 = 11–20 • T3 = 21+i",
+          },
+          "matchup": {
+            "rankShort": "Rang",
+            "diffShort": "+/-"
+          },
+          "playerSelect": {
+              "title": "Sélectionner un joueur",
+              "close": "Fermer",
+              "searchPlaceholder": "Rechercher un joueur…",
+              "emptyChoice": "Choisir un joueur…"
+          },
+          "seasonToggle": {
+              "current": "Saison {{id}}",
+              "previous": "Saison {{id}}"
+          },
+          "infoCard": {
+              "nhlDate": "Date NHL",
+              "signupDeadline": "Heure limite:",
+              "firstGameUtc": "Premier match (UTC):",
+              "choicesCount": "Nombre de choix:",
+              "status": "Statut:",
+              "lockedSuffix": "verrouillé",
+              "potLabel": "Cagnotte",
+              "pot": "{{count}} point(s)"
+          },
+          "gamesCard": {
+              "title": "Matchs NHL du jour",
+              "none": "Aucun match trouvé.",
+              "time": "Heure",
+              "away": "Visiteur",
+              "home": "Domicile"
+          },
+          "pickersCard": {
+              "title": "Sélectionne tes joueurs",
+              "choiceLabel": "Choix {{index}}",
+              "summary": "{{current}}/{{max}} sélection(s)",
+              "requirementsPrefix": "Tu dois choisir :"
+          }, 
+          "paywall": {
+            "ctaTitle": "Débloque Matchups + PPG + Rank",
+            "ctaBody": "Passe Pro/VIP pour optimiser tes picks.",
+          },
+          "rules": {
+              "title": "Règles de tiers",
+              "wrongPickCount": "Tu dois sélectionner exactement {{expected}} joueurs.",
+              "tierMissingCount": "Il te manque {{missing}} {{tierLabel}}.",
+              "tierTooMany": "Tu as dépassé la limite {{tierLabel}} (max {{max}})."
+          },
+          "errors":  {
+              "notFoundMessage": "Aucun défi trouvé.",
+              "planNotAllowed": "Ce format de défi n’est pas disponible avec votre forfait actuel.",
+              "createLimitReached": "Vous avez atteint la limite de création de défis pour cette semaine (maximum {{max}}).",
+              "joinLimitReached": "Vous avez atteint la limite de participations aux défis pour cette semaine (maximum {{max}}).",
+              "subscriptionInactive": "Ton abonnement est inactif. Mets-le à jour pour participer."
+          },
+          "alerts": {
+              "playerDuplicateTitle": "Joueur déjà sélectionné",
+              "playerDuplicateMessage": "{{name}} est déjà choisi pour un autre poste.",
+              "lockedTitle": "Inscription fermée",
+              "lockedMessage": "La date limite est dépassée.",
+              "incompleteTitle": "Sélection incomplète",
+              "incompleteMessage": "Tu dois choisir {{count}} joueur(s).",
+              "savingSlow": "Création de la participation… (le premier participant peut prendre quelques secondes)",
+              "successTitle": "Participation enregistrée",
+              "successMessage": "Bonne chance ! {{potMessage}}",
+              "successPotMessage": "Cagnotte: {{count}} points",
+              "successPotMessageSimple": "Participation enregistrée.",
+              "genericErrorTitle": "Erreur"
+          },
+          "actions": {
+              "primarySaving": "Création de la participation…",
+              "primaryLocked": "Inscription fermée",
+              "primaryDefault": "Enregistrer ma participation"
+          },
+          "results": {
+              "header": {
+              "defaultTitle": "Résultats",
+              "groupFallback": "Groupe",
+              "pot": "Cagnotte de {{count}} points",
+              "startsAt": "Débute à",
+              "scoring": "Barème : Buteur = +1 • Passe = +1"
+              },
+              "status": {
+              "open": "Ouvert",
+              "live": "En cours",
+              "awaiting": "Calcul en cours",
+              "closed": "Terminé",
+              "unknown": "Inconnu"
+              },
+              "loading": {
+              "generic": "Chargement…"
+              },
+              "errors": {
+              "notFound": "Aucun défi trouvé."
+              },
+              "toast": {
+              "title": "Mise à jour officielle",
+              "empty": "Ajustement appliqué."
+              },
+              "chat": {
+              "title": "Chat du défi",
+              "count": "{{count}} messages",
+              "empty": "Aucun message.",
+              "inputPlaceholder": "Écrire un message…",
+              "send": "Envoyer"
+              },
+              "participants": {
+              "empty": "Aucune participation.",
+              "hiddenUntil": "Les choix des autres participants sont cachés jusqu’au début du premier match{{time}}.",
+              "legend": "Format : buts – passes = total",
+              "hiddenSelections": "Sélections cachées jusqu’au début du premier match.",
+              "noPlayers": "Aucun joueur sélectionné."
+              }
+          }
+      },
 
-        "legend": {
-            "name": "Nom",
-            "wins": "Défis gagnés",
-            "gainTotal": "Gain total",
-            "gainAvg": "Gain moyen par défi"
-        },
+      "live": {
+          "title": "Match Live",
+          "loading": "Chargement des matchs…",
+          "headerWithDate": "Matchs NHL du {{date}}",
+          "headerNoDate": "Matchs NHL",
+          "tapHint": "Touchez un match pour voir les buts et les buteurs en temps réel.",
+          "emptyWithDate": "Aucun match trouvé pour le {{date}}.",
+          "emptyNoDate": "Aucun match trouvé.",
+          "status": {
+              "live": "LIVE",
+              "final": "Final",
+              "finalOT": "Final (P)",
+              "finalSO": "Final (TB)"
+          },
+          "row": {
+              "startAt": "Début: {{time}}",
+              "startUnknown": "Heure inconnue",
+              "tapForDetails": "Touchez pour voir les détails"
+          },
+          "detail": {
+              "title": "Détail du match",
+              "startAt": "Début: {{time}}",
+              "startUnknown": "Heure de début inconnue",
+              "timeRemaining": "Temps restant: {{time}}",
+              "inProgress": "En cours",
+              "summaryTitle": "Sommaire du match",
+              "loadingGoals": "Chargement des buts…",
+              "noGoals": "Aucun but ou statistiques non disponibles pour ce match.",
+              "period": "Période {{period}}",
+              "periodWithSuffix": "Période {{period}}{{suffix}}",
+              "ot": "Prolongation",
+              "so": "Tirs de barrage",
+              "liveWithPeriod": "{{period}}{{time}}",
+              "assistOne": "Assisté de {{player}}",
+              "assistTwo": "Assisté de {{player1}} et {{player2}}",
+              "goalFallback": "But",
+              "intermission":"Entracte"
+          },
+          "goals": {
+              "period1": "Période 1",
+              "period2": "Période 2",
+              "period3": "Période 3",
+              "ot": "Prolongation",
+              "so": "Tirs de barrage",
+              "unknown": "Inconnu"
+          }
+      },
+      "settings": {
+          "title": "Paramètres",
+          "appearance": "Apparence",
+          "theme": {
+              "system": "Comme le système",
+              "light": "Thème clair",
+              "dark": "Thème sombre"
+          },
+          "language": "Langue"
+      },
 
-        "rebuild": {
-            "button": "Rebuilder",
-            "loading": "Rebuild…"
-        },
+      "boutique": {
+          "title": "Boutique",
+          "loginRequired": "Connecte-toi pour accéder à la boutique.",
+          "loading": "Chargement…",
+          "errorPrefix": "Erreur : {{message}}",
 
-        "group": {
-            "noStats": "Pas encore de statistiques pour ce groupe."
-        },
+          "profileCard": {
+              "title": "Avatar de profil",
+              "hint": "Personnalise ton identité dans l’app.",
+              "changeAvatar": "Changer d’avatar"
+          },
 
-        "empty": {
-            "noGroups": "Tu n’as pas encore de groupes."
-        }
-    },
-    "live": {
-        "title": "Match Live",
-        "loading": "Chargement des matchs…",
-        "headerWithDate": "Matchs NHL du {{date}}",
-        "headerNoDate": "Matchs NHL",
-        "tapHint": "Touchez un match pour voir les buts et les buteurs en temps réel.",
-        "emptyWithDate": "Aucun match trouvé pour le {{date}}.",
-        "emptyNoDate": "Aucun match trouvé.",
-        "status": {
-            "live": "LIVE",
-            "final": "Final",
-            "finalOT": "Final (P)",
-            "finalSO": "Final (TB)"
-        },
-        "row": {
-            "startAt": "Début: {{time}}",
-            "startUnknown": "Heure inconnue",
-            "tapForDetails": "Touchez pour voir les détails"
-        },
-        "detail": {
-            "title": "Détail du match",
-            "startAt": "Début: {{time}}",
-            "startUnknown": "Heure de début inconnue",
-            "timeRemaining": "Temps restant: {{time}}",
-            "inProgress": "En cours",
-            "summaryTitle": "Sommaire du match",
-            "loadingGoals": "Chargement des buts…",
-            "noGoals": "Aucun but ou statistiques non disponibles pour ce match.",
-            "period": "Période {{period}}",
-            "periodWithSuffix": "Période {{period}}{{suffix}}",
-            "ot": "Prolongation",
-            "so": "Tirs de barrage",
-            "liveWithPeriod": "{{period}}{{time}}",
-            "assistOne": "Assisté de {{player}}",
-            "assistTwo": "Assisté de {{player1}} et {{player2}}",
-            "goalFallback": "But",
-            "intermission":"Entracte"
-        },
-        "goals": {
-            "period1": "Période 1",
-            "period2": "Période 2",
-            "period3": "Période 3",
-            "ot": "Prolongation",
-            "so": "Tirs de barrage",
-            "unknown": "Inconnu"
-        }
-    },
-    "settings": {
-        "title": "Paramètres",
-        "appearance": "Apparence",
-        "theme": {
-            "system": "Comme le système",
-            "light": "Thème clair",
-            "dark": "Thème sombre"
-        },
-        "language": "Langue"
-    },
+          "groupsCard": {
+              "title": "Avatars de groupes",
+              "emptyOwner": "Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.",
+              "hint": "Change l’avatar des groupes que tu gères :",
+              "edit": "Modifier"
+          }
+      },
 
-    "boutique": {
-        "title": "Boutique",
-        "loginRequired": "Connecte-toi pour accéder à la boutique.",
-        "loading": "Chargement…",
-        "errorPrefix": "Erreur : {{message}}",
+      "avatars": {
+          "title": "Avatars",
+          "headerTitle": "Mon avatar",
+          "common": { "credits": "points" },
 
-        "profileCard": {
-            "title": "Avatar de profil",
-            "hint": "Personnalise ton identité dans l’app.",
-            "changeAvatar": "Changer d’avatar ({{price}} crédit)"
-        },
+          "loginGate": {
+            "body": "Connecte-toi pour accéder à la boutique d’avatars."
+          },
 
-        "groupsCard": {
-            "title": "Avatars de groupes",
-            "emptyOwner": "Tu n’es propriétaire d’aucun groupe. Crée-en un dans l’onglet Groupes.",
-            "hint": "Change l’avatar des groupes que tu gères :",
-            "edit": "Modifier"
-        }
-    },
+          "info": {
+            "title": "Avatars exclusifs",
+            "bodyPrefix": "Personnalise ton profil avec un avatar unique. Chaque avatar coûte",
+            "reactivationChip": "Réactivation: {{price}} crédit",
+            "myCreditsLabel": "Tes points",
+            "reactivationHint": "Toute (ré)activation d’avatar coûte 1 crédit.",
+            "body": "Sélectionne un avatar et applique-le à ton profil.",
+            "freeChip": "Gratuit"
+          },
 
-    "avatars": {
-        "title": "Avatars",
-        "headerTitle": "Mon avatar",
-        "common": { "credits": "crédits" },
+          "preview": {
+            "title": "Aperçu",
+            "noneSelected": "Sélectionne un avatar"
+          },
 
-        "loginGate": {
-        "body": "Connecte-toi pour accéder à la boutique d’avatars."
-        },
+          "catalog": {
+            "title": "Catalogue",
+            "priceLine": "{{price}} crédit{{s}}"
+          },
 
-        "info": {
-        "title": "Avatars exclusifs",
-        "bodyPrefix": "Personnalise ton profil avec un avatar unique. Chaque avatar coûte",
-        "reactivationChip": "Réactivation: {{price}} crédit",
-        "myCreditsLabel": "Tes crédits",
-        "reactivationHint": "Toute (ré)activation d’avatar coûte 1 crédit."
-        },
+          "actions": {
+            "chooseFirst": "Choisis un avatar",
+            "buyButton": "Acheter ({{price}} crédit{{s}})",
+            "applyButton": "Appliquer"
+          },
 
-        "preview": {
+          "alerts": {
+            "loginRequiredTitle": "Connexion requise",
+            "loginRequiredBody": "Connecte-toi pour acheter un avatar.",
+            "selectRequiredTitle": "Choisis un avatar",
+            "selectRequiredBody": "Sélectionne un avatar avant d’acheter.",
+            "insufficientCreditsTitle": "points insuffisants",
+            "insufficientCreditsBody": "Il te faut {{price}} crédit(s) (solde: {{credits}}).",
+            "activatedTitle": "✅ Avatar (ré)activé",
+            "purchasedTitle": "🎉 Avatar acheté",
+            "purchasedBody": "Ton profil sera mis à jour dans un instant.",
+            "purchaseFailedTitle": "Achat impossible",
+            "appliedTitle": "✅ Avatar appliqué",
+            "appliedBody": "Ton profil sera mis à jour dans un instant.",
+            "applyFailedTitle": "Impossible de modifier"
+          },
+
+          "footer": {
+          "legal": "En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement."
+          }
+      },
+
+      "groupAvatars": {
+      "title": "Avatars de groupe",
+
+      "group": {
+        "title": "Groupe",
+        "myCreditsLabel": "Tes points"
+      },
+
+      "access": {
+        "owner": "Tu es propriétaire",
+        "readOnly": "Lecture seule"
+      },
+
+      "preview": {
         "title": "Aperçu",
         "noneSelected": "Sélectionne un avatar"
-        },
+      },
 
-        "catalog": {
+      "catalog": {
         "title": "Catalogue",
-        "priceLine": "{{price}} crédit{{s}}"
-        },
+        "priceLine": "{{price}} crédit{{s}}",
+        "freeLine": "Gratuit"
+      },
 
-        "actions": {
+      "actions": {
+        "processing": "Traitement…",
         "chooseFirst": "Choisis un avatar",
-        "buyButton": "Acheter ({{price}} crédit{{s}})"
-        },
+        "buyForGroup": "Acheter pour le groupe ({{price}} points)",
+        "applyButton": "Appliquer"
+      },
 
-        "alerts": {
+      "alerts": {
         "loginRequiredTitle": "Connexion requise",
         "loginRequiredBody": "Connecte-toi pour acheter un avatar.",
+        "groupRequiredTitle": "Groupe requis",
+        "groupRequiredBody": "Aucun groupe n’a été fourni.",
         "selectRequiredTitle": "Choisis un avatar",
         "selectRequiredBody": "Sélectionne un avatar avant d’acheter.",
-        "insufficientCreditsTitle": "Crédits insuffisants",
-        "insufficientCreditsBody": "Il te faut {{price}} crédit(s) (solde: {{credits}}).",
-        "activatedTitle": "✅ Avatar (ré)activé",
-        "purchasedTitle": "🎉 Avatar acheté",
-        "purchasedBody": "Ton profil sera mis à jour dans un instant.",
-        "purchaseFailedTitle": "Achat impossible"
-        },
-
-        "footer": {
-        "legal": "En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement."
-        }
-    },
-
-    "groupAvatars": {
-    "title": "Avatars de groupe",
-
-    "group": {
-      "title": "Groupe",
-      "myCreditsLabel": "Tes crédits"
-    },
-
-    "access": {
-      "owner": "Tu es propriétaire",
-      "readOnly": "Lecture seule"
-    },
-
-    "preview": {
-      "title": "Aperçu",
-      "noneSelected": "Sélectionne un avatar"
-    },
-
-    "catalog": {
-      "title": "Catalogue",
-      "priceLine": "{{price}} crédit{{s}}"
-    },
-
-    "actions": {
-      "processing": "Traitement…",
-      "chooseFirst": "Choisis un avatar",
-      "buyForGroup": "Acheter pour le groupe ({{price}} crédits)"
-    },
-
-    "alerts": {
-      "loginRequiredTitle": "Connexion requise",
-      "loginRequiredBody": "Connecte-toi pour acheter un avatar.",
-      "groupRequiredTitle": "Groupe requis",
-      "groupRequiredBody": "Aucun groupe n’a été fourni.",
-      "selectRequiredTitle": "Choisis un avatar",
-      "selectRequiredBody": "Sélectionne un avatar avant d’acheter.",
-      "accessDeniedTitle": "Accès refusé",
-      "accessDeniedBody": "Seul le propriétaire du groupe peut changer son avatar.",
-      "successTitle": "Avatar défini 🎉",
-      "successBody": "Le groupe “{{name}}” a un nouvel avatar !",
-      "purchaseFailedTitle": "Achat impossible"
-    },
-
-    "footer": {
-      "legal": "En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement."
-    }
-  },
-
-  "credits": {
-    "title": "Crédits",
-    "loginHint": "Connecte-toi…",
-
-    "editWarningTitle": "Modifier vos choix ?",
-    "editWarningBody": "Après votre première sauvegarde, chaque modification coûte 1 crédit. Voulez-vous continuer ?",
-    "editChargedToast": "1 crédit a été débité pour la modification.",
-
-    "goals": {
-      "title": "Objectifs",
-      "firstDefi": "Premier défi créé",
-      "firstGroup": "Premier groupe créé",
-      "fiveParticipations": "Participer à 5 défis",
-      "threeDays": "3 jours consécutifs"
-    },
-
-    "activities": {
-      "title": "Activités",
-      "empty": "Aucun mouvement de crédits pour l’instant."
-    },
-
-    "logs": {
-      "unknownType": "Mouvement",
-      "types": {
-        "defi_entry": "Inscription à un défi",
-        "defi_edit": "Modifier un défi",
-        "defi_payout": "Gain de défi",
-        "defi_refund": "Remboursement : défi annulé",
-        "topup_free": "Bonus gratuit",
-        "topup_purchase": "Achat de crédits",
-        "adjustment": "Ajustement",
-        "purchase_avatar": "Achat d’un avatar",
-        "first_defi": "Récompense : 1er défi créé",
-        "first_group": "Récompense : 1er groupe créé",
-        "streak3_reward": "Récompense : 3 jours d’affilée",
-        "five_particip_reward": "Récompense : 5 participations",
-        "daily_shot": "Bonus shake",
+        "accessDeniedTitle": "Accès refusé",
+        "accessDeniedBody": "Seul le propriétaire du groupe peut changer son avatar.",
+        "successTitle": "Avatar défini 🎉",
+        "successBody": "Le groupe “{{name}}” a un nouvel avatar !",
+        "purchaseFailedTitle": "Achat impossible",
+        "appliedTitle": "✅ Avatar appliqué",
+        "appliedBody": "Le groupe “{{name}}” a un nouvel avatar.”",
+        "applyFailedTitle": "Impossible de modifier"
       },
 
-      "wallet": {
-        "balanceLabel": "MON SOLDE",
-        "bonusButton": "+25 Bonus",
-        "buyTitle": "Acheter des tokens Prophetik",
-        "creditsLabel": "{{count}}",
-        "buyButton": "Acheter",
-        "footerNote": "Paiements sécurisés • Token Prophetik livrés instantanément",
-        "tokenDisclaimer":  "Les tokens sont utilisables uniquement dans l’application et ne peuvent pas être échangés contre de l’argent.",
-
-        "bonusSuccessTitle": "🎉 Bonus crédité",
-        "bonusSuccessBody": "Tu viens de recevoir +{{amount}} token(s).\nTon solde va se mettre à jour.",
-
-        "bonusLine":"{{bonus}} tokens en bonus",
-        "bonusAlreadyUsedTitle": "Bonus déjà utilisé",
-        "bonusAlreadyUsedBody": "Tu as déjà utilisé ton bonus récemment.\nTu pourras en redemander à partir du {{date}}.",
-
-        "loginRequiredTitle": "Connexion requise",
-        "loginRequiredBody": "Tu dois être connecté pour demander un bonus de token prophetik.",
-
-        "comingSoonTitle": "Bientôt",
-        "comingSoonBody": "Achat de {{credits}} tokens ({{price}})",
-
-        "paymentTitle": "Paiement",
-
-        "purchasePendingTitle": "✅ Achat réussi",
-        "purchasePendingBody": "Tes tokens prophetik seront livrés sous peu.",
-        "deliveryWaiting":"En attente de la livraison des tokens...",
-        "deliveryDelivered": "Tokens livrés ✅",
-
-        "packs": {
-            "starter": "Starter",
-            "popular": "Populaire",
-            "bestValue": "Meilleure valeur"
-        }
-    }
-    }
-  },
-
-  "profile": {
-    "title": "Profil",
-
-    "chooseAvatarCta": "🎨 Choisir un avatar",
-
-    "displayNameLabel": "Nom d’affichage",
-    "displayNamePlaceholder": "Ton nom",
-
-    "save": "Sauvegarder",
-    "signOut": "Se déconnecter",
-
-    "alert": {
-      "connectedTitle": "Connecté",
-      "connectedBody": "Bienvenue !",
-
-      "signedOutTitle": "Déconnecté",
-
-      "signInFailTitle": "Connexion impossible",
-      "signOutFailTitle": "Déconnexion impossible",
-
-      "notLoggedTitle": "Non connecté",
-      "notLoggedBody": "Connecte-toi d’abord.",
-
-      "savedTitle": "Profil mis à jour",
-      "saveFailTitle": "Échec de la sauvegarde"
-    },
-
-    "topup": {
-      "title": "Top-up",
-      "body": "Nouveau solde : {{credits}}",
-      "failTitle": "Top-up impossible",
-      "betaCta": "+25 gratuits (bêta)"
-    }
-  },
-
-  "howItWorks": {
-    "title": "Comment ça marche",
-    "headerTitle": "Comment ça marche",
-    "subtitle": "Tout ce qu’il faut savoir pour créer un défi, participer, comprendre les formats, la cagnotte et le bris d’égalité.",
-    "headerHint": "Guides rapides & règles des défis",
-
-    "formats": {
-      "title": "Formats & coût de participation",
-      "rule": "Règle simple : coût = nombre de joueurs à sélectionner",
-      "costPill": "{{cost}} crédit(s)",
-      "picksLabel": "Joueurs à choisir",
-      "costLabel": "Coût pour participer",
-      "special67Note": "Événement spécial (samedi seulement). Bonus au gagnant."
-    },
-
-    "create": {
-      "title": "Créer un défi",
-      "step1": "Accède à l’onglet Défis.",
-      "step2": "Choisis un groupe.",
-      "step3": "Sélectionne un format (1x1, 2x2, …, 6x7).",
-      "step4": "Choisis la date NHL.",
-      "step5": "Clique sur « Créer le défi ».",
-      "deadlinePill": "Inscription/modification : jusqu’à 1h avant le 1er match",
-      "deadlineNote": "Le bouton « Créer » peut se désactiver si la date limite est passée (1h avant le premier match)."
-    },
-
-    "join": {
-      "title": "Participer à un défi",
-      "step1": "Accède à l’onglet Défis.",
-      "step2": "Repère le défi (format + date).",
-      "step3": "Clique sur « Participer ».",
-      "step4": "Sélectionne le nombre de joueurs requis par le format.",
-      "step5": "Sauvegarde tes choix.",
-      "editPill": "Tu peux modifier tes choix jusqu’à 1h avant le 1er match"
-    },
-
-    "pot": {
-      "title": "Cagnotte & gains",
-      "rule1": "Chaque participation ajoute des crédits à la cagnotte.",
-      "rule2": "Le gagnant remporte la cagnotte du défi.",
-      "exampleTitle": "Exemple",
-      "exampleBody": "Défi 2x2 avec 5 participants → coût 2 crédits chacun → cagnotte = 10 crédits.",
-      "special67Pill": "6x7 : bonus spécial au gagnant (6 ou 7 crédits)"
-    },
-
-    "tiebreak": {
-      "title": "Bris d’égalité",
-      "intro": "Si plusieurs participants ont le même score, Prophetik utilise un bris d’égalité automatique pour déterminer un seul gagnant.",
-      "rule1": "1) Total de buts",
-      "rule2": "2) Total de passes",
-      "rule3": "3) Moins de joueurs différents utilisés (avantage à la précision)",
-      "rule4": "4) Heure de participation (premier inscrit)",
-      "note": "Tu peux ajuster ces règles selon la logique backend."
-    },
-
-    "groups": {
-      "title": "Groupes : créer et joindre",
-      "create": "Créer un groupe : choisis un nom, puis invite des amis.",
-      "join": "Joindre un groupe : accepte une invitation ou utilise un code/lien (si disponible).",
-      "role": "Le propriétaire du groupe peut gérer les paramètres et les membres."
-    },
-
-    "footer": "Prophetik évolue : certaines options peuvent varier selon le groupe ou les événements spéciaux."
-  },
-
-  "drawer": {
-    "guest": "Invité",
-    "online": "Connecté",
-    "offline": "Hors ligne",
-
-    "section": {
-      "navigation": "Navigation",
-      "personal": "Personnel"
-    },
-
-    "home": "Accueil",
-    "groups": "Groupes",
-    "challenges": "Défis",
-    "leaderboard": "Classement",
-    "matchLive": "Match en direct",
-
-    "subscriptions":"Abonnement",
-    "shop": "Boutique",
-    "tokens": "Tokens",
-    "profile": "Profil",
-    "settings": "Paramètres",
-    "howItWorks": "Comment ça marche",
-
-    "signOut": "Déconnexion"
-  },
-
-  "tabs": {
-    "home": "Accueil",
-    "groups": "Groupes",
-    "challenges": "Défis",
-    "leaderboard": "Classement",
-    "matchLive": "En direct"
-  },
-
-  "subscriptions": {
-    "title": "Abonnements Prophetik",
-    "headerTitle":"Abonnement",
-    "subtitle": "Choisis le plan qui correspond à ton niveau de jeu.",
-
-    "cta": {
-      "choose": "Choisir",
-      "chooseHint": "Changement immédiat.",
-      "current": "Plan actuel",
-      "currentHint": "Tu es déjà sur ce plan."
-    },
-
-    "current": {
-      "label": "Ton plan actuel",
-      "pill": "Actif",
-      "hint": "Tu peux changer de plan à tout moment.",
-      "unknown": "—",
-      "nextGrantLabel": "Prochain octroi",
-      "nextGrantHint": "+{{monthlyCredits}} crédits au prochain octroi"
-    },
-
-    "plan": {
-      "creditsPerMonth": "{{credits}} crédits / mois",
-
-      "free": {
-        "short": "Gratuit",
-        "title": "Gratuit",
-        "tag": "Découverte",
-        "price": "0 $ / mois",
-        "desc": "10 crédits par mois à réclamer manuellement dans la page Crédits."
-      },
-
-      "base": {
-        "short": "Base",
-        "title": "Base",
-        "price": "4,99 $ CAD / mois",
-        "desc": "Crédits ajoutés automatiquement le jour de l’abonnement, puis chaque 30 jours."
-      },
-
-      "popular": {
-        "short": "Populaire",
-        "title": "Populaire",
-        "tag": "Le plus populaire",
-        "price": "9,99 $ CAD / mois",
-        "desc": "Parfait pour les groupes actifs. Inclut l’accès au défi spécial 6x7."
-      },
-
-      "prophetik": {
-        "short": "Prophetik",
-        "title": "Prophetik",
-        "tag": "Ultime",
-        "price": "14,99 $ CAD / mois",
-        "desc": "Pour les power users : gros volume de crédits et accès complet."
+      "footer": {
+        "legal": "En achetant, tu acceptes un usage personnel dans l’app. Aucun remboursement.",
+        "note": "Les avatars de groupe sont gratuits."
       }
     },
 
-    "features": {
-      "autoYes": "Crédits automatiques",
-      "autoNo": "Crédits à réclamer manuellement",
-      "has67": "Accès au défi spécial 6x7"
+    "credits": {
+      "title": "Points",
+      "loginHint": "Connecte-toi…",
+
+      "editWarningTitle": "Modifier vos choix ?",
+      "editWarningBody": "Après votre première sauvegarde, chaque modification coûte 1 crédit. Voulez-vous continuer ?",
+      "editChargedToast": "1 crédit a été débité pour la modification.",
+
+      "goals": {
+        "title": "Objectifs",
+        "firstDefi": "Premier défi créé",
+        "firstGroup": "Premier groupe créé",
+        "fiveParticipations": "Participer à 5 défis",
+        "threeDays": "3 jours consécutifs"
+      },
+
+      "activities": {
+        "title": "Activités",
+        "empty": "Aucun mouvement de points pour l’instant."
+      },
+
+      "logs": {
+        "unknownType": "Mouvement",
+        "types": {
+          "defi_entry": "Inscription à un défi",
+          "defi_edit": "Modifier un défi",
+          "defi_payout": "Gain de défi",
+          "defi_refund": "Remboursement : défi annulé",
+          "topup_free": "Bonus gratuit",
+          "topup_purchase": "Achat de points",
+          "adjustment": "Ajustement",
+          "purchase_avatar": "Achat d’un avatar",
+          "first_defi": "Récompense : 1er défi créé",
+          "first_group": "Récompense : 1er groupe créé",
+          "streak3_reward": "Récompense : 3 jours d’affilée",
+          "five_particip_reward": "Récompense : 5 participations",
+          "daily_shot": "Bonus shake",
+        },
+
+        "wallet": {
+          "balanceLabel": "MON SOLDE",
+          "bonusButton": "+25 Bonus",
+          "buyTitle": "Acheter des tokens Prophetik",
+          "creditsLabel": "{{count}}",
+          "buyButton": "Acheter",
+          "footerNote": "Paiements sécurisés • Token Prophetik livrés instantanément",
+          "tokenDisclaimer":  "Les tokens sont utilisables uniquement dans l’application et ne peuvent pas être échangés contre de l’argent.",
+
+          "bonusSuccessTitle": "🎉 Bonus crédité",
+          "bonusSuccessBody": "Tu viens de recevoir +{{amount}} token(s).\nTon solde va se mettre à jour.",
+
+          "bonusLine":"{{bonus}} tokens en bonus",
+          "bonusAlreadyUsedTitle": "Bonus déjà utilisé",
+          "bonusAlreadyUsedBody": "Tu as déjà utilisé ton bonus récemment.\nTu pourras en redemander à partir du {{date}}.",
+
+          "loginRequiredTitle": "Connexion requise",
+          "loginRequiredBody": "Tu dois être connecté pour demander un bonus de token prophetik.",
+
+          "comingSoonTitle": "Bientôt",
+          "comingSoonBody": "Achat de {{credits}} tokens ({{price}})",
+
+          "paymentTitle": "Paiement",
+
+          "purchasePendingTitle": "✅ Achat réussi",
+          "purchasePendingBody": "Tes tokens prophetik seront livrés sous peu.",
+          "deliveryWaiting":"En attente de la livraison des tokens...",
+          "deliveryDelivered": "Tokens livrés ✅",
+
+          "packs": {
+              "starter": "Starter",
+              "popular": "Populaire",
+              "bestValue": "Meilleure valeur"
+          }
+      }
+      }
     },
 
-    "compare": {
-      "title": "Comparatif rapide",
-      "subtitle": "Un aperçu simple des différences entre les plans.",
-      "feature": "Fonction",
-      "credits": "Crédits / mois",
-      "auto": "Attribution automatique",
-      "has67": "Défi 6x7"
+    "profile": {
+      "title": "Profil",
+
+      "chooseAvatarCta": "🎨 Choisir un avatar",
+
+      "displayNameLabel": "Nom d’affichage",
+      "displayNamePlaceholder": "Ton nom",
+
+      "save": "Sauvegarder",
+      "signOut": "Se déconnecter",
+
+      "alert": {
+        "connectedTitle": "Connecté",
+        "connectedBody": "Bienvenue !",
+
+        "signedOutTitle": "Déconnecté",
+
+        "signInFailTitle": "Connexion impossible",
+        "signOutFailTitle": "Déconnexion impossible",
+
+        "notLoggedTitle": "Non connecté",
+        "notLoggedBody": "Connecte-toi d’abord.",
+
+        "savedTitle": "Profil mis à jour",
+        "saveFailTitle": "Échec de la sauvegarde"
+      },
+
+      "topup": {
+        "title": "Top-up",
+        "body": "Nouveau solde : {{credits}}",
+        "failTitle": "Top-up impossible",
+        "betaCta": "+25 gratuits (bêta)"
+      }
     },
 
-    "reassure": {
-      "cancelAnytime": "Annule à tout moment.",
-      "secure": "Paiement sécurisé via App Store / Google Play.",
-      "note": "Les prix peuvent varier selon la plateforme. Les crédits et avantages peuvent évoluer avec Prophetik."
+    "howItWorks": {
+      "title": "Comment ça marche",
+      "headerTitle": "Comment ça marche",
+      "subtitle": "Tout ce qu’il faut savoir pour créer un défi, participer, comprendre les formats, la cagnotte et le bris d’égalité.",
+      "headerHint": "Guides rapides & règles des défis",
+
+      "formats": {
+        "title": "Formats & coût de participation",
+        "rule": "Règle simple : coût = nombre de joueurs à sélectionner",
+        "costPill": "{{cost}} crédit(s)",
+        "picksLabel": "Joueurs à choisir",
+        "costLabel": "Coût pour participer",
+        "special67Note": "Événement spécial (samedi seulement). Bonus au gagnant."
+      },
+
+      "create": {
+        "title": "Créer un défi",
+        "step1": "Accède à l’onglet Défis.",
+        "step2": "Choisis un groupe.",
+        "step3": "Sélectionne un format (1x1, 2x2, …, 6x7).",
+        "step4": "Choisis la date NHL.",
+        "step5": "Clique sur « Créer le défi ».",
+        "deadlinePill": "Inscription/modification : jusqu’à 1h avant le 1er match",
+        "deadlineNote": "Le bouton « Créer » peut se désactiver si la date limite est passée (1h avant le premier match)."
+      },
+
+      "join": {
+        "title": "Participer à un défi",
+        "step1": "Accède à l’onglet Défis.",
+        "step2": "Repère le défi (format + date).",
+        "step3": "Clique sur « Participer ».",
+        "step4": "Sélectionne le nombre de joueurs requis par le format.",
+        "step5": "Sauvegarde tes choix.",
+        "editPill": "Tu peux modifier tes choix jusqu’à 1h avant le 1er match"
+      },
+
+      "pot": {
+        "title": "Cagnotte & gains",
+        "rule1": "Chaque participation ajoute des points à la cagnotte.",
+        "rule2": "Le gagnant remporte la cagnotte du défi.",
+        "exampleTitle": "Exemple",
+        "exampleBody": "Défi 2x2 avec 5 participants → coût 2 points chacun → cagnotte = 10 points.",
+        "special67Pill": "6x7 : bonus spécial au gagnant (6 ou 7 points)"
+      },
+
+      "tiebreak": {
+        "title": "Bris d’égalité",
+        "intro": "Si plusieurs participants ont le même score, Prophetik utilise un bris d’égalité automatique pour déterminer un seul gagnant.",
+        "rule1": "1) Total de buts",
+        "rule2": "2) Total de passes",
+        "rule3": "3) Moins de joueurs différents utilisés (avantage à la précision)",
+        "rule4": "4) Heure de participation (premier inscrit)",
+        "note": "Tu peux ajuster ces règles selon la logique backend."
+      },
+
+      "groups": {
+        "title": "Groupes : créer et joindre",
+        "create": "Créer un groupe : choisis un nom, puis invite des amis.",
+        "join": "Joindre un groupe : accepte une invitation ou utilise un code/lien (si disponible).",
+        "role": "Le propriétaire du groupe peut gérer les paramètres et les membres."
+      },
+
+      "footer": "Prophetik évolue : certaines options peuvent varier selon le groupe ou les événements spéciaux."
     },
 
-    "alert": {
-      "title": "Confirmer",
-      "body": "Choisir le plan {{plan}} ?"
+    "drawer": {
+      "guest": "Invité",
+      "online": "Connecté",
+      "offline": "Hors ligne",
+
+      "section": {
+        "navigation": "Navigation",
+        "personal": "Personnel"
+      },
+
+      "home": "Accueil",
+      "groups": "Groupes",
+      "challenges": "Défis",
+      "leaderboard": "Classement",
+      "matchLive": "Match en direct",
+
+      "subscriptions":"Abonnement",
+      "shop": "Boutique",
+      "tokens": "Tokens",
+      "profile": "Profil",
+      "settings": "Paramètres",
+      "howItWorks": "Comment ça marche",
+
+      "signOut": "Déconnexion"
+    },
+
+    "tabs": {
+      "home": "Accueil",
+      "groups": "Groupes",
+      "challenges": "Défis",
+      "leaderboard": "Classement",
+      "matchLive": "En direct"
+    },
+
+    "subscriptions": {
+      "title": "Abonnements Prophetik",
+      "subtitle": "Le classement est par participant (ton forfait). Les autres membres peuvent rester Gratuit.",
+
+      "loginToManage": "Connecte-toi pour gérer ton abonnement.",
+      "yourPlan": "Ton forfait",
+      "active": "Actif",
+      "currentPlan": "Forfait actuel",
+
+      "perMonth": "/mois",
+
+      "chooseFree": "Choisir Gratuit",
+      "upgradePro": "Passer à Pro",
+      "upgradeVip": "Passer à Vip",
+      "downgradeTitle": "Passer à Gratuit ?",
+      "downgradeBody": "Tu perdras l’accès aux fonctionnalités premium. Tu pourras revenir à Pro/Vip quand tu veux.",
+
+      "badge": {
+        "popular": "Populaire",
+        "best": "Meilleur"
+      },
+
+          "highlights": {
+        "free": {
+          "1": "1 groupe (propriétaire ou participant)",
+          "2": "Formats disponibles : 1x1 à 3x3",
+          "3": "Participation limitée chaque semaine"
+        },
+        "pro": {
+          "1": "Accès au classement avancé",
+          "2": "Formats disponibles : 1x1 à 5x5",
+          "3": "Plus de groupes et plus de participations par semaine"
+        },
+        "vip": {
+          "1": "Formats disponibles : 1x1 à 6x7",
+          "2": "Statistiques avancées avec recommandations IA",
+          "3": "Nova IA optionnelle (peut être activée ou retirée)"
+        }
+      },
+
+      "plans": {
+        "free": {
+          "title": "Gratuit",
+          "subtitle": "Essentiel pour débuter",
+          "h1": "Accès de base",
+          "h2": "Participation standard",
+          "h3": "Fonctions limitées"
+        },
+        "pro": {
+          "title": "Pro",
+          "subtitle": "Pour suivre tes performances",
+          "h1": "Accès au classement (pour toi)",
+          "h2": "Historique complet",
+          "h3": "Meilleure visibilité des stats"
+        },
+        "vip":  {
+          "title": "Vip",
+          "subtitle": "Le plein potentiel Prophetik",
+          "h1": "Classement + statistiques avancées",
+          "h2": "Analyse IA (aide au choix)",
+          "h3": "Notifications avancées"
+        }
+      },
+
+      "compareTitle": "Comparatif",
+      "compareSubtitle": "✅ inclus • ⭐ avantage premium",
+
+      "features": {
+        "challenges": "Défis (participation)",
+        "leaderboard": "Classement",
+        "ai": "Analyse / IA"
+      }
+    },
+    "leaderboard": {
+      "title": "Classement",
+
+      "loginToSee": "Connecte-toi pour voir les classements.",
+      "loading": "Chargement…",
+      "errorPrefix": "Erreur : {{message}}",
+
+      "seasonLine": "Saison {{seasonId}} · {{from}} → {{to}}",
+
+      "group": {
+        "noStats": "Pas encore de statistiques pour ce groupe."
+      },
+
+      "empty": {
+        "noGroups": "Tu n’as pas encore de groupes."
+      },
+
+      "upgradeCta": {
+        "freeTitle": "Débloque Pro & VIP",
+        "freeBody": "Passe à Pro pour voir ton win rate et ouvrir le détail des participants. VIP ajoute aussi les stats avancées et graphiques.",
+        "button": "Voir les forfaits",
+
+        "proTitle": "Passe VIP pour la version complète",
+        "proBody": "VIP ajoute les stats avancées, les graphiques réels, et la colonne PPG (plus de détails par participant).",
+        "vipButton": "Passer VIP"
+      },
+
+
+      "premiumOnly": {
+        "title": "Classement premium",
+        "body": "Passe au forfait Starter, Pro ou VIP pour consulter les classements de tous tes groupes.",
+        "cta": "Voir les forfaits"
+      },
+      "legend": {
+        "title": "Légende du classement",
+        "name": "Nom",
+        "subtitleFree": "Débloque le classement détaillé avec Pro ou VIP.",
+        "subtitlePro": "Version abrégée (Pro).",
+        "subtitleVip": "Version complète (VIP).",
+
+        "pointsTotal": "Points totaux",
+        "pointsTotalHelp": "Total des points Prophetik gagnés dans ce groupe (tous défis confondus).",
+
+        "winRate": "Win rate",
+        "winRateHelp": "Victoires ÷ participations (global).",
+
+        "ppg": "PPG (sélections)",
+        "ppgHelp": "Points réels générés par tes sélections ÷ matchs (global).",
+
+        "cta": {
+          "free": {
+            "eyebrow": "Pourquoi Pro ?",
+            "title": "Débloque le classement détaillé",
+            "body": "Avec Pro, tu vois le win rate et tu peux ouvrir le détail des participants.",
+            "b1": "Win rate + stats avancées",
+            "b2": "Accès au détail des participants",
+            "b3": "Meilleure lecture des performances",
+            "button": "Passer Pro"
+          },
+          "pro": {
+            "eyebrow": "Pourquoi VIP ?",
+            "title": "Version complète du classement",
+            "body": "VIP débloque PPG (sélections) et les détails avancés.",
+            "b1": "Graphiques & tendances",
+            "b2": "PPG (sélections) + stats avancées",
+            "b3": "Comparaisons plus riches",
+            "button": "Passer VIP"
+          }
+        },
+
+        "vipDetails": {
+          "title": "Détail participant (VIP)",
+          "body": "Chaque participant est cliquable : touchez une ligne du tableau pour ouvrir les détails.",
+          "b1": "Comparaison : points totaux vs moyenne du groupe",
+          "b2": "Win rate global + par format (3x3, 5x5, etc.)",
+          "b3": "PPG (sélections) global + par format",
+          "b4": "Graphiques et détails avancés"
+        },
+
+        "freeFootnote": "🔒 Certaines statistiques sont réservées aux abonnés."
+      }
+    },
+  "leaderboardMember": {
+    "header": {
+      "title": "Détails participant",
+      "othersCount": "{{count}} autres"
+    },
+    "upgrade": {
+      "title": "Débloquer VIP",
+      "body": "Comparaisons avancées + tendances"
+    },
+    "common": {
+      "me": "Toi",
+      "others": "Les autres",
+      "avgOthers": "Moyenne des autres",
+      "avgOthersShort": "Moy. autres",
+      "avgShort": "Moy.",
+      "typesCount": "{{count}} types",
+      "noDataByType": "Aucune donnée par type.",
+      "challengesCount": "({{count}} défis)",
+      "meValue": "Toi: {{value}}",
+      "avgShortValue": "Moy.: {{value}}",
+      "difference": "Différence",
+      "diffShort": "Diff.",
+      "gamesCount": "{{count}} matchs",
+      "pointsShort": "{{value}} pts",
+      "ppg": "PPG"
+    },
+    "charts": {
+      "compareBar": {
+        "title": "Comparatif",
+        "maxScale": "Max échelle:"
+      }
+    },
+    "cards": {
+      "points": {
+        "title": "Pointage",
+        "subtitle": "Comparaison avec la moyenne pondérée des autres participants",
+        "byTypeTitle": "Détail par type de défi"
+      },
+      "winRate": {
+        "title": "Taux de conversion des défis",
+        "subtitle": "Win rate global + par type (pondéré par nombre de défis).",
+        "byTypeTitle": "Win rate par type de défi"
+      },
+      "nhl": {
+        "title": "Performance des joueurs",
+        "subtitle": "Points réels générés par tes sélections (PPG = points / matchs).",
+        "byTypeTitle": "PPG par type de défi",
+        "diffPpg": "Diff. PPG"
+      }
+    },
+    "footer": "Données: {{plays}} défis, {{wins}} victoires · Comparaison sur {{others}} autres."
+  },
+
+  "ascension": {
+    "create": {
+      "title": "Créer une Ascension",
+      "wizard": {
+        "step1": "1. Concept",
+        "step2": "2. Groupe",
+        "step3": "3. Format",
+        "step4": "4. Début",
+        "step5": "5. Confirmation",
+        "pickGroup": "Choix du groupe",
+        "pickType": "Choix du format",
+        "pickStartDate": "Date de début"
+      },
+      "concept": {
+        "title": "C’est quoi une Ascension?",
+        "body1": "Une Ascension est un défi “sur plusieurs jours”. Tu démarres à une date précise, tu progresses dans des paliers, et tu compares ta performance aux autres participants du groupe.",
+        "quickTitle": "En bref",
+        "quick1": "• Ascension 4 : format plus court (début recommandé mercredi).",
+        "quick2": "• Ascension 7 : format complet (début recommandé dimanche)."
+      },
+      "group": {
+        "noneBody": "Crée un groupe pour pouvoir lancer une Ascension."
+      },
+      "type": {
+        "label": "Ascension {{n}}",
+        "lockedHint": "Ascension 7 est réservé aux abonnés."
+      },
+      "unlockOther": "Débloquer Ascension 7",
+      "startDate": {
+        "recoA7": "Recommandé : dimanche (nouvelle semaine).",
+        "recoA4": "Recommandé : mercredi (format 4 jours).",
+        "quickTomorrow": "Demain",
+        "quickSunday": "Dimanche",
+        "quickWednesday": "Mercredi"
+      },
+      "planLocked": "Ton abonnement ne permet pas ce format.",
+      "confirm": {
+        "title": "Confirmation",
+        "group": "Groupe",
+        "type": "Format",
+        "startDate": "Début",
+        "note": "Tu pourras inviter les membres du groupe à participer dès la création."
+      },
+      "actions": {
+        "creating": "Création…",
+        "createNow": "Créer l’Ascension"
+      },
+      "alert": {
+        "cannot": {
+          "title": "Impossible de créer",
+          "body": "Vérifie les étapes et réessaie."
+        },
+        "error": {
+          "title": "Création impossible"
+        }
+      }
+    }
+  },
+
+  "nova": {
+    "common": {
+      "next": "Parfait, passons à la suite.",
+      "confirm": "Tout est prêt. Tu peux créer maintenant."
+    },
+
+    "defi": {
+      "step1": {
+        "title": "Choix du groupe",
+        "body": "Sélectionne le groupe dans lequel tu veux créer ce défi."
+      },
+      "step2": {
+        "title": "Choix du format",
+        "body": "Chaque format a ses propres règles. Choisis celui qui te convient."
+      },
+      "step3": {
+        "title": "Choix de la date",
+        "body": "Sélectionne une journée où il y a des matchs NHL."
+      },
+      "confirm": {
+        "title": "Récapitulatif",
+        "body": "Vérifie les informations avant de créer le défi."
+      },
+      "success": {
+        "title": "Défi créé",
+        "body": "Excellent choix. Le défi est maintenant ouvert aux participants."
+      }
+    },
+
+    "ascension": {
+      "intro": {
+        "title": "Mode Ascension",
+        "body": "L’Ascension est un défi sur plusieurs jours où les participants progressent étape par étape."
+      },
+      "step1": {
+        "title": "Choix du groupe",
+        "body": "Choisis le groupe qui participera à cette Ascension."
+      },
+      "step2": {
+        "title": "Choix de l’Ascension",
+        "body": "Ascension 4 est plus courte. Ascension 7 est plus stratégique."
+      },
+      "step3": {
+        "title": "Date de départ",
+        "body": "L’Ascension commence toujours à une date précise. Choisis bien ton point de départ."
+      },
+      "confirm": {
+        "title": "Prêt à lancer l’Ascension",
+        "body": "Tout est en place. Tu peux maintenant lancer l’Ascension."
+      }
     }
   }
-} 
+}
+
