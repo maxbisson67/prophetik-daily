@@ -70,12 +70,25 @@ export default function AuthChoiceScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title }} />
+      <Stack.Screen
+        options={{
+          title,
+          headerBackTitle: i18n.t("auth.choice.title", { defaultValue: "Bienvenue" }),
+        }}
+      />
 
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ flex: 1, padding: 16, justifyContent: "center", gap: 14 }}>
+        <View
+          style={{
+            flex: 1,
+            padding: 16,
+            justifyContent: "flex-start",
+            paddingTop: 32, // ou 40 selon ton goût
+            gap: 14,
+          }}
+        >
           {/* Logo Prophetik */}
-          <View style={{ alignItems: "center", marginBottom: 24 }}>
+          <View style={{ alignItems: "center", marginBottom: 16 }}>
             <ProphetikIcons size="xxl" iconPosition="after" />
           </View>
           {/* Carte d’intro */}

@@ -1,14 +1,25 @@
 // app/(drawer)/(tabs)/_layout.js
 import React from "react";
+import {View} from 'react-native';
 import { Tabs } from "expo-router";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
+import TabBadge from "@src/ui/TabBadge";
+
+import { useTheme } from "@src/theme/ThemeProvider";
+import { useAuth } from "@src/auth/SafeAuthProvider";
+import { useEligibleChallengesCount} from "@src/hooks/useEligibleChallengesCount";
+
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { user } = useAuth();
+
+ const eligibleCount = useEligibleChallengesCount({ userUid: user?.uid });
+
+
 
   return (
     <Tabs
@@ -49,21 +60,19 @@ export default function TabsLayout() {
         }}
       />
 
-    <Tabs.Screen
-      name="ChallengesScreen"
-      options={{
-        title: i18n.t("tabs.challenges", { defaultValue: "Challenges" }),
-        headerLeft: (props) => <DrawerToggleButton {...props} />,
-        tabBarIcon: ({ size }) => (
-          <ProphetikIcons
-            mode="emoji"
-            emoji="🎯"
-            size={size >= 28 ? "lg" : "md"}
-            iconOnly
-          />
-        ),
-      }}
-    />
+      <Tabs.Screen
+        name="ChallengesScreen"
+        options={{
+          title: i18n.t("tabs.challenges", { defaultValue: "Challenges" }),
+          headerLeft: (props) => <DrawerToggleButton {...props} />,
+          tabBarIcon: ({ size }) => (
+          <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+            <ProphetikIcons mode="emoji" emoji="🎯" size={size >= 28 ? "lg" : "md"} iconOnly />
+            <TabBadge value={eligibleCount} colors={colors} />
+          </View>
+          ),
+        }}
+      />
 
       <Tabs.Screen
         name="ClassementScreen"
@@ -76,16 +85,17 @@ export default function TabsLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="MatchLiveScreen"
-        options={{
-          title: i18n.t("tabs.matchLive", { defaultValue: "Live game" }),
-          headerLeft: (props) => <DrawerToggleButton {...props} />,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="radio-outline" size={size} color={color} />
-          ),
-        }}
-      />
+
+    <Tabs.Screen
+      name="sports"
+      options={{
+        title: i18n.t("drawer.sports", { defaultValue: "Sports" }),
+        headerLeft: (props) => <DrawerToggleButton {...props} />,
+        tabBarIcon: ({ color, size }) => (
+          <Ionicons name="radio-outline" size={size} color={color} />
+        ),
+      }}
+    />
 
       {/* Route index masquée */}
       <Tabs.Screen

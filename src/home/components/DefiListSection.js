@@ -10,6 +10,8 @@ import { computeUiStatus } from "@src/home/homeUtils";
 export default function DefiListSection(props) {
   const {
     colors,
+    flat = false,
+    hideHeader = false,
     loadingGroups,
     loadingDefis,
     groupIds,
@@ -36,43 +38,50 @@ export default function DefiListSection(props) {
 
   return (
     <View
-      style={{
-        padding: 12,
-        borderWidth: 1,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-      }}
+      style={
+        flat || (!groupIds?.length && !loadingGroups)
+          ? null
+          : {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 16,
+              overflow: "hidden",
+              padding: 12,
+            }
+      }
     >
+      {!hideHeader ? (
         <View
-        style={{
+          style={{
             flexDirection: "row",
             alignItems: "center",
             marginBottom: 8,
-        }}
+          }}
         >
-        {/* Bloc gauche : emoji + titre */}
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+          {/* Bloc gauche : emoji + titre */}
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
             <ProphetikIcons
-            mode="emoji"
-            emoji="🎯"
-            size="lg"
-            style={{ marginRight: 8 }}
+              mode="emoji"
+              emoji="🎯"
+              size="lg"
+              style={{ marginRight: 8 }}
             />
             <Text
-            style={{
+              style={{
                 fontWeight: "800",
                 fontSize: 16,
                 color: colors.text,
-            }}
+              }}
             >
-            {i18n.t("home.todayChallenge")}
+              {i18n.t("home.todayChallenge")}
             </Text>
-        </View>
+          </View>
 
-        {/* Loader à droite */}
-        {loadingGroups || loadingDefis ? <ActivityIndicator /> : null}
+          {/* Loader à droite */}
+          {loadingGroups || loadingDefis ? <ActivityIndicator /> : null}
         </View>
+      ) : null}
 
       {!groupIds?.length && !loadingGroups ? (
         <Text style={{ color: colors.subtext }}>{i18n.t("home.noGroups")}</Text>

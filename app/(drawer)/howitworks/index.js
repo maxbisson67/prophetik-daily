@@ -4,21 +4,36 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
+const RED = "#b91c1c";
+
+function prophetikCardStyle(colors, accent = RED) {
+  return {
+    borderLeftWidth: 4,
+    borderLeftColor: accent,
+    borderBottomWidth: 2,
+    borderBottomColor: accent,
+  };
+}
+
 function Section({ title, icon, children, defaultOpen = true, colors }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <View
-      style={{
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.card2,
-        borderRadius: 14,
-        overflow: "hidden",
-      }}
-    >
+      <View
+        style={[
+          {
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card2,
+            borderRadius: 14,
+            overflow: "hidden",
+          },
+          prophetikCardStyle(colors),
+        ]}
+      >
       <TouchableOpacity
         onPress={() => setOpen((v) => !v)}
+        activeOpacity={0.85}
         style={{
           paddingHorizontal: 14,
           paddingVertical: 12,
@@ -36,6 +51,7 @@ function Section({ title, icon, children, defaultOpen = true, colors }) {
             {title}
           </Text>
         </View>
+
         <Ionicons
           name={open ? "chevron-up" : "chevron-down"}
           size={18}
@@ -84,26 +100,26 @@ function Pill({ text, colors, tone = "neutral" }) {
   );
 }
 
-function Row({ left, right, colors, boldRight = false }) {
+function SubTitle({ children, colors }) {
   return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-      <Text style={{ color: colors.subtext, fontWeight: "700" }}>{left}</Text>
-      <Text style={{ color: colors.text, fontWeight: boldRight ? "900" : "700" }}>{right}</Text>
-    </View>
+    <Text style={{ color: colors.text, fontWeight: "900", marginTop: 6 }}>
+      {children}
+    </Text>
   );
 }
 
 export default function CommentCaMarcheScreen() {
   const { colors } = useTheme();
 
-  const formats = useMemo(
+  const dailyFormats = useMemo(
     () => [
-      { f: "1x1", picks: 1, cost: 1 },
-      { f: "2x2", picks: 2, cost: 2 },
-      { f: "3x3", picks: 3, cost: 3 },
-      { f: "4x4", picks: 4, cost: 4 },
-      { f: "5x5", picks: 5, cost: 5 },
-      { f: "6x7", picks: 6, cost: 6, special: true },
+      { f: "1x1", picks: 1, pot: 1 },
+      { f: "2x2", picks: 2, pot: 2 },
+      { f: "3x3", picks: 3, pot: 3 },
+      { f: "4x4", picks: 4, pot: 4 },
+      { f: "5x5", picks: 5, pot: 5 },
+      { f: "6x6", picks: 6, pot: 6 },
+      { f: "7x7", picks: 7, pot: 7 },
     ],
     []
   );
@@ -113,6 +129,7 @@ export default function CommentCaMarcheScreen() {
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16, paddingBottom: 28, gap: 12 }}
     >
+      {/* Header */}
       <View style={{ gap: 6 }}>
         <Text style={{ color: colors.text, fontSize: 22, fontWeight: "900" }}>
           {i18n.t("howItWorks.title", { defaultValue: "Comment ça marche" })}
@@ -120,27 +137,47 @@ export default function CommentCaMarcheScreen() {
         <Text style={{ color: colors.subtext, lineHeight: 20 }}>
           {i18n.t("howItWorks.subtitle", {
             defaultValue:
-              "Tout ce qu’il faut savoir pour créer un défi, participer, comprendre les formats, la cagnotte et le bris d’égalité.",
+              "Tout ce qu’il faut savoir sur les défis, la création, la participation et les règles d’abonnement.",
           })}
         </Text>
       </View>
 
+      {/* 1) Formats */}
       <Section
-        title={i18n.t("howItWorks.formats.title", { defaultValue: "Formats & coût de participation" })}
+        title={i18n.t("howItWorks.formats.title", { defaultValue: "Formats des défis" })}
         icon="grid-outline"
         colors={colors}
         defaultOpen
       >
+
         <Pill
-          text={i18n.t("howItWorks.formats.rule", {
-            defaultValue: "Règle simple : coût = nombre de joueurs à sélectionner",
+          text={i18n.t("howItWorks.formats.legendPill", {
+            defaultValue: "Lecture rapide : 3x3 = 3 joueurs à choisir + 3 points ajoutés à la cagnotte",
           })}
           colors={colors}
           tone="neutral"
         />
 
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.formats.legendBody", {
+            defaultValue:
+              "Le premier nombre indique le nombre de joueurs à sélectionner. Le deuxième nombre indique combien de points Prophetik ajoute à la cagnotte du défi (gratuit pour participer).",
+          })}
+        </Text>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.formats.dailyTitle", { defaultValue: "Défis quotidiens (1x1 à 7x7)" })}
+        </SubTitle>
+
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.formats.dailyBody", {
+            defaultValue:
+              "Chaque défi quotidien te demande de sélectionner de 1 à 7 joueurs (selon le format).",
+          })}
+        </Text>
+
         <View style={{ gap: 8, marginTop: 6 }}>
-          {formats.map((x) => (
+          {dailyFormats.map((x) => (
             <View
               key={x.f}
               style={{
@@ -149,224 +186,236 @@ export default function CommentCaMarcheScreen() {
                 borderWidth: 1,
                 borderColor: colors.border,
                 backgroundColor: colors.card,
-                gap: 6,
               }}
             >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-                  {x.f} {x.special ? "🔥" : ""}
-                </Text>
-               <Pill
-                text={i18n.t("howItWorks.formats.costPill", {
-                  cost: x.cost,
-                  defaultValue: `${x.cost} crédit(s)`
-                })}
-                colors={colors}
-                tone={x.special ? "warn" : "neutral"}
-              />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              {/* FORMAT À GAUCHE */}
+                <View style={{ width: 64 }}>
+                  <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
+                    {x.f}
+                  </Text>
+                </View>
+
+              {/* PILLS À DROITE */} 
+              <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+                <Pill text={`${x.picks} joueur(s)`} colors={colors} tone="neutral" />
+                <Pill text={`+${x.pot} cagnotte`} colors={colors} tone="success" />
               </View>
-              <Row
-                left={i18n.t("howItWorks.formats.picksLabel", { defaultValue: "Joueurs à choisir" })}
-                right={`${x.picks}`}
-                colors={colors}
-              />
-              <Row
-                left={i18n.t("howItWorks.formats.costLabel", { defaultValue: "Coût pour participer" })}
-                right={`${x.cost}`}
-                colors={colors}
-              />
-              {x.special ? (
-                <Text style={{ color: "#92400e", fontWeight: "800", marginTop: 4 }}>
-                  {i18n.t("howItWorks.formats.special67Note", {
-                    defaultValue: "Événement spécial (samedi seulement). Bonus au gagnant.",
-                  })}
-                </Text>
-              ) : null}
+            </View>
             </View>
           ))}
         </View>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.formats.ascTitle", { defaultValue: "Défis Ascension" })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.formats.ascBody", {
+            defaultValue:
+              "Ascension 4 (4 jours) et Ascension 7 (7 jours). Les performances s’accumulent sur plusieurs jours.",
+          })}
+        </Text>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.formats.firstGoalTitle", { defaultValue: "Défi Premier But" })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.formats.firstGoalBody", {
+            defaultValue:
+              "Choisis un seul joueur parmi les deux équipes qui s’affrontent. Si ton joueur marque le premier but confirmé, tu gagnes.",
+          })}
+        </Text>
+
+        <View style={{ marginTop: 8, gap: 8 }}>
+          <Pill
+            text={i18n.t("howItWorks.formats.potTitle", {
+              defaultValue: "Cagnotte (défis 1x1 à 7x7)",
+            })}
+            colors={colors}
+            tone="neutral"
+          />
+          <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+            {i18n.t("howItWorks.formats.potBody", {
+              defaultValue:
+                  "Pour les défis quotidiens 1x1 à 7x7, Prophetik ajoute des points à la cagnotte selon le format (le 2e nombre). Aucun coût d’inscription n’est requis.",            })}
+          </Text>
+        </View>
       </Section>
 
+      {/* 2) Créer */}
       <Section
         title={i18n.t("howItWorks.create.title", { defaultValue: "Créer un défi" })}
         icon="add-circle-outline"
         colors={colors}
         defaultOpen={false}
       >
+        <Pill
+          text={i18n.t("howItWorks.create.whereTitle", { defaultValue: "Où créer un défi" })}
+          colors={colors}
+          tone="neutral"
+        />
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.create.whereBody", {
+            defaultValue: "Depuis la page d’Accueil, l’onglet Groupes ou l’onglet Défis.",
+          })}
+        </Text>
+
+        <Pill
+          text={i18n.t("howItWorks.create.notifyTitle", { defaultValue: "Notification" })}
+          colors={colors}
+          tone="success"
+        />
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.create.notifyBody", {
+            defaultValue:
+              "Lorsqu’un défi est créé, une notification est envoyée aux membres du groupe.",
+          })}
+        </Text>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.create.dailyTitle", { defaultValue: "Créer un défi quotidien (3 étapes)" })}
+        </SubTitle>
         <Bullet colors={colors}>
-          {i18n.t("howItWorks.create.step1", { defaultValue: "Accède à l’onglet Défis." })}
+          {i18n.t("howItWorks.create.dailyS1", { defaultValue: "1) Choix du groupe" })}
         </Bullet>
         <Bullet colors={colors}>
-          {i18n.t("howItWorks.create.step2", { defaultValue: "Choisis un groupe." })}
+          {i18n.t("howItWorks.create.dailyS2", { defaultValue: "2) Choix du format (1x1 à 7x7)" })}
         </Bullet>
         <Bullet colors={colors}>
-          {i18n.t("howItWorks.create.step3", { defaultValue: "Sélectionne un format (1x1, 2x2, …, 6x7)." })}
+          {i18n.t("howItWorks.create.dailyS3", { defaultValue: "3) Choix de la date" })}
+        </Bullet>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.create.ascTitle", { defaultValue: "Créer une Ascension (4 étapes)" })}
+        </SubTitle>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.create.ascS1", { defaultValue: "1) Choix du groupe" })}
         </Bullet>
         <Bullet colors={colors}>
-          {i18n.t("howItWorks.create.step4", { defaultValue: "Choisis la date NHL." })}
+          {i18n.t("howItWorks.create.ascS2", { defaultValue: "2) Type d’Ascension (4 jours ou 7 jours)" })}
         </Bullet>
         <Bullet colors={colors}>
-          {i18n.t("howItWorks.create.step5", { defaultValue: "Clique sur “Créer le défi”." })}
+          {i18n.t("howItWorks.create.ascS3", { defaultValue: "3) Choix de la date" })}
         </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.create.ascS4", { defaultValue: "4) Confirmation" })}
+        </Bullet>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.create.firstGoalTitle", { defaultValue: "Créer un défi Premier But" })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.create.firstGoalBody", {
+            defaultValue: "Le défi Premier But se crée pour la journée même uniquement.",
+          })}
+        </Text>
 
         <View style={{ marginTop: 8, gap: 6 }}>
           <Pill
-            text={i18n.t("howItWorks.create.deadlinePill", {
-              defaultValue: "Inscription/modification : jusqu’à 1h avant le 1er match",
-            })}
+            text={i18n.t("howItWorks.create.constraintsTitle", { defaultValue: "Contraintes" })}
             colors={colors}
             tone="warn"
           />
-          <Text style={{ color: colors.subtext, lineHeight: 20 }}>
-            {i18n.t("howItWorks.create.deadlineNote", {
+          <Bullet colors={colors}>
+            {i18n.t("howItWorks.create.c1", { defaultValue: "Création : propriétaire du groupe seulement." })}
+          </Bullet>
+          <Bullet colors={colors}>
+            {i18n.t("howItWorks.create.c2", {
               defaultValue:
-                "Le bouton “Créer” peut se désactiver si la date limite est passée (1h avant le premier match).",
+                "Abonnement Free : maximum 7 créations par semaine (défis quotidiens ou ascensions). La semaine débute le samedi à minuit.",
             })}
-          </Text>
+          </Bullet>
+          <Bullet colors={colors}>
+            {i18n.t("howItWorks.create.c3", {
+              defaultValue: "Ascension 7 : réservée aux abonnements Pro et VIP.",
+            })}
+          </Bullet>
+          <Bullet colors={colors}>
+            {i18n.t("howItWorks.create.c4", {
+              defaultValue:
+                "Défi quotidien / ascension : doit être créé pour un match qui débute dans moins de 72 heures.",
+            })}
+          </Bullet>
+          <Bullet colors={colors}>
+            {i18n.t("howItWorks.create.c5", {
+              defaultValue:
+                "Premier But : limité à 1 par jour et par groupe (journée même).",
+            })}
+          </Bullet>
         </View>
       </Section>
 
+      {/* 3) Participer */}
       <Section
         title={i18n.t("howItWorks.join.title", { defaultValue: "Participer à un défi" })}
         icon="checkbox-outline"
         colors={colors}
         defaultOpen={false}
       >
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.join.step1", { defaultValue: "Accède à l’onglet Défis." })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.join.step2", { defaultValue: "Repère le défi (format + date)." })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.join.step3", { defaultValue: "Clique sur “Participer”." })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.join.step4", { defaultValue: "Sélectionne le nombre de joueurs requis par le format." })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.join.step5", { defaultValue: "Sauvegarde tes choix." })}
-        </Bullet>
-
-        <View style={{ marginTop: 8, gap: 8 }}>
-          <Pill
-            text={i18n.t("howItWorks.join.editPill", {
-              defaultValue: "Tu peux modifier tes choix jusqu’à 1h avant le 1er match",
-            })}
-            colors={colors}
-            tone="neutral"
-          />
-        </View>
-      </Section>
-
-      <Section
-        title={i18n.t("howItWorks.pot.title", { defaultValue: "Cagnotte & gains" })}
-        icon="cash-outline"
-        colors={colors}
-        defaultOpen={false}
-      >
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.pot.rule1", {
-            defaultValue: "Chaque participation ajoute des crédits à la cagnotte.",
-          })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.pot.rule2", {
-            defaultValue: "Le gagnant remporte la cagnotte du défi.",
-          })}
-        </Bullet>
-
-        <View
-          style={{
-            marginTop: 8,
-            padding: 12,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.card,
-            gap: 6,
-          }}
-        >
-          <Text style={{ color: colors.text, fontWeight: "900" }}>
-            {i18n.t("howItWorks.pot.exampleTitle", { defaultValue: "Exemple" })}
-          </Text>
-          <Text style={{ color: colors.subtext, lineHeight: 20 }}>
-            {i18n.t("howItWorks.pot.exampleBody", {
-              defaultValue:
-                "Défi 2x2 avec 5 participants → coût 2 crédits chacun → cagnotte = 10 crédits.",
-            })}
-          </Text>
-        </View>
-
-        <View style={{ marginTop: 8, gap: 6 }}>
-          <Pill
-            text={i18n.t("howItWorks.pot.special67Pill", {
-              defaultValue: "6x7 : bonus spécial au gagnant (6 ou 7 crédits)",
-            })}
-            colors={colors}
-            tone="warn"
-          />
-        </View>
-      </Section>
-
-      <Section
-        title={i18n.t("howItWorks.tiebreak.title", { defaultValue: "Bris d’égalité" })}
-        icon="trophy-outline"
-        colors={colors}
-        defaultOpen={false}
-      >
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.join.dailyTitle", { defaultValue: "Défi quotidien" })}
+        </SubTitle>
         <Text style={{ color: colors.subtext, lineHeight: 20 }}>
-          {i18n.t("howItWorks.tiebreak.intro", {
+          {i18n.t("howItWorks.join.dailyBody", {
             defaultValue:
-              "Si plusieurs participants ont le même score, Prophetik utilise un bris d’égalité automatique pour déterminer un seul gagnant.",
+              "Choisis le nombre de joueurs requis selon le format (1 à 7).",
           })}
         </Text>
 
-        <View style={{ marginTop: 6, gap: 8 }}>
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.join.ascTitle", { defaultValue: "Défi Ascension" })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.join.ascBody", {
+            defaultValue:
+              "L’inscription n’est pas obligatoire, mais elle est fortement suggérée vu la nature du défi (sur plusieurs jours).",
+          })}
+        </Text>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.join.firstGoalTitle", { defaultValue: "Défi Premier But" })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.join.firstGoalBody", {
+            defaultValue:
+              "Choisis un seul joueur parmi les deux équipes. Le premier buteur est confirmé officiellement quelques minutes après le but (pour éviter les buts annulés ou réattribués).",
+          })}
+        </Text>
+
+        <View style={{ marginTop: 8, gap: 6 }}>
+          <Pill
+            text={i18n.t("howItWorks.join.constraintsTitle", { defaultValue: "Contraintes" })}
+            colors={colors}
+            tone="warn"
+          />
           <Bullet colors={colors}>
-            {i18n.t("howItWorks.tiebreak.rule1", { defaultValue: "1) Total de buts" })}
-          </Bullet>
-          <Bullet colors={colors}>
-            {i18n.t("howItWorks.tiebreak.rule2", { defaultValue: "2) Total de passes" })}
-          </Bullet>
-          <Bullet colors={colors}>
-            {i18n.t("howItWorks.tiebreak.rule3", {
-              defaultValue: "3) Moins de joueurs différents utilisés (avantage à la précision)",
+            {i18n.t("howItWorks.join.j1", {
+              defaultValue:
+                "Abonnement Free : limité à 7 participations par semaine. La semaine commence le samedi à minuit.",
             })}
           </Bullet>
           <Bullet colors={colors}>
-            {i18n.t("howItWorks.tiebreak.rule4", {
-              defaultValue: "4) Heure de participation (premier inscrit)",
+            {i18n.t("howItWorks.join.j2", {
+              defaultValue:
+                "Participation à l’Ascension 7 : réservée aux abonnements Pro et VIP.",
+            })}
+          </Bullet>
+          <Bullet colors={colors}>
+            {i18n.t("howItWorks.join.j3", {
+              defaultValue:
+                "Inscription : permise jusqu’à 1 heure avant le début du premier match de la journée.",
             })}
           </Bullet>
         </View>
-
-        <Pill
-          text={i18n.t("howItWorks.tiebreak.note", {
-            defaultValue: "Tu peux ajuster ces règles selon la logique backend.",
-          })}
-          colors={colors}
-          tone="neutral"
-        />
       </Section>
 
-      <Section
-        title={i18n.t("howItWorks.groups.title", { defaultValue: "Groupes : créer et joindre" })}
-        icon="people-outline"
-        colors={colors}
-        defaultOpen={false}
-      >
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.groups.create", { defaultValue: "Créer un groupe : choisis un nom, puis invite des amis." })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.groups.join", { defaultValue: "Joindre un groupe : accepte une invitation ou utilise un code/lien (si disponible)." })}
-        </Bullet>
-        <Bullet colors={colors}>
-          {i18n.t("howItWorks.groups.role", { defaultValue: "Le propriétaire du groupe peut gérer les paramètres et les membres." })}
-        </Bullet>
-      </Section>
-
+      {/* Footer note */}
       <View style={{ paddingTop: 6 }}>
         <Text style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>
           {i18n.t("howItWorks.footer", {

@@ -1,18 +1,17 @@
-// functions/nhlInjuriesSync.js
+ // functions/nhlInjuriesSync.js
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onCall } from "firebase-functions/v2/https";
 import { db, FieldValue, logger } from "./utils.js";
-import { defineSecret } from "firebase-functions/params";
 import { FieldPath } from "firebase-admin/firestore";
 
-const SPORTRADAR_URL =
-  "https://api.sportradar.com/nhl/trial/v7/en/league/injuries.json";
+import { 
+  fetchAllNHLInjuriesFromESPN, 
+  normalizeESPNStatus 
+} from "./utils/espnApi.js";
 
-const SPORTRADAR_API_KEY = defineSecret("SPORTRADAR_API_KEY");
+import { findBestMatch, logMatchingResults } from "./utils/nameMatching.js";
 
-function normalizeStr(v) {
-  const s = typeof v === "string" ? v.trim() : "";
-  return s ? s : null;
-}
+const BATCH_MAX = 450;
 
 function ymdUTC(date = new Date()) {
   const y = date.getUTCFullYear();
@@ -21,250 +20,398 @@ function ymdUTC(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
-function normalizeStatus(srStatus) {
-  const s = String(srStatus || "").trim().toLowerCase();
-  if (!s) return null;
-  if (s.includes("day")) return "DayToDay";
-  if (s === "out" || s.includes("out")) return "Out";
-  if (s.includes("question")) return "Questionable";
-  if (s.includes("prob")) return "Probable";
-  return "Unknown";
+/**
+ * Nettoie un objet en remplaçant undefined par null récursivement
+ */
+function cleanUndefined(obj) {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+  
+  if (typeof obj !== 'object') {
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanUndefined(item));
+  }
+  
+  const cleaned = {};
+  for (const key in obj) {
+    const value = obj[key];
+    if (value !== undefined) {
+      cleaned[key] = cleanUndefined(value);
+    }
+  }
+  
+  return cleaned;
 }
 
-function mapInjuryFromSportradar(player) {
-  const injuries = Array.isArray(player?.injuries) ? player.injuries : [];
-  if (!injuries.length) return null;
+/**
+ * Récupère TOUS les joueurs NHL actifs depuis Firestore avec pagination
+ */
+async function getAllNHLPlayersFromFirestore() {
+  const players = [];
+  let lastDoc = null;
+  let pageCount = 0;
+  
+  logger.info("[Injuries] Loading all NHL players from Firestore...");
+  
+  while (true) {
+    let query = db
+      .collection("nhl_players")
+      .where("active", "==", true)
+      .orderBy(FieldPath.documentId())
+      .limit(500);
+    
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+    
+    const snapshot = await query.get();
+    
+    if (snapshot.empty) break;
+    
+    pageCount++;
+    snapshot.forEach(doc => {
+      players.push({
+        nhlPlayerId: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    logger.info(`[Injuries] Loaded page ${pageCount}`, { 
+      count: snapshot.size,
+      total: players.length 
+    });
+    
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    
+    if (snapshot.size < 500) break;
+  }
+  
+  logger.info("[Injuries] All NHL players loaded", { 
+    total: players.length,
+    pages: pageCount 
+  });
+  
+  return players;
+}
 
-  const sorted = injuries
-    .slice()
-    .sort((a, b) =>
-      String(b?.update_date || "").localeCompare(String(a?.update_date || ""))
-    );
-
-  const inj = sorted[0] || null;
-  if (!inj) return null;
-
-  const status = normalizeStatus(inj?.status);
-  const safeStatus = status || "Unknown";
-
-  return {
-    status: safeStatus,
-    short: normalizeStr(inj?.desc),
-    description: normalizeStr(inj?.comment),
-    startDate: normalizeStr(inj?.start_date) ?? null,
+/**
+ * Convertit une blessure ESPN en format standard
+ * ✅ Nettoie tous les undefined
+ */
+function mapInjuryToPlayerFormat(espnInjury) {
+  const rawData = {
+    status: normalizeESPNStatus(espnInjury.strStatus),
+    short: espnInjury.strInjury || null,
+    description: espnInjury.description || null,
+    startDate: null,
     expectedReturn: null,
-    updatedDate: normalizeStr(inj?.update_date) ?? null,
-    source: "sportradar",
+    updatedDate: espnInjury.dateUpdated || null,
+    source: "espn",
+    espnData: {
+      playerName: espnInjury.playerName || null,
+      team: espnInjury.teamName || null,
+      espnPlayerId: espnInjury.espnPlayerId || null,
+    },
     updatedAt: FieldValue.serverTimestamp(),
   };
+  
+  // ✅ Nettoyer tous les undefined
+  return cleanUndefined(rawData);
 }
 
+/**
+ * Commit un batch si non vide
+ */
 async function commitBatch(batch, count) {
   if (count > 0) await batch.commit();
 }
 
-async function clearDocsBySnaps(docs, reason) {
-  if (!docs?.length) return 0;
-
-  let b = db.batch();
-  let c = 0;
-  let cleared = 0;
-
-  for (const docSnap of docs) {
-    if (docSnap.id === "8478403") {
-      logger.info("[injuries] clearing EICHEL", { reason, docId: docSnap.id });
-    }
-
-    b.set(
-      docSnap.ref,
-      {
-        injury: FieldValue.delete(),
-        injuryClearedAt: FieldValue.serverTimestamp(),
-        injuryClearReason: reason,
-      },
-      { merge: true }
-    );
-
-    c++;
-    cleared++;
-
-    if (c >= 450) {
-      await commitBatch(b, c);
-      b = db.batch();
-      c = 0;
-    }
-  }
-
-  await commitBatch(b, c);
-  return cleared;
-}
-
 /**
- * ✅ Purge robuste:
- * - scan tous les docs ayant injury.source == "sportradar"
- * - clear si injuryRunId !== runId (inclut: champ manquant)
+ * Clear les blessures des joueurs qui ne sont plus blessés
  */
-async function purgeStaleByScan({ runId }) {
-  let scanned = 0;
+async function clearStaleInjuries(runId, injuredPlayerIds) {
   let cleared = 0;
+  let lastDoc = null;
+  let scanned = 0;
 
-  let last = null;
+  logger.info("[Injuries] Clearing stale injuries...");
 
   while (true) {
-    let q = db
+    let query = db
       .collection("nhl_players")
-      .where("injury.source", "==", "sportradar")
+      .where("injury.source", "==", "espn")
       .orderBy(FieldPath.documentId())
       .limit(400);
 
-    if (last) q = q.startAfter(last);
-
-    const snap = await q.get();
-    if (snap.empty) break;
-
-    scanned += snap.size;
-
-    const toClear = [];
-    for (const docSnap of snap.docs) {
-      const d = docSnap.data() || {};
-      const docRunId = d.injuryRunId; // peut être undefined
-      if (docRunId !== runId) toClear.push(docSnap);
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
     }
 
-    if (toClear.length) {
-      cleared += await clearDocsBySnaps(toClear, "stale_injuryRunId_or_missing");
-    }
+    const snapshot = await query.get();
+    
+    if (snapshot.empty) break;
 
-    last = snap.docs[snap.docs.length - 1];
-    if (snap.size < 400) break;
-  }
-
-  return { scanned, cleared };
-}
-
-export const syncNhlInjuries = onSchedule(
-  {
-    //schedule: "*/2 * * * *", // test
-    schedule: "0 9 * * *",
-    timeZone: "America/Toronto",
-    region: "us-central1",
-    secrets: [SPORTRADAR_API_KEY],
-  },
-  async () => {
-    const apiKey = SPORTRADAR_API_KEY.value();
-    if (!apiKey) {
-      logger.error("Missing SPORTRADAR_API_KEY");
-      return;
-    }
-
-    const runId = String(Date.now());
-    const runYmd = ymdUTC(new Date());
-    logger.info("[injuries] sync start", { runId, runYmd });
-
-    const res = await fetch(SPORTRADAR_URL, {
-      headers: { accept: "application/json", "x-api-key": apiKey },
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      logger.error(`[injuries] Sportradar error ${res.status}`, {
-        body: txt?.slice?.(0, 300),
-      });
-      return;
-    }
-
-    const payload = await res.json();
-    const teams = Array.isArray(payload?.teams) ? payload.teams : [];
-    if (!teams.length) {
-      logger.error("[injuries] Invalid payload (no teams[])");
-      return;
-    }
+    scanned += snapshot.size;
 
     let batch = db.batch();
     let batchCount = 0;
 
-    let playersSeen = 0;
-    let playersTouched = 0;
-    let injuredCount = 0;
-    let clearedInline = 0;
-    let skippedNoReference = 0;
-
-    // 1) Upsert joueurs blessés (payload Sportradar = blessés)
-    for (const team of teams) {
-      const players = Array.isArray(team?.players) ? team.players : [];
-      for (const p of players) {
-        playersSeen++;
-
-        const nhlPlayerId = String(p?.reference ?? "").trim();
-        if (!nhlPlayerId) {
-          skippedNoReference++;
-          continue;
-        }
-
-        if (nhlPlayerId === "8478403") {
-          logger.info("[injuries] EICHEL in payload", {
-            reference: nhlPlayerId,
-            rawInjuriesCount: Array.isArray(p?.injuries) ? p.injuries.length : 0,
-            latestUpdate: p?.injuries?.[0]?.update_date || null,
-            status: p?.injuries?.[0]?.status || null,
-            desc: p?.injuries?.[0]?.desc || null,
-          });
-        }
-
-        const injurySnapshot = mapInjuryFromSportradar(p);
-        const ref = db.collection("nhl_players").doc(nhlPlayerId);
-
-        if (injurySnapshot) {
-          injuredCount++;
-          batch.set(
-            ref,
-            {
-              injury: injurySnapshot,
-              injurySyncYmd: runYmd,
-              injuryRunId: runId,
-            },
-            { merge: true }
-          );
-        } else {
-          // (rare) si un joueur est présent sans injuries[]
-          clearedInline++;
-          batch.set(
-            ref,
-            {
-              injury: FieldValue.delete(),
-              injurySyncYmd: runYmd,
-              injuryRunId: runId,
-            },
-            { merge: true }
-          );
-        }
-
+    snapshot.forEach(doc => {
+      const nhlPlayerId = doc.id;
+      
+      if (!injuredPlayerIds.has(nhlPlayerId)) {
+        batch.set(doc.ref, {
+          injury: FieldValue.delete(),
+          injuryClearedAt: FieldValue.serverTimestamp(),
+          injuryClearReason: "not_in_espn_anymore",
+          injuryMappingRunId: runId,
+        }, { merge: true });
+        
         batchCount++;
-        playersTouched++;
+        cleared++;
+      }
+    });
 
-        if (batchCount >= 450) {
-          await batch.commit();
-          batch = db.batch();
-          batchCount = 0;
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    
+    if (snapshot.size < 400) break;
+  }
+
+  logger.info("[Injuries] Stale injuries cleared", { 
+    scanned, 
+    cleared 
+  });
+
+  return cleared;
+}
+
+/**
+ * Fonction principale de synchronisation
+ */
+async function runSyncNhlInjuries() {
+  const runId = String(Date.now());
+  const runYmd = ymdUTC(new Date());
+  const startedAt = Date.now();
+  
+  logger.info("[Injuries] Sync start (ESPN API)", { runId, runYmd });
+
+  try {
+    // 1. Récupérer toutes les blessures depuis ESPN
+    logger.info("[Injuries] Fetching from ESPN API...");
+    const espnInjuries = await fetchAllNHLInjuriesFromESPN();
+    
+    logger.info("[Injuries] Fetched from ESPN", { 
+      count: espnInjuries.length,
+      apiRequestsUsed: 1,
+    });
+
+    if (espnInjuries.length === 0) {
+      logger.warn("[Injuries] No injuries returned from ESPN");
+    }
+
+    // 2. Récupérer TOUS les joueurs NHL depuis Firestore
+    const nhlPlayers = await getAllNHLPlayersFromFirestore();
+    
+    if (nhlPlayers.length === 0) {
+      logger.error("[Injuries] No NHL players found. Run refreshNhlPlayers first!");
+      return { ok: false, error: "No NHL players in Firestore" };
+    }
+
+    // 3. Matcher les blessures avec les joueurs NHL
+    logger.info("[Injuries] Starting matching process...");
+    
+    const matches = [];
+    const injuredPlayerIds = new Set();
+    const matchStats = {
+      total: 0,
+      highConfidence: 0,
+      mediumConfidence: 0,
+      notMatched: espnInjuries.length,
+    };
+
+    for (const nhlPlayer of nhlPlayers) {
+      const matchResult = findBestMatch(nhlPlayer, espnInjuries, 80);
+      
+      if (matchResult) {
+        matches.push({
+          nhlPlayerId: nhlPlayer.nhlPlayerId,
+          nhlPlayer,
+          injury: matchResult.match,
+          matchScore: matchResult.score,
+          confidence: matchResult.confidence,
+        });
+        
+        injuredPlayerIds.add(nhlPlayer.nhlPlayerId);
+        
+        matchStats.total++;
+        matchStats.notMatched--;
+        
+        if (matchResult.confidence === "high") {
+          matchStats.highConfidence++;
+        } else if (matchResult.confidence === "medium") {
+          matchStats.mediumConfidence++;
         }
       }
     }
+    
+    logger.info("[Injuries] Matching completed", {
+      totalNHLPlayers: nhlPlayers.length,
+      totalESPNInjuries: espnInjuries.length,
+      matchesFound: matches.length,
+      ...matchStats,
+    });
 
-    await commitBatch(batch, batchCount);
+    // Log quelques exemples
+    if (matches.length > 0) {
+      logMatchingResults(matches.slice(0, 10).map(m => ({
+        nhlPlayerId: m.nhlPlayerId,
+        nhlName: m.nhlPlayer.fullName,
+        sportsDbName: m.injury.strPlayer,
+        teamAbbrev: m.nhlPlayer.teamAbbr,
+        score: m.matchScore,
+        confidence: m.confidence,
+        injury: m.injury,
+      })));
+    }
 
-    // 2) Purge robuste des stale (inclut champs manquants)
-    const purge = await purgeStaleByScan({ runId });
+    // 4. Upsert les blessures dans nhl_players
+    logger.info("[Injuries] Upserting injuries to Firestore...");
+    
+    let batch = db.batch();
+    let batchCount = 0;
+    let upsertedCount = 0;
 
-    logger.info("[injuries] Sync completed (Sportradar)", {
+    for (const match of matches) {
+      const ref = db.collection("nhl_players").doc(match.nhlPlayerId);
+      
+      // ✅ Nettoyer les données avant l'upsert
+      const injuryData = mapInjuryToPlayerFormat(match.injury);
+      
+      const updateData = cleanUndefined({
+        injury: injuryData,
+        injuryMappingRunId: runId,
+        injuryMatchScore: match.matchScore,
+        injuryMatchConfidence: match.confidence,
+        injuryLastMapped: FieldValue.serverTimestamp(),
+      });
+      
+      batch.set(ref, updateData, { merge: true });
+      
+      batchCount++;
+      upsertedCount++;
+
+      if (batchCount >= BATCH_MAX) {
+        await batch.commit();
+        logger.info(`[Injuries] Batch committed (${upsertedCount} so far)`);
+        batch = db.batch();
+        batchCount = 0;
+      }
+    }
+
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+
+    logger.info("[Injuries] Injuries upserted", { count: upsertedCount });
+
+    // 5. Clear les blessures obsolètes
+    const clearedCount = await clearStaleInjuries(runId, injuredPlayerIds);
+
+    // 6. Stocker les stats
+    const duration = Date.now() - startedAt;
+    
+    await db.collection("_jobs").doc("syncNhlInjuries").set({
+      ok: true,
       runId,
       runYmd,
-      playersSeen,
-      playersTouched,
-      injuredCount,
-      clearedInline,
-      skippedNoReference,
-      staleScanned: purge.scanned,
-      staleCleared: purge.cleared,
+      nhlPlayersTotal: nhlPlayers.length,
+      espnInjuriesTotal: espnInjuries.length,
+      matchesFound: matches.length,
+      injuriesUpserted: upsertedCount,
+      injuriesCleared: clearedCount,
+      matchStats,
+      apiRequestsUsed: 1,
+      durationMs: duration,
+      ranAt: FieldValue.serverTimestamp(),
+      source: "nhlInjuriesSync.js (ESPN)",
+    }, { merge: true });
+
+    logger.info("[Injuries] Sync completed successfully", {
+      runId,
+      nhlPlayersTotal: nhlPlayers.length,
+      espnInjuriesTotal: espnInjuries.length,
+      matchesFound: matches.length,
+      injuriesUpserted: upsertedCount,
+      injuriesCleared: clearedCount,
+      apiRequestsUsed: 1,
+      durationMs: duration,
     });
+
+    return {
+      ok: true,
+      runId,
+      nhlPlayersTotal: nhlPlayers.length,
+      espnInjuriesTotal: espnInjuries.length,
+      matchesFound: matches.length,
+      injuriesUpserted: upsertedCount,
+      injuriesCleared: clearedCount,
+      apiRequestsUsed: 1,
+      durationMs: duration,
+    };
+
+  } catch (error) {
+    logger.error("[Injuries] Sync failed", { 
+      error: error.message, 
+      stack: error.stack 
+    });
+    
+    await db.collection("_jobs").doc("syncNhlInjuries").set({
+      ok: false,
+      error: error.message,
+      runId,
+      ranAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    
+    throw error;
+  }
+}
+
+/**
+ * Cloud Function schedulée - 1x par jour à midi
+ */
+export const syncNhlInjuries = onSchedule(
+  {
+    schedule: "0 12 * * *",
+    //schedule: "*/2 * * * *", // pour test
+    timeZone: "America/Toronto",
+    region: "us-central1",
+    memory: "1GiB",
+    timeoutSeconds: 540,
+  },
+  async () => {
+    await runSyncNhlInjuries();
   }
 );
+
+/**
+ * Callable function pour tests manuels
+ */
+export const syncNhlInjuriesManual = onCall(
+  { 
+    region: "us-central1", 
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async () => {
+    return await runSyncNhlInjuries();
+  }
+);
+

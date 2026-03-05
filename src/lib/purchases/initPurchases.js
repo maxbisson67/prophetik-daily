@@ -35,14 +35,10 @@ export function initPurchases() {
   if (configured) return;
   configured = true;
 
-  Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
+  Purchases.setLogLevel(LOG_LEVEL.ERROR);
 
   const profile = getRuntimeProfile();
   const apiKey = pickRcApiKey(profile);
-
-  console.log("[RC] EAS_BUILD_PROFILE =", process?.env?.EAS_BUILD_PROFILE);
-  console.log("[RC] resolved profile =", profile);
-  console.log("[RC] prodLike =", isProdLike(profile));
 
   Purchases.configure({ apiKey });
 }

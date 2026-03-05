@@ -116,6 +116,35 @@ function uniq(arr) {
   return Array.from(new Set(arr.filter(Boolean)));
 }
 
+const RED = "#b91c1c";
+
+function cardShadow() {
+  return {
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 }, // iOS
+    elevation: 4, // Android
+  };
+}
+
+function prophetikCardStyle(colors, accent = RED) {
+  return {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+    padding: 14,
+
+    // signature
+    borderLeftWidth: 4,
+    borderLeftColor: accent,
+    borderBottomWidth: 2,
+    borderBottomColor: accent,
+  };
+}
+
 /* ----------------------------------------------------
    Écran
 ---------------------------------------------------- */
@@ -561,21 +590,11 @@ export default function GroupsScreen() {
             ) : (
               <TouchableOpacity
                 onPress={() => openGroup(item)}
-                style={{
-                  marginHorizontal: 16,
-                  marginVertical: 6,
-                  padding: 14,
-                  borderRadius: 14,
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  shadowColor: '#000',
-                  shadowOpacity: 0.1,
-                  shadowRadius: 6,
-                  shadowOffset: { width: 0, height: 3 },
-                  elevation: 3,
-                  position: 'relative',
-                }}
+                style={[
+                  { marginHorizontal: 16, marginVertical: 6, position: "relative" },
+                  cardShadow(),
+                  prophetikCardStyle(colors),
+                ]}
               >
                 {/* Favori */}
                 <TouchableOpacity

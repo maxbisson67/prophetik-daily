@@ -89,6 +89,9 @@ function friendlyCallableError(e) {
         max: details.max,
       });
 
+    case "DATE_NOT_ELIGIBLE":
+      return i18n.t("groups.defi.errors.dateNotEligible");
+
     default:
       // fallback safe
       return i18n.t("common.genericError");

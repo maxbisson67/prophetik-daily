@@ -146,7 +146,8 @@ export const defisJoin = onCall({ region: "us-central1" }, async (req) => {
     const ent = await getUserTier(uid);
     const tier = ent.tier || "free";
 
-    if (ent.active === false) {
+    // ✅ Free ≠ "inactive". On bloque seulement si PRO/VIP et inactive.
+    if (tier !== "free" && ent.active === false) {
       throw new HttpsError("failed-precondition", "SUBSCRIPTION_INACTIVE", {
         reason: "SUBSCRIPTION_INACTIVE",
         tier,

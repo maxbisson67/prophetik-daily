@@ -114,6 +114,16 @@
 			<key>isShown</key>
 			<false/>
 		</dict>
+		<key>ExpoCamera.xcscheme</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+		</dict>
+		<key>ExpoClipboard.xcscheme</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+		</dict>
 		<key>ExpoFileSystem-ExpoFileSystem_privacy.xcscheme</key>
 		<dict>
 			<key>isShown</key>
@@ -799,6 +809,11 @@
 			<key>isShown</key>
 			<false/>
 		</dict>
+		<key>ZXingObjC.xcscheme</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+		</dict>
 		<key>abseil-xcprivacy.xcscheme</key>
 		<dict>
 			<key>isShown</key>
@@ -920,26 +935,6 @@
 			<false/>
 		</dict>
 		<key>libwebp.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<false/>
-		</dict>
-		<key>lottie-ios-LottiePrivacyInfo.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<false/>
-		</dict>
-		<key>lottie-ios.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<false/>
-		</dict>
-		<key>lottie-react-native-Lottie_React_Native_Privacy.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<false/>
-		</dict>
-		<key>lottie-react-native.xcscheme</key>
 		<dict>
 			<key>isShown</key>
 			<false/>

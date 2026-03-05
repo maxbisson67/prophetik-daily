@@ -1,5 +1,5 @@
 // app/(auth)/email-link-signup.js
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,28 +7,24 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Platform,
+  SafeAreaView,
 } from "react-native";
 import { Stack } from "expo-router";
-import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { webAuth } from "@src/lib/firebase";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import i18n from "@src/i18n/i18n";
+import { useTheme } from "@src/theme/ThemeProvider";
+import ProphetikIcons from "@src/ui/ProphetikIcons";
 
-// ✅ Unifié avec email-link.js + email-link-complete.js
 const PENDING_EMAIL_KEY = "auth:emailLink:pendingEmail";
-// ✅ Nouveau (prénom optionnel)
 const PENDING_NAME_KEY = "auth:emailLink:pendingName";
 
 export default function EmailLinkSignupScreen() {
-  const [firstName, setFirstName] = useState(""); // ✅ nouveau
+  const { colors } = useTheme();
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-
-const redirectUrl = useMemo(() => {
-  return "https://capitaine.web.app/email-link/";
-}, []);
 
   const onSendLink = async () => {
     const nm = String(firstName || "").trim();
@@ -45,16 +41,15 @@ const redirectUrl = useMemo(() => {
     try {
       setBusy(true);
 
-        const actionCodeSettings = {
+      const actionCodeSettings = {
         url: "https://capitaine.web.app/email-link/",
         handleCodeInApp: true,
         iOS: { bundleId: "com.prophetik" },
         android: { packageName: "com.prophetik", installApp: true, minimumVersion: "1" },
-        };
+      };
 
       await sendSignInLinkToEmail(webAuth, em, actionCodeSettings);
 
-      // ✅ stocke email + prénom (prénom optionnel)
       await AsyncStorage.setItem(PENDING_EMAIL_KEY, em);
       if (nm) await AsyncStorage.setItem(PENDING_NAME_KEY, nm);
       else await AsyncStorage.removeItem(PENDING_NAME_KEY);
@@ -77,62 +72,105 @@ const redirectUrl = useMemo(() => {
 
   return (
     <>
-      <Stack.Screen
+        <Stack.Screen
         options={{
-          title: i18n.t("auth.emailLink.title", { defaultValue: "Sign up with Email" }),
+            title: i18n.t("auth.emailLink.title", { defaultValue: "Continue with email link" }),
+            headerBackTitle: i18n.t("auth.choice.title", { defaultValue: "Bienvenue" }),
+            headerBackTitleVisible: true,
+            headerBackButtonDisplayMode: "generic", // 👈 IMPORTANT iOS
+            headerBackTitleStyle: { fontSize: 16 }, // optionnel, aide parfois
         }}
-      />
-
-      <View style={{ flex: 1, padding: 16, gap: 12, justifyContent: "center" }}>
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>
-          {i18n.t("auth.emailLink.headline", { defaultValue: "No password needed" })}
-        </Text>
-
-        <Text style={{ color: "#6B7280" }}>
-          {i18n.t("auth.emailLink.body", { defaultValue: "We’ll email you a sign-in link." })}
-        </Text>
-
-        {/* ✅ Prénom (optionnel) */}
-        <TextInput
-          value={firstName}
-          onChangeText={setFirstName}
-          autoCapitalize="words"
-          placeholder={i18n.t("auth.emailLink.firstNamePlaceholder", { defaultValue: "First name (optional)" })}
-          editable={!busy}
-          style={{ borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12 }}
         />
 
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-          placeholder="you@email.com"
-          editable={!busy}
-          style={{ borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12 }}
-        />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={{ flex: 1, padding: 16, justifyContent: "flex-start", paddingTop: 32, gap: 14 }}>
+          {/* Logo Prophetik */}
+          <View style={{ alignItems: "center", marginBottom: 16 }}>
+            <ProphetikIcons size="xxl" iconPosition="after" />
+          </View>
 
-        <TouchableOpacity
-          disabled={busy}
-          onPress={onSendLink}
-          style={{
-            backgroundColor: busy ? "#9ca3af" : "#111",
-            padding: 14,
-            borderRadius: 10,
-            alignItems: "center",
-            marginTop: 6,
-          }}
-        >
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={{ color: "#fff", fontWeight: "800" }}>
-              {i18n.t("auth.emailLink.sendCta", { defaultValue: "Send link" })}
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: colors.text }}>
+            {i18n.t("auth.emailLink.headline", { defaultValue: "No password needed" })}
+          </Text>
+
+          <Text style={{ color: colors.subtext }}>
+            {i18n.t("auth.emailLink.body", { defaultValue: "We’ll email you a sign-in link." })}
+          </Text>
+
+          {/* Prénom (optionnel) */}
+          <Text style={{ fontWeight: "700", color: colors.subtext, marginTop: 6 }}>
+            {i18n.t("auth.emailLink.firstNameLabel", { defaultValue: "First name (optional)" })}
+          </Text>
+
+          <TextInput
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+            placeholder={i18n.t("auth.emailLink.firstNamePlaceholder", { defaultValue: "e.g., Mike" })}
+            placeholderTextColor={colors.subtext}
+            editable={!busy}
+            style={{
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 10,
+              padding: 12,
+              backgroundColor: colors.card,
+              color: colors.text,
+            }}
+          />
+
+          {/* Courriel */}
+          <Text style={{ fontWeight: "700", color: colors.subtext, marginTop: 6 }}>
+            {i18n.t("auth.emailLink.emailLabel", { defaultValue: "Email address" })}
+          </Text>
+
+          <Text style={{ color: colors.subtext, fontSize: 12, marginTop: -6 }}>
+            {i18n.t("auth.emailLink.emailHint", {
+              defaultValue: "We’ll send your secure sign-in link to this email.",
+            })}
+          </Text>
+
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            placeholder="you@email.com"
+            placeholderTextColor={colors.subtext}
+            editable={!busy}
+            style={{
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 10,
+              padding: 12,
+              backgroundColor: colors.card,
+              color: colors.text,
+            }}
+          />
+
+          <TouchableOpacity
+            disabled={busy}
+            onPress={onSendLink}
+            activeOpacity={0.85}
+            style={{
+              backgroundColor: busy ? "#9ca3af" : "#111827",
+              padding: 14,
+              borderRadius: 10,
+              alignItems: "center",
+              marginTop: 6,
+            }}
+          >
+            {busy ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ color: "#fff", fontWeight: "800" }}>
+                {i18n.t("auth.emailLink.sendCta", { defaultValue: "Send link" })}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     </>
   );
 }

@@ -32,6 +32,8 @@ import i18n from '@src/i18n/i18n';
 
 import CreateDefiModal from '../../defis/CreateDefiModal';
 
+import InviteQrCard from "@src/groups/InviteQrCard";
+
 import {
   leaveGroupService,
   deleteGroupService,
@@ -905,48 +907,52 @@ export default function GroupDetailScreen() {
             </View>
           </View>
 
-          {/* Détails */}
-          <View
+      
+        {/* Détails */}
+        <View
+          style={{
+            padding: 12,
+            borderWidth: 1,
+            borderRadius: 12,
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}
+        >
+          <Text
             style={{
-              padding: 12,
-              borderWidth: 1,
-              borderRadius: 12,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
+              fontWeight: "800",
+              marginBottom: 4,
+              textAlign: "center",
+              color: colors.text,
             }}
           >
-            <Text
-              style={{
-                fontWeight: '800',
-                marginBottom: 4,
-                textAlign: 'center',
-                color: colors.text,
-              }}
-            >
-              {i18n.t('groups.detail.sectionDetails')}
-            </Text>
-            <DetailRow colors={colors} label={i18n.t('groups.detail.groupType')}>
-              {group?.isPrivate
-                ? i18n.t('groups.detail.private')
-                : i18n.t('groups.detail.public')}
-            </DetailRow>
-            {!!codeInvitation && (
-              <DetailRowWithAction
+            {i18n.t("groups.detail.sectionDetails")}
+          </Text>
+
+          <DetailRow colors={colors} label={i18n.t("groups.detail.groupType")}>
+            {group?.isPrivate ? i18n.t("groups.detail.private") : i18n.t("groups.detail.public")}
+          </DetailRow>
+
+          {!!codeInvitation && (
+            <View style={{ marginTop: 10 }}>
+              <InviteQrCard
+                code={codeInvitation}
+                groupName={group?.name || group?.title || "Prophetik"}
                 colors={colors}
-                label={i18n.t('groups.detail.inviteCode')}
-                value={codeInvitation}
-                onPress={onShareInvite}
               />
-            )}
-            <DetailRow colors={colors} label={i18n.t('groups.detail.createdAt')}>
-              {fmtDate(group?.createdAt)}
+            </View>
+          )}
+
+          <DetailRow colors={colors} label={i18n.t("groups.detail.createdAt")}>
+            {fmtDate(group?.createdAt)}
+          </DetailRow>
+
+          {!!group?.signupDeadline && (
+            <DetailRow colors={colors} label={i18n.t("groups.detail.signupUntil")}>
+              {fmtDate(group.signupDeadline)}
             </DetailRow>
-            {!!group?.signupDeadline && (
-              <DetailRow colors={colors} label={i18n.t('groups.detail.signupUntil')}>
-                {fmtDate(group.signupDeadline)}
-              </DetailRow>
-            )}
-          </View>
+          )}
+        </View>
 
           {/* Membres */}
           <View

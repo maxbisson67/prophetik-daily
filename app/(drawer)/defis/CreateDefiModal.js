@@ -10,53 +10,46 @@ import i18n from "@src/i18n/i18n";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
 import { useRouter } from "expo-router";
 import useEntitlement from "../subscriptions/useEntitlement";
-import NovaBubble from "@src/ui/NovaBubble";
+import firestore from "@react-native-firebase/firestore";
+
 
 import { Ionicons } from "@expo/vector-icons";
 
 const APP_TZ = "America/Toronto";
 
-/* ----------------------- NHL helpers ----------------------- */
-async function fetchNhlDaySummary(gameDateYmd) {
-  if (!gameDateYmd) return { count: 0, firstISO: null };
 
-  const safeToInt = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
+function ymdToCompact(ymd) {
+  return String(ymd || "").slice(0, 10).replace(/-/g, "");
+}
+
+async function fetchEligibleDaySummaryFromFirestore(gameDateYmd) {
+  if (!gameDateYmd) return { status: "none", count: 0, firstISO: null };
+
+  const dayId = ymdToCompact(gameDateYmd); // "YYYYMMDD"
 
   try {
-    const res = await fetch(`https://api-web.nhle.com/v1/schedule/${encodeURIComponent(gameDateYmd)}`);
-    if (!res.ok) return { count: 0, firstISO: null };
+    const dayDocRef = firestore().doc(`nhl_matchups_daily/${dayId}`);
+    const daySnap = await dayDocRef.get();
 
-    const data = await res.json();
+    if (!daySnap.exists) {
+      // Données pas encore ingérées
+      return { status: "not_ready", count: 0, firstISO: null };
+    }
 
-    const day = Array.isArray(data?.gameWeek)
-      ? data.gameWeek.find((d) => d?.date === gameDateYmd)
-      : null;
+    const snap = await dayDocRef
+      .collection("games")
+      .where("eligibleForProphetik", "==", true)
+      .orderBy("startTimeUTC", "asc")
+      .limit(50) // assez pour compter sans exploser (ou augmente si tu veux)
+      .get();
 
-    let games = [];
-    if (day) games = Array.isArray(day.games) ? day.games : [];
-    else if (Array.isArray(data?.games)) games = data.games;
+    const count = snap.size || 0;
+    const firstISO = count ? snap.docs[0]?.data()?.startTimeUTC || null : null;
 
-    const directCount =
-      safeToInt(day?.numberOfGames) ??
-      safeToInt(day?.totalGames) ??
-      safeToInt(data?.numberOfGames) ??
-      safeToInt(data?.totalGames);
-
-    const count = directCount ?? games.length ?? 0;
-    if (!count || games.length === 0) return { count: 0, firstISO: null };
-
-    const isoList = games
-      .map((g) => g?.startTimeUTC || g?.startTimeUTCDate || g?.gameDate || null)
-      .filter(Boolean)
-      .sort();
-
-    const firstISO = isoList[0] ?? null;
-    return { count, firstISO };
-  } catch {
-    return { count: 0, firstISO: null };
+    return { status: count ? "ok" : "none", count, firstISO };
+  } catch (e) {
+    console.warn("[fetchEligibleDaySummaryFromFirestore]", e?.code || e?.message || e);
+    return { status: "error", count: 0, firstISO: null };
   }
 }
 
@@ -99,6 +92,20 @@ function humanCreateDefiError(err) {
       return i18n.t("defi.errors.createLimitReached", { max: err?.max });
     case "JOIN_LIMIT_REACHED":
       return i18n.t("defi.errors.joinLimitReached", { max: err?.max });
+    case "DEFI_TOO_EARLY": {
+      const max = err?.maxAheadHours ?? 72;
+      const ahead = err?.aheadHours;
+      // Optionnel: arrondir pour message propre
+      const aheadRounded = Number.isFinite(Number(ahead)) ? Math.ceil(Number(ahead)) : null;
+
+      return i18n.t("defi.errors.defiTooEarly", {
+        max,
+        aheadHours: aheadRounded,
+        defaultValue: aheadRounded
+          ? `Ce défi est trop loin dans le futur (${aheadRounded}h). Tu peux créer un défi au maximum ${max}h à l’avance.`
+          : `Ce défi est trop loin dans le futur. Tu peux créer un défi au maximum ${max}h à l’avance.`,
+      });
+    };
     default:
       return i18n.t("common.genericError");
   }
@@ -261,6 +268,8 @@ export default function CreateDefiModal({
 
   const [creating, setCreating] = useState(false);
 
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+
   // Reset wizard when opening
   useEffect(() => {
     if (!visible) return;
@@ -283,6 +292,18 @@ export default function CreateDefiModal({
       return selectableGroups[0]?.id ?? null;
     });
   }, [visible, initialGroupId, selectableGroups]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setStep(1);
+    setSize("1x1");
+    setGameDateYmd(ymdFromLocalDate(new Date()));
+    setVerifyStatus("idle");
+    setVerifyMsg("");
+    setVerifyCount(null);
+    setVerifyFirstISO(null);
+    setGroupDropdownOpen(false); // ✅
+  }, [visible]);
 
   // Format groups (two lines)
   const LINE1 = ["1x1", "2x2", "3x3", "4x4"];
@@ -422,17 +443,27 @@ const nova = useMemo(() => {
     setVerifyMsg("");
 
     try {
-      const { count, firstISO } = await fetchNhlDaySummary(gameDateYmd);
-
+      const { status, count, firstISO } = await fetchEligibleDaySummaryFromFirestore(gameDateYmd);    
       setVerifyCount(count);
       setVerifyFirstISO(firstISO);
+
+     if (status === "not_ready") {
+        setVerifyStatus("idle");
+        setVerifyMsg(
+          i18n.t("defi.create.verify.notReady", {
+            date: gameDateYmd,
+            defaultValue: `Horaire en préparation pour ${gameDateYmd}. Réessaie dans un instant.`,
+          })
+        );
+        return;
+      }
 
       if (!count) {
         setVerifyStatus("none");
         setVerifyMsg(
-          i18n.t("defi.create.verify.noGames", {
+          i18n.t("defi.create.verify.noEligibleGames", {
             date: gameDateYmd,
-            defaultValue: `Aucun match NHL trouvé pour ${gameDateYmd}.`,
+            defaultValue: `Aucun match éligible pour ${gameDateYmd}.`,
           })
         );
         return;
@@ -524,19 +555,33 @@ const nova = useMemo(() => {
 
     try {
       let firstISO = verifyFirstISO;
+
       if (!firstISO) {
-        const { count, firstISO: fromApi } = await fetchNhlDaySummary(gameDateYmd);
-        if (!count) {
+        const { status, count, firstISO: fsFirstISO } = await fetchEligibleDaySummaryFromFirestore(gameDateYmd);
+
+        if (status === "not_ready") {
           Alert.alert(
-            i18n.t("defi.create.alert.noGames.title", { defaultValue: "Aucun match NHL" }),
-            i18n.t("defi.create.alert.noGames.body", {
+            i18n.t("defi.create.alert.notReady.title", { defaultValue: "Horaire en préparation" }),
+            i18n.t("defi.create.alert.notReady.body", {
               date: gameDateYmd,
-              defaultValue: `Aucun match NHL pour ${gameDateYmd}.`,
+              defaultValue: `Les matchs ne sont pas encore disponibles pour ${gameDateYmd}. Réessaie dans un instant.`,
             })
           );
           return;
         }
-        firstISO = fromApi;
+
+        if (!count) {
+          Alert.alert(
+            i18n.t("defi.create.alert.noGames.title", { defaultValue: "Aucun match éligible" }),
+            i18n.t("defi.create.alert.noGames.body", {
+              date: gameDateYmd,
+              defaultValue: `Aucun match éligible pour ${gameDateYmd}.`,
+            })
+          );
+          return;
+        }
+
+        firstISO = fsFirstISO;
       }
 
       const firstGameDate = new Date(firstISO);
@@ -612,14 +657,6 @@ const nova = useMemo(() => {
   const renderStep1 = () => {
     return (
       <View style={{ gap: 10 }}>
-      {/* 🧠 Nova */}
-      <NovaBubble
-        variant="groups"
-        title={i18n.t("nova.defi.step1.title")}
-        body={i18n.t("nova.defi.step1.body")}
-      />
-
-
 
         {noGroupAvailable ? (
           <View
@@ -661,27 +698,76 @@ const nova = useMemo(() => {
             <Text style={{ fontSize: 12, color: colors.subtext }}>
               {i18n.t("defi.create.group.choose", { defaultValue: "Choisir un groupe" })}
             </Text>
-            {selectableGroups.map((g) => {
-              const active = g.id === selectedGroupId;
-              return (
-                <TouchableOpacity
-                  key={g.id}
-                  onPress={() => setSelectedGroupId(g.id)}
-                  style={{
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: active ? colors.primary : colors.border,
-                    backgroundColor: active ? colors.primary : colors.card,
-                  }}
-                >
-                  <Text style={{ color: active ? "#fff" : colors.text, fontWeight: "800" }}>
-                    {g.name || g.id}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+
+<View style={{ gap: 8 }}>
+
+  {/* Bouton dropdown */}
+  <TouchableOpacity
+    onPress={() => setGroupDropdownOpen((v) => !v)}
+    activeOpacity={0.85}
+    style={{
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card2,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    }}
+  >
+    <Text style={{ color: colors.text, fontWeight: "900" }} numberOfLines={1}>
+      {selectedGroup?.name || selectedGroup?.id || i18n.t("common.choose", { defaultValue: "Choisir…" })}
+    </Text>
+
+    <Ionicons
+      name={groupDropdownOpen ? "chevron-up" : "chevron-down"}
+      size={18}
+      color={colors.text}
+    />
+  </TouchableOpacity>
+
+    {/* Liste déroulante */}
+    {groupDropdownOpen ? (
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: 12,
+          backgroundColor: colors.card,
+          overflow: "hidden",
+        }}
+      >
+        <ScrollView style={{ maxHeight: 220 }}>
+          {selectableGroups.map((g) => {
+            const active = g.id === selectedGroupId;
+            return (
+              <TouchableOpacity
+                key={g.id}
+                onPress={() => {
+                  setSelectedGroupId(g.id);
+                  setGroupDropdownOpen(false);
+                }}
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                  backgroundColor: active ? colors.card2 : colors.card,
+                }}
+              >
+                <Text style={{ color: colors.text, fontWeight: active ? "900" : "800" }}>
+                  {g.name || g.id}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    ) : null}
+  </View>
+
           </View>
         )}
       </View>
@@ -722,11 +808,7 @@ const nova = useMemo(() => {
 
     return (
       <View style={{ gap: 12 }}>
-        <NovaBubble
-          variant="format"
-          title={i18n.t("nova.defi.step2.title")}
-          body={i18n.t("nova.defi.step2.body")}
-        />
+
         <Text style={{ fontWeight: "800", color: colors.text }}>
           {i18n.t("defi.create.wizard.pickFormat", { defaultValue: "Choix du format" })}
         </Text>
@@ -842,11 +924,7 @@ const nova = useMemo(() => {
 
     return (
       <View style={{ gap: 12 }}>
-        <NovaBubble
-          variant="calendar"
-          title={i18n.t("nova.defi.step3.title")}
-          body={i18n.t("nova.defi.step3.body")}
-        />
+
         <Text style={{ fontWeight: "800", color: colors.text }}>
           {i18n.t("defi.create.wizard.pickDate", { defaultValue: "Choix de la date" })}
         </Text>
@@ -943,11 +1021,7 @@ const nova = useMemo(() => {
 
     return (
       <View style={{ gap: 14 }}>
-        <NovaBubble
-          variant="thumbsUp"
-          title={i18n.t("nova.defi.confirm.title")}
-          body={i18n.t("nova.defi.confirm.body")}
-        />
+
         <Text style={{ fontWeight: "900", color: colors.text, fontSize: 16 }}>
           {i18n.t("defi.create.wizard.confirmTitle", { defaultValue: "Confirmer le défi" })}
         </Text>

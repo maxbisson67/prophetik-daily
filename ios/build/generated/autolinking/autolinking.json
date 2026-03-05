@@ -230,33 +230,6 @@
         }
       }
     },
-    "lottie-react-native": {
-      "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/lottie-react-native",
-      "name": "lottie-react-native",
-      "platforms": {
-        "ios": {
-          "podspecPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/lottie-react-native/lottie-react-native.podspec",
-          "version": "7.3.4",
-          "configurations": [],
-          "scriptPhases": []
-        },
-        "android": {
-          "sourceDir": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/lottie-react-native/android",
-          "packageImportPath": "import com.airbnb.android.react.lottie.LottiePackage;",
-          "packageInstance": "new LottiePackage()",
-          "buildTypes": [],
-          "libraryName": "lottiereactnative",
-          "componentDescriptors": [
-            "LottieAnimationViewComponentDescriptor"
-          ],
-          "cmakeListsPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/lottie-react-native/android/build/generated/source/codegen/jni/CMakeLists.txt",
-          "cxxModuleCMakeListsModuleName": null,
-          "cxxModuleCMakeListsPath": null,
-          "cxxModuleHeaderName": null,
-          "isPureCxxDependency": false
-        }
-      }
-    },
     "react-native-gesture-handler": {
       "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/react-native-gesture-handler",
       "name": "react-native-gesture-handler",

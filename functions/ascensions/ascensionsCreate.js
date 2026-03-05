@@ -1,8 +1,8 @@
 // functions/ascensions/ascensionsCreate.js
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, logger } from "../utils.js";
+import { FieldValue } from "firebase-admin/firestore";
 import { APP_TZ, toYmdInTz, addDaysToYmd } from "../ProphetikDate.js";
-import { getAsc4TypeForYmd } from "./ascensionUtils.js";
 import { sendPushToGroup } from "../utils/pushUtils.js";
 
 /* ---------------- Helpers ---------------- */
@@ -15,38 +15,20 @@ function planRank(p) {
   const s = String(p || "free").toLowerCase();
   if (s === "vip") return 3;
   if (s === "pro") return 2;
-  return 1; // free, gratuit
+  return 1;
 }
 
-function dowInTz(date = new Date(), tz = APP_TZ) {
-  const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(date);
-  const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return map[wd] ?? 0;
+function isValidYmd(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
 }
 
-function nextDowYmdInTz(targetDow, tz = APP_TZ, now = new Date()) {
-  const todayYmd = toYmdInTz(now, tz);
-  const dow = dowInTz(now, tz);
-  let delta = (targetDow - dow + 7) % 7;
-  if (delta === 0) delta = 7;
-  return addDaysToYmd(todayYmd, delta);
+function todayYmdInAppTz(now = new Date()) {
+  return toYmdInTz(now, APP_TZ);
 }
 
-function forcedStartYmdForAscType(ascType) {
-  return ascType === 7
-    ? nextDowYmdInTz(0, APP_TZ) // dimanche
-    : nextDowYmdInTz(3, APP_TZ); // mercredi
-}
-
-function dowInTzFromYmd(ymd, tz = APP_TZ) {
-  const date = new Date(`${ymd}T12:00:00`);
-  const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(date);
-  const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return map[wd] ?? 0;
-}
-
-function getAsc7TypeForYmd(gameYmd) {
-  return dowInTzFromYmd(gameYmd, APP_TZ) + 1; // 1..7
+function tomorrowYmdInAppTz(now = new Date()) {
+  const today = todayYmdInAppTz(now);
+  return addDaysToYmd(today, 1);
 }
 
 async function getUserTier(uid) {
@@ -77,120 +59,180 @@ async function assertCanManageGroup(uid, groupId) {
     throw new HttpsError("permission-denied", "Only the group owner can create an ascension");
   }
 
-  return { gRef, group };
+  return { gRef, group, ownerId };
+}
+
+/**
+ * ✅ Demain seulement (APP_TZ)
+ * - accepte req.data.startDateYmd (UI) ou startYmd (legacy)
+ * - si absent => demain
+ * - si invalide => demain
+ * - si < demain => REFUS (invalid-argument)
+ */
+function computeStartDateYmd(reqData, now = new Date()) {
+  const tomorrow = tomorrowYmdInAppTz(now);
+
+  const raw =
+    (reqData?.startDateYmd != null ? String(reqData.startDateYmd) : null) ||
+    (reqData?.startYmd != null ? String(reqData.startYmd) : null);
+
+  const candidate = raw && isValidYmd(raw) ? raw : tomorrow;
+
+  // force "demain" minimum
+  if (candidate < tomorrow) {
+    throw new HttpsError(
+      "invalid-argument",
+      `startDateYmd must be >= ${tomorrow} (tomorrow only).`
+    );
+  }
+
+  return { startDateYmd: candidate, tomorrow, rawProvided: !!raw };
 }
 
 /* ---------------- Callable ---------------- */
-export const ascensionsCreate = onCall(
-  { region: "us-central1" },
-  async (req) => {
-    const uid = assertAuth(req);
+export const ascensionsCreate = onCall({ region: "us-central1" }, async (req) => {
+  const uid = assertAuth(req);
 
-    const groupId = String(req.data?.groupId || "");
-    const ascType = Number(req.data?.type || 0);
-    const startDateYmd = forcedStartYmdForAscType(ascType);
-    const startStrategy = "nextStartDay";
+  const groupId = String(req.data?.groupId || "");
+  if (!groupId) throw new HttpsError("invalid-argument", "Missing groupId");
 
-    if (!groupId) throw new HttpsError("invalid-argument", "Missing groupId");
-    if (![4, 7].includes(ascType)) throw new HttpsError("invalid-argument", "Invalid ascension type");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateYmd)) {
-      throw new HttpsError("invalid-argument", "Invalid startDate format (YYYY-MM-DD)");
-    }
+  // ✅ ASC7 only
+  const ascKey = "ASC7";
+  const ascType = 7;
 
-    const { gRef } = await assertCanManageGroup(uid, groupId);
+  // ✅ startDateYmd = demain minimum
+  const { startDateYmd, rawProvided } = computeStartDateYmd(req.data, new Date());
+  const startStrategy = rawProvided ? "custom" : "tomorrow";
 
-    const { tier, active } = await getUserTier(uid);
+  const { gRef, ownerId } = await assertCanManageGroup(uid, groupId);
 
-    if (ascType === 7) {
-      if (active === false) {
-        throw new HttpsError("failed-precondition", "Active subscription required for Ascension 7");
+  const { tier, active } = await getUserTier(uid);
+
+  // ✅ gating ASC7 (Pro+)
+  if (tier !== "free" && active === false) {
+    throw new HttpsError("failed-precondition", "Active subscription required for Ascension 7");
+  }
+  if (planRank(tier) < planRank("pro")) {
+    throw new HttpsError("failed-precondition", "Pro subscription required for Ascension 7");
+  }
+
+  // ✅ run-based: runId = startDateYmd
+  const runId = startDateYmd;
+
+  const ascRootRef = db.doc(`groups/${groupId}/ascensions/${ascKey}`);
+  const runRef = db.doc(`groups/${groupId}/ascensions/${ascKey}/runs/${runId}`);
+
+  await db.runTransaction(async (tx) => {
+    const rootSnap = await tx.get(ascRootRef);
+    const root = rootSnap.exists ? rootSnap.data() || {} : {};
+
+    // S'il y a déjà un activeRunId, on bloque si ce run est actif
+    const existingRunId = root.activeRunId ? String(root.activeRunId) : null;
+    if (existingRunId) {
+      const existingRunRef = db.doc(`groups/${groupId}/ascensions/${ascKey}/runs/${existingRunId}`);
+      const exSnap = await tx.get(existingRunRef);
+      const ex = exSnap.exists ? exSnap.data() || {} : {};
+      const exStatus = String(ex.status || "active").toLowerCase();
+
+      if (exStatus !== "completed") {
+        throw new HttpsError(
+          "failed-precondition",
+          `An ${ascKey} run is already active (${existingRunId}). Complete it before creating a new one.`
+        );
       }
-      if (planRank(tier) < planRank("pro")) {
-        throw new HttpsError("failed-precondition", "Pro subscription required for Ascension 7");
-      }
     }
 
-    const ascKey = ascType === 7 ? "ASC7" : "ASC4";
-    const defiType =
-      ascKey === "ASC7"
-        ? getAsc7TypeForYmd(startDateYmd)
-        : getAsc4TypeForYmd(startDateYmd);
-
-    if (!defiType) {
-      throw new HttpsError("failed-precondition", "Start date is outside ascension window for this format");
+    // Crée le run si missing (ou merge si déjà là)
+    const rSnap = await tx.get(runRef);
+    if (!rSnap.exists) {
+      tx.set(runRef, {
+        groupId,
+        ascKey,
+        runId,
+        startYmd: runId,
+        status: "active",
+        ownerId: ownerId || uid,
+        jackpot: 0,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      tx.set(runRef, { status: "active", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     }
 
-    // 1) update group config
-    const cfgPath = ascKey === "ASC7" ? "questAsc7" : "questAsc4";
-    await gRef.set(
+    // Root: pointe sur le run actif
+    tx.set(
+      ascRootRef,
       {
-        [cfgPath]: {
-          enabled: true,
-          startStrategy,
-          startDateYmd,
-          defiTypeStart: defiType,
-          activatedAt: new Date(),
-          activatedBy: uid,
-          updatedAt: new Date(),
-        },
+        enabled: true,
+        status: "active",
+        activeRunId: runId,
+        startStrategy,
+        startDateYmd: runId,
+        activatedAt: FieldValue.serverTimestamp(),
+        activatedBy: uid,
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
+  });
 
-    // 2) notify group: Ascension created (but defis JIT)
-    try {
-      const title = ascType === 7 ? "Ascension 7 activée" : "Ascension 4 activée";
-      const body =
-        ascType === 7
-          ? "Une Ascension 7 vient d’être lancée. Les défis seront créés juste à temps (48h avant)."
-          : "Une Ascension 4 vient d’être lancée. Les défis seront créés juste à temps (48h avant).";
+  // ✅ garder la config dans groups.questAsc7 (tick fallback)
+  await gRef.set(
+    {
+      questAsc7: {
+        enabled: true,
+        startStrategy,
+        startRunYmd: startDateYmd, // ✅ toujours >= demain
+        activatedAt: FieldValue.serverTimestamp(),
+        activatedBy: uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    },
+    { merge: true }
+  );
 
-      logger.info("[ascensionsCreate] about to sendPushToGroup", { groupId, uid });
+  // Push
+  try {
+    const title = "Ascension 7 activée";
+    const body = `Une Ascension 7 vient d’être lancée. Début: ${startDateYmd}.`;
 
-
-      const res = await sendPushToGroup({
-        groupId,
-        createdBy: uid,
-        includeCreator: true,
-        includeAi: false,
-        title,
-        body,
-        data: {
-          action: "OPEN_ASCENSION",
-          groupId,
-          ascKey,
-        },
-        channelId: "challenges_v2",
-        logTag: "ascensionsCreate",
-      });
-
-      logger.info("[ascensionsCreate] sendPushToGroup result", { groupId, res });
-
-    } catch (e) {
-      logger.warn("[ascensionsCreate] push failed (non-blocking)", { error: e?.message || String(e) });
-    }
-
-    logger.info("[ascensionsCreate] enabled (JIT)", {
-      uid,
+    const res = await sendPushToGroup({
       groupId,
-      ascKey,
-      startDateYmd,
-      defiType,
-      tier,
-      active,
+      createdBy: uid,
+      includeCreator: true,
+      includeAi: false,
+      title,
+      body,
+      data: { action: "OPEN_ASCENSION", groupId, ascKey, runId: startDateYmd },
+      channelId: "challenges_v2",
+      logTag: "ascensionsCreate",
     });
 
-    return {
-      ok: true,
-      groupId,
-      ascKey,
-      type: ascType,
-      startDate: startDateYmd,
-      defiType,
-      tier,
-      active,
-      jit: true,
-      message: "Ascension enabled. Defis will be created just-in-time by scheduled tick.",
-    };
+    logger.info("[ascensionsCreate] sendPushToGroup result", { groupId, res });
+  } catch (e) {
+    logger.warn("[ascensionsCreate] push failed (non-blocking)", { error: e?.message || String(e) });
   }
-);
+
+  logger.info("[ascensionsCreate] ASC7 run enabled", {
+    uid,
+    groupId,
+    ascKey,
+    runId: startDateYmd,
+    tier,
+    active,
+  });
+
+  return {
+    ok: true,
+    groupId,
+    ascKey,
+    type: ascType,
+    runId: startDateYmd,
+    startDateYmd,
+    tier,
+    active,
+    jit: true,
+    message: "ASC7 run created/enabled. Defis will be created just-in-time by scheduled tick.",
+  };
+});

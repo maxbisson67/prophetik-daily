@@ -32,6 +32,17 @@ import CreateDefiModal from '../defis/CreateDefiModal';
 
 const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
 
+function hasStarted(defi) {
+  // on essaie firstGameUTC, sinon gameStartTimeUTC, sinon startTimeUTC
+  const startMs =
+    tsToMillis(defi?.firstGameUTC) ||
+    tsToMillis(defi?.gameStartTimeUTC) ||
+    tsToMillis(defi?.startTimeUTC);
+
+  if (!startMs) return false; // si on n'a pas la date, on n'empêche pas
+  return Date.now() >= startMs;
+}
+
 function fmtTSLocalHM(v) {
   try {
     const d = v?.toDate?.()
@@ -66,6 +77,28 @@ function initialsFrom(nameOrEmail = '') {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+  function isAscensionDefi(item) {
+    // adapte si tu as une propriété officielle (ex: item.isAscension, item.ascKey, item.ascensionType)
+    return item?.ascKey || item?.ascensionType || item?.isAscension;
+  }
+
+  function ascensionLabel(item) {
+    const key = item?.ascension?.key;
+
+    if (key === "ASC4") return "Ascension 4";
+    if (key === "ASC7") return "Ascension 7";
+
+    return null;
+  }
+
+  function defiFormatLabel(item) {
+    // item.type = 2 -> "2x2"
+    const t = Number(item?.type);
+    if (Number.isFinite(t) && t > 0) return `${t}x${t}`;
+    // fallback si title contient déjà "Défi 2x2" etc.
+    return null;
+  }
 
 export default function ChallengesScreen() {
   const { user } = useAuth();
@@ -474,6 +507,7 @@ export default function ChallengesScreen() {
     return s;
   }, [activeDefis, pastLimited]);
 
+
   const WinnerRow = ({ uid, share }) => {
     const info = winnerInfoMap[uid] || {
       name: uid,
@@ -533,54 +567,40 @@ export default function ChallengesScreen() {
     );
   };
 
+
+
   // Rendu d'une carte de défi
   const renderCard = (item, isActive) => {
-    const groupName =
-      groupsMap[item.groupId]?.name || item.groupId;
-    const title =
-      item.title ||
-      (item.type
-        ? i18n.t('home.challenge') + ` ${item.type}x${item.type}`
-        : i18n.t('home.challenge'));
-    const pot = Number.isFinite(item.pot) ? item.pot : 0;
+  const groupName = groupsMap[item.groupId]?.name || item.groupId;
 
-    const statusKey = String(item.status || '').toLowerCase();
-    const winners = Array.isArray(item.winners)
-      ? item.winners
-      : [];
-    const winnerShares = item.winnerShares || {};
+  // ✅ remet ces variables (elles étaient avant)
+  const statusKey = String(item?.status || "").toLowerCase();
 
-    const isGhostCancelled = statusKey === 'cancelled_ghost';
+  const winners = Array.isArray(item?.winners) ? item.winners : [];
+  const winnerShares = item?.winnerShares || {};
 
-    let statusLabel = '';
-    let statusColor = '#6b7280';
-    let statusIcon = 'checkmark-circle';
+  const isGhostCancelled = statusKey === "cancelled_ghost";
 
-    if (statusKey === 'open' || statusKey === 'live') {
-      statusLabel = i18n.t('challenges.status.active');
-      statusColor = '#16a34a';
-      statusIcon = 'flame';
-    } else if (statusKey === 'awaiting_result') {
-      statusLabel = i18n.t('challenges.status.awaiting');
-      statusColor = '#ea580c';
-      statusIcon = 'timer-outline';
-    } else if (isGhostCancelled) {
-      statusLabel = i18n.t('challenges.status.cancelledGhost');
-      statusColor = '#9ca3af';
-      statusIcon = 'alert-circle-outline';
-    } else {
-      statusLabel = i18n.t('challenges.status.completed');
-      statusColor = '#6b7280';
-      statusIcon = 'checkmark-circle';
-    }
+  const started = hasStarted(item);
+  const canJoin = (statusKey === "open" || statusKey === "live") && !started && !isGhostCancelled;
 
-    const potLabel = i18n.t('challenges.potLabel', { count: pot });
-    const entryCost = item.participationCost ?? item.type;
+  // --- ton nouveau UI ---
+  const formatLabel = defiFormatLabel(item); // "2x2"
+  const ascLabel = ascensionLabel(item);     // "Ascension 4/7" ou null
 
-    const winnersTitle =
-      winners.length > 1
-        ? i18n.t('challenges.winnersTitlePlural')
-        : i18n.t('challenges.winnersTitleSingular');
+  const signupCount =
+    Number(item?.signupCount ?? item?.participantsCount ?? item?.entriesCount ?? item?.nParticipants ?? 0) || 0;
+
+  const signupCountLabel =
+    i18n.t("challenges.signupCountLabel", { count: signupCount, defaultValue: "{{count}} inscription(s)" });
+
+  // ✅ maintenant winners existe
+  const winnersTitle =
+    winners.length > 1
+      ? i18n.t("challenges.winnersTitlePlural")
+      : i18n.t("challenges.winnersTitleSingular");
+
+  // ... return (...) inchangé
 
     return (
       <View
@@ -594,62 +614,63 @@ export default function ChallengesScreen() {
           borderColor: colors.border,
         }}
       >
-        {/* En-tête avec avatar groupe */}
+
+        {/* En-tête avec avatar groupe (logo + 2 lignes) */}
         <View
           style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
           }}
         >
-          <View
+          {/* Logo / avatar du groupe */}
+          <Image
+            source={
+              groupsMap[item.groupId]?.avatarUrl
+                ? { uri: groupsMap[item.groupId].avatarUrl }
+                : GROUP_PLACEHOLDER
+            }
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              flex: 1,
-              minWidth: 0,
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: colors.card2,
+              borderWidth: 1,
+              borderColor: colors.border,
             }}
-          >
-            <Image
-              source={
-                groupsMap[item.groupId]?.avatarUrl
-                  ? { uri: groupsMap[item.groupId].avatarUrl }
-                  : GROUP_PLACEHOLDER
-              }
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: colors.card2,
-                borderWidth: 1,
-                borderColor: colors.border,
-                marginRight: 8,
-              }}
-            />
+          />
+
+          {/* Textes (2 lignes) */}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {/* 1) Nom du groupe */}
             <Text
               style={{
-                fontWeight: '700',
+                fontWeight: "900",
                 fontSize: 16,
-                flexShrink: 1,
                 color: colors.text,
               }}
               numberOfLines={1}
+              ellipsizeMode="tail"
             >
-              {groupName} – {title}
+              {groupName}
             </Text>
-          </View>
 
-          {/* Badge de statut */}
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name={statusIcon} size={18} color={statusColor} />
+            {/* 2) Ascension + Type défi */}
             <Text
               style={{
-                marginLeft: 6,
-                color: statusColor,
-                fontWeight: '700',
+                marginTop: 2,
+                fontWeight: "800",
+                color: colors.subtext,
               }}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
-              {statusLabel}
+              {[
+                ascLabel, // "Ascension 4"
+                formatLabel ? `Défi ${formatLabel}` : null, // "Défi 2x2"
+              ]
+                .filter(Boolean)
+                .join(" • ") || i18n.t("home.challenge")}
             </Text>
           </View>
         </View>
@@ -667,20 +688,16 @@ export default function ChallengesScreen() {
                 {i18n.t('challenges.signupDeadlineLabel')}{' '}
                 {fmtTSLocalHM(item.signupDeadline)}
               </Text>
-              <Text style={{ color: colors.text }}>
-                {i18n.t('challenges.firstGameLabel')}{' '}
-                {fmtTSLocalHM(item.firstGameUTC)}
-              </Text>
             </>
           )}
 
-          {/* Cagnotte */}
+          {/* Nbr d'inscriptions */}
           <View
             style={{
               marginTop: 6,
-              alignSelf: 'stretch',
-              flexDirection: 'row',
-              alignItems: 'center',
+              alignSelf: "stretch",
+              flexDirection: "row",
+              alignItems: "center",
               paddingVertical: 8,
               paddingHorizontal: 10,
               borderRadius: 10,
@@ -689,19 +706,9 @@ export default function ChallengesScreen() {
               borderColor: colors.border,
             }}
           >
-            <MaterialCommunityIcons
-              name="cash-multiple"
-              size={16}
-              color="#b91c1c"
-            />
-            <Text
-              style={{
-                marginLeft: 6,
-                color: colors.text,
-                fontWeight: '800',
-              }}
-            >
-              {potLabel}
+            <MaterialCommunityIcons name="account-multiple" size={16} color="#b91c1c" />
+            <Text style={{ marginLeft: 6, color: colors.text, fontWeight: "800" }}>
+              {signupCountLabel}
             </Text>
           </View>
 
@@ -804,41 +811,61 @@ export default function ChallengesScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() =>
-              statusKey === 'open' || statusKey === 'live'
-                ? router.push(
-                    `/(drawer)/defis/${item.id}`
-                  )
-                : null
-            }
-            disabled={
-              !(
-                statusKey === 'open' ||
-                statusKey === 'live'
-              )
-            }
+          <View
             style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 10,
-              alignItems: 'center',
-              backgroundColor:
-                statusKey === 'open' ||
-                statusKey === 'live'
-                  ? '#b91c1c'
-                  : '#9ca3af',
+              flexDirection: "row",
+              gap: 8,
+              marginTop: 10,
             }}
           >
-            <Text
+            <TouchableOpacity
+              onPress={() =>
+                router.push(`/(drawer)/defis/${item.id}/results`)
+              }
               style={{
-                color: '#fff',
-                fontWeight: '700',
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: colors.border,
+                alignItems: "center",
+                backgroundColor: colors.card2,
               }}
             >
-              {i18n.t('challenges.participate')}
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={{
+                  fontWeight: "700",
+                  color: colors.text,
+                }}
+              >
+                {i18n.t("challenges.seeResults")}
+              </Text>
+            </TouchableOpacity>
+
+            {canJoin && (
+              <TouchableOpacity
+                onPress={() =>
+                  router.push(`/(drawer)/defis/${item.id}`)
+                }
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  backgroundColor: "#b91c1c",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "700",
+                  }}
+                >
+                  {i18n.t("challenges.participate")}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     );

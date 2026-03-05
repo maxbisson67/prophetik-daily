@@ -5,10 +5,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import crypto from "crypto";
 
-// 🔁 NEW: on importe le helper d’ingest
 import { runIngestStatsForDate } from "./ingest.js";
-
-// 🔁 NEW: on centralise la logique de date/fuseau
 import { APP_TZ, appYmd, addDaysToYmd, formatDebug } from "./ProphetikDate.js";
 
 /* ------------------------- Admin init ------------------------- */
@@ -16,10 +13,6 @@ if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 
 /* --------------------------- Helpers -------------------------- */
-function readTS(v) {
-  return v?.toDate?.() ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
-}
-
 function splitEven(total, n) {
   if (n <= 0 || !(total > 0)) return Array.from({ length: Math.max(0, n) }, () => 0);
   const base = Math.floor(total / n);
@@ -51,7 +44,7 @@ function pickDeterministicFromValues(defiId, values = []) {
   if (!arr.length) return 0;
 
   const hex = crypto.createHash("sha256").update(String(defiId)).digest("hex");
-  const n = parseInt(hex.slice(0, 8), 16); // 32-bit
+  const n = parseInt(hex.slice(0, 8), 16);
   const idx = n % arr.length;
   return Number(arr[idx]) || 0;
 }
@@ -68,32 +61,55 @@ function computeBonusPerWinner(defiId, defiDoc) {
   return bonus > 0 ? bonus : 0;
 }
 
+/** ✅ détecter "humain vs bot" via doc participant */
+async function isHumanUid(uid) {
+  try {
+    const snap = await db.collection("participants").doc(uid).get();
+    if (!snap.exists) return true;
+    const d = snap.data() || {};
+
+    const isBotA = d.isBot === true;
+    const isBotB = String(d.kind || "").toLowerCase() === "bot";
+    const isBotC = String(d.role || "").toLowerCase() === "bot";
+    const isBotD = String(d.type || "").toLowerCase() === "bot";
+
+    return !(isBotA || isBotB || isBotC || isBotD);
+  } catch (e) {
+    logger.warn("isHumanUid: failed, defaulting to HUMAN", {
+      uid,
+      error: String(e?.message || e),
+    });
+    return true;
+  }
+}
+
 /* -------------------- FINALIZATION (daily 5AM) ----------------- */
 /**
- * Règle:
- * - À 05:00 APP_TZ (America/Toronto), finaliser tous les défis:
- *   • dont gameDate == hier (APP_TZ), quelque soit le statut (sauf déjà completed)
- *   • ET aussi ceux "open" avec gameDate ≤ hier (au cas où ils n’ont jamais été lancés correctement)
+ * À 05:00 APP_TZ:
+ * - finaliser tous les défis gameDate <= hier
+ * - status in ["open","live","awaiting_result"] (fallback date-only)
  *
- * Avant de finaliser, on lance une dernière synchro live (runIngestStatsForDate)
- * pour garantir que livePoints est à jour.
+ * ✅ Bonus optionnel 6x7 (deterministic / idempotent)
+ * ✅ Si aucun humain => annule
  *
- * ✅ Bonus optionnel 6x7:
- * - si le défi contient bonusReward: { type:"random", values:[6,7] }
- * - on crédite chaque gagnant d’un bonus déterministe (6 ou 7) en plus du pot
- * - idempotent car le bonus est dérivé du defiId (hash)
+ * ✅ ASCENSION JACKPOT (RUN-BASED):
+ * - si d.ascension.key === "ASC7" et d.ascension.runId et groupId
+ *   ajouter ceil(pot*0.5) au doc:
+ *     groups/{groupId}/ascensions/ASC7/runs/{runId}.jackpot
+ *   idempotent via receipt:
+ *     .../runs/{runId}/jackpot_contribs/{defiId}
  */
 export const finalizeDefiWinners = onSchedule(
   {
-
     schedule: "0 5 * * *",
+    //schedule: "*/1 * * * *", // test toute les minutes
     timeZone: APP_TZ,
     region: "us-central1",
   },
   async () => {
     const now = new Date();
 
-    // 🔁 0) Dernière synchro live avant de figer les résultats
+    // 0) Dernière synchro live avant figer
     try {
       logger.info("finalizeDefiWinners: running runIngestStatsForDate() before finalization");
       await runIngestStatsForDate();
@@ -104,7 +120,7 @@ export const finalizeDefiWinners = onSchedule(
       });
     }
 
-    // 1) Cible: tous les défis dont gameDate ≤ hier (APP_TZ)
+    // 1) Cible: gameDate <= hier (APP_TZ)
     const todayYmd = appYmd(now);
     const yYMD = addDaysToYmd(todayYmd, -1);
 
@@ -135,21 +151,18 @@ export const finalizeDefiWinners = onSchedule(
       const defiId = docSnap.id;
       const d = docSnap.data() || {};
       const status = String(d.status || "").toLowerCase();
-      if (status === "completed") continue;
+      if (status === "completed" || status === "cancelled") continue;
 
-      // ✅ Bonus par gagnant (6 ou 7) si configuré sur le défi
       const bonusPerWinner = computeBonusPerWinner(defiId, d);
 
-      // 3) Récupérer toutes les participations avec leurs livePoints
+      // 3) Participations
       const partsSnap = await docSnap.ref.collection("participations").get();
       const parts = partsSnap.docs.map((s) => {
         const v = s.data() || {};
-        return {
-          uid: s.id,
-          livePoints: Number(v.livePoints ?? v.finalPoints ?? 0),
-        };
+        return { uid: s.id, livePoints: Number(v.livePoints ?? v.finalPoints ?? 0) };
       });
 
+      // (A) Aucun participant
       if (!parts.length) {
         await docSnap.ref.set(
           {
@@ -165,27 +178,75 @@ export const finalizeDefiWinners = onSchedule(
         continue;
       }
 
-      // 4) Déterminer le score max + liste des gagnants (ex aequo)
+      // (B) Au moins 1 humain ?
+      const humanFlags = await Promise.all(parts.map((p) => isHumanUid(p.uid)));
+      const hasHuman = humanFlags.some(Boolean);
+
+      // Aucun humain => annule
+      if (!hasHuman) {
+        const cancelledPotOriginal = Number(d.pot ?? 0);
+        await docSnap.ref.set(
+          {
+            status: "cancelled",
+            cancelReason: "NO_HUMANS",
+            cancelledAt: FieldValue.serverTimestamp(),
+            cancelledPotOriginal,
+            pot: 0,
+            winners: [],
+            winnerShares: {},
+            completedAt: FieldValue.serverTimestamp(),
+            payoutAppliedAt: FieldValue.serverTimestamp(),
+            payoutAppliedTo: null,
+            ...(bonusPerWinner > 0 ? { bonusPerWinner } : {}),
+          },
+          { merge: true }
+        );
+
+        try {
+          const batch = db.batch();
+          for (const p of partsSnap.docs) {
+            batch.set(
+              p.ref,
+              {
+                cancelledAt: FieldValue.serverTimestamp(),
+                cancelReason: "NO_HUMANS",
+                payout: 0,
+                finalizedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+          await batch.commit();
+        } catch (e) {
+          logger.warn(`defi ${defiId}: failed to tag participations as cancelled`, String(e));
+        }
+
+        logger.info(`defi ${defiId}: cancelled (NO_HUMANS)`, {
+          participants: parts.map((p) => p.uid),
+        });
+        continue;
+      }
+
+      // 4) Winners (ex aequo)
       const top = parts.reduce((m, p) => Math.max(m, p.livePoints), -Infinity);
       const winners = parts.filter((p) => p.livePoints === top).map((p) => p.uid);
 
-      // 5) Transaction: marquer le défi comme completed + payer les gagnants
+      // 5) Transaction: completed + payout + jackpot run
       await db.runTransaction(async (tx) => {
         const dRef = db.collection("defis").doc(defiId);
         const fresh = await tx.get(dRef);
         if (!fresh.exists) return;
 
         const cur = fresh.data() || {};
-        if (String(cur.status || "").toLowerCase() === "completed") return;
+        const curStatus = String(cur.status || "").toLowerCase();
+        if (curStatus === "completed" || curStatus === "cancelled") return;
 
         const pot = Number(cur.pot ?? d.pot ?? 0);
         const shares = splitEven(pot, Math.max(1, winners.length));
         const winnerShares = {};
-        winners.forEach((uid, i) => {
-          winnerShares[uid] = shares[i] || 0;
-        });
+        winners.forEach((uid, i) => (winnerShares[uid] = shares[i] || 0));
 
-        // Marquer complété + sauvegarder le breakdown (+ bonus si présent)
+        // 5A) Mark completed
         tx.set(
           dRef,
           {
@@ -203,47 +264,38 @@ export const finalizeDefiWinners = onSchedule(
           { merge: true }
         );
 
-        // Payout + finalPoints sur participations
+        // 5B) participations finalPoints + payout
         for (const p of parts) {
           const payout = winners.includes(p.uid) ? winnerShares[p.uid] || 0 : 0;
           tx.set(
             dRef.collection("participations").doc(p.uid),
-            {
-              finalPoints: p.livePoints,
-              payout,
-              finalizedAt: FieldValue.serverTimestamp(),
-            },
+            { finalPoints: p.livePoints, payout, finalizedAt: FieldValue.serverTimestamp() },
             { merge: true }
           );
         }
 
-        // Créditer les gagnants (pot + bonus 6x7)
+        // 5C) credit winners (pot + bonus) — atomique via increment
         for (let i = 0; i < winners.length; i++) {
           const uid = winners[i];
-
           const potAmount = shares[i] || 0;
           const bonusAmount = bonusPerWinner || 0;
-
-          if (!(potAmount > 0) && !(bonusAmount > 0)) continue;
+          const add = (potAmount > 0 ? potAmount : 0) + (bonusAmount > 0 ? bonusAmount : 0);
+          if (!(add > 0)) continue;
 
           const uRef = db.collection("participants").doc(uid);
           const uSnap = await tx.get(uRef);
           const curU = uSnap.exists ? uSnap.data() || {} : {};
           const curBal = readAnyBalance(curU);
 
-          const add = (potAmount > 0 ? potAmount : 0) + (bonusAmount > 0 ? bonusAmount : 0);
-          const newBal = curBal + add;
-
           tx.set(
             uRef,
             {
-              credits: { balance: newBal },
+              "credits.balance": FieldValue.increment(add),
               updatedAt: FieldValue.serverTimestamp(),
             },
             { merge: true }
           );
 
-          // Log payout pot (type existant)
           if (potAmount > 0) {
             const logRef = uRef.collection("credit_logs").doc();
             tx.set(logRef, {
@@ -256,7 +308,6 @@ export const finalizeDefiWinners = onSchedule(
             });
           }
 
-          // Log bonus 6x7 (nouveau type)
           if (bonusAmount > 0) {
             const logRef2 = uRef.collection("credit_logs").doc();
             const from2 = curBal + (potAmount > 0 ? potAmount : 0);
@@ -267,17 +318,57 @@ export const finalizeDefiWinners = onSchedule(
               toBalance: from2 + bonusAmount,
               defiId,
               createdAt: FieldValue.serverTimestamp(),
-              meta: { concept: "6x7", pickedFrom: (d?.bonusReward?.values || [6, 7]) },
+              meta: { concept: "6x7", pickedFrom: d?.bonusReward?.values || [6, 7] },
             });
+          }
+        }
+
+        /* ---------------- ASCENSION JACKPOT (RUN-BASED) ---------------- */
+        const asc = cur.ascension || d.ascension;
+        const ascKey = asc?.key ? String(asc.key).toUpperCase() : null;
+        const runId = asc?.runId ? String(asc.runId) : null;
+        const groupId = cur.groupId || d.groupId;
+
+        if (ascKey === "ASC7" && runId && groupId) {
+          const potNow = Number(cur.pot ?? d.pot ?? 0);
+          const jackpotAdd = potNow > 0 ? Math.ceil(potNow * 0.5) : 0;
+
+          if (jackpotAdd > 0) {
+            const runRef = db.doc(`groups/${groupId}/ascensions/ASC7/runs/${runId}`);
+            const receiptRef = runRef.collection("jackpot_contribs").doc(defiId);
+
+            const receiptSnap = await tx.get(receiptRef);
+            if (!receiptSnap.exists) {
+              tx.set(
+                receiptRef,
+                {
+                  defiId,
+                  pot: potNow,
+                  jackpotAdd,
+                  runId,
+                  stepType: asc?.stepType ?? null,
+                  createdAt: FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+              );
+
+              tx.set(
+                runRef,
+                {
+                  jackpot: FieldValue.increment(jackpotAdd),
+                  jackpotUpdatedAt: FieldValue.serverTimestamp(),
+                  lastJackpotDefiId: defiId,
+                  lastJackpotAdd: jackpotAdd,
+                  updatedAt: FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
           }
         }
       });
 
-      logger.info(`defi ${defiId}: finalized@5AM`, {
-        winners,
-        pot: d.pot || 0,
-        bonusPerWinner,
-      });
+      logger.info(`defi ${defiId}: finalized@5AM`, { winners, pot: d.pot || 0, bonusPerWinner });
     }
   }
 );

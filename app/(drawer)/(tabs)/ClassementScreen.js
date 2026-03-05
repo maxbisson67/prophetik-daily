@@ -94,6 +94,34 @@ function computeMode({ user, tierLower, tierActive }) {
   return "free";
 }
 
+const RED = "#b91c1c";
+
+function cardShadow() {
+  return {
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  };
+}
+
+function prophetikCardStyle(colors, accent = RED) {
+  return {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+
+    // ✅ signature Prophetik
+    borderLeftWidth: 4,
+    borderLeftColor: accent,
+    borderBottomWidth: 2,
+    borderBottomColor: accent,
+  };
+}
+
 /**
  * ✅ hook: écoute un leaderboard "members" pour chaque groupeId / seasonId
  * - FREE: tri simple pointsTotal desc
@@ -205,16 +233,7 @@ function normalizeMemberRow(row) {
 function LeaderboardUpgradeFooterFree({ colors, onPress }) {
   const t = i18n.t.bind(i18n);
   return (
-    <View
-      style={{
-        marginTop: 12,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-      }}
-    >
+    <View style={[cardShadow(), prophetikCardStyle(colors), { marginTop: 12, padding: 12 }]}>
       <Text style={{ color: colors.text, fontWeight: "900" }}>
         {t("leaderboard.upgradeCta.freeTitle", { defaultValue: "Débloque Pro & VIP" })}
       </Text>

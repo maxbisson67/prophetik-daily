@@ -120,9 +120,23 @@ function stepsTotalForAscKey(ascKey) {
   return String(ascKey).toUpperCase() === "ASC7" ? 7 : 4;
 }
 
-function allStepsCompleted(winsByType = {}, stepsTotal = 4) {
+/**
+ * ✅ Migration + count:
+ * - si ancien boolean true => 1
+ * - si number => clamp >=0
+ */
+function toCount(v) {
+  if (v === true) return 1;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * ✅ Completed si chaque step 1..stepsTotal a un count >= 1
+ */
+function allStepsCompletedCount(winsByType = {}, stepsTotal = 4) {
   for (let i = 1; i <= stepsTotal; i++) {
-    if (winsByType[String(i)] !== true) return false;
+    if (toCount(winsByType[String(i)]) < 1) return false;
   }
   return true;
 }
@@ -132,7 +146,9 @@ function cycleRefFor(groupId, cycleId) {
 }
 
 function cycleMemberRefFor(groupId, cycleId, uid) {
-  return db.doc(`groups/${String(groupId)}/ascension_cycles/${String(cycleId)}/members/${String(uid)}`);
+  return db.doc(
+    `groups/${String(groupId)}/ascension_cycles/${String(cycleId)}/members/${String(uid)}`
+  );
 }
 
 /* -------------------- FINALIZATION (daily 5AM) ----------------- */
@@ -356,10 +372,14 @@ export const finalizeDefiWinners = onSchedule(
         const typeKey = ensureTypeKey(cur.type);
 
         // leaderboards
-        const lbMemberRefs = eligibleParts.map((p) => db
-          .collection("groups").doc(groupId)
-          .collection("leaderboards").doc(String(seasonId))
-          .collection("members").doc(String(p.uid))
+        const lbMemberRefs = eligibleParts.map((p) =>
+          db
+            .collection("groups")
+            .doc(groupId)
+            .collection("leaderboards")
+            .doc(String(seasonId))
+            .collection("members")
+            .doc(String(p.uid))
         );
 
         const lbMemberSnaps = await Promise.all(lbMemberRefs.map((ref) => tx.get(ref)));
@@ -465,7 +485,7 @@ export const finalizeDefiWinners = onSchedule(
           );
         }
 
-        // 3) Leaderboard season members 
+        // 3) Leaderboard season members
         for (const p of eligibleParts) {
           const uid = String(p.uid);
           const isWinner = winners.includes(uid);
@@ -523,19 +543,26 @@ export const finalizeDefiWinners = onSchedule(
         }
 
         // 3.5) ✅ Ascension progress (winners only) -> ascension_cycles/{cycleId}/members/{uid}
+        // ✅ NOTE: ici on NE choisit PAS de gagnant de cycle. Juste progression + completed bool.
         if (isAscensionDefi && cycRef && cycleId) {
           const stepsTotal = stepsTotalForAscKey(ascKey);
 
-          const prevCompletedWinners = Array.isArray(cycState?.completedWinners) ? cycState.completedWinners : [];
+          const prevCompletedWinners = Array.isArray(cycState?.completedWinners)
+            ? cycState.completedWinners
+            : [];
           const newlyCompleted = [];
 
           cycMemberSnaps.forEach((s, idx) => {
             const uid = winners[idx];
             const prev = s.exists ? (s.data() || {}) : {};
-            const prevWinsByType = prev.winsByType && typeof prev.winsByType === "object" ? prev.winsByType : {};
+            const prevWinsByType =
+              prev.winsByType && typeof prev.winsByType === "object" ? prev.winsByType : {};
 
-            const nextWinsByType = { ...prevWinsByType, [String(ascStepType)]: true };
-            const completedNow = allStepsCompleted(nextWinsByType, stepsTotal);
+            const stepKey = String(ascStepType);
+            const prevCount = toCount(prevWinsByType[stepKey]);
+            const nextWinsByType = { ...prevWinsByType, [stepKey]: prevCount + 1 };
+
+            const completedNow = allStepsCompletedCount(nextWinsByType, stepsTotal);
 
             const memberRef = cycMemberRefs[idx];
 
@@ -546,9 +573,9 @@ export const finalizeDefiWinners = onSchedule(
                 groupId,
                 ascKey,
                 cycleId,
-                winsByType: nextWinsByType,
+                winsByType: nextWinsByType, // ✅ numbers
                 completed: completedNow === true,
-                ...(completedNow ? { completedAt: prev.completedAt || FieldValue.serverTimestamp() } : {}),
+                // ❌ pas de completedAt (simplicité)
                 updatedAt: FieldValue.serverTimestamp(),
                 createdAt: prev.createdAt || FieldValue.serverTimestamp(),
               },
@@ -558,17 +585,17 @@ export const finalizeDefiWinners = onSchedule(
             if (completedNow) newlyCompleted.push(uid);
           });
 
-          // co-gagnants permis
+          // info utile pour UI (liste des complétés), sans décider du gagnant
           const merged = Array.from(new Set([...prevCompletedWinners, ...newlyCompleted])).filter(Boolean);
 
-          // ✅ cycle summary
+          // ✅ cycle summary: reste "active", finalizeAscensionCycleWinners décidera ensuite
           tx.set(
             cycRef,
             {
-              status: merged.length ? "completed" : "active",
+              status: "active",
               stepsTotal,
               completedWinners: merged,
-              ...(merged.length ? { completedAt: cycState?.completedAt || FieldValue.serverTimestamp() } : {}),
+              completedCount: merged.length,
               updatedAt: FieldValue.serverTimestamp(),
               lastFinalizeAt: FieldValue.serverTimestamp(),
               lastFinalizeDefiId: defiId,
@@ -577,7 +604,7 @@ export const finalizeDefiWinners = onSchedule(
             { merge: true }
           );
 
-          // ✅ compat: met aussi à jour le doc courant ascensions/{ascKey}
+          // ✅ compat: doc courant ascensions/{ascKey}
           if (ascRef) {
             tx.set(
               ascRef,
@@ -587,7 +614,6 @@ export const finalizeDefiWinners = onSchedule(
                 activeCycleId: cycleId,
                 cycleId: ascState?.cycleId || cycleId,
                 completedWinners: merged,
-                ...(merged.length ? { completedAt: ascState?.completedAt || FieldValue.serverTimestamp() } : {}),
                 updatedAt: FieldValue.serverTimestamp(),
                 lastFinalizeAt: FieldValue.serverTimestamp(),
                 lastFinalizeDefiId: defiId,

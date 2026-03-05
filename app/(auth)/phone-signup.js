@@ -115,10 +115,19 @@ export default function PhoneSignUpScreen() {
         })
       );
     } catch (e) {
-      Alert.alert(
-        i18n.t('auth.phoneSignup.alerts.sendFailedTitle', { defaultValue: 'Send failed' }),
-        e?.message || String(e)
-      );
+      const code = e?.code || "";
+
+      if (code === "auth/invalid-phone-number") {
+        Alert.alert(
+          i18n.t("auth.phoneLogin.invalidPhoneTitle", { defaultValue: "Numéro invalide" }),
+          i18n.t("auth.phoneLogin.invalidPhoneBody", { defaultValue: "Entre un numéro valide (ex. 5145551234)." })
+        );
+      } else {
+        Alert.alert(
+          i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "Erreur SMS" }),
+          i18n.t("auth.phoneLogin.smsErrorBody", { defaultValue: "Impossible d’envoyer le code." })
+        );
+      }
     } finally {
       setBusy(false);
     }

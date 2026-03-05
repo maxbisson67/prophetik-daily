@@ -116,6 +116,41 @@ function statusStyleBase(status) {
   }
 }
 
+  function ymdInTorontoFromAny(v) {
+    try {
+      const d = v?.toDate?.() ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
+      if (!d || isNaN(d.getTime())) return null;
+
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Toronto",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(d);
+
+      const y = parts.find((p) => p.type === "year")?.value;
+      const m = parts.find((p) => p.type === "month")?.value;
+      const dd = parts.find((p) => p.type === "day")?.value;
+      return y && m && dd ? `${y}-${m}-${dd}` : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function extractTeamsFromParts(parts = [], playerMap = {}) {
+    const set = new Set();
+    for (const part of parts) {
+      const picks = Array.isArray(part?.picks) ? part.picks : [];
+      for (const p of picks) {
+        const pid = String(p?.playerId ?? "").trim();
+        const abbr =
+          (playerMap?.[pid]?.teamAbbr || p?.teamAbbr || "").toString().trim().toUpperCase();
+        if (abbr) set.add(abbr);
+      }
+    }
+    return Array.from(set);
+  }
+
 /* ---------------------- Cache noms participants ---------------------- */
 const memNames = { map: {}, info: {} }; // {uid -> name}, {uid -> {photoURL}}
 
@@ -282,6 +317,28 @@ export default function DefiResultsScreen() {
     const rule = String(defi?.splitRule ?? 'winner_takes_all').toLowerCase();
     return rule === 'split_even' ? Math.floor(pot / n) : pot;
   }
+
+  const goNhlLive = React.useCallback(() => {
+    const ymd =
+      ymdInTorontoFromAny(defi?.firstGameUTC) ||
+      ymdInTorontoFromAny(defi?.signupDeadline) ||
+      null;
+
+    const focusTeamAbbrs = extractTeamsFromParts(parts, playerMap);
+
+    router.push({
+      pathname: "/sports/MatchLiveScreen",
+      params: {
+        // optionnel: MatchLiveScreen peut ignorer si non géré
+        ymd: ymd || "",
+        focusPlayerIds: JSON.stringify(allPickedIds || []),
+        focusTeamAbbrs: JSON.stringify(focusTeamAbbrs || []),
+        from: "defiResults",
+        defiId: String(defi?.id || ""),
+      },
+    });
+  }, [router, defi?.firstGameUTC, defi?.signupDeadline, defi?.id, parts, playerMap, allPickedIds]);
+
 
   const allPickedIds = useMemo(() => {
   const ids = new Set();
@@ -743,6 +800,28 @@ export default function DefiResultsScreen() {
           ),
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+
+               {/* ✅ Quick link NHL Live */}
+              <TouchableOpacity
+                onPress={goNhlLive}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <Ionicons name="pulse" size={16} color={colors.text} />
+                <Text style={{ marginLeft: 6, fontWeight: "800", color: colors.text, fontSize: 12 }}>
+                  NHL
+                </Text>
+              </TouchableOpacity>
+
               <Ionicons
                 name="chatbubble-ellipses"
                 size={18}

@@ -7,11 +7,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
+  ScrollView
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 import i18n from "@src/i18n/i18n";
+
+import ProphetikIcons from "@src/ui/ProphetikIcons";
+import { useTheme } from "@src/theme/ThemeProvider";
 
 // --- Helpers E.164 ---
 const DEFAULT_COUNTRY = "+1";
@@ -58,7 +63,6 @@ async function ensureParticipantDoc({ displayName }) {
     email: user.email ?? null,
     photoURL: user.photoURL ?? null,
     updatedAt: now,
-    // createdAt seulement si nouveau doc (on le gère plus bas)
   });
 
   const ref = firestore().collection("participants").doc(user.uid);
@@ -69,15 +73,24 @@ async function ensureParticipantDoc({ displayName }) {
       {
         ...payload,
         createdAt: now,
-        onboarding: { welcomeSeen: false },
+        "onboarding.welcomeSeen": false,
       },
       { merge: true }
     );
-    return { isNew: true };
+    return { isNew: true, shouldShowWelcome: true };
   }
 
+  const data = snap.data() || {};
+  const welcomeSeen = data?.onboarding?.welcomeSeen === true;
+
   await ref.set(payload, { merge: true });
-  return { isNew: false };
+
+  // si onboarding.welcomeSeen n’existe pas, on le force à false (optionnel mais “safe”)
+  if (data?.onboarding?.welcomeSeen === undefined) {
+    await ref.set({ "onboarding.welcomeSeen": false }, { merge: true });
+  }
+
+  return { isNew: false, shouldShowWelcome: !welcomeSeen };
 }
 
 async function ensurePublicProfile({ displayName }) {
@@ -85,18 +98,33 @@ async function ensurePublicProfile({ displayName }) {
   if (!user) return;
 
   const now = firestore.FieldValue.serverTimestamp();
+
+  // IMPORTANT: ne jamais mettre undefined
   const payload = stripUndefined({
     displayName: displayName || user.displayName || null,
     avatarUrl: user.photoURL ?? null,
     updatedAt: now,
+    visibility: "public", // optionnel mais aide à stabiliser
   });
 
-  await firestore().collection("profiles_public").doc(user.uid).set(payload, { merge: true });
+  const ref = firestore().collection("profiles_public").doc(user.uid);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    // CREATE clean, sans merge
+    await ref.set(payload);
+    return { created: true };
+  }
+
+  // UPDATE: merge ok
+  await ref.set(payload, { merge: true });
+  return { created: false };
 }
 
 export default function PhoneLoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { colors } = useTheme();
 
   const initialPhone = typeof params?.phone === "string" ? params.phone : "";
 
@@ -139,11 +167,24 @@ export default function PhoneLoginScreen() {
         i18n.t("auth.phoneLogin.codeSentBody", { defaultValue: "Check your SMS." })
       );
     } catch (e) {
-      Alert.alert(
-        i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "SMS error" }),
-        e?.message ??
-          i18n.t("auth.phoneLogin.smsErrorBody", { defaultValue: "Couldn't send the code." })
-      );
+      console.log("SMS send error:", e?.code, e?.message);
+        const code = e?.code || "";
+
+        if (code === "auth/invalid-phone-number") {
+          Alert.alert(
+            i18n.t("auth.phoneLogin.invalidPhoneTitle", { defaultValue: "Numéro invalide" }),
+            i18n.t("auth.phoneLogin.invalidPhoneBody", {
+              defaultValue: "Le format du numéro est invalide. Exemple : 5145551234.",
+            })
+          );
+        } else {
+          Alert.alert(
+            i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "Erreur SMS" }),
+            i18n.t("auth.phoneLogin.smsErrorBody", {
+              defaultValue: "Impossible d’envoyer le code.",
+            })
+          );
+        }
     } finally {
       setBusy(false);
     }
@@ -185,15 +226,33 @@ export default function PhoneLoginScreen() {
         } catch {}
       }
 
-      // ✅ auto-create / update Firestore docs
-      const { isNew } = await ensureParticipantDoc({ displayName: cleanName || null });
-      await ensurePublicProfile({ displayName: cleanName || null });
 
-      if (isNew) {
+     let shouldShowWelcome = false;
+
+      try {
+        const res = await ensureParticipantDoc({ displayName: cleanName || null });
+        shouldShowWelcome = !!res?.shouldShowWelcome;
+        console.log("participants OK", { shouldShowWelcome });
+      } catch (e) {
+        console.log("participants FAIL", e?.code, e?.message);
+        throw e;
+      }
+
+      try {
+        await ensurePublicProfile({ displayName: cleanName || null });
+        console.log("profiles_public OK");
+      } catch (e) {
+        console.log("profiles_public FAIL", e?.code, e?.message);
+        throw e;
+      }
+
+      
+      if (shouldShowWelcome) {
         router.replace("/onboarding/welcome");
       } else {
         goHome();
       }
+
     } catch (e) {
       const msg = String(e?.message || e);
 
@@ -229,8 +288,17 @@ export default function PhoneLoginScreen() {
         }}
       />
 
-      <View style={{ flex: 1, padding: 16, justifyContent: "center", gap: 12 }}>
-        <Text style={{ fontSize: 22, fontWeight: "800" }}>
+    <SafeAreaView style={{ flex: 1 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingTop: 32, gap: 12 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={{ alignItems: "center", marginBottom: 8 }}>
+          <ProphetikIcons size="xxl" iconPosition="after" />
+        </View>
+
+        <Text style={{ fontSize: 22, fontWeight: "800", color: colors.text }}>
           {i18n.t("auth.phoneLogin.h1", { defaultValue: "Continue with SMS" })}
         </Text>
 
@@ -311,7 +379,7 @@ export default function PhoneLoginScreen() {
               onPress={confirmCode}
               disabled={busy || code.trim().length < 4}
               style={{
-                backgroundColor: "#0ea5e9",
+                backgroundColor: "#b91c1c",
                 padding: 14,
                 borderRadius: 10,
                 alignItems: "center",
@@ -342,7 +410,9 @@ export default function PhoneLoginScreen() {
             </TouchableOpacity>
           </>
         )}
-      </View>
+
+       </ScrollView>
+       </SafeAreaView>
     </>
   );
 }

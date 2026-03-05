@@ -1,22 +1,26 @@
 // app/onboarding/welcome.js
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import firestore from '@react-native-firebase/firestore';
-// Safe auth
-import { useAuth } from '@src/auth/SafeAuthProvider';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, Image, ActivityIndicator, Alert, SafeAreaView } from "react-native";
+import { Stack, useRouter } from "expo-router";
+import firestore from "@react-native-firebase/firestore";
+import { useAuth } from "@src/auth/SafeAuthProvider";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "@src/theme/ThemeProvider";
+import i18n from "@src/i18n/i18n";
+const PROPHETIK_LOGO = require("../../assets/prophetik_icon_512.png");
 
-const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
+const RED = "#b91c1c";
+const BLACK = "#111827";
 
 export default function WelcomeOnboarding() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
   const [saving, setSaving] = useState(false);
 
   async function markSeenAndGo(nextPath) {
     if (!user?.uid) {
-      router.replace('/'); // fallback
+      router.replace("/");
       return;
     }
     try {
@@ -25,108 +29,142 @@ export default function WelcomeOnboarding() {
         .doc(`participants/${user.uid}`)
         .set(
           {
-            onboarding: { welcomeSeen: true },
+            "onboarding.welcomeSeen": true,
             updatedAt: firestore.FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
     } catch (e) {
-      Alert.alert('Oups', String(e?.message || e));
+      Alert.alert("Oups", String(e?.message || e));
     } finally {
       setSaving(false);
-      if (nextPath) {
-        router.replace(nextPath);
-      } else {
-        router.replace('/(drawer)/(tabs)/AccueilScreen');
-      }
+      router.replace(nextPath || "/(drawer)/(tabs)/AccueilScreen");
     }
   }
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Bienvenue' }} />
-      <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
-        <View
-          style={{
-            padding: 16,
-            borderWidth: 1,
-            borderRadius: 16,
-            backgroundColor: '#fff',
-            shadowColor: '#000',
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 4 },
-          }}
-        >
-          <View style={{ alignItems: 'center' }}>
-            <Image
-              source={GROUP_PLACEHOLDER}
-              style={{
-                width: 120,
-                height: 120,
-                borderRadius: 60,
-                backgroundColor: '#f3f4f6',
-                marginBottom: 12,
-              }}
-            />
-            <Text style={{ fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
-              Bienvenue sur Prophetik 🎉
+      <Stack.Screen
+        options={{
+          title: i18n.t("onboarding.welcome.title", { defaultValue: "Welcome" }),
+        }}
+      />
+
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, padding: 16, justifyContent: "center" }}>
+          <View
+            style={{
+              padding: 16,
+              borderWidth: 1,
+              borderRadius: 16,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            }}
+          >
+            <View style={{ alignItems: "center" }}>
+              <Image
+                source={PROPHETIK_LOGO}
+                style={{
+                  width: 120,
+                  height: 120,
+                  borderRadius: 60,
+                  backgroundColor: colors.card2,
+                  marginBottom: 12,
+                }}
+                resizeMode="contain"
+              />
+
+            <Text style={{ fontSize: 22, fontWeight: "900", textAlign: "center", color: colors.text }}>
+              {i18n.t("onboarding.welcome.h1", { defaultValue: "Welcome to Prophetik 🎉" })}
             </Text>
-            <Text style={{ marginTop: 8, color: '#374151', textAlign: 'center' }}>
-              Crée ton premier groupe ou rejoins tes amis pour prédire et gagner des crédits.
+
+            <Text style={{ marginTop: 8, color: colors.subtext, textAlign: "center" }}>
+              {i18n.t("onboarding.welcome.subtitle", {
+                defaultValue: "Create your first group or join your friends to play.",
+              })}
             </Text>
-          </View>
-
-          <View style={{ marginTop: 16, gap: 10 }}>
-            <TouchableOpacity
-              disabled={saving}
-              onPress={() => markSeenAndGo('/groups/join?from=onboarding')}
-              style={{
-                backgroundColor: '#111827',
-                paddingVertical: 14,
-                borderRadius: 12,
-                alignItems: 'center',
-              }}
-            >
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>Rejoindre un groupe</Text>}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              disabled={saving}
-              onPress={() => markSeenAndGo('/groups/create?from=onboarding')}
-              style={{
-                borderWidth: 1,
-                borderColor: '#111827',
-                paddingVertical: 14,
-                borderRadius: 12,
-                alignItems: 'center',
-                backgroundColor: '#fff',
-              }}
-            >
-              <Text style={{ color: '#111827', fontWeight: '800' }}>Créer un groupe</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              disabled={saving}
-              onPress={() => markSeenAndGo(null)}
-              style={{ paddingVertical: 12, alignItems: 'center' }}
-            >
-              <Text style={{ color: '#6b7280' }}>Plus tard</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ marginTop: 16, gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="trophy" size={18} color="#b91c1c" />
-              <Text style={{ marginLeft: 8 }}>Cumule des crédits en gagnant des défis</Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="account-group" size={18} color="#b91c1c" />
-              <Text style={{ marginLeft: 8 }}>Joue avec tes amis dans des groupes privés</Text>
+
+            <View style={{ marginTop: 16, gap: 10 }}>
+              {/* CTA Rejoindre (rouge) */}
+              <TouchableOpacity
+                disabled={saving}
+                onPress={() => markSeenAndGo("/groups/join?from=onboarding")}
+                activeOpacity={0.9}
+                style={{
+                  backgroundColor: RED,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "900" }}>
+                    {i18n.t("onboarding.welcome.joinCta", { defaultValue: "Join a group" })}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {/* CTA Créer (noir) */}
+              <TouchableOpacity
+                disabled={saving}
+                onPress={() => markSeenAndGo("/groups/create?from=onboarding")}
+                activeOpacity={0.9}
+                style={{
+                  backgroundColor: BLACK,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                <Text style={{ color: "#fff", fontWeight: "900" }}>
+                  {i18n.t("onboarding.welcome.createCta", { defaultValue: "Create a group" })}
+                </Text>
+                )}
+              </TouchableOpacity>
+
+              {/* CTA Plus tard (fine bordure) */}
+              <TouchableOpacity
+                disabled={saving}
+                onPress={() => markSeenAndGo(null)}
+                activeOpacity={0.9}
+                style={{
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  backgroundColor: "transparent",
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                  {i18n.t("common.later", { defaultValue: "Later" })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ✅ Enlever la ligne "Cumule des crédits..." */}
+            <View style={{ marginTop: 16, gap: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <MaterialCommunityIcons name="account-group" size={18} color={RED} />
+                <Text style={{ marginLeft: 8, color: colors.text }}>
+                  {i18n.t("onboarding.welcome.privateGroups", {
+                    defaultValue: "Play with your friends in private groups",
+                  })}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
+      </SafeAreaView>
     </>
   );
 }

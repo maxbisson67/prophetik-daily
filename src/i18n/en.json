@@ -18,6 +18,10 @@
     "genericError": "Something went wrong. Please try again.",
     "back": "Back",
     "next": "Next",
+    "check": "✅ ",
+    "dot": "▫️ ",
+    "tomorrow":"Tomorrow",
+    "today":"Today"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -32,7 +36,9 @@
       "continueEmail": "Continue with Email",
       "createSms": "Create an account (SMS)",
       "createEmail": "Create an account (Email)",
-      "footer": "By continuing, you agree to our terms of use."
+      "footer": "By continuing, you agree to our terms of use.",
+      "continueEmailLink":"Continue with email link",
+      "securityNote":"🔒 For security reasons, emails and SMS may come from capitaine.firebaseapp.com. This is the official authentication service used by Prophetik."
     },
 
     "signup": {
@@ -134,6 +140,22 @@
       "signInFailedTitle": "Sign-in failed"
     },
 
+    "emailLink": {
+      "title": "Continue with email link",
+      "headline": "No password needed",
+      "body": "We’ll email you a sign-in link.",
+      "firstNameLabel": "First name (optional)",
+      "firstNamePlaceholder": "e.g., Mike",
+      "emailLabel": "Email address",
+      "emailHint": "We’ll send your secure sign-in link to this email.",
+      "missingEmailTitle": "Missing email",
+      "missingEmailBody": "Enter your email.",
+      "sentTitle": "✅ Email sent",
+      "sentBody": "Check your inbox and tap the link to finish sign up.",
+      "cannotSendTitle": "Cannot send link",
+      "sendCta": "Send link"
+    },
+
     "phoneSignup": {
       "title": "Create account (SMS)",
 
@@ -183,6 +205,16 @@
       }
     }
   },
+  "onboarding": {
+    "welcome": {
+      "title": "Welcome",
+      "h1": "Welcome to Prophetik 🎉",
+      "subtitle": "Start by creating your own group or join one that already exists.",
+      "joinCta": "Join a group",
+      "createCta": "Create a group",
+      "privateGroups": "Play with your friends in private groups"
+    }
+  },
   "home": {
     "title": "Home",
     "hello": "Hi",
@@ -193,6 +225,7 @@
     "unknownGroup": "Group",
     "totalPot": "Potential Winnings",
     "todayChallenge": "My challenges today",
+    "create":"Create",
     "challenge": "Challenge",
     "challengeDate": "NHL date",
     "challengeLimit": "Signup deadline:",
@@ -206,7 +239,13 @@
     "upgradeToJoin": "Upgrade to Pro or VIP to join this challenge.",
     "upgradeCta": "See plans",
     "launchAscension":"Start an Ascension",
-    "participate":"Participate",
+    "participate":"Participate", 
+    "selectGroupLabel": "Select a group to view its challenges",
+    "threeWays":"Three ways to play on Prophetik",
+    "threeWaysSub":"Choose your style today.",
+    "way1": "1st way to play",
+    "way2": "2nd way to play", 
+    "way3": "3rd way to play",
     "status": {
       "open": "Open",
       "live": "Live",
@@ -214,6 +253,8 @@
       "completed": "Completed"
     },
     "metrics": {
+      "title": "My metrics",
+      "subtitle": "Points • Plays • Wins • PPG",
       "points": "Points",
       "pointsSubtitle": "{{count}} challenges",
       "pointsSubtitleEmpty": "No challenges",
@@ -228,8 +269,11 @@
 
       "unlockCta": "Unlock this metric"
     },
+ 
     "loginToAccess": "Log in to access the home screen.",
     "noGroups": "You don’t have any groups yet.",
+    "createGroup":"Create a group",
+    "noGroupCreateDefiBody":"You must create a group before launching a challenge.",
     "noActiveChallenges": "No active challenges at the moment.",
     "editAvatar": "Edit avatar",
     "creditsToEarn": "Points to earn",
@@ -249,6 +293,101 @@
     "dailyShotHint": "Shake your phone  to earn +1 credit.",
     "dailyShotLoading": "Sensors loading…",
     "dailyShotMonthlyCap": "Monthly cap: {{current}} / {{max}}" 
+  },
+  "firstGoal": {
+    "home": {
+      "title": "Challenges First goal",
+      "empty": "No first-goal challenge in your groups today",
+      "signupDeadline": "Registration deadline",
+      "infoTitle":"How does this challenge work?",
+       "boni": "Bonus",
+      "infoBody":"• Choose the player who will score the first goal of the game.\n• Watch the results in the Sports / MatchLive tab.\n• One point is awarded to the participant who correctly predicts the first goal scorer.\n• If no one makes the correct prediction, the point carries over and the jackpot increases."
+    },
+    "create":{
+      "firstGoalTitle":"Create a First goal challenge",
+      "groupChoose":"Select a group",
+      "gameTime":"Start: {{time}}",
+      "step1":"Group",
+      "step2":"Match",
+      "step3":"Confirm",
+      "pickGameTitle": "Select a match",
+      "confirmTitle":"Confirm",
+      "createNow": "Create",
+      "creating": "Creation…",
+      "summary": {
+          "group":"Group",
+          "startAt":"Start: {{time}}",
+           "hint":"Members will receive a notification and can choose one player before the game starts."
+   
+      },
+      "players": {
+        "none": "No players found",
+        "loading": "Loading rosters…",
+        "title": "Players"
+      },
+      "pick":{
+        "title": "First goal",
+        "loading": "Loading…",
+        "noResults": "No players found.",
+        "alreadyPicked": "Your pick is locked",
+        "editUntil": "You can change your pick until",
+        "locked": "The challenge is locked",
+        "chooseOne": "Choose the player who will score the first goal",
+        "startsAt": "Start"
+      }
+    },
+    "live": {
+      "title": "Challenge: First goal",
+      "none": "No “first goal” challenge for this game.",
+      "participants": "{{n}} participant(s)",
+      "myPick": "Your pick: {{name}}",
+      "viewPick": "View my pick",
+      "join": "Join",
+      "noWinner": "No winner",
+      "pending": "Provisional / under NHL review…",
+      "locked": "Locked (pre-game)",
+      "open": "Open"
+    },
+    "cta":{
+        "matchLive": "Match Live",
+        "pickScorer": "Choose my player"
+     }
+  },
+  "ascensions": {
+    "home": {
+      "title": "My ascensions",
+      "subtitle": "Multi-day quests (progress)"
+    },
+    "badgeDays":"{{n}}-day Ascensions",
+    "lockedAsc7Text":"Unlock the 7-day ascension to access the weekly quest (Sun–Sat) and full tracking",
+    "badge": {
+      "asc4": "4-day Ascensions",
+      "asc7": "7-day Ascensions"
+    },
+    "title": {
+      "asc4": "Ascension 4", 
+      "asc7": "Ascension 7"
+    },
+    "locked": {
+      "body": "Unlock Ascension 7 to access the weekly quest (Sun→Sat) and full tracking.",
+      "cta": "View subscriptions"
+    },
+    "notInitialized": "Not initialized for this group yet.",
+    "noActiveCycle":"No active cycle for this Ascension.",
+    "viewSubscriptions":"View subscriptions",
+    "status": {
+      "disabled": "Disabled",
+      "completedWithWinners_one": "Completed ({{count}} winner)",
+      "completedWithWinners_other": "Completed ({{count}} winners)",
+      "inProgress": "In progress"
+    },
+    "labels": {
+      "cycle": "Cycle",
+      "nextStep": "Next step",
+      "startLabel": "Ascension start",
+      "weekLabel": "Week",
+      "completed":"Quests completed"
+    }
   },
   "groups": {
     "detail": {
@@ -322,7 +461,7 @@
         "transferRequiredTitle": "Transfer required",
         "transferRequiredMessage": "Other members still exist. You must transfer ownership before leaving."
     },
-         "title": "Groups",
+        "title": "Groups",
         "detailTitle": "Group details",
         "loginToSeeGroups": "Log in to view your groups.",
         "login": "Log in",
@@ -366,54 +505,68 @@
         "alertFavoriteReadTitle": "Favorite group",
         "alertErrorTitle": "Error",
         "alertFavoriteTitle": "Favorite",
-        "alertFavoriteMessage": "Unable to update:",
-    "join": {
-        "title": "Join a group",
-        "ctaTitle": "🔑 Enter your invite code",
-        "ctaSubtitle": "Join an existing group and start predicting right away.",
-        "placeholderCode": "XXXXXXXX",
-        "btnJoin": "Join group",
-        "btnCancel": "Cancel",
+        "alertFavoriteMessage": "Unable to update",
+        "join": {
+            "title": "Join a group",
+            "ctaTitle": "🔑 Enter your invite code",
+            "ctaSubtitle": "Join an existing group and start predicting right away.",
+            "placeholderCode": "XXXXXXXX",
+            "btnJoin": "Join group",
+            "btnCancel": "Cancel",
 
-        "alertLoginRequiredTitle": "Sign-in required",
-        "alertLoginRequiredMessage": "Log in to join a group.",
-        "alertCodeInvalidTitle": "Invalid code",
-        "alertCodeInvalidMessage": "The code must contain {{len}} characters (A–Z, without O or 0).",
+            "alertLoginRequiredTitle": "Sign-in required",
+            "alertLoginRequiredMessage": "Log in to join a group.",
+            "alertCodeInvalidTitle": "Invalid code",
+            "alertCodeInvalidMessage": "The code must contain {{len}} characters (A–Z, without O or 0).",
 
-        "alertServerUnexpected": "Unexpected server response.",
-        "alertCodeNotFoundTitle": "Code not found",
-        "alertCodeNotFoundMessage": "Check the code and try again.",
-        "alertAccessDeniedTitle": "Access denied",
-        "alertAccessDeniedMessage": "You are not allowed to join this group.",
-        "alertGenericErrorTitle": "Error",
-        "alertLimitTitle": "Limit reached",
-        "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} groups as a member. You currently have {{current}}. Upgrade to PRO/VIP to increase the limit."
-    }
-  },
-    "challenges": {
-        "activeTitle": "Active challenges",
-        "pastTitle": "Past challenges",
-        "status": {
-            "active": "Active",
-            "awaiting": "Pending results",
-            "cancelledGhost": "Cancelled (not enough players)",
-            "completed": "Completed"
-        },
-        "gameDateLabel": "NHL date",
-        "signupDeadlineLabel": "Signup deadline (local time):",
-        "firstGameLabel": "First game (local time):",
-        "potLabel": "Pot: {{count}} credit(s)",
-        "entryCostLabel": "Entry cost: {{count}} credit(s)",
-        "ghostRefundHint": "Players have been automatically refunded.",
-        "winnersTitleSingular": "Winner",
-        "winnersTitlePlural": "Winners",
-        "seeResults": "See results",
-        "participate": "Join",
-        "loginToSee": "Log in to see your challenges.",
-        "loadingChallenges": "Loading challenges…",
-        "createNhlChallenge": "Create an NHL challenge",
-        "noChallenges": "No challenges to display."
-    },
+            "alertServerUnexpected": "Unexpected server response.",
+            "alertCodeNotFoundTitle": "Code not found",
+            "alertCodeNotFoundMessage": "Check the code and try again.",
+            "alertAccessDeniedTitle": "Access denied",
+            "alertAccessDeniedMessage": "You are not allowed to join this group.",
+            "alertGenericErrorTitle": "Error",
+            "alertLimitTitle": "Limit reached",
+            "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} groups as a member. You currently have {{current}}. Upgrade to PRO/VIP to increase the limit.",
+            "scanBtn": "Scan a QR",
+            "scanTitle": "Scan a QR",
+            "scanHint": "Place the QR inside the frame",
+            "qrInvalid": "Invalid QR. Try again.",
+            "cameraDenied": "Camera permission denied. Allow camera access to scan a QR.",
+            "cameraGrant": "Allow"
+          },
+           "invite": {
+            "title": "Invite with a QR code",
+            "subtitle": "A member can scan this QR to join without typing the code.",
+            "copy": "Copy",
+            "copied": "Copied",
+            "share": "Share",
+            "shareMessage": "Join my group {{name}} on Prophetik with this code: {{code}}"
+          }
+      },
+      "challenges": {
+          "activeTitle": "Active challenges",
+          "pastTitle": "Past challenges",
+          "status": {
+              "active": "Active",
+              "awaiting": "Pending results",
+              "cancelledGhost": "Cancelled (not enough players)",
+              "completed": "Completed"
+          },
+          "gameDateLabel": "NHL date",
+          "signupDeadlineLabel": "Signup deadline :",
+          "firstGameLabel": "First game (local time):",
+          "potLabel": "Pot: {{count}} credit(s)",
+          "entryCostLabel": "Entry cost: {{count}} credit(s)",
+          "ghostRefundHint": "Players have been automatically refunded.",
+          "winnersTitleSingular": "Winner",
+          "winnersTitlePlural": "Winners",
+          "seeResults": "See results",
+          "participate": "Join",
+          "loginToSee": "Log in to see your challenges.",
+          "loadingChallenges": "Loading challenges…",
+          "createNhlChallenge": "Create an NHL challenge",
+          "noChallenges": "No challenges to display."
+      },
     "defi": {
        "create": {
             "title": "Create a challenge",
@@ -863,9 +1016,8 @@
         "streak3_reward": "Reward: 3-day streak",
         "five_particip_reward": "Reward: 5 participations",
         "daily_shot": "Reward: phone shaked"
-      },
-    
-
+      }
+    },
     "wallet": {
       "balanceLabel": "MY BALANCE",
       "bonusButton": "+25 Bonus",
@@ -901,7 +1053,7 @@
         "bestValue": "Best value"
       }
     }
-  }
+  
   },
   "profile": {
     "title": "Profile",
@@ -1107,7 +1259,8 @@
       "challenges": "Challenges (participation)",
       "leaderboard": "Leaderboard",
       "ai": "AI analysis"
-    }
+    }, 
+    "seePlans": "View subscriptions"
   },
 
  "leaderboard": {
@@ -1252,19 +1405,15 @@
       "wizard": {
         "step1": "1. Concept",
         "step2": "2. Group",
-        "step3": "3. Format",
-        "step4": "4. Start",
-        "step5": "5. Confirm",
+        "step3": "3. Start", 
+        "step4": "4. Confirm",
         "pickGroup": "Pick a group",
         "pickType": "Pick a format",
         "pickStartDate": "Start date"
       },
       "concept": {
         "title": "What is an Ascension?",
-        "body1": "An Ascension is a multi-day challenge. You start on a specific date, progress through stages, and compare your performance to other members in the group.",
-        "quickTitle": "Quick summary",
-        "quick1": "• Ascension 4: shorter format (recommended start: Wednesday).",
-        "quick2": "• Ascension 7: full format (recommended start: Sunday)."
+        "body1": "An Ascension is a multi-day challenge. You start on a specific date, progress through stages, and compare your performance to other members in the group."
       },
       "group": {
         "noneBody": "Create a group to launch an Ascension."
@@ -1274,20 +1423,15 @@
         "lockedHint": "Ascension 7 is for subscribers."
       },
       "unlockOther": "Unlock Ascension 7",
-      "startDate": {
-        "recoA7": "Recommended: Sunday (new week).",
-        "recoA4": "Recommended: Wednesday (4-day format).",
-        "quickTomorrow": "Tomorrow",
-        "quickSunday": "Sunday",
-        "quickWednesday": "Wednesday"
-      },
+      "startDate": "Choose when to start: today or tomorrow (no later).",
+      "startDatePlanned":"Planned start",
       "planLocked": "Your plan doesn’t allow this format.",
       "confirm": {
         "title": "Confirm",
         "group": "Group",
         "type": "Format",
         "startDate": "Start",
-        "note": "You can invite group members right after creation."
+        "note": "A challenge will be created automatically after your confirmation."
       },
       "actions": {
         "creating": "Creating…",

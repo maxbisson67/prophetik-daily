@@ -30,7 +30,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 🔥 Logs Firestore verbeux en dev
 if (__DEV__) {
-  setLogLevel('silent'); // 'debug' | 'error' | 'silent'
+  setLogLevel('debug'); // 'debug' | 'error' | 'silent'
 }
 
 /* ----------------------- Config ----------------------- */

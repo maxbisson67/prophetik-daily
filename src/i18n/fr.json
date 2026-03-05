@@ -16,7 +16,11 @@
       "next": "Suivant",
       "loading": "Chargement…",
       "selected":"Sélectionné",
-      "genericError": "Une erreur est survenue. Veuillez réessayer."
+      "genericError": "Une erreur est survenue. Veuillez réessayer.",
+      "check": "✅ ",
+      "dot": "▫️ ",
+      "tomorrow":"Demain",
+      "today":"Aujourd'hui"
     },
     "errors": {
       "firestorePermission": "Accès refusé par les règles Firestore."
@@ -31,7 +35,9 @@
         "continueEmail": "Continuer avec Email",
         "createSms": "Créer un compte SMS",
         "createEmail": "Créer un compte Email",
-        "footer": "En continuant, tu acceptes nos conditions d’utilisation."
+        "footer": "En continuant, tu acceptes nos conditions d’utilisation.",
+        "continueEmailLink": "Continuer avec un lien par courriel",
+        "securityNote": "🔒 Pour des raisons de sécurité, les courriels et SMS peuvent provenir de capitaine.firebaseapp.com. Il s’agit du service officiel d’authentification utilisé par Prophetik."
       },
       "signup": {
         "title": "Créer un compte",
@@ -96,41 +102,52 @@
           "tooManyRequests": "Trop de tentatives. Réessaie plus tard."
         }
       },
-      
-      "phoneLogin": {
-        "title": "Connexion SMS",
-        "h1": "Se connecter par SMS",
-
-        "phoneLabel": "Téléphone (tu peux écrire 5145551234)",
-        "phonePlaceholder": "5145551234",
-        "sendingAs": "Envoi comme : {{phone}}",
-
-        "receiveCodeCta": "Recevoir le code",
-
-        "codeLabel": "Code reçu par SMS",
-        "codePlaceholder": "123456",
-        "confirmCta": "Confirmer",
-        "changeNumberCta": "Changer de numéro / Renvoyer un code",
-
-        "invalidPhoneTitle": "Numéro invalide",
-        "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
-
-        "accountRequiredTitle": "Compte requis",
-        "accountRequiredBody": "Ce numéro n'est pas associé à un compte existant. Crée d'abord un compte (SMS ou Email).",
-
-        "codeSentTitle": "Code envoyé",
-        "codeSentBody": "Vérifie tes SMS.",
-
-        "smsErrorTitle": "Erreur SMS",
-        "smsErrorBody": "Impossible d’envoyer le code.",
-
-        "userNotFound": "Utilisateur introuvable.",
-
-        "invalidCodeTitle": "Code invalide",
-        "invalidCodeBody": "Vérifie le code.",
-
-        "signInFailedTitle": "Échec de connexion"
+      "emailLink": {
+        "title": "Continuer avec un lien courriel",
+        "headline": "Aucun mot de passe requis",
+        "body": "Nous t’enverrons un lien de connexion par courriel.",
+        "firstNameLabel": "Prénom (optionnel)",
+        "firstNamePlaceholder": "ex. Mike",
+        "emailLabel": "Adresse courriel",
+        "emailHint": "Nous enverrons ton lien sécurisé à cette adresse.",
+        "missingEmailTitle": "Courriel manquant",
+        "missingEmailBody": "Entre ton adresse courriel.",
+        "sentTitle": "✅ Courriel envoyé",
+        "sentBody": "Vérifie ta boîte de réception et touche le lien pour terminer l’inscription.",
+        "cannotSendTitle": "Impossible d’envoyer le lien",
+        "sendCta": "Envoyer le lien"
       },
+            
+      "phoneLogin": {
+            "title": "Continuer par SMS",
+            "h1": "Continuer par SMS",
+            "subtitle": "On va t’envoyer un code unique par SMS.",
+            "displayNameLabel": "Prénom (optionnel)",
+            "displayNamePlaceholder": "ex. Liam",
+            "phoneLabel": "Téléphone (tu peux écrire 5145551234)",
+            "phonePlaceholder": "5145551234",
+            "sendingAs": "Envoi à : {{phone}}",
+            "receiveCodeCta": "Recevoir le code",
+
+            "codeLabel": "Code reçu par SMS",
+            "codePlaceholder": "123456",
+            "confirmCta": "Confirmer",
+            "resendLink": "Utiliser un autre numéro / Renvoyer",
+
+            "invalidPhoneTitle": "Numéro invalide",
+            "invalidPhoneBody": "Entre un numéro valide (ex. 5145551234).",
+            "codeSentTitle": "Code envoyé",
+            "codeSentBody": "Vérifie tes SMS.",
+            "smsErrorTitle": "Erreur SMS",
+            "smsErrorBody": "Impossible d’envoyer le code.",
+            "codeRequiredTitle": "Code requis",
+            "codeRequiredBody": "Entre le code reçu par SMS.",
+            "sessionExpiredTitle": "Session expirée",
+            "sessionExpiredBody": "Essaie de renvoyer le code.",
+            "invalidCodeTitle": "Code invalide",
+            "invalidCodeBody": "Vérifie le code.",
+            "signInFailedTitle": "Connexion échouée"
+    },
 
       "phoneSignup": {
         "title": "Créer un compte (SMS)",
@@ -182,6 +199,16 @@
       }
     
     },
+    "onboarding": {
+      "welcome": {
+        "title": "Bienvenue",
+        "h1": "Bienvenue sur Prophetik 🎉",
+        "subtitle": "Crée ton premier groupe afin d'y inviter tes amis. Tu peux aussi rejoindre un groupe existant.",
+        "joinCta": "Rejoindre un groupe",
+        "createCta": "Créer un groupe",
+        "privateGroups": "Joue avec tes amis dans des groupes privés"
+      }
+    },
     "home": {
       "title": "Accueil",
       "hello": "Salut",
@@ -193,6 +220,7 @@
       "totalPot": "Gain potentiel",
       "todayChallenge": "Mes défis du jour",
       "challenge": "Défi",
+      "create":"Créer",
       "challengeDate": "Date NHL",
       "challengeLimit": "Limite d’inscription :",
       "challengeStarts": "Débute à",
@@ -206,6 +234,12 @@
       "upgradeCta": "Voir les forfaits",   
       "launchAscension":"Lancer une ascension", 
       "participate":"Participer",
+      "selectGroupLabel": "Sélectionne un groupe pour voir les défis associés",
+      "threeWays":"Trois façons de jouer sur Prophetik",
+      "threeWaysSub":"Choisis ton style aujourd’hui.",
+      "way1": "Première façon de jouer",
+      "way2": "Deuxième façon de jouer",
+      "way3": "Troisième façon de jouer",
       "status": {
         "open": "Ouvert",
         "live": "En cours",
@@ -213,7 +247,9 @@
         "completed": "Terminé"
       },
       "metrics": {
-        "points": "Points",
+        "title": "Mes métriques",
+        "points": "Points", 
+        "subtitle": "Points • Participations • Victoires • PPG",
         "pointsSubtitle": "{{count}} défis",
         "pointsSubtitleEmpty": "Aucun défi",
 
@@ -229,6 +265,8 @@
       },
       "loginToAccess": "Connecte-toi pour accéder à l’accueil.",
       "noGroups": "Tu n’as pas encore de groupes.",
+      "createGroup":"Créer un groupe",
+      "noGroupCreateDefiBody":"Vous devez d’abord créer un groupe avant de lancer un défi.",
       "noActiveChallenges": "Aucun défi actif pour le moment.",
       "editAvatar": "Modifier l'avatar",
       "creditsToEarn": "Points à gagner",
@@ -248,6 +286,100 @@
       "dailyShotHint": "Shake ton téléphone pour gagner +1 crédit.",
       "dailyShotLoading": "Capteurs en cours de chargement…",
       "dailyShotMonthlyCap": "Plafond mensuel: {{current}} / {{max}}" 
+    },
+    "firstGoal": {
+      "home": {
+        "title": "Défis Premier but",
+        "empty": "Aucun défi premier but aujourd'hui dans tes groupes",
+        "signupDeadline": "Heure limite d'inscription",
+        "infoTitle":"Comment fonctionne ce défi?",
+        "boni": "Boni",
+        "infoBody":"• Choisis le joueur qui marquera le premier but du match.\n• Regarde les résultats dans l'onglet Sports/MatchLive.\n• Un point sera alloué à celui qui a prédit le premier compteur.\n• Si personne n'a fait la bonne prédiction, le point sera reporté et la cagnotte augmentera."
+      },
+      "create":{
+        "firstGoalTitle":"Créer un défi Premier but",
+        "groupChoose":"Choisir un groupe",
+        "gameTime":"Début: {{time}}",
+        "step1":"Groupe",
+        "step2":"Match",
+        "step3":"Confirmer",
+        "pickGameTitle": "Choisir un match",
+        "confirmTitle":"Confirmer",
+        "createNow": "Créer",
+        "creating": "Création…",
+        "summary": {
+          "group":"Groupe",
+          "startAt":"Début: {{time}}",
+          "hint":"Les membres recevront une notification et pourront choisir 1 joueur avant le début du match."
+        },
+        "players": {
+          "none": "Aucun joueur de trouvé",
+          "loading": "chargement des rosters…",
+          "title": "Joueurs"
+        }
+      },
+      "pick":{
+        "title": "First goal",
+        "loading": "Chargement…",
+        "noResults": "Aucun joueur trouvé.",
+        "alreadyPicked": "Ton choix est verrouillé",
+        "editUntil" : "Tu peux modifier ton choix jusqu’à",
+        "locked": "Le défi est verrouillé",
+        "chooseOne": "Choisis le joueur qui marquera le premier but",
+        "startsAt": "Début" 
+      },
+      "live": {
+        "title": "Défi : Premier but",
+        "none": "Aucun défi « premier but » pour ce match.",
+        "participants": "{{n}} participant(s)",
+        "myPick": "Ton choix : {{name}}",
+        "viewPick": "Voir mon choix",
+        "join": "Participer",
+        "noWinner": "Aucun gagnant",
+        "pending": "Provisoire / en révision NHL…",
+        "locked": "Verrouillé (avant-match)",
+        "open": "Ouvert"
+      },
+      "cta":{
+        "matchLive": "En direct",
+        "pickScorer": "Choisir mon joueur"
+      }
+    },
+    "ascensions": {
+      "home": { 
+        "title": "Mes ascensions",
+        "subtitle": "Quêtes multi-jours (progression)"
+      },
+      "badgeDays":"Ascensions sur {{n}} jours",
+      "lockedAsc7Text":"Débloque Ascension 7 pour accéder à la quête hebdomadaire (Dim→Sam) et au suivi complet.",
+      "badge": {
+        "asc4": "Ascensions sur 4 jour",
+        "asc7": "Ascensions sur 7 jours"
+      },
+      "title": {
+        "asc4": "Ascension 4",
+        "asc7": "Ascension 7"
+      },
+      "locked": {
+        "body": "Débloque Ascension 7 pour accéder à la quête hebdomadaire (Dim→Sam) et au suivi complet.",
+        "cta": "Voir les abonnements"
+      },
+      "notInitialized": "Pas encore initialisée pour ce groupe.",
+      "noActiveCycle":"Aucun cycle actif pour cette Ascension.",
+      "viewSubscriptions":"Voir les abonnements",
+      "status": {
+        "disabled": "Désactivée",
+        "completedWithWinners_one": "Complétée ({{count}} gagnant)",
+        "completedWithWinners_other": "Complétée ({{count}} gagnants)",
+        "inProgress": "En cours"
+      },
+      "labels": {
+        "cycle": "Cycle",
+        "nextStep": "Prochaine étape",
+        "startLabel": "Début de l’ascension",
+        "weekLabel": "Semaine",
+        "completed":"Quête complétée"
+      }
     },
     "groups": {
       "detail": {
@@ -389,8 +521,22 @@
           "alertAccessDeniedMessage": "Tu n’es pas autorisé à rejoindre ce groupe.",
           "alertGenericErrorTitle": "Erreur",
           "alertLimitTitle": "Limite atteinte",
-          "alertLimitMessage": "Ton abonnement {{tier}} permet max {{max}} groupes en tant que membre. Tu en as déjà {{current}}. Passe à PRO/VIP pour augmenter la limite."
-      }
+          "alertLimitMessage": "Ton abonnement {{tier}} permet max {{max}} groupes en tant que membre. Tu en as déjà {{current}}. Passe à PRO/VIP pour augmenter la limite.",
+          "scanBtn": "Scanner un QR",
+          "scanTitle": "Scanner un QR",
+          "scanHint": "Place le QR dans le cadre",
+          "qrInvalid": "QR invalide. Essaie encore.",
+          "cameraDenied": "Permission caméra refusée. Autorise la caméra pour scanner un QR.",
+          "cameraGrant": "Autoriser"
+      },
+      "invite": {
+        "title": "Inviter avec un QR code",
+        "subtitle": "Un membre peut scanner ce QR pour rejoindre sans saisir le code.",
+        "copy": "Copier",
+        "copied": "Copié",
+        "share": "Partager",
+        "shareMessage": "Joins mon groupe {{name}} sur Prophetik avec ce code: {{code}}"
+      },
     },
       "challenges": {
           "activeTitle": "Défis actifs",
@@ -402,7 +548,7 @@
               "completed": "Terminé"
           },
           "gameDateLabel": "Date NHL",
-          "signupDeadlineLabel": "Limite d’inscription (heure locale) :",
+          "signupDeadlineLabel": "Heure limite d’inscription :",
           "firstGameLabel": "Premier match (heure locale) :",
           "potLabel": "Cagnotte : {{count}} crédit(s)",
           "entryCostLabel": "Coût de participation : {{count}} crédit(s)",
@@ -436,7 +582,7 @@
                 },
                 "pickGroup": "Choix du groupe",
                 "pickFormat": "Choix du format",
-                "pickDate": "Choix de la date",
+                "pickDate": "Choix de la date"
 
               },
 
@@ -511,7 +657,7 @@
               "statsGeneric": "Chargement des statistiques…"
           },
           "tiers": {
-              "legend": "T1 = Top 10 • T2 = 11–20 • T3 = 21+i",
+              "legend": "T1 = Top 10 • T2 = 11–20 • T3 = 21+i"
           },
           "matchup": {
             "rankShort": "Rang",
@@ -552,7 +698,7 @@
           }, 
           "paywall": {
             "ctaTitle": "Débloque Matchups + PPG + Rank",
-            "ctaBody": "Passe Pro/VIP pour optimiser tes picks.",
+            "ctaBody": "Passe Pro/VIP pour optimiser tes picks."
           },
           "rules": {
               "title": "Règles de tiers",
@@ -852,9 +998,9 @@
           "first_group": "Récompense : 1er groupe créé",
           "streak3_reward": "Récompense : 3 jours d’affilée",
           "five_particip_reward": "Récompense : 5 participations",
-          "daily_shot": "Bonus shake",
-        },
-
+          "daily_shot": "Bonus shake"
+        }
+      },
         "wallet": {
           "balanceLabel": "MON SOLDE",
           "bonusButton": "+25 Bonus",
@@ -890,7 +1036,7 @@
               "bestValue": "Meilleure valeur"
           }
       }
-      }
+      
     },
 
     "profile": {
@@ -1049,7 +1195,7 @@
         "best": "Meilleur"
       },
 
-          "highlights": {
+       "highlights": {
         "free": {
           "1": "1 groupe (propriétaire ou participant)",
           "2": "Formats disponibles : 1x1 à 3x3",
@@ -1098,7 +1244,8 @@
         "challenges": "Défis (participation)",
         "leaderboard": "Classement",
         "ai": "Analyse / IA"
-      }
+      },
+      "seePlans": "Voir les abonnements"
     },
     "leaderboard": {
       "title": "Classement",
@@ -1241,19 +1388,15 @@
       "wizard": {
         "step1": "1. Concept",
         "step2": "2. Groupe",
-        "step3": "3. Format",
-        "step4": "4. Début",
-        "step5": "5. Confirmation",
+        "step3": "3. Début",
+        "step4": "4. Confirmation",
         "pickGroup": "Choix du groupe",
         "pickType": "Choix du format",
         "pickStartDate": "Date de début"
       },
       "concept": {
         "title": "C’est quoi une Ascension?",
-        "body1": "Une Ascension est un défi “sur plusieurs jours”. Tu démarres à une date précise, tu progresses dans des paliers, et tu compares ta performance aux autres participants du groupe.",
-        "quickTitle": "En bref",
-        "quick1": "• Ascension 4 : format plus court (début recommandé mercredi).",
-        "quick2": "• Ascension 7 : format complet (début recommandé dimanche)."
+        "body1": "Une Ascension est un défi “sur plusieurs jours”. Tu démarres à une date précise, tu progresses dans des paliers, et tu compares ta performance aux autres participants du groupe."
       },
       "group": {
         "noneBody": "Crée un groupe pour pouvoir lancer une Ascension."
@@ -1263,13 +1406,8 @@
         "lockedHint": "Ascension 7 est réservé aux abonnés."
       },
       "unlockOther": "Débloquer Ascension 7",
-      "startDate": {
-        "recoA7": "Recommandé : dimanche (nouvelle semaine).",
-        "recoA4": "Recommandé : mercredi (format 4 jours).",
-        "quickTomorrow": "Demain",
-        "quickSunday": "Dimanche",
-        "quickWednesday": "Mercredi"
-      },
+      "startDate": "Choisis quand démarrer: aujourd’hui ou demain (pas plus loin).",
+      "startDatePlanned":"Début prévu", 
       "planLocked": "Ton abonnement ne permet pas ce format.",
       "confirm": {
         "title": "Confirmation",

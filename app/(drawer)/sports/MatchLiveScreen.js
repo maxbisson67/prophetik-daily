@@ -1,4 +1,4 @@
-// app/(tabs)/MatchLiveScreen.js
+// app/sports/MatchLiveScreen.js
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
@@ -11,7 +11,13 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import { Stack } from 'expo-router';
+
+import {  useRouter } from 'expo-router';
+import { useAuth } from '@src/auth/SafeAuthProvider';
+
+import FirstGoalChallengeModal from "@src/firstGoal/FirstGoalChallengeModal";
+
+
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@src/theme/ThemeProvider';
 
@@ -21,6 +27,7 @@ import functions from '@react-native-firebase/functions';
 
 // i18n
 import i18n from '@src/i18n/i18n';
+
 
 /* ========================
    Helpers date / logos
@@ -64,6 +71,18 @@ const LOGO_MAP = {
 
 function teamLogo(abbr) {
   return LOGO_MAP[abbr] || null;
+}
+
+function formatShortDateLocalized(ymd, locale) {
+  if (!ymd || typeof ymd !== "string" || ymd.length < 10) return "";
+  const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+
+  // ex: "27 February" / "27 février"
+  return new Intl.DateTimeFormat(locale || "en", {
+    day: "numeric",
+    month: "long",
+  }).format(dt);
 }
 
 function todayYMD() {
@@ -240,7 +259,7 @@ function shortName(fullName) {
    Composant de ligne
 ========================= */
 
-function GameRow({ game, onPress, colors }) {
+function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
   const {
     homeAbbr,
     awayAbbr,
@@ -260,9 +279,32 @@ function GameRow({ game, onPress, colors }) {
   // On n’affiche pas "Terminé" si le match est final (le "Final..." vient de periodLabel)
   const displayStatusText = isFinal ? null : statusText;
 
+  const ch = challenge || null;
+  const chStatus = String(ch?.status || "").toLowerCase();
+  const chParticipants = Number(ch?.participantsCount || 0);
+
+  const chLine =
+    chStatus === "open"
+      ? `🟢 ${i18n.t("firstGoal.status.open", { defaultValue: "Ouvert" })}`
+      : chStatus === "locked"
+      ? `🔒 ${i18n.t("firstGoal.status.locked", { defaultValue: "Verrouillé" })}`
+      : chStatus === "pending"
+      ? `⏳ ${i18n.t("firstGoal.status.pending", { defaultValue: "En vérification" })}`
+      : chStatus === "decided"
+      ? `✅ ${i18n.t("firstGoal.status.decided", { defaultValue: "Résultats" })}`
+      : chStatus
+      ? chStatus
+      : null;
+
+  const chResult =
+    chStatus === "decided" || chStatus === "closed"
+      ? ch?.firstGoal?.playerName
+        ? `${i18n.t("firstGoal.result.prefix", { defaultValue: "Premier but:" })} ${ch.firstGoal.playerName}`
+        : i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })
+      : null;
+
   return (
-    <TouchableOpacity
-      onPress={() => onPress?.(game)}
+    <View
       style={{
         padding: 12,
         borderRadius: 12,
@@ -272,173 +314,144 @@ function GameRow({ game, onPress, colors }) {
         marginBottom: 10,
       }}
     >
-      <View
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
+      {/* Zone tappable pour ouvrir la modale du match */}
+      <TouchableOpacity
+        onPress={() => onPress?.(game)}
+        activeOpacity={0.85}
+        style={{}}
       >
-        {/* Infos gauche : équipes + score */}
-        <View style={{ flex: 1 }}>
-          {/* Away */}
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}
-          >
-            {teamLogo(awayAbbr) && (
-              <Image
-                source={teamLogo(awayAbbr)}
-                style={{ width: 26, height: 26, marginRight: 8 }}
-              />
-            )}
-            <Text
-              style={{ color: colors.text, fontWeight: '600', flex: 1 }}
-            >
-              {awayAbbr}
-            </Text>
-            <Text
-              style={{
-                color: colors.text,
-                fontWeight: '700',
-                width: 24,
-                textAlign: 'right',
-              }}
-            >
-              {awayScore}
-            </Text>
-          </View>
-          {/* Home */}
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {teamLogo(homeAbbr) && (
-              <Image
-                source={teamLogo(homeAbbr)}
-                style={{ width: 26, height: 26, marginRight: 8 }}
-              />
-            )}
-            <Text
-              style={{ color: colors.text, fontWeight: '600', flex: 1 }}
-            >
-              {homeAbbr}
-            </Text>
-            <Text
-              style={{
-                color: colors.text,
-                fontWeight: '700',
-                width: 24,
-                textAlign: 'right',
-              }}
-            >
-              {homeScore}
-            </Text>
-          </View>
-        </View>
-
-        {/* Colonne droite : LIVE + période + heure/temps */}
-        <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
-          {/* Indication LIVE */}
-          {isLive && (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginBottom: 2,
-              }}
-            >
-              <View
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: '#dc2626',
-                  marginRight: 6,
-                }}
-              />
-              <Text
-                style={{
-                  color: '#dc2626',
-                  fontWeight: '700',
-                }}
-              >
-                {i18n.t('live.status.live', 'LIVE')}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          {/* Infos gauche : équipes + score */}
+          <View style={{ flex: 1 }}>
+            {/* Away */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+              {teamLogo(awayAbbr) && (
+                <Image source={teamLogo(awayAbbr)} style={{ width: 26, height: 26, marginRight: 8 }} />
+              )}
+              <Text style={{ color: colors.text, fontWeight: "600", flex: 1 }}>{awayAbbr}</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", width: 24, textAlign: "right" }}>
+                {awayScore}
               </Text>
             </View>
-          )}
 
-          {/* Période / Final */}
-          {periodLabel && (
-            <Text
-              style={{
-                color: colors.subtext,
-                fontSize: 12,
-                marginBottom: 2,
-              }}
-            >
-              {periodLabel}
-            </Text>
-          )}
-
-          {/* Temps restant ou heure de début */}
-          {isLive ? (
-            isIntermission ? (
-              <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                {i18n.t('live.detail.intermission', 'Entracte')}
+            {/* Home */}
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              {teamLogo(homeAbbr) && (
+                <Image source={teamLogo(homeAbbr)} style={{ width: 26, height: 26, marginRight: 8 }} />
+              )}
+              <Text style={{ color: colors.text, fontWeight: "600", flex: 1 }}>{homeAbbr}</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", width: 24, textAlign: "right" }}>
+                {homeScore}
               </Text>
-            ) : timeRemaining ? (
-              <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                {i18n.t('live.detail.timeRemaining', {
-                  defaultValue: 'Temps restant: {{time}}',
-                  time: timeRemaining,
-                })}
-              </Text>
-            ) : null
-          ) : isFinal ? null : (
-            <Text style={{ color: colors.subtext, fontSize: 12 }}>
-              {startTimeUTC
-                ? i18n.t('live.row.startAt', {
-                    defaultValue: 'Début: {{time}}',
-                    time: fmtTime(startTimeUTC),
-                  })
-                : i18n.t('live.row.startUnknown', 'Heure inconnue')}
-            </Text>
-          )}
+            </View>
+          </View>
 
-          {/* Texte de statut brut (si pas final) */}
-          {displayStatusText ? (
-            <Text
-              style={{
-                color: colors.subtext,
-                fontSize: 11,
-                marginTop: 2,
-              }}
-            >
-              {displayStatusText}
+          {/* Colonne droite : LIVE + période + heure/temps */}
+          <View style={{ alignItems: "flex-end", marginLeft: 12 }}>
+            {isLive && (
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 2 }}>
+                <View
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: "#dc2626",
+                    marginRight: 6,
+                  }}
+                />
+                <Text style={{ color: "#dc2626", fontWeight: "700" }}>
+                  {i18n.t("live.status.live", "LIVE")}
+                </Text>
+              </View>
+            )}
+
+            {periodLabel && (
+              <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 2 }}>
+                {periodLabel}
+              </Text>
+            )}
+
+            {isLive ? (
+              isIntermission ? (
+                <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                  {i18n.t("live.detail.intermission", "Entracte")}
+                </Text>
+              ) : timeRemaining ? (
+                <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                  {i18n.t("live.detail.timeRemaining", {
+                    defaultValue: "Temps restant: {{time}}",
+                    time: timeRemaining,
+                  })}
+                </Text>
+              ) : null
+            ) : isFinal ? null : (
+              <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                {startTimeUTC
+                  ? i18n.t("live.row.startAt", {
+                      defaultValue: "Début: {{time}}",
+                      time: fmtTime(startTimeUTC),
+                    })
+                  : i18n.t("live.row.startUnknown", "Heure inconnue")}
+              </Text>
+            )}
+
+            {displayStatusText ? (
+              <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 2 }}>
+                {displayStatusText}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* ✅ Zone tappable séparée pour le First Goal Challenge */}
+      {ch?.id ? (
+        <TouchableOpacity
+          onPress={() => onPressChallenge?.(ch)}
+          activeOpacity={0.85}
+          style={{
+            marginTop: 10,
+            paddingVertical: 8,
+            paddingHorizontal: 10,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card2,
+          }}
+        >
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
+            🎯 {i18n.t("firstGoal.label", { defaultValue: "Premier but" })} • {chParticipants}
+          </Text>
+
+          {chLine ? (
+            <Text style={{ marginTop: 2, color: colors.subtext, fontSize: 12 }} numberOfLines={1}>
+              {chLine}
+              {chResult ? ` • ${chResult}` : ""}
             </Text>
           ) : null}
+        </TouchableOpacity>
+      ) : (
+        <View
+          style={{
+            marginTop: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "flex-end",
+          }}
+        >
+          <Ionicons name="information-circle-outline" size={16} color={colors.subtext} />
+          <Text style={{ marginLeft: 4, color: colors.subtext, fontSize: 12 }}>
+            {i18n.t("live.row.tapForDetails", "Touchez pour voir les détails")}
+          </Text>
         </View>
-      </View>
-
-      {/* Hint tap */}
-      <View
-        style={{
-          marginTop: 8,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-        }}
-      >
-        <Ionicons
-          name="information-circle-outline"
-          size={16}
-          color={colors.subtext}
-        />
-        <Text style={{ marginLeft: 4, color: colors.subtext, fontSize: 12 }}>
-          {i18n.t(
-            'live.row.tapForDetails',
-            'Touchez pour voir les détails'
-          )}
-        </Text>
-      </View>
-    </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -447,9 +460,12 @@ function GameRow({ game, onPress, colors }) {
 ========================= */
 
 function GameDetailModal({ visible, onClose, game, colors }) {
+  const { user } = useAuth();
+
   const [gameDoc, setGameDoc] = useState(null);
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(false);
+
 
   useEffect(() => {
     console.log("TIMEMNOW",
@@ -1018,6 +1034,12 @@ export default function MatchLiveScreen() {
   // 🔑 "todayKey" dynamique (règle NHL avec 9h) qui se met à jour tout seul
   const [todayKey, setTodayKey] = useState(() => computeNhlYmd());
 
+  const router = useRouter();
+  const [firstGoalByGameId, setFirstGoalByGameId] = useState({});
+
+  const [fgModalOpen, setFgModalOpen] = useState(false);
+  const [fgSelectedChallenge, setFgSelectedChallenge] = useState(null);
+
   // Met à jour todayKey toutes les 60s (pour refléter changement de journée)
   useEffect(() => {
     const id = setInterval(() => {
@@ -1052,6 +1074,58 @@ export default function MatchLiveScreen() {
     };
   }, [todayKey]);
 
+  // ✅ Défis "first goal" du jour (tous groupes)
+  useEffect(() => {
+    setFirstGoalByGameId({});
+
+    const ymd = String(todayKey || "");
+    if (!ymd) return;
+
+    const q = firestore()
+      .collection("first_goal_challenges")
+      .where("league", "==", "NHL")
+      .where("type", "==", "first_goal")
+      .where("gameYmd", "==", ymd);
+
+    const unsub = q.onSnapshot(
+      (snap) => {
+        // rebuild map à chaque fois (simple, évite fantômes)
+        const map = {};
+        snap.docs.forEach((d) => {
+          const ch = { id: d.id, ...d.data() };
+          const gid = String(ch.gameId || "");
+          if (!gid) return;
+
+          // si plusieurs défis sur même gameId, on garde le plus "important"
+          // ordre: open > locked > pending > decided > closed/other
+          const rank = (st) => {
+            const s = String(st || "").toLowerCase();
+            if (s === "open") return 0;
+            if (s === "locked") return 1;
+            if (s === "pending") return 2;
+            if (s === "decided") return 3;
+            if (s === "closed") return 4;
+            return 5;
+          };
+
+          const prev = map[gid];
+          if (!prev || rank(ch.status) < rank(prev.status)) {
+            map[gid] = ch;
+          }
+        });
+
+        setFirstGoalByGameId(map);
+      },
+      (err) => {
+        console.log("[MatchLive] first_goal_challenges error", err?.message || err);
+      }
+    );
+
+    return () => {
+      try { unsub(); } catch {}
+    };
+  }, [todayKey]);
+
   const sortedGames = useMemo(() => {
     const s = [...games];
     const weight = (g) => (g.isLive ? 0 : g.isFinal ? 2 : 1);
@@ -1071,6 +1145,21 @@ export default function MatchLiveScreen() {
     setModalVisible(true);
   }, []);
 
+  const handlePressFirstGoal = useCallback((ch, game) => {
+    const st = String(ch?.status || "").toLowerCase();
+
+    // 1) Défi ouvert -> page de pick (join / edit)
+    if (st === "open") {
+      router.push(`/(first-goal)/pick/${String(ch.id)}`);
+      return;
+    }
+
+    // 2) Lock / live / pending -> modale participants + choix
+    // 3) decided / closed -> modale participants + choix + winners badge
+    setFgSelectedChallenge({ ...ch, gameId: ch.gameId || game?.id });
+    setFgModalOpen(true);
+  }, [router]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -1083,16 +1172,18 @@ export default function MatchLiveScreen() {
     }
   }, []);
 
+  const locale = i18n.language?.startsWith("fr") ? "fr-CA" : "en-CA";
+
   const prettyDateLabel = useMemo(
-    () => formatFrenchShortDate(todayKey),
-    [todayKey]
+    () => formatShortDateLocalized(todayKey, locale),
+    [todayKey, locale]
   );
 
   const headerTitle = i18n.t('live.title', 'Match Live');
 
   return (
     <>
-      <Stack.Screen options={{ title: headerTitle }} />
+    
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         {loading ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -1139,7 +1230,13 @@ export default function MatchLiveScreen() {
               </View>
             )}
             renderItem={({ item }) => (
-              <GameRow game={item} onPress={handlePressGame} colors={colors} />
+              <GameRow
+                game={item}
+                onPress={handlePressGame}
+                colors={colors}
+                challenge={firstGoalByGameId[String(item.id)] || null}
+                onPressChallenge={(ch) => handlePressFirstGoal(ch, item)}
+              />
             )}
             ListEmptyComponent={() => (
               <View style={{ marginTop: 40, alignItems: 'center' }}>
@@ -1155,6 +1252,13 @@ export default function MatchLiveScreen() {
             )}
           />
         )}
+
+        <FirstGoalChallengeModal
+          visible={fgModalOpen}
+          onClose={() => setFgModalOpen(false)}
+          challenge={fgSelectedChallenge}
+          colors={colors}
+        />
 
         <GameDetailModal
           visible={modalVisible}

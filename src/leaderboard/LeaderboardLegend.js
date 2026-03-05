@@ -6,6 +6,35 @@ import ProphetikIcons from "@src/ui/ProphetikIcons";
 import i18n from "@src/i18n/i18n";
 import WinRateIcon from "@src/ui/WinRateIcon";
 
+const RED = "#b91c1c";
+
+function cardShadow() {
+  return {
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  };
+}
+
+function sectionCardStyle(colors, accent = RED) {
+  return {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+    padding: 12,
+
+    // ✅ signature Prophetik
+    borderLeftWidth: 4,
+    borderLeftColor: accent,
+    borderBottomWidth: 2,
+    borderBottomColor: accent,
+  };
+}
+
 export default function LeaderboardLegend({ colors, tierLower, onUpgrade }) {
   const t = i18n.t.bind(i18n);
   const [open, setOpen] = useState(false);
@@ -74,15 +103,7 @@ export default function LeaderboardLegend({ colors, tierLower, onUpgrade }) {
   }, [t, isFree, isPro, isVip]);
 
   return (
-    <View
-      style={{
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-        padding: 12,
-      }}
-    >
+    <View style={[cardShadow(), sectionCardStyle(colors, RED)]}>
       <TouchableOpacity
         onPress={() => setOpen((v) => !v)}
         activeOpacity={0.85}

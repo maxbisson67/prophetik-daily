@@ -89,6 +89,7 @@ export default function PlayerSelectModal({
   tierLower = "free",
   teamLogo,
   headshotUrl,
+  forcedTier = null,
 }) {
   const { colors } = useTheme();
 
@@ -103,13 +104,20 @@ export default function PlayerSelectModal({
   const isPro = tier === "pro" || isVip;
   const isFree = !isPro; // ✅ FREE = pas pro/vip
 
+
   useEffect(() => {
-    if (visible) {
-      setQ("");
-      setTierFilter("T1");
-      setSortKey("points");
+    if (!visible) return;
+
+    setQ("");
+    setSortKey("points");
+
+    const ft = String(forcedTier || "").toUpperCase();
+    if (ft === "T1" || ft === "T2" || ft === "T3") {
+        setTierFilter(ft);
+    } else {
+        setTierFilter("T1"); // fallback
     }
-  }, [visible]);
+    }, [visible, forcedTier]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -297,11 +305,17 @@ export default function PlayerSelectModal({
 
           {/* Filters */}
           <View style={{ gap: 10, marginBottom: 10 }}>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              <Chip label="T1" active={tierFilter === "T1"} onPress={() => setTierFilter("T1")} />
-              <Chip label="T2" active={tierFilter === "T2"} onPress={() => setTierFilter("T2")} />
-              <Chip label="T3" active={tierFilter === "T3"} onPress={() => setTierFilter("T3")} />
-            </View>
+         
+            {forcedTier ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
+                    {i18n.t("defi.playerSelect.tierLocked", { defaultValue: "Tier :" })}
+                    </Text>
+                    <TierBadge tier={forcedTier} />
+             </View>
+            ) : null}
+
+      
 
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               <Chip label="Points" active={sortKey === "points"} onPress={() => setSortKey("points")} />

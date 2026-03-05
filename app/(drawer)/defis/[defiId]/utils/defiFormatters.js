@@ -6,6 +6,8 @@ export function fmtUTCDateStr(d) {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
+
+
 export function toYMD(v) {
   if (!v) return null;
 
@@ -83,21 +85,22 @@ export function impactBand(pct) {
   return "neutral";
 }
 
-export function ymdTorontoFromUTC(utcString) {
+export function ymdTorontoFromUTC(v) {
   try {
-    if (!utcString) return null;
-    const d = new Date(utcString);
-    if (Number.isNaN(d.getTime())) return null;
+    const d =
+      typeof v === "string" ? new Date(v) :
+      v?.toDate ? v.toDate() :
+      v instanceof Date ? v :
+      null;
 
-    const parts = new Intl.DateTimeFormat("en-CA", {
+    if (!d || isNaN(d.getTime())) return null;
+
+    return new Intl.DateTimeFormat("en-CA", {
       timeZone: "America/Toronto",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    }).formatToParts(d);
-
-    const get = (t) => parts.find((p) => p.type === t)?.value;
-    return `${get("year")}-${get("month")}-${get("day")}`;
+    }).format(d);
   } catch {
     return null;
   }

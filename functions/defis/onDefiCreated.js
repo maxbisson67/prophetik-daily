@@ -3,10 +3,6 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
 
-
-// ✅ règle “pas plus que 72h avant”
-const MAX_AHEAD_HOURS = 72;
-
 // ✅ pool figé du défi
 const POOL_SIZE = 150;
 
@@ -67,50 +63,44 @@ function tierFromIndex0(idx0) {
  * ✅ Source de vérité: nhl_schedule_daily/{snapshotYyyymmdd}/games/*
  * Contient la semaine, donc on filtre par startTimeUTC (YYYY-MM-DD)
  */
-async function fetchTeamsPlayingOnFromScheduleDaily(gameDateYmd) {
-  if (!gameDateYmd) return [];
+  async function fetchTeamsPlayingOnFromScheduleDaily(gameDateYmd) {
+    if (!gameDateYmd) return [];
 
-  // On lit le snapshot "aujourd'hui" (Toronto), car il contient la semaine à venir
-  const snapshotYmd = ymdToronto(new Date());
-  const snapshotId = ymdCompact(snapshotYmd);
+    const set = new Set();
 
-  const snap = await db.collection(`nhl_schedule_daily/${snapshotId}/games`).get();
+    // ✅ 1) Lire d’abord le snapshot du JOUR DU MATCH (ta structure)
+    const snapIdGameDay = ymdCompact(gameDateYmd);
+    const snapGameDay = await db.collection(`nhl_schedule_daily/${snapIdGameDay}/games`).get();
 
-  const set = new Set();
-
-  snap.forEach((doc) => {
-    const g = doc.data() || {};
-    const gYmd = ymdFromStartTimeUTC(g.startTimeUTC);
-    if (gYmd !== gameDateYmd) return;
-
-    const h = String(g?.home?.abbr || "").toUpperCase();
-    const a = String(g?.away?.abbr || "").toUpperCase();
-    if (h) set.add(h);
-    if (a) set.add(a);
-  });
-
-  // ✅ fallback soft: si vide (rare), essaie le snapshot d'hier
-  if (set.size === 0) {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const snapYmd2 = ymdToronto(yesterday);
-    const snapId2 = ymdCompact(snapYmd2);
-
-    const snap2 = await db.collection(`nhl_schedule_daily/${snapId2}/games`).get();
-    snap2.forEach((doc) => {
+    snapGameDay.forEach((doc) => {
       const g = doc.data() || {};
-      const gYmd = ymdFromStartTimeUTC(g.startTimeUTC);
-      if (gYmd !== gameDateYmd) return;
-
       const h = String(g?.home?.abbr || "").toUpperCase();
       const a = String(g?.away?.abbr || "").toUpperCase();
       if (h) set.add(h);
       if (a) set.add(a);
     });
+
+    // ✅ 2) Fallback soft: si vide, on essaie “aujourd’hui” (ton ancien comportement)
+    if (set.size === 0) {
+      const snapshotYmd = ymdToronto(new Date());
+      const snapshotId = ymdCompact(snapshotYmd);
+
+      const snap = await db.collection(`nhl_schedule_daily/${snapshotId}/games`).get();
+      snap.forEach((doc) => {
+        const g = doc.data() || {};
+        const gYmd = ymdFromStartTimeUTC(g.startTimeUTC);
+        if (gYmd !== gameDateYmd) return;
+
+        const h = String(g?.home?.abbr || "").toUpperCase();
+        const a = String(g?.away?.abbr || "").toUpperCase();
+        if (h) set.add(h);
+        if (a) set.add(a);
+      });
+    }
+
+    return Array.from(set);
   }
-
-  return Array.from(set);
-}
-
+  
 function chunk(arr, n) {
   const out = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
@@ -273,24 +263,6 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
   const now = new Date();
   const aheadMs = firstGameDate.getTime() - now.getTime();
   const aheadHours = aheadMs / (1000 * 60 * 60);
-
-  // règle 72h (sauf Ascensions)
-  const isAsc = !!defi?.ascension?.key;
-
-  if (!isAsc && aheadHours > MAX_AHEAD_HOURS) {
-    await defiRef.set(
-      {
-        status: "invalid",
-        invalidReason: "too_early",
-        poolStatus: "error",
-        poolError: `defi_created_more_than_${MAX_AHEAD_HOURS}h_before_firstGameUTC`,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    logger.warn("[onDefiCreated] rejected (too early)", { defiId, aheadHours });
-    return;
-  }
 
   const gameDateYmd = toYMD(defi.gameDate) || toYMD(firstGameDate);
   if (!gameDateYmd) {

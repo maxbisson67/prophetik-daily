@@ -10,6 +10,9 @@ import { APP_TZ, appYmd, weekAnchorDate } from "../ProphetikDate.js";
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
+
+const MAX_AHEAD_HOURS = 72;
+
 /* ----------------------------- helpers ----------------------------- */
 
 function randSuffix(len = 6) {
@@ -87,6 +90,24 @@ function getWeekKeyInTz(now = new Date(), tz = APP_TZ) {
   const week = 1 + Math.round((utc - firstThu) / (7 * 24 * 3600 * 1000));
   const weekYear = utc.getUTCFullYear();
   return `${weekYear}-W${String(week).padStart(2, "0")}`;
+}
+
+function ymdToCompact(ymd) {
+  return String(ymd || "").slice(0, 10).replace(/-/g, "");
+}
+
+async function hasEligibleProphetikGamesForYmd(ymd) {
+  const dayId = ymdToCompact(ymd); // "YYYYMMDD"
+
+  const snap = await db
+    .collection("nhl_matchups_daily")
+    .doc(dayId)
+    .collection("games")
+    .where("eligibleForProphetik", "==", true)
+    .limit(1)
+    .get();
+
+  return !snap.empty;
 }
 
 async function getUserTier(uid) {
@@ -219,6 +240,37 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
 
     // game date
     const gameDateYmd = normalizeGameDate(input.gameDate); // "YYYY-MM-DD"
+
+    // ✅ Refuser création si aucun match éligible à cette date (ex: pré-saison gameType=1)
+    const eligible = await hasEligibleProphetikGamesForYmd(gameDateYmd);
+    if (!eligible) {
+      throw new HttpsError("failed-precondition", "DATE_NOT_ELIGIBLE", {
+        reason: "DATE_NOT_ELIGIBLE",
+        gameDate: gameDateYmd,
+      });
+    }
+
+    // --- règle 72h (meilleure UX: refuser AVANT création) ---
+    const isSpecial = input.isSpecial === true;
+
+    // on exige firstGameUTC pour appliquer la règle (sinon pas de contrôle possible)
+    const firstGameUTC = toDateOrNull(input.firstGameUTC);
+    if (!firstGameUTC) {
+      throw new HttpsError("invalid-argument", "firstGameUTC requis.", {
+        reason: "FIRST_GAME_UTC_REQUIRED",
+      });
+    }
+
+    const now = new Date();
+    const aheadHours = (firstGameUTC.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    if (!isSpecial && aheadHours > MAX_AHEAD_HOURS) {
+      throw new HttpsError("failed-precondition", "DEFI_TOO_EARLY", {
+        reason: "DEFI_TOO_EARLY",
+        maxAheadHours: MAX_AHEAD_HOURS,
+        aheadHours: Math.round(aheadHours),
+      });
+    }
 
     // ✅ ID: 2025_12_30_3x3_idRandom
     const idDate = ymdToUnderscore(gameDateYmd);

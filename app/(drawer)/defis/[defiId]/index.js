@@ -206,6 +206,19 @@ function validatePicksPartial(chosen = [], rules, i18n) {
 
   return null;
 }
+function tierForSlotIndex(slotIndex, defiType) {
+  const rules = getDefiRules(defiType);
+
+  const t1 = Number(rules?.T1 ?? 0);
+  const t2 = Number(rules?.T2 ?? 0);
+  const t3 = Number(rules?.T3 ?? 0);
+
+  if (slotIndex < t1) return "T1";
+  if (slotIndex < t1 + t2) return "T2";
+  if (slotIndex < t1 + t2 + t3) return "T3";
+
+  return "T3";
+}
 
 export default function DefiParticipationScreen() {
   const { defiId } = useLocalSearchParams();
@@ -226,6 +239,7 @@ export default function DefiParticipationScreen() {
   const [selected, setSelected] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerIndex, setPickerIndex] = useState(0);
+  const [pickerTier, setPickerTier] = useState(null); // ✅ "T1" | "T2" | "T3" | null
 
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -338,10 +352,7 @@ export default function DefiParticipationScreen() {
           snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
 
           // ✅ Filtre: garder seulement les matchs de la journée du défi (Toronto)
-          const filtered = list.filter((g) => {
-            const ymd = ymdTorontoFromUTC(g.startTimeUTC);
-            return ymd === gameYMD;
-          });
+          const filtered = list.filter((g) => g.startYmdToronto === gameYMD);
 
           filtered.sort((a, b) => String(a.startTimeUTC || "").localeCompare(String(b.startTimeUTC || "")));
 
@@ -440,11 +451,16 @@ export default function DefiParticipationScreen() {
     );
   }, [defi]);
 
-  const openPicker = useCallback((index) => {
+  const openPicker = useCallback(
+  (index) => {
+    const forcedTier = tierForSlotIndex(index, defi?.type);
     setPickerIndex(index);
+    setPickerTier(forcedTier);
     setPickerOpen(true);
     Keyboard.dismiss();
-  }, []);
+  },
+  [defi?.type]
+  );
 
   const handlePick = useCallback(
     (p) => {
@@ -829,13 +845,18 @@ export default function DefiParticipationScreen() {
       {/* Modal */}
       <PlayerSelectModal
         visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
+        onClose={() => {
+          setPickerOpen(false);
+          setPickerTier(null);
+        }}
         options={playersSorted}
         onPick={handlePick}
         alreadyChosenIds={alreadyChosenIds}
         tierLower={tierLower}
         teamLogo={teamLogo}
         headshotUrl={headshotUrl}
+        forcedTier={pickerTier}
+
       />
 
       <LoadingOverlay visible={saving} text={i18n.t("defi.actions.primarySaving")} />

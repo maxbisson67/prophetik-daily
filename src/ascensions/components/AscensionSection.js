@@ -1,189 +1,90 @@
 // src/ascensions/components/AscensionSection.js
 import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator,Image } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
+import { useLanguage } from "@src/i18n/LanguageProvider";
+import i18n from "@src/i18n/i18n";
 import useAscensionGlobalState from "../useAscensionGlobalState";
-
-function badgeLabel(ascKey) {
-  const k = String(ascKey || "").toUpperCase();
-  return k === "ASC7" ? "Ascensions sur 7 jours" : "Ascensions sur 4 jours";
-}
-
-function titleLabel(ascKey) {
-  const k = String(ascKey || "").toUpperCase();
-  return k === "ASC7" ? "Ascension 7" : "Ascension 4";
-}
 
 function isLockedByTier(ascKey, tierLower) {
   const k = String(ascKey || "").toUpperCase();
   const t = String(tierLower || "free").toLowerCase();
-
-  // 👉 règle simple (ajuste si tu veux: vip seulement, etc.)
-  if (k === "ASC7" && t === "free") return true;
-  return false;
+  return k === "ASC7" && t === "free";
 }
 
-function fmtRange(startYmd, endYmd) {
-  if (!startYmd && !endYmd) return null;
-  if (startYmd && endYmd) return `${startYmd} → ${endYmd}`;
-  return startYmd || endYmd;
-}
-
-export default function AscensionSection({
-  colors,
-  groupId,
-  ascKey,
-  tierLower,
-  onPressOpen, // optionnel: ouvrir un écran ascension
-}) {
+export default function AscensionSection({ colors, groupId, ascKey, tierLower, onPressOpen }) {
   const router = useRouter();
-  const locked = isLockedByTier(ascKey, tierLower);
+  const { lang } = useLanguage();
 
+  // ✅ hooks TOUJOURS appelés
+  const locked = useMemo(() => isLockedByTier(ascKey, tierLower), [ascKey, tierLower]);
+
+  // ✅ hook accepte ascKey (ASC4/ASC7) — et retourne { loading, state, error }
   const { loading, state } = useAscensionGlobalState({
-    groupId: locked ? null : groupId, // ⚠️ si locked, on évite même le read
+    groupId: locked ? null : groupId,
     ascKey: locked ? null : ascKey,
   });
 
-  const header = useMemo(() => badgeLabel(ascKey), [ascKey]);
-  const title = useMemo(() => titleLabel(ascKey), [ascKey]);
+  const header = useMemo(() => {
+    const k = String(ascKey || "").toUpperCase();
+    const n = k === "ASC7" ? 7 : 4;
+    return i18n.t("ascensions.badgeDays", { n, defaultValue: "Ascensions sur {{n}} jours" });
+  }, [ascKey, lang]);
 
-  const ASC4_ICON = require("@src/assets/asc4.png");
-  const ASC7_ICON = require("@src/assets/asc7.png");  
+  const statusText = useMemo(() => {
+    if (!state) return "";
+    if (!state.enabled) return i18n.t("ascensions.status.disabled", { defaultValue: "Désactivée" });
+    if (state.completed) return i18n.t("ascensions.status.completed", { defaultValue: "Terminée" });
+    return i18n.t("ascensions.status.inProgress", { defaultValue: "En cours" });
+  }, [state, lang]);
 
-  const kUpper = String(ascKey || "").toUpperCase();
-    
-  const ascIcon = kUpper === "ASC7" ? ASC7_ICON : ASC4_ICON;
-
-
-  const containerStyle = {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-  };
-
-  const pillStyle = {
-    alignSelf: "flex-start",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: colors.card2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 10,
-  };
-
-  // --- LOCKED UI (CTA) ---
+  // ✅ ensuite seulement : returns conditionnels
   if (locked) {
     return (
-      <View style={containerStyle}>
-        <View style={[pillStyle, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
-            <Image source={ascIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{header}</Text>
-        </View>
-
-        <Text style={{ color: colors.subtext, marginTop: 6 }}>
-          Débloque Ascension 7 pour accéder à la quête hebdomadaire (Dim→Sam) et au suivi complet.
+      <View style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 14 }}>
+        <Text style={{ color: colors.text, fontWeight: "900" }}>{header}</Text>
+        <Text style={{ color: colors.subtext, marginTop: 8 }}>
+          {i18n.t("ascensions.lockedAsc7Text", { defaultValue: "Ascension 7 est réservé aux abonnés." })}
         </Text>
-
         <TouchableOpacity
           onPress={() => router.push("/(drawer)/subscriptions")}
-          style={{
-            marginTop: 12,
-            backgroundColor: "#111",
-            paddingVertical: 10,
-            borderRadius: 12,
-            alignItems: "center",
-          }}
+          style={{ marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: "#b91c1c", alignItems: "center" }}
         >
-          <Text style={{ color: "#fff", fontWeight: "900" }}>Voir les abonnements</Text>
+          <Text style={{ color: "#fff", fontWeight: "900" }}>
+            {i18n.t("ascensions.viewSubscriptions", { defaultValue: "Voir les abonnements" })}
+          </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // --- LOADING ---
   if (loading) {
     return (
-      <View style={containerStyle}>
-        <View style={[pillStyle, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
-            <Image source={ascIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{header}</Text>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <ActivityIndicator />
-          <Text style={{ marginLeft: 10, color: colors.subtext }}>Chargement…</Text>
-        </View>
-      </View>
-    );
-  }
-
-  // --- EMPTY (no doc) ---
-  if (!state) {
-    return (
-      <View style={containerStyle}>
-        <View style={[pillStyle, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
-            <Image source={ascIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{header}</Text>
-        </View>
-     
-        <Text style={{ color: colors.subtext, marginTop: 6 }}>
-          Pas encore initialisée pour ce groupe.
+      <View style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 14 }}>
+        <ActivityIndicator />
+        <Text style={{ marginTop: 8, color: colors.subtext }}>
+          {i18n.t("common.loading", { defaultValue: "Chargement…" })}
         </Text>
       </View>
     );
   }
 
-  const completedCount = (state.completedWinners || []).length;
-  const isCompleted = completedCount > 0;
-
-  const range = fmtRange(state.cycleStartYmd, state.cycleEndYmd);
-  const nextYmd = state.nextGameYmd || null;
-
-  const statusText = !state.enabled
-    ? "Désactivée"
-    : isCompleted
-    ? `Complétée (${completedCount} gagnant${completedCount > 1 ? "s" : ""})`
-    : "En cours";
-
-  const statusColor = !state.enabled
-    ? colors.subtext
-    : isCompleted
-    ? "#16a34a"
-    : colors.text;
+  if (!state || state.enabled === false) return null;
 
   return (
     <TouchableOpacity
       activeOpacity={0.85}
-      onPress={() => {
-        if (onPressOpen) return onPressOpen(state);
-        // option: une page dédiée
-        // router.push(`/(drawer)/ascensions/${String(groupId)}/${String(ascKey).toUpperCase()}`);
-      }}
-      style={containerStyle}
+      onPress={() => onPressOpen?.(state)}
+      style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 14 }}
     >
-    <View style={[pillStyle, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
-        <Image source={ascIcon} style={{ width:36, height: 36 }} resizeMode="contain" />
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{header}</Text>
-    </View>
+      <Text style={{ color: colors.text, fontWeight: "900" }}>{header}</Text>
+      <Text style={{ color: colors.text, marginTop: 8, fontWeight: "900" }}>{statusText}</Text>
 
-      <Text style={{ color: statusColor, marginTop: 6, fontWeight: "800" }}>
-        {statusText}
-      </Text>
-
-      {range ? (
-        <Text style={{ color: colors.subtext, marginTop: 6 }}>
-          Cycle: {range}
+      {!!state.lastTickNote ? (
+        <Text style={{ color: colors.subtext, marginTop: 6, fontSize: 12 }}>
+          {state.lastTickNote}
         </Text>
       ) : null}
-
-      {nextYmd ? (
-        <Text style={{ color: colors.subtext, marginTop: 4 }}>
-          Prochaine étape: {nextYmd}
-        </Text>
-      ) : null}
-
     </TouchableOpacity>
   );
 }

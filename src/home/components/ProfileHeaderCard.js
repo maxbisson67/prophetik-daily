@@ -1,3 +1,4 @@
+// ProfileHeaderCard.js
 import React from "react";
 import { View, Text, Image, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -5,7 +6,6 @@ import i18n from "@src/i18n/i18n";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
 const ASC4_ICON = require("@src/assets/asc4.png");
-
 
 export default function ProfileHeaderCard({
   colors,
@@ -16,12 +16,39 @@ export default function ProfileHeaderCard({
   onPressPoints,
   onCreateDefi,
   onCreateAscension,
-
+  onCreateFirstGoal,
+  onOpenPlayerProfile,
   groups = [],
   currentGroupId,
   onSelectGroup,
 }) {
-  const RED_DARK = "#b91c1c";
+  const RED = "#b91c1c";
+
+  const baseBtn = {
+    paddingVertical: 10,          // ✅ un peu moins gros
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+  };
+
+  const ctaPrimary = {
+    ...baseBtn,
+    backgroundColor: RED,
+  };
+
+  const ctaOutline = {
+    ...baseBtn,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: RED,
+  };
+
+  const textPrimary = { color: "#fff", fontWeight: "900" };
+  const textOutline = { color: RED, fontWeight: "900" };
 
   return (
     <View
@@ -31,7 +58,6 @@ export default function ProfileHeaderCard({
         borderRadius: 12,
         backgroundColor: colors.card,
         borderColor: colors.border,
-        
       }}
     >
       {/* Avatar */}
@@ -79,72 +105,17 @@ export default function ProfileHeaderCard({
         </Text>
       </View>
 
-      {/* ✅ Sélecteur pleine largeur */}
-        <View style={{ alignSelf: "stretch" }}>
+      {/* Sélecteur */}
+      <View style={{ alignSelf: "stretch" }}>
         <GroupsToggleRow
-            colors={colors}
-            groups={groups}
-            value={currentGroupId}
-            onChange={onSelectGroup}
+          colors={colors}
+          groups={groups}
+          value={currentGroupId}
+          onChange={onSelectGroup}
         />
-        </View>
-
-      {/* CTA */}
-      <View style={{ marginTop: 12, gap: 10 }}>
-        <TouchableOpacity
-        onPress={onCreateDefi}
-        style={{
-            backgroundColor: RED_DARK,
-            paddingVertical: 12,
-            paddingHorizontal: 16,
-            borderRadius: 10,
-
-            // ✅ clé ici
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8, // RN >= 0.71 / Expo OK
-        }}
-        >
-        <ProphetikIcons
-            mode="emoji"
-            emoji="🎯"
-            size="lg"
-            iconOnly
-        />
-
-        <Text style={{ color: "#fff", fontWeight: "800" }}>
-            {i18n.t("home.createChallenge")}
-        </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={onCreateAscension}
-          style={{
-            backgroundColor: RED_DARK,
-            paddingVertical: 12,
-            borderRadius: 10,
-            alignItems: "center",
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: 8,
-          }}
-        >
-       <Image
-        source={ASC4_ICON}
-        style={{
-            width: 18,
-            height: 18,
-            tintColor: "#fff", // ✅ si ton icône est noire
-        }}
-        resizeMode="contain"
-        />
-
-        <Text style={{ color: "#fff", fontWeight: "900" }}>
-        {i18n.t("home.launchAscension")}
-        </Text>
-        </TouchableOpacity>
       </View>
+
+    
     </View>
   );
 }

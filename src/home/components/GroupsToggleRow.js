@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { withCacheBust } from "@src/home/homeUtils";
+import i18n from "@src/i18n/i18n";
 
 const AVATAR_PLACEHOLDER = require("../../../assets/avatar-placeholder.png");
 
@@ -49,9 +50,11 @@ export default function GroupsToggleRow({
             style={{ width: 26, height: 26, borderRadius: 999, backgroundColor: colors.card }}
           />
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
-              Groupe
-            </Text>
+          <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
+            {i18n.t("home.selectGroupLabel", {
+              defaultValue: "Sélectionne un groupe pour voir les défis associés",
+            })}
+          </Text>
             <Text numberOfLines={1} style={{ color: colors.text, fontSize: 14, fontWeight: "900" }}>
               {selected?.name || selected?.id || "—"}
             </Text>

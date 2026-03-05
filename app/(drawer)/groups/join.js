@@ -23,7 +23,10 @@ import firestore from "@react-native-firebase/firestore";
 // Safe auth + thème
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
-import i18n from "@src/i18n/i18n"; // 👈 i18n
+import i18n from "@src/i18n/i18n";
+
+// ✅ QR scan modal
+import ScanInviteQrModal from "@src/groups/ScanInviteQrModal";
 
 const CODE_LEN = 8;
 const ALPHABET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
@@ -55,7 +58,7 @@ function pickAvatarUrl(profile, user) {
 async function buildIdentityFromParticipants(uid, user) {
   try {
     const snap = await firestore().doc(`participants/${uid}`).get();
-    const p = snap.exists ? (snap.data() || {}) : {};
+    const p = snap.exists ? snap.data() || {} : {};
 
     const displayName =
       (typeof p.displayName === "string" && p.displayName.trim()) ||
@@ -83,7 +86,7 @@ async function buildIdentityFromParticipants(uid, user) {
 
 export default function JoinGroupScreen() {
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const { from } = useLocalSearchParams();
 
@@ -92,20 +95,29 @@ export default function JoinGroupScreen() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const sanitize = (s) =>
-    String(s || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .replace(/O/g, "")
-      .replace(/0/g, "");
+  // ✅ QR scan modal state
+  const [scanOpen, setScanOpen] = useState(false);
 
-  const validateCode = (c) =>
-    c.length === CODE_LEN && [...c].every((ch) => ALPHABET.includes(ch));
+  const sanitize = useCallback(
+    (s) =>
+      String(s || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .replace(/O/g, "")
+        .replace(/0/g, ""),
+    []
+  );
 
-  const cleanedCode = sanitize(code);
+  const validateCode = useCallback(
+    (c) => c.length === CODE_LEN && [...c].every((ch) => ALPHABET.includes(ch)),
+    []
+  );
+
+  const cleanedCode = useMemo(() => sanitize(code), [code, sanitize]);
+
   const canJoin = useMemo(
     () => validateCode(cleanedCode) && !busy,
-    [cleanedCode, busy]
+    [cleanedCode, busy, validateCode]
   );
 
   // 🔙 Retour logique
@@ -133,88 +145,89 @@ export default function JoinGroupScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const sub = BackHandler.addEventListener(
-        "hardwareBackPress",
-        safeBack
-      );
+      const sub = BackHandler.addEventListener("hardwareBackPress", safeBack);
       return () => sub.remove();
     }, [safeBack])
   );
 
-  async function onJoin() {
-    if (!user?.uid)
-      return Alert.alert(
+  const onJoin = useCallback(async () => {
+    if (!user?.uid) {
+      Alert.alert(
         i18n.t("groups.join.alertLoginRequiredTitle"),
         i18n.t("groups.join.alertLoginRequiredMessage")
       );
+      return;
+    }
 
-    if (!validateCode(cleanedCode))
-      return Alert.alert(
+    if (!validateCode(cleanedCode)) {
+      Alert.alert(
         i18n.t("groups.join.alertCodeInvalidTitle"),
         i18n.t("groups.join.alertCodeInvalidMessage", { len: CODE_LEN })
       );
+      return;
+    }
 
     try {
-        setBusy(true);
+      setBusy(true);
 
-        const identity = await buildIdentityFromParticipants(user.uid, user);
+      const identity = await buildIdentityFromParticipants(user.uid, user);
+      const res = await joinGroupService({ code: cleanedCode, identity });
 
-        const res = await joinGroupService({ code: cleanedCode, identity });
+      const groupId = res?.groupId;
+      if (!groupId) throw new Error(i18n.t("groups.join.alertServerUnexpected"));
 
-        const groupId = res?.groupId;
-        if (!groupId) throw new Error(i18n.t("groups.join.alertServerUnexpected"));
+      router.replace({
+        pathname: "/(drawer)/groups/[groupId]",
+        params: { groupId },
+      });
+    } catch (e) {
+      const errCode = String(e?.code || ""); // ex: functions/failed-precondition
+      const msg = String(e?.message || "");
+      const details = e?.details || null;
 
-        router.replace({
-          pathname: "/(drawer)/groups/[groupId]",
-          params: { groupId },
-        });
-      } catch (e) {
-        const code = String(e?.code || ""); // ex: functions/failed-precondition
-        const msg = String(e?.message || "");
-        const details = e?.details || null;
+      console.log("JOIN ERROR", { code: errCode, message: msg, details });
 
-        console.log("JOIN ERROR", { code, message: msg, details });
+      // ✅ Caps (abonnement)
+      if (
+        errCode.includes("failed-precondition") &&
+        (msg.includes("MEMBER_GROUP_LIMIT_REACHED") ||
+          msg.includes("OWNER_GROUP_LIMIT_REACHED"))
+      ) {
+        const tier = details?.tier || "free";
+        const current = details?.current ?? 0;
+        const max = details?.max ?? 0;
 
-        // ✅ Caps (abonnement)
-        if (
-          code.includes("failed-precondition") &&
-          (msg.includes("MEMBER_GROUP_LIMIT_REACHED") || msg.includes("OWNER_GROUP_LIMIT_REACHED"))
-        ) {
-          const tier = details?.tier || "free";
-          const current = details?.current ?? 0;
-          const max = details?.max ?? 0;
-
-          Alert.alert(
-            i18n.t("groups.join.alertLimitTitle"),
-            i18n.t("groups.join.alertLimitMessage", { tier, current, max })
-          );
-          return;
-        }
-
-        // Invalid code
-        if (code.includes("not-found") || msg.toLowerCase().includes("invalid code")) {
-          Alert.alert(
-            i18n.t("groups.join.alertCodeNotFoundTitle"),
-            i18n.t("groups.join.alertCodeNotFoundMessage")
-          );
-          return;
-        }
-
-        // Not logged in
-        if (code.includes("unauthenticated")) {
-          Alert.alert(
-            i18n.t("groups.join.alertLoginRequiredTitle"),
-            i18n.t("groups.join.alertLoginRequiredMessage")
-          );
-          return;
-        }
-
-        // Fallback générique
-        Alert.alert(i18n.t("groups.join.alertGenericErrorTitle"), msg || "Erreur");
-      } finally {
-        setBusy(false);
+        Alert.alert(
+          i18n.t("groups.join.alertLimitTitle"),
+          i18n.t("groups.join.alertLimitMessage", { tier, current, max })
+        );
+        return;
       }
-  }
+
+      // Invalid code
+      if (errCode.includes("not-found") || msg.toLowerCase().includes("invalid code")) {
+        Alert.alert(
+          i18n.t("groups.join.alertCodeNotFoundTitle"),
+          i18n.t("groups.join.alertCodeNotFoundMessage")
+        );
+        return;
+      }
+
+      // Not logged in
+      if (errCode.includes("unauthenticated")) {
+        Alert.alert(
+          i18n.t("groups.join.alertLoginRequiredTitle"),
+          i18n.t("groups.join.alertLoginRequiredMessage")
+        );
+        return;
+      }
+
+      // Fallback générique
+      Alert.alert(i18n.t("groups.join.alertGenericErrorTitle"), msg || "Erreur");
+    } finally {
+      setBusy(false);
+    }
+  }, [user?.uid, cleanedCode, validateCode, router, user]);
 
   return (
     <>
@@ -232,13 +245,15 @@ export default function JoinGroupScreen() {
         }}
       />
 
-      <View
-        style={{
-          flex: 1,
-          padding: 20,
-          backgroundColor: colors.background,
-        }}
-      >
+      {/* ✅ QR Scan Modal */}
+      <ScanInviteQrModal
+        visible={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onCode={(c) => setCode(sanitize(c))}
+        colors={colors}
+      />
+
+      <View style={{ flex: 1, padding: 20, backgroundColor: colors.background }}>
         <View
           style={{
             backgroundColor: colors.card,
@@ -259,6 +274,7 @@ export default function JoinGroupScreen() {
           >
             {i18n.t("groups.join.ctaTitle")}
           </Text>
+
           <Text
             style={{
               marginTop: 8,
@@ -292,11 +308,36 @@ export default function JoinGroupScreen() {
           }}
         />
 
+        {/* ✅ Scanner QR */}
+        <TouchableOpacity
+          onPress={() => setScanOpen(true)}
+          disabled={busy}
+          style={{
+            marginTop: 12,
+            paddingVertical: 12,
+            borderRadius: 12,
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card2,
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 8,
+            opacity: busy ? 0.7 : 1,
+          }}
+        >
+          <Ionicons name="qr-code-outline" size={20} color={colors.text} />
+          <Text style={{ color: colors.text, fontWeight: "900" }}>
+            {i18n.t("groups.join.scanBtn", { defaultValue: "Scanner un QR" })}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Join */}
         <TouchableOpacity
           onPress={onJoin}
           disabled={!canJoin}
           style={{
-            marginTop: 20,
+            marginTop: 16,
             backgroundColor: canJoin ? "#ef4444" : colors.subtext,
             padding: 14,
             borderRadius: 12,
@@ -312,6 +353,7 @@ export default function JoinGroupScreen() {
           )}
         </TouchableOpacity>
 
+        {/* Cancel */}
         <TouchableOpacity
           onPress={safeBack}
           style={{
