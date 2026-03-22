@@ -174,6 +174,21 @@ export const defisJoin = onCall({ region: "us-central1" }, async (req) => {
         });
       }
 
+      const signupDeadline =
+        typeof defi.signupDeadline?.toDate === "function"
+          ? defi.signupDeadline.toDate()
+          : defi.signupDeadline
+          ? new Date(defi.signupDeadline)
+          : null;
+
+      if (signupDeadline && signupDeadline.getTime() <= Date.now()) {
+        throw new HttpsError("failed-precondition", "SIGNUP_DEADLINE_PASSED", {
+          reason: "SIGNUP_DEADLINE_PASSED",
+          defiId,
+          signupDeadline: signupDeadline.toISOString(),
+        });
+      }
+
 
       // ✅ Plan gating
       const defiType = Number(defi.type || 0);

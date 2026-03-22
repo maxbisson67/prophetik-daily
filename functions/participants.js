@@ -4,14 +4,10 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { APP_TZ, toYmdInTz, addDaysToYmd } from "./ProphetikDate.js";
 
 import { db, FieldValue, logger, readAnyBalance } from "./utils.js";
-
-// ✅ Helper unifié pour octroyer des crédits (idempotence + logs)
 import { grantCreditsTx } from "./credits/grantCredits.js";
 
 const TZ = "America/Toronto";
 const SIGNUP_BONUS_AMOUNT = 5;
-
-// ✅ 1 bonus gratuit par 30 jours (modifie si tu veux 30, 10, etc.)
 const BONUS_COOLDOWN_DAYS = 30;
 
 /**
@@ -30,18 +26,55 @@ export const onParticipantCreate = onDocumentCreated(
     logger.info("onParticipantCreate:start", { uid });
 
     const ref = db.collection("participants").doc(uid);
+    const entitlementRef = db.collection("entitlements").doc(uid);
 
     await db.runTransaction(async (tx) => {
+      // ✅ Toutes les lectures d'abord
       const snap = await tx.get(ref);
       if (!snap.exists) {
         logger.info("onParticipantCreate:noDoc", { uid });
         return;
       }
 
+      const entitlementSnap = await tx.get(entitlementRef);
+
       const data = snap.data() || {};
       const system = data.system || {};
 
-      // 🔒 Idempotence (flag)
+      // ✅ Lecture + calcul avant toute écriture
+      let grantRes = null;
+
+      if (system.signupBonusGranted !== true) {
+        const amount = SIGNUP_BONUS_AMOUNT;
+        const grantId = `signup_${uid}`;
+
+        grantRes = await grantCreditsTx(tx, {
+          uid,
+          amount,
+          grantId,
+          source: "signup_bonus",
+          meta: {
+            reason: "NEW_PARTICIPANT_WELCOME",
+          },
+        });
+      }
+
+      // ✅ Ensuite seulement les écritures
+
+      if (!entitlementSnap.exists) {
+        tx.set(
+          entitlementRef,
+          {
+            active: true,
+            tier: "vip",
+            source: "mvp_default",
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
       if (system.signupBonusGranted === true) {
         logger.info("onParticipantCreate:signupBonusAlreadyGranted", { uid });
         return;
@@ -49,21 +82,7 @@ export const onParticipantCreate = onDocumentCreated(
 
       const amount = SIGNUP_BONUS_AMOUNT;
 
-      // 🔒 Idempotence (reçu) — double sécurité contre retry/duplication
-      const grantId = `signup_${uid}`;
-
-      const res = await grantCreditsTx(tx, {
-        uid,
-        amount,
-        grantId,
-        source: "signup_bonus",
-        meta: {
-          reason: "NEW_PARTICIPANT_WELCOME",
-        },
-      });
-
-      // Si déjà octroyé (grant existant), on pose quand même le flag pour aligner l’état
-      if (res.reason === "already_granted") {
+      if (grantRes?.reason === "already_granted") {
         tx.set(
           ref,
           {
@@ -79,8 +98,7 @@ export const onParticipantCreate = onDocumentCreated(
         return;
       }
 
-      // Marquer le bonus comme octroyé
-      if (res.applied) {
+      if (grantRes?.applied) {
         tx.set(
           ref,
           {
@@ -96,7 +114,10 @@ export const onParticipantCreate = onDocumentCreated(
       }
     });
 
-    logger.info("onParticipantCreate:done", { uid, amount: SIGNUP_BONUS_AMOUNT });
+    logger.info("onParticipantCreate:done", {
+      uid,
+      amount: SIGNUP_BONUS_AMOUNT,
+    });
   }
 );
 

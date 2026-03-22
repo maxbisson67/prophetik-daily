@@ -16,6 +16,7 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import functions from "@react-native-firebase/functions";
+import Analytics from "@src/services/analytics";
 
 /* ---------------- UI bits ---------------- */
 
@@ -493,6 +494,12 @@ export default function CreateFirstGoalModal({
       if (!challengeId) {
         throw new Error("Création échouée: challengeId manquant.");
       }
+
+      Analytics.createChallenge({
+        type: "fgc",
+        groupId: String(selectedGroupId),
+        gameId: String(selectedGameId),
+      });
 
       onCreated?.({
         challengeId,

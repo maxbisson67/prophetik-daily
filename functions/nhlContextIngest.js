@@ -53,10 +53,15 @@ function hmTorontoFromUtcString(utcString) {
 }
 
 function addDaysToYmd(ymd, deltaDays) {
-  const [y, m, d] = String(ymd).split("-").map((x) => Number(x));
+  const [y, m, d] = String(ymd).split("-").map(Number);
   const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
   dt.setUTCDate(dt.getUTCDate() + deltaDays);
-  return ymdToronto(dt);
+
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+
+  return `${yy}-${mm}-${dd}`;
 }
 
 function ymdCompact(ymd) {
@@ -280,8 +285,6 @@ function normalizeStandings(payload) {
   return teams;
 }
 
-/* ----------------------------- schedule normalization ----------------------------- */
-
 function normalizeSchedule(payload) {
   const weeks = payload?.gameWeek || payload?.weeks || [];
   const games =
@@ -306,25 +309,65 @@ function normalizeSchedule(payload) {
 
     if (!id || !homeAbbr || !awayAbbr) continue;
 
+    const awayScore = toNum(g?.awayTeam?.score, 0);
+    const homeScore = toNum(g?.homeTeam?.score, 0);
+
+    const periodNumber = toNum(g?.periodDescriptor?.number, 0);
+    const periodType = g?.periodDescriptor?.periodType || null;
+    const periodMax = toNum(g?.periodDescriptor?.maxRegulationPeriods, 0);
+
+    const gameState =
+      g?.gameState ||
+      g?.gameStatus ||
+      g?.gameStatusText ||
+      null;
+
+    const gameScheduleState = g?.gameScheduleState || null;
+
+    const clock =
+      g?.clock?.timeRemaining ||
+      g?.timeRemaining ||
+      g?.gameClock ||
+      null;
+
     out.push({
       gameId: id,
       startTimeUTC: startTimeUTC || null,
 
-      // ✅ pour filtrage NHL vs hors NHL + pré-saison
+      // existants
       gameType: g?.gameType ?? null,
       season: g?.season ?? null,
+
+      // ✅ nouveaux champs
+      awayScore,
+      homeScore,
+      gameState: gameState || null,
+      gameScheduleState,
+      period: periodNumber || 0,
+      periodType,
+      periodMax: periodMax || 0,
+      clock: clock || null,
+      gameOutcome: g?.gameOutcome || null,
 
       home: {
         abbr: String(homeAbbr).toUpperCase(),
         id: g?.homeTeam?.id || null,
-        name: g?.homeTeam?.placeName?.default || g?.homeTeam?.name?.default || null,
+        name:
+          g?.homeTeam?.placeName?.default ||
+          g?.homeTeam?.commonName?.default ||
+          g?.homeTeam?.name?.default ||
+          null,
         logo: g?.homeTeam?.logo || null,
         darkLogo: g?.homeTeam?.darkLogo || null,
       },
       away: {
         abbr: String(awayAbbr).toUpperCase(),
         id: g?.awayTeam?.id || null,
-        name: g?.awayTeam?.placeName?.default || g?.awayTeam?.name?.default || null,
+        name:
+          g?.awayTeam?.placeName?.default ||
+          g?.awayTeam?.commonName?.default ||
+          g?.awayTeam?.name?.default ||
+          null,
         logo: g?.awayTeam?.logo || null,
         darkLogo: g?.awayTeam?.darkLogo || null,
       },
@@ -333,7 +376,6 @@ function normalizeSchedule(payload) {
 
   return out;
 }
-
 /* ----------------------------- league/phase/eligibility ----------------------------- */
 
 function detectLeagueFromLogos(game) {
@@ -582,6 +624,41 @@ async function ingestNhlDailyContext(date = new Date()) {
   return { ymd, yyyymmdd, teams: teams.length, games: games.length };
 }
 
+async function backfillNhlScheduleScores({ startYmd, endYmd }) {
+  let cur = startYmd;
+  let written = 0;
+  const visitedWeekKeys = new Set();
+
+  while (cur <= endYmd) {
+    logger.info("NHL schedule backfill processing week", { cur });
+
+    const payload = await fetchScheduleForYmd(cur);
+
+    const weekKey =
+      payload?.gameWeek?.[0]?.date ||
+      payload?.previousStartDate ||
+      cur;
+
+    if (!visitedWeekKeys.has(weekKey)) {
+      visitedWeekKeys.add(weekKey);
+
+      const games = normalizeSchedule(payload);
+      await writeDailySchedule({ games });
+      written++;
+    }
+
+    cur = addDaysToYmd(cur, 7);
+  }
+
+  logger.info("NHL schedule backfill done", {
+    startYmd,
+    endYmd,
+    weeksProcessed: written,
+  });
+
+  return { startYmd, endYmd, weeksProcessed: written };
+}
+
 /* ----------------------------- schedules ----------------------------- */
 
 // ⏰ Cron : 8h05 Toronto
@@ -607,5 +684,28 @@ export const cronRefreshNhlScheduleWindow = onSchedule(
     const startYmd = addDaysToYmd(today, -7);
     const totalDays = 67; // -7 à +60 = 67 jours
     await ingestNhlScheduleWindow({ startYmd, totalDays });
+  }
+);
+
+export const cronRefreshNhlScheduleRecentScores = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: "America/Toronto",
+    region: "us-central1",
+  },
+  async () => {
+    const today = ymdToronto(new Date());
+
+    // hier → aujourd’hui → demain
+    const startYmd = addDaysToYmd(today, -1);
+    const totalDays = 2;
+
+    await ingestNhlScheduleWindow({ startYmd, totalDays });
+
+    logger.info("NHL recent schedule refresh done", {
+      startYmd,
+      totalDays,
+      scope: "yesterday_today_tomorrow",
+    });
   }
 );

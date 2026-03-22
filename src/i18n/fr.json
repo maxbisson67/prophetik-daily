@@ -20,7 +20,8 @@
       "check": "✅ ",
       "dot": "▫️ ",
       "tomorrow":"Demain",
-      "today":"Aujourd'hui"
+      "today":"Aujourd'hui",
+      "confirm":"Confirmer"
     },
     "errors": {
       "firestorePermission": "Accès refusé par les règles Firestore."
@@ -218,8 +219,10 @@
       "activeChallenges": "Défis actifs",
       "unknownGroup": "Groupe",
       "totalPot": "Gain potentiel",
-      "todayChallenge": "Mes défis du jour",
+      "todayChallenge": "Mes défis Standards",
       "challenge": "Défi",
+      "todayChallengeInfoTitle": "C’est quoi le défi Standard?",
+      "todayChallengeInfoBody":"Chaque défi Standard te demande de choisir un certain nombre de joueurs selon le format (ex. 2x2, 3x3). Tes joueurs accumulent des points réels selon leurs performances, et le meilleur total remporte le défi.",
       "create":"Créer",
       "challengeDate": "Date NHL",
       "challengeLimit": "Limite d’inscription :",
@@ -289,11 +292,11 @@
     },
     "firstGoal": {
       "home": {
-        "title": "Défis Premier but",
+        "title": "Mes défis Premier but",
         "empty": "Aucun défi premier but aujourd'hui dans tes groupes",
         "signupDeadline": "Heure limite d'inscription",
         "infoTitle":"Comment fonctionne ce défi?",
-        "boni": "Boni",
+        "boni": "Points Bonis",
         "infoBody":"• Choisis le joueur qui marquera le premier but du match.\n• Regarde les résultats dans l'onglet Sports/MatchLive.\n• Un point sera alloué à celui qui a prédit le premier compteur.\n• Si personne n'a fait la bonne prédiction, le point sera reporté et la cagnotte augmentera."
       },
       "create":{
@@ -319,14 +322,18 @@
         }
       },
       "pick":{
-        "title": "First goal",
+        "title": "Premier but",
         "loading": "Chargement…",
         "noResults": "Aucun joueur trouvé.",
         "alreadyPicked": "Ton choix est verrouillé",
         "editUntil" : "Tu peux modifier ton choix jusqu’à",
         "locked": "Le défi est verrouillé",
         "chooseOne": "Choisis le joueur qui marquera le premier but",
-        "startsAt": "Début" 
+        "startsAt": "Début",
+        "mySelection": "Ma sélection",
+        "successBody":"Ton choix est enregistré. Bonne chance 🍀",
+        "updatedBody": "Ton choix a été mis à jour.",
+        "successTitle": "Choix enregistré"
       },
       "live": {
         "title": "Défi : Premier but",
@@ -367,18 +374,37 @@
       "notInitialized": "Pas encore initialisée pour ce groupe.",
       "noActiveCycle":"Aucun cycle actif pour cette Ascension.",
       "viewSubscriptions":"Voir les abonnements",
+      "infoTitle": "C’est quoi une ascension?",
+      "infoBody": "Une ascension est un défi sur plusieurs jours où tu progresses étape par étape. Chaque défi complété te fait avancer, et des points bonis quotidiens peuvent faire augmenter la récompense au sommet.",
       "status": {
         "disabled": "Désactivée",
         "completedWithWinners_one": "Complétée ({{count}} gagnant)",
         "completedWithWinners_other": "Complétée ({{count}} gagnants)",
         "inProgress": "En cours"
       },
+      "summit":{
+        "title": "Mes défis Ascension",
+      },
       "labels": {
         "cycle": "Cycle",
         "nextStep": "Prochaine étape",
         "startLabel": "Début de l’ascension",
         "weekLabel": "Semaine",
-        "completed":"Quête complétée"
+        "completed":"Quête complétée",
+        "pointsBonis": "Points bonis",
+        "dailyPlus": "+2 par jour",
+        "challenges":"défis",
+        "noLinkedDefi": "Aucun défi ascension n'est disponible pour le moment"
+      },
+      "challenge": {
+        "title": "Relève le défi {{size}}x{{size}}",
+        "ctaOne": "Choisir mon joueur",
+        "ctaMany": "Choisir mes {{size}} joueurs", 
+        "none": "Aucun défi d’ascension actif pour le moment."
+      },
+      "cta": {
+        "past": "Voir les ascensions passées",
+        "details": "Détails de l’ascension"
       }
     },
     "groups": {
@@ -415,7 +441,7 @@
           "shareInviteMessage": "Rejoins mon groupe \"{{name}}\" dans Prophetik-daily.\nCode : {{code}}\nID : {{id}}",
 
           "leaveConfirmTitle": "Groupe quitté",
-          "leaveConfirmMessage": "Tu as quitté ce groupe.",
+          "leaveConfirmMessage": "Veux-tu vraiment ce groupe.",
           "leaveErrorTitle": "Impossible de quitter",
           "leaveErrorMessage": "Une erreur est survenue.",
 
@@ -605,7 +631,7 @@
               },
 
               "hint": {
-                "signupDeadline": "Tu peux t'inscrire jusqu'à 1h avant le premier match."
+                "signupDeadline": "Tu peux t'inscrire jusqu'à 15 minutes avant le premier match."
               },
 
               "actions": {
@@ -1381,7 +1407,13 @@
     },
     "footer": "Données: {{plays}} défis, {{wins}} victoires · Comparaison sur {{others}} autres."
   },
-
+  "nhl": {
+    "schedule": {
+      "final": "Final",
+      "finalOt": "Final • Prol.",
+      "finalSo": "Final • TDB"
+    }
+  },
   "ascension": {
     "create": {
       "title": "Créer une Ascension",

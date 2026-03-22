@@ -21,7 +21,8 @@
     "check": "✅ ",
     "dot": "▫️ ",
     "tomorrow":"Tomorrow",
-    "today":"Today"
+    "today":"Today",
+    "confirm":"Confirm"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -224,13 +225,15 @@
     "activeChallenges": "Active challenges",
     "unknownGroup": "Group",
     "totalPot": "Potential Winnings",
-    "todayChallenge": "My challenges today",
+    "todayChallenge": "My Standard Challenges",
+    "todayChallengeInfoTitle": "What is the Standard challenge?",
+    "todayChallengeInfoBody": "Each Standard challenge asks you to pick a certain number of players based on the format (e.g., 2x2, 3x3). Your players earn real points based on their performance, and the highest total wins the challenge.",
     "create":"Create",
     "challenge": "Challenge",
     "challengeDate": "NHL date",
     "challengeLimit": "Signup deadline:",
     "challengeStarts": "Starts at",
-    "challengeStatus": "Open",
+    "challengeStatus": "Open", 
     "leaderboardTitle": "Leaderboard", 
     "leaderboardLockedTitle": "Premium leaderboard",
     "leaderboardLockedBody": "Upgrade to Pro or Vip to see the full leaderboard for your default group.",
@@ -300,7 +303,7 @@
       "empty": "No first-goal challenge in your groups today",
       "signupDeadline": "Registration deadline",
       "infoTitle":"How does this challenge work?",
-       "boni": "Bonus",
+       "boni": "Bonus points",
       "infoBody":"• Choose the player who will score the first goal of the game.\n• Watch the results in the Sports / MatchLive tab.\n• One point is awarded to the participant who correctly predicts the first goal scorer.\n• If no one makes the correct prediction, the point carries over and the jackpot increases."
     },
     "create":{
@@ -324,18 +327,22 @@
         "none": "No players found",
         "loading": "Loading rosters…",
         "title": "Players"
-      },
-      "pick":{
+      }
+    },
+    "pick":{
         "title": "First goal",
         "loading": "Loading…",
         "noResults": "No players found.",
         "alreadyPicked": "Your pick is locked",
-        "editUntil": "You can change your pick until",
+        "editUntil": "You can change your pick until", 
         "locked": "The challenge is locked",
         "chooseOne": "Choose the player who will score the first goal",
-        "startsAt": "Start"
-      }
-    },
+        "startsAt": "Start",
+        "mySelection": "My pick",
+        "successBody": "Your pick has been saved. Good luck 🍀",
+        "updatedBody": "Your pick has been updated.",
+        "successTitle": "Pick saved"
+      },
     "live": {
       "title": "Challenge: First goal",
       "none": "No “first goal” challenge for this game.",
@@ -375,18 +382,37 @@
     "notInitialized": "Not initialized for this group yet.",
     "noActiveCycle":"No active cycle for this Ascension.",
     "viewSubscriptions":"View subscriptions",
+    "infoTitle": "What is an Ascension?",
+    "infoBody": "An Ascension is a multi-day challenge where you progress step by step. Each completed challenge advances your climb, and daily bonus points can increase the reward at the summit.",
     "status": {
       "disabled": "Disabled",
       "completedWithWinners_one": "Completed ({{count}} winner)",
       "completedWithWinners_other": "Completed ({{count}} winners)",
       "inProgress": "In progress"
     },
+    "summit":{
+       "title": "My Summit challenge",
+    },
     "labels": {
       "cycle": "Cycle",
       "nextStep": "Next step",
       "startLabel": "Ascension start",
       "weekLabel": "Week",
-      "completed":"Quests completed"
+      "completed":"Quests completed",
+      "pointsBonis": "Bonus points",
+      "dailyPlus": "+2 per day",
+      "challenges":"challenges",
+      "noLinkedDefi": "No active ascension challenge right now."
+    },
+    "challenge":{
+      "title" : "Take on the {{size}}x{{size}} challenge",
+      "ctaOne": "Pick my player",
+      "ctaMany": "Pick my {{size}} players", 
+      "none": "No active ascension challenge right now."
+    },
+    "cta":{
+      "past": "View past ascensions",
+      "details": "Ascension details"
     }
   },
   "groups": {
@@ -423,7 +449,7 @@
         "shareInviteMessage": "Join my group \"{{name}}\" in Prophetik-daily.\nCode: {{code}}\nID: {{id}}",
 
         "leaveConfirmTitle": "Group left",
-        "leaveConfirmMessage": "You have left this group.",
+        "leaveConfirmMessage": "Do you really want to leave this group?",
         "leaveErrorTitle": "Unable to leave",
         "leaveErrorMessage": "An error occurred.",
 
@@ -610,7 +636,7 @@
             },
 
             "hint": {
-              "signupDeadline": "You can join until 1 hour before the first game."
+              "signupDeadline": "You can join until 15 minutes before the first game."
             },
 
             "actions": {
@@ -1398,7 +1424,13 @@
     },
     "footer": "Data: {{plays}} challenges, {{wins}} wins · Compared against {{others}} others."
   },
-
+    "nhl": {
+    "schedule": {
+      "final": "Final",
+      "finalOt": "Final • OT",
+      "finalSo": "Final • SO"
+    }
+  },
   "ascension": {
     "create": {
       "title": "Create an Ascension",

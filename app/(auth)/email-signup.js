@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import RNFBAuth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import Analytics from '@src/services/analytics';
 
 // i18n
 import i18n from '@src/i18n/i18n';
@@ -94,13 +95,22 @@ export default function SignUpScreen() {
 
       setBusy(true);
 
+      Analytics.authStart("email");
+
       // 1) Création du compte (RNFirebase)
       await RNFBAuth().createUserWithEmailAndPassword(email.trim(), pwd);
+
+      Analytics.authSuccess("email");
 
       // 2) Update profil Auth (displayName)
       const user = RNFBAuth().currentUser;
       await user?.updateProfile({ displayName: displayName.trim() });
       await user?.reload().catch(() => {}); // parfois nécessaire sous Android
+
+      if (user?.uid) {
+        Analytics.setUserId(user.uid);
+        Analytics.setUserProperty("auth_method", "email");
+      }
 
       // 3) participants/{uid}
       await ensureParticipantDoc(displayName.trim());
@@ -114,7 +124,8 @@ export default function SignUpScreen() {
         })
       );
 
-      r.replace('/(drawer)/(tabs)/AccueilScreen');
+      r.replace('/(drawer)');
+      
     } catch (e) {
       const msg = String(e?.message || e);
 

@@ -1,4 +1,3 @@
-// app/(auth)/phone-login.js
 import React, { useMemo, useRef, useState } from "react";
 import {
   View,
@@ -8,7 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   SafeAreaView,
-  ScrollView
+  ScrollView,
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import auth from "@react-native-firebase/auth";
@@ -17,6 +16,7 @@ import i18n from "@src/i18n/i18n";
 
 import ProphetikIcons from "@src/ui/ProphetikIcons";
 import { useTheme } from "@src/theme/ThemeProvider";
+import Analytics from "@src/services/analytics";
 
 // --- Helpers E.164 ---
 const DEFAULT_COUNTRY = "+1";
@@ -47,7 +47,9 @@ function sanitizeDisplayName(s) {
 
 function stripUndefined(obj) {
   const out = {};
-  for (const [k, v] of Object.entries(obj || {})) if (v !== undefined) out[k] = v;
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v !== undefined) out[k] = v;
+  }
   return out;
 }
 
@@ -73,7 +75,9 @@ async function ensureParticipantDoc({ displayName }) {
       {
         ...payload,
         createdAt: now,
-        "onboarding.welcomeSeen": false,
+        onboarding: {
+          welcomeSeen: false,
+        },
       },
       { merge: true }
     );
@@ -85,9 +89,15 @@ async function ensureParticipantDoc({ displayName }) {
 
   await ref.set(payload, { merge: true });
 
-  // si onboarding.welcomeSeen n’existe pas, on le force à false (optionnel mais “safe”)
   if (data?.onboarding?.welcomeSeen === undefined) {
-    await ref.set({ "onboarding.welcomeSeen": false }, { merge: true });
+    await ref.set(
+      {
+        onboarding: {
+          welcomeSeen: false,
+        },
+      },
+      { merge: true }
+    );
   }
 
   return { isNew: false, shouldShowWelcome: !welcomeSeen };
@@ -99,24 +109,21 @@ async function ensurePublicProfile({ displayName }) {
 
   const now = firestore.FieldValue.serverTimestamp();
 
-  // IMPORTANT: ne jamais mettre undefined
   const payload = stripUndefined({
     displayName: displayName || user.displayName || null,
     avatarUrl: user.photoURL ?? null,
     updatedAt: now,
-    visibility: "public", // optionnel mais aide à stabiliser
+    visibility: "public",
   });
 
   const ref = firestore().collection("profiles_public").doc(user.uid);
   const snap = await ref.get();
 
   if (!snap.exists) {
-    // CREATE clean, sans merge
     await ref.set(payload);
     return { created: true };
   }
 
-  // UPDATE: merge ok
   await ref.set(payload, { merge: true });
   return { created: false };
 }
@@ -128,7 +135,7 @@ export default function PhoneLoginScreen() {
 
   const initialPhone = typeof params?.phone === "string" ? params.phone : "";
 
-  const [step, setStep] = useState(1); // 1=enter, 2=code
+  const [step, setStep] = useState(1);
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState(initialPhone);
   const [code, setCode] = useState("");
@@ -155,7 +162,8 @@ export default function PhoneLoginScreen() {
 
       setBusy(true);
 
-      // ✅ Pas de precheck / pas de blocage: on envoie le SMS direct
+      await Analytics.authStart("sms_login");
+
       const confirmation = await auth().signInWithPhoneNumber(normalized, true);
       confirmationRef.current = confirmation;
 
@@ -168,23 +176,24 @@ export default function PhoneLoginScreen() {
       );
     } catch (e) {
       console.log("SMS send error:", e?.code, e?.message);
-        const code = e?.code || "";
 
-        if (code === "auth/invalid-phone-number") {
-          Alert.alert(
-            i18n.t("auth.phoneLogin.invalidPhoneTitle", { defaultValue: "Numéro invalide" }),
-            i18n.t("auth.phoneLogin.invalidPhoneBody", {
-              defaultValue: "Le format du numéro est invalide. Exemple : 5145551234.",
-            })
-          );
-        } else {
-          Alert.alert(
-            i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "Erreur SMS" }),
-            i18n.t("auth.phoneLogin.smsErrorBody", {
-              defaultValue: "Impossible d’envoyer le code.",
-            })
-          );
-        }
+      const errCode = e?.code || "";
+
+      if (errCode === "auth/invalid-phone-number") {
+        Alert.alert(
+          i18n.t("auth.phoneLogin.invalidPhoneTitle", { defaultValue: "Numéro invalide" }),
+          i18n.t("auth.phoneLogin.invalidPhoneBody", {
+            defaultValue: "Le format du numéro est invalide. Exemple : 5145551234.",
+          })
+        );
+      } else {
+        Alert.alert(
+          i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "Erreur SMS" }),
+          i18n.t("auth.phoneLogin.smsErrorBody", {
+            defaultValue: "Impossible d’envoyer le code.",
+          })
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -195,7 +204,9 @@ export default function PhoneLoginScreen() {
       if (!code.trim() || code.trim().length < 4) {
         Alert.alert(
           i18n.t("auth.phoneLogin.codeRequiredTitle", { defaultValue: "Code required" }),
-          i18n.t("auth.phoneLogin.codeRequiredBody", { defaultValue: "Enter the code you received by SMS." })
+          i18n.t("auth.phoneLogin.codeRequiredBody", {
+            defaultValue: "Enter the code you received by SMS.",
+          })
         );
         return;
       }
@@ -204,7 +215,9 @@ export default function PhoneLoginScreen() {
       if (!confirmation) {
         Alert.alert(
           i18n.t("auth.phoneLogin.sessionExpiredTitle", { defaultValue: "Session expired" }),
-          i18n.t("auth.phoneLogin.sessionExpiredBody", { defaultValue: "Try sending the code again." })
+          i18n.t("auth.phoneLogin.sessionExpiredBody", {
+            defaultValue: "Try sending the code again.",
+          })
         );
         setStep(1);
         setCode("");
@@ -215,19 +228,25 @@ export default function PhoneLoginScreen() {
 
       await confirmation.confirm(code.trim());
 
-      // ✅ prénom optionnel (n’écrase pas un displayName existant)
-      const cleanName = sanitizeDisplayName(displayName);
-      const user = auth().currentUser;
+      await Analytics.authSuccess("sms_login");
 
-      if (user && cleanName && !user.displayName) {
+      const signedUser = auth().currentUser;
+      if (signedUser?.uid) {
+        await Analytics.setUserId(signedUser.uid);
+        await Analytics.setUserProperty("auth_method", "sms");
+      }
+
+      const cleanName = sanitizeDisplayName(displayName);
+      const currentUser = auth().currentUser;
+
+      if (currentUser && cleanName && !currentUser.displayName) {
         try {
-          await user.updateProfile({ displayName: cleanName });
-          await user.reload().catch(() => {});
+          await currentUser.updateProfile({ displayName: cleanName });
+          await currentUser.reload().catch(() => {});
         } catch {}
       }
 
-
-     let shouldShowWelcome = false;
+      let shouldShowWelcome = false;
 
       try {
         const res = await ensureParticipantDoc({ displayName: cleanName || null });
@@ -238,21 +257,20 @@ export default function PhoneLoginScreen() {
         throw e;
       }
 
-      try {
-        await ensurePublicProfile({ displayName: cleanName || null });
-        console.log("profiles_public OK");
-      } catch (e) {
-        console.log("profiles_public FAIL", e?.code, e?.message);
-        throw e;
-      }
-
-      
+      /*
+        try {
+          await ensurePublicProfile({ displayName: cleanName || null });
+          console.log("profiles_public OK");
+        } catch (e) {
+          console.log("profiles_public FAIL", e?.code, e?.message);
+          throw e;
+        }
+    */
       if (shouldShowWelcome) {
         router.replace("/onboarding/welcome");
       } else {
         goHome();
       }
-
     } catch (e) {
       const msg = String(e?.message || e);
 
@@ -264,9 +282,12 @@ export default function PhoneLoginScreen() {
       } else if (msg.includes("session-expired")) {
         Alert.alert(
           i18n.t("auth.phoneLogin.sessionExpiredTitle", { defaultValue: "Session expired" }),
-          i18n.t("auth.phoneLogin.sessionExpiredBody", { defaultValue: "Try sending the code again." })
+          i18n.t("auth.phoneLogin.sessionExpiredBody", {
+            defaultValue: "Try sending the code again.",
+          })
         );
         setStep(1);
+        setCode("");
         confirmationRef.current = null;
       } else {
         Alert.alert(
@@ -288,131 +309,142 @@ export default function PhoneLoginScreen() {
         }}
       />
 
-    <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingTop: 32, gap: 12 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={{ alignItems: "center", marginBottom: 8 }}>
-          <ProphetikIcons size="xxl" iconPosition="after" />
-        </View>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, paddingTop: 32, gap: 12 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ alignItems: "center", marginBottom: 8 }}>
+            <ProphetikIcons size="xxl" iconPosition="after" />
+          </View>
 
-        <Text style={{ fontSize: 22, fontWeight: "800", color: colors.text }}>
-          {i18n.t("auth.phoneLogin.h1", { defaultValue: "Continue with SMS" })}
-        </Text>
+          <Text style={{ fontSize: 22, fontWeight: "800", color: colors.text }}>
+            {i18n.t("auth.phoneLogin.h1", { defaultValue: "Continue with SMS" })}
+          </Text>
 
-        {step === 1 ? (
-          <>
-            <Text style={{ color: "#6B7280" }}>
-              {i18n.t("auth.phoneLogin.subtitle", {
-                defaultValue: "We’ll text you a one-time code.",
-              })}
-            </Text>
-
-            <Text>
-              {i18n.t("auth.phoneLogin.displayNameLabel", { defaultValue: "First name (optional)" })}
-            </Text>
-            <TextInput
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder={i18n.t("auth.phoneLogin.displayNamePlaceholder", { defaultValue: "e.g., Marcel" })}
-              autoCapitalize="words"
-              style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
-            />
-
-            <Text>
-              {i18n.t("auth.phoneLogin.phoneLabel", { defaultValue: "Phone (you can type 5145551234)" })}
-            </Text>
-            <TextInput
-              placeholder={i18n.t("auth.phoneLogin.phonePlaceholder", { defaultValue: "5145551234" })}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              autoComplete="tel"
-              style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
-            />
-
-            {!!normalized && (
+          {step === 1 ? (
+            <>
               <Text style={{ color: "#6B7280" }}>
-                {i18n.t("auth.phoneLogin.sendingAs", {
-                  defaultValue: "Sending as: {{phone}}",
-                  phone: normalized,
+                {i18n.t("auth.phoneLogin.subtitle", {
+                  defaultValue: "We’ll text you a one-time code.",
                 })}
               </Text>
-            )}
 
-            <TouchableOpacity
-              onPress={sendCode}
-              disabled={busy || !canSend}
-              style={{
-                backgroundColor: "#111827",
-                padding: 14,
-                borderRadius: 10,
-                alignItems: "center",
-                opacity: busy || !canSend ? 0.6 : 1,
-              }}
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: "#fff", fontWeight: "800" }}>
-                  {i18n.t("auth.phoneLogin.receiveCodeCta", { defaultValue: "Get code" })}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text>{i18n.t("auth.phoneLogin.codeLabel", { defaultValue: "Code received by SMS" })}</Text>
-
-            <TextInput
-              placeholder={i18n.t("auth.phoneLogin.codePlaceholder", { defaultValue: "123456" })}
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              maxLength={6}
-              style={{ borderWidth: 1, borderRadius: 10, padding: 12, letterSpacing: 4 }}
-            />
-
-            <TouchableOpacity
-              onPress={confirmCode}
-              disabled={busy || code.trim().length < 4}
-              style={{
-                backgroundColor: "#b91c1c",
-                padding: 14,
-                borderRadius: 10,
-                alignItems: "center",
-                opacity: busy || code.trim().length < 4 ? 0.6 : 1,
-              }}
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: "#fff", fontWeight: "800" }}>
-                  {i18n.t("auth.phoneLogin.confirmCta", { defaultValue: "Confirm" })}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setStep(1);
-                setCode("");
-                confirmationRef.current = null;
-              }}
-              disabled={busy}
-              style={{ padding: 10, alignItems: "center" }}
-            >
-              <Text style={{ color: "#6B7280" }}>
-                {i18n.t("auth.phoneLogin.resendLink", { defaultValue: "Use a different number / resend" })}
+              <Text>
+                {i18n.t("auth.phoneLogin.displayNameLabel", {
+                  defaultValue: "First name (optional)",
+                })}
               </Text>
-            </TouchableOpacity>
-          </>
-        )}
+              <TextInput
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder={i18n.t("auth.phoneLogin.displayNamePlaceholder", {
+                  defaultValue: "e.g., Marcel",
+                })}
+                autoCapitalize="words"
+                style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
+              />
 
-       </ScrollView>
-       </SafeAreaView>
+              <Text>
+                {i18n.t("auth.phoneLogin.phoneLabel", {
+                  defaultValue: "Phone (you can type 5145551234)",
+                })}
+              </Text>
+              <TextInput
+                placeholder={i18n.t("auth.phoneLogin.phonePlaceholder", {
+                  defaultValue: "5145551234",
+                })}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                autoComplete="tel"
+                style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
+              />
+
+              {!!normalized && (
+                <Text style={{ color: "#6B7280" }}>
+                  {i18n.t("auth.phoneLogin.sendingAs", {
+                    defaultValue: "Sending as: {{phone}}",
+                    phone: normalized,
+                  })}
+                </Text>
+              )}
+
+              <TouchableOpacity
+                onPress={sendCode}
+                disabled={busy || !canSend}
+                style={{
+                  backgroundColor: "#111827",
+                  padding: 14,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  opacity: busy || !canSend ? 0.6 : 1,
+                }}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>
+                    {i18n.t("auth.phoneLogin.receiveCodeCta", { defaultValue: "Get code" })}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text>
+                {i18n.t("auth.phoneLogin.codeLabel", { defaultValue: "Code received by SMS" })}
+              </Text>
+
+              <TextInput
+                placeholder={i18n.t("auth.phoneLogin.codePlaceholder", { defaultValue: "123456" })}
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                maxLength={6}
+                style={{ borderWidth: 1, borderRadius: 10, padding: 12, letterSpacing: 4 }}
+              />
+
+              <TouchableOpacity
+                onPress={confirmCode}
+                disabled={busy || code.trim().length < 4}
+                style={{
+                  backgroundColor: "#b91c1c",
+                  padding: 14,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  opacity: busy || code.trim().length < 4 ? 0.6 : 1,
+                }}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>
+                    {i18n.t("auth.phoneLogin.confirmCta", { defaultValue: "Confirm" })}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setStep(1);
+                  setCode("");
+                  confirmationRef.current = null;
+                }}
+                disabled={busy}
+                style={{ padding: 10, alignItems: "center" }}
+              >
+                <Text style={{ color: "#6B7280" }}>
+                  {i18n.t("auth.phoneLogin.resendLink", {
+                    defaultValue: "Use a different number / resend",
+                  })}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
     </>
   );
 }

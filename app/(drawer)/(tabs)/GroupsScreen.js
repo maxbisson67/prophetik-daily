@@ -11,6 +11,7 @@ import { useAuth } from '@src/auth/SafeAuthProvider';
 import { createGroupService } from '@src/groups/createGroupService';
 import { useTheme } from '@src/theme/ThemeProvider';
 import i18n from '@src/i18n/i18n'; // 👈 i18n
+import Analytics from '@src/services/analytics';
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)
@@ -343,6 +344,12 @@ export default function GroupsScreen() {
       const { groupId } = await createGroupService({
         name: name.trim(),
         description: description.trim(),
+      });
+
+      await Analytics.createGroup({
+        groupType: "private",
+        source: "groups_screen",
+        groupId,
       });
 
       setCreating(false);

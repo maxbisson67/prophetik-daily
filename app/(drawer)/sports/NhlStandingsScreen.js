@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback ,useRef} from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
+import Analytics from "@src/services/analytics";
 
 /* ========================
    Logos (reprend ton mapping NHL)
@@ -80,6 +81,14 @@ function pointsPct(item) {
   return maxPts > 0 ? pts / maxPts : 0;
 }
 
+function sortWildcardTeams(a, b) {
+  const wa = pickNumber(a?.wildcardSequence, 9999);
+  const wb = pickNumber(b?.wildcardSequence, 9999);
+  if (wa !== wb) return wa - wb;
+
+  return sortNhlTeams(a, b);
+}
+
 function sortNhlTeams(a, b) {
   // 1) points desc
   const pa = pickNumber(a?.points, 0);
@@ -135,6 +144,20 @@ export default function NhlStandingsScreen() {
 
   const headerTitle = i18n.t("nhl.standings.title", { defaultValue: "Classement NHL" });
 
+  const hasLoggedStandingsViewRef = useRef(false);
+
+  useEffect(() => {
+    if (busy) return;
+    if (hasLoggedStandingsViewRef.current) return;
+
+    hasLoggedStandingsViewRef.current = true;
+
+    Analytics.nhlStandingsView({
+      mode,
+      teamsCount: Array.isArray(rows) ? rows.length : 0,
+    });
+  }, [busy, mode, rows]);
+
   useEffect(() => {
     const ref = firestore().doc("nhl_standings/current");
     const unsub = ref.onSnapshot(
@@ -175,12 +198,17 @@ export default function NhlStandingsScreen() {
     return s;
   }, [rows]);
 
-  // Sections : Conférences / Divisions / Wildcard
   const sections = useMemo(() => {
     const list = [...rows];
 
     if (mode === "global") {
-      return [{ key: "GLOBAL", title: i18n.t("nhl.standings.global", { defaultValue: "Ligue" }), data: globalList }];
+      return [
+        {
+          key: "GLOBAL",
+          title: i18n.t("nhl.standings.global", { defaultValue: "Ligue" }),
+          data: globalList,
+        },
+      ];
     }
 
     if (mode === "conference") {
@@ -217,8 +245,11 @@ export default function NhlStandingsScreen() {
         }));
     }
 
-    // Wildcard (Meilleurs deuxièmes) : top2 par conférence hors top-3 de chaque division
-    // Simplification : tie-breakers = points/points%/wins
+    // Wildcard / Meilleurs deuxièmes
+    // ✅ Source de vérité: wildcardSequence
+    // - 1 et 2 = meilleurs deuxièmes
+    // - 0 = déjà qualifié séries
+    // - 3+ = suivent au classement wildcard
     if (mode === "wildcard") {
       const byConf = {};
       list.forEach((t) => {
@@ -232,30 +263,15 @@ export default function NhlStandingsScreen() {
         .map((conf) => {
           const confTeams = [...byConf[conf]];
 
-          // par division dans la conférence
-          const byDiv = {};
-          confTeams.forEach((t) => {
-            const d = pickStr(t?.divisionName, "—");
-            byDiv[d] = byDiv[d] || [];
-            byDiv[d].push(t);
-          });
-
-          const divisionTop3Ids = new Set();
-          Object.keys(byDiv).forEach((div) => {
-            const top = [...byDiv[div]].sort(sortNhlTeams).slice(0, 3);
-            top.forEach((t) => divisionTop3Ids.add(String(t?.teamAbbrev?.default || t?.teamAbbrev || t?.teamName?.default || "")));
-          });
-
-          const rest = confTeams.filter((t) => {
-            const id = String(t?.teamAbbrev?.default || t?.teamAbbrev || t?.teamName?.default || "");
-            return !divisionTop3Ids.has(id);
-          });
-
-          const wild = rest.sort(sortNhlTeams).slice(0, 2);
+          const wild = confTeams
+            .filter((t) => pickNumber(t?.wildcardSequence, 0) > 0)
+            .sort(sortWildcardTeams);
 
           return {
             key: `WC:${conf}`,
-            title: `${conf} • ${i18n.t("nhl.standings.wildcard", { defaultValue: "Meilleurs deuxièmes" })}`,
+            title: `${conf} • ${i18n.t("nhl.standings.wildcard", {
+              defaultValue: "Meilleurs deuxièmes",
+            })}`,
             data: wild,
           };
         });
@@ -264,19 +280,74 @@ export default function NhlStandingsScreen() {
     return [];
   }, [rows, globalList, mode]);
 
-  const flatData = useMemo(() => {
-    // On transforme sections -> FlatList avec headers intercalés
+  
+    const flatData = useMemo(() => {
     const out = [];
+
     sections.forEach((s) => {
       out.push({ __type: "header", key: `H:${s.key}`, title: s.title });
+
       s.data.forEach((item, idx) => {
         out.push({ __type: "row", key: `R:${s.key}:${idx}`, item });
+
+        const wildcardSeq = pickNumber(item?.wildcardSequence, 0);
+
+        if (mode === "wildcard" && wildcardSeq === 2) {
+          out.push({
+            __type: "cutline",
+            key: `CUT:${s.key}:${idx}`,
+            title: i18n.t("nhl.standings.cutlineTitle", {
+              defaultValue: "Ligne de qualification",
+            }),
+            note: i18n.t("nhl.standings.cutlineNote", {
+              defaultValue: "Les équipes suivantes sont actuellement exclues des séries.",
+            }),
+          });
+        }
       });
     });
+
     return out;
-  }, [sections]);
+  }, [sections, mode]);
 
 const renderItem = ({ item }) => {
+
+    if (item.__type === "cutline") {
+    return (
+      <View style={{ marginTop: 4, marginBottom: 12 }}>
+        <View
+          style={{
+            height: 2,
+            backgroundColor: colors.primary,
+            borderRadius: 999,
+            opacity: 0.9,
+          }}
+        />
+
+        <Text
+          style={{
+            color: colors.primary,
+            fontWeight: "900",
+            fontSize: 12,
+            marginTop: 6,
+          }}
+        >
+          {item.title}
+        </Text>
+
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 12,
+            marginTop: 2,
+          }}
+        >
+          {item.note}
+        </Text>
+      </View>
+    );
+  }
+
   if (item.__type === "header") {
     return (
       <View style={{ marginTop: 14, marginBottom: 8 }}>

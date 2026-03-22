@@ -1,12 +1,10 @@
-// app/(tabs)/ClassementScreen.js
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
   ActivityIndicator,
   FlatList,
   RefreshControl,
-  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
@@ -17,18 +15,16 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 
 import firestore from "@react-native-firebase/firestore";
-import useEntitlement from "../subscriptions/useEntitlement";
 
 import GroupLeaderboardCard from "@src/leaderboard/GroupLeaderboardCard";
 import { dedupeById } from "@src/leaderboard/utils";
-import { getColumnsForTier } from "@src/leaderboard/leaderboardColumns";
 import LeaderboardMemberModal from "@src/leaderboard/LeaderboardMemberModal";
 import LeaderboardLegend from "@src/leaderboard/LeaderboardLegend";
+import ProphetikIcons from "@src/ui/ProphetikIcons";
 
 // ✅ hooks (leaderboards saison)
 import useCurrentSeason from "@src/hooks/useCurrentSeason";
-
-const SUBSCRIBE_ROUTE = "/(drawer)/subscriptions";
+import Analytics from "@src/services/analytics";
 
 /* 🔎 hook: tous les groupes dont je suis owner (ownerId == uid OU createdBy == uid) */
 function useOwnedGroups(uid) {
@@ -85,50 +81,12 @@ function useOwnedGroups(uid) {
   return { owned, loading };
 }
 
-function computeMode({ user, tierLower, tierActive }) {
-  if (!user) return "anon";
-  if (tierActive === false) return "free";
-  if (tierLower === "vip") return "vip";
-  if (tierLower === "pro") return "pro";
-  if (tierLower === "starter") return "pro";
-  return "free";
-}
-
-const RED = "#b91c1c";
-
-function cardShadow() {
-  return {
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  };
-}
-
-function prophetikCardStyle(colors, accent = RED) {
-  return {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-
-    // ✅ signature Prophetik
-    borderLeftWidth: 4,
-    borderLeftColor: accent,
-    borderBottomWidth: 2,
-    borderBottomColor: accent,
-  };
-}
-
 /**
  * ✅ hook: écoute un leaderboard "members" pour chaque groupeId / seasonId
- * - FREE: tri simple pointsTotal desc
- * - PRO/VIP: tri wins desc, pointsTotal desc, participations desc
- * Retour: { all: { [groupId]: rows[] }, loading }
+ * MVP:
+ * - tri simple par pointsTotal desc pour tous
  */
-function useLeaderboardsSeasonForGroups({ groupIds, seasonId, enabled, mode }) {
+function useLeaderboardsSeasonForGroups({ groupIds, seasonId, enabled }) {
   const [all, setAll] = useState({});
   const [loading, setLoading] = useState(!!enabled);
 
@@ -157,15 +115,7 @@ function useLeaderboardsSeasonForGroups({ groupIds, seasonId, enabled, mode }) {
     groupIds.forEach((gid) => {
       const groupId = String(gid);
       const base = firestore().collection(`groups/${groupId}/leaderboards/${seasonId}/members`);
-
-      const q =
-        mode === "free"
-          ? base.orderBy("pointsTotal", "desc").limit(50)
-          : base
-              .orderBy("wins", "desc")
-              .orderBy("pointsTotal", "desc")
-              .orderBy("participations", "desc")
-              .limit(50);
+      const q = base.orderBy("pointsTotal", "desc").limit(50);
 
       const un = q.onSnapshot(
         (snap) => {
@@ -191,27 +141,32 @@ function useLeaderboardsSeasonForGroups({ groupIds, seasonId, enabled, mode }) {
         } catch {}
       });
     };
-  }, [enabled, seasonId, mode, JSON.stringify(groupIds || [])]);
+  }, [enabled, seasonId, JSON.stringify(groupIds || [])]);
 
   return { all, loading };
 }
 
-// ✅ Normalisation: on s'assure que l'app utilise pointsTotal
 function normalizeMemberRow(row) {
   const r = row || {};
 
-  const pointsTotal = Number(r.pointsTotal ?? 0) || 0;
+  const fgcPoints = Number(r.fgcPoints ?? r?.families?.fgc?.points ?? 0) || 0;
+  const standardPoints = Number(r.standardPoints ?? r?.families?.standard?.points ?? 0) || 0;
+  const ascensionPoints =
+    Number(r.ascensionPoints ?? r?.families?.ascension?.points ?? 0) || 0;
 
-  const wins = Number(r.wins ?? 0) || 0;
-  const participations = Number(r.participations ?? r.plays ?? 0) || 0;
+  const pointsTotal =
+    Number(r.pointsTotal ?? fgcPoints + standardPoints + ascensionPoints) || 0;
 
-  // winRate global (0..1)
+  const fgcWins = Number(r.fgcWins ?? r?.families?.fgc?.wins ?? 0) || 0;
+  const standardWins = Number(r.standardWins ?? r?.families?.standard?.wins ?? 0) || 0;
+  const ascensionWins = Number(r.ascensionWins ?? r?.families?.ascension?.wins ?? 0) || 0;
+
+  const wins = Number(r.wins ?? fgcWins + standardWins + ascensionWins) || 0;
+  const participations = Number(r.participations ?? 0) || 0;
   const winRate = participations > 0 ? wins / participations : 0;
 
-  // sport-agnostique: garde les champs historiques si existants
   const nhlPointsTotal = Number(r.nhlPointsTotal ?? 0) || 0;
   const nhlGamesTotal = Number(r.nhlGamesTotal ?? 0) || 0;
-
   const nhlPPG = Number.isFinite(Number(r.nhlPPG))
     ? Number(r.nhlPPG)
     : nhlGamesTotal > 0
@@ -220,7 +175,13 @@ function normalizeMemberRow(row) {
 
   return {
     ...r,
+    fgcPoints,
+    standardPoints,
+    ascensionPoints,
     pointsTotal,
+    fgcWins,
+    standardWins,
+    ascensionWins,
     wins,
     participations,
     winRate,
@@ -230,85 +191,8 @@ function normalizeMemberRow(row) {
   };
 }
 
-function LeaderboardUpgradeFooterFree({ colors, onPress }) {
-  const t = i18n.t.bind(i18n);
-  return (
-    <View style={[cardShadow(), prophetikCardStyle(colors), { marginTop: 12, padding: 12 }]}>
-      <Text style={{ color: colors.text, fontWeight: "900" }}>
-        {t("leaderboard.upgradeCta.freeTitle", { defaultValue: "Débloque Pro & VIP" })}
-      </Text>
-      <Text style={{ color: colors.subtext, marginTop: 6 }}>
-        {t("leaderboard.upgradeCta.freeBody", {
-          defaultValue:
-            "Passe à Pro pour voir ton win rate et ouvrir le détail des participants. VIP ajoute aussi les stats avancées et graphiques.",
-        })}
-      </Text>
-
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.85}
-        style={{
-          marginTop: 10,
-          alignSelf: "flex-start",
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.card,
-        }}
-      >
-        <Text style={{ color: colors.primary, fontWeight: "900" }}>
-          {t("leaderboard.upgradeCta.button", { defaultValue: "Voir les forfaits" })}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function LeaderboardUpgradeFooterPro({ colors, onPress }) {
-  const t = i18n.t.bind(i18n);
-  return (
-    <View
-      style={{
-        marginTop: 12,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-      }}
-    >
-      <Text style={{ color: colors.text, fontWeight: "900" }}>
-        {t("leaderboard.upgradeCta.proTitle", { defaultValue: "Passe VIP pour la version complète" })}
-      </Text>
-      <Text style={{ color: colors.subtext, marginTop: 6 }}>
-        {t("leaderboard.upgradeCta.proBody", {
-          defaultValue:
-            "VIP ajoute les stats avancées, les graphiques réels, et la colonne PPG (plus de détails par participant).",
-        })}
-      </Text>
-
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.85}
-        style={{
-          marginTop: 10,
-          alignSelf: "flex-start",
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.card,
-        }}
-      >
-        <Text style={{ color: colors.primary, fontWeight: "900" }}>
-          {t("leaderboard.upgradeCta.vipButton", { defaultValue: "Passer VIP" })}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+function HeaderEmoji({ children }) {
+  return <Text style={{ fontSize: 16 }}>{children}</Text>;
 }
 
 export default function ClassementScreen() {
@@ -319,17 +203,10 @@ export default function ClassementScreen() {
 
   const insets = useSafeAreaInsets();
 
-  const { tier: userTier, loading: loadingTier, active: tierActive } = useEntitlement(user?.uid);
-  const tierLower = String(userTier || "free").toLowerCase();
-  const mode = computeMode({ user, tierLower, tierActive });
-
-  // ✅ Saison courante
   const { season, loading: loadingSeason } = useCurrentSeason();
   const seasonId = String(season?.seasonId || "");
 
-  // groupes membre
   const { groups: memberGroups, loading: loadingMemberGroups, error } = useGroups(user?.uid);
-  // groupes owner
   const { owned: ownedGroups, loading: loadingOwned } = useOwnedGroups(user?.uid);
 
   const groups = useMemo(() => {
@@ -343,19 +220,16 @@ export default function ClassementScreen() {
 
   const groupIds = useMemo(() => groups.map((g) => String(g.id)), [groups]);
 
-  // ✅ FREE inclut maintenant la charge
-  const canLoad = mode !== "anon" && !!seasonId;
+  const canLoad = !!user && !!seasonId;
 
   const { all, loading: loadingBoards } = useLeaderboardsSeasonForGroups({
     groupIds: canLoad ? groupIds : [],
     seasonId,
     enabled: canLoad,
-    mode,
   });
 
   const [refreshing, setRefreshing] = useState(false);
 
-  // ✅ endpoint saison (HTTP)
   const baseUrl =
     "https://us-central1-capitaine.cloudfunctions.net/rebuildLeaderboardSeasonForGroup";
 
@@ -373,7 +247,9 @@ export default function ClassementScreen() {
           fetch(
             `${baseUrl}?groupId=${encodeURIComponent(gid)}&seasonId=${encodeURIComponent(
               seasonId
-            )}&fromYmd=${encodeURIComponent(fromYmd)}&toYmd=${encodeURIComponent(toYmd)}`
+            )}&fromYmd=${encodeURIComponent(fromYmd)}&toYmd=${encodeURIComponent(
+              toYmd
+            )}&clearDirty=1`
           )
         )
       );
@@ -384,10 +260,39 @@ export default function ClassementScreen() {
     }
   }, [groupIds, seasonId, season?.fromYmd, season?.toYmd]);
 
-  // ✅ IMPORTANT: getColumnsForTier(tierLower) seulement
+  // ✅ Colonnes MVP avec icônes seulement
   const columns = useMemo(
-    () => getColumnsForTier(tierLower, colors),
-    [tierLower, colors]
+    () => [
+      {
+        key: "fgcPoints",
+        header: <Text style={{ fontSize: 16 }}>🏒</Text>,
+        flex: 0.9,
+        align: "center",
+        render: (row) => String(Number(row?.fgcPoints ?? 0) || 0),
+      },
+      {
+        key: "standardPoints",
+        header: <Text style={{ fontSize: 16 }}>🎯</Text>,
+        flex: 0.95,
+        align: "center",
+        render: (row) => String(Number(row?.standardPoints ?? 0) || 0),
+      },
+      {
+        key: "ascensionPoints",
+        header: <Text style={{ fontSize: 16 }}>🏔</Text>,
+        flex: 0.95,
+        align: "center",
+        render: (row) => String(Number(row?.ascensionPoints ?? 0) || 0),
+      },
+      {
+        key: "pointsTotal",
+        header: <ProphetikIcons mode="points" amount={null} size="sm" iconOnly />,
+        flex: 0.95,
+        align: "right",
+        render: (row) => String(Number(row?.pointsTotal ?? 0) || 0),
+      },
+    ],
+    []
   );
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -400,11 +305,33 @@ export default function ClassementScreen() {
     setModalOpen(true);
   }
 
-  const canOpenMember = mode === "pro" || mode === "vip";
+  const hasLoggedLeaderboardViewRef = useRef(false);
 
-  // ✅ CTA stratégiques
-  const showFooterFree = mode === "free";
-  const showFooterPro = mode === "pro";
+    useEffect(() => {
+      if (!user?.uid) return;
+      if (loadingSeason || loadingMemberGroups || loadingOwned || loadingBoards) return;
+      if (error) return;
+
+      if (hasLoggedLeaderboardViewRef.current) return;
+      hasLoggedLeaderboardViewRef.current = true;
+
+      Analytics.leaderboardView({
+        seasonId: seasonId || null,
+        groupsCount: Array.isArray(groups) ? groups.length : 0,
+      });
+    }, [
+      user?.uid,
+      loadingSeason,
+      loadingMemberGroups,
+      loadingOwned,
+      loadingBoards,
+      error,
+      seasonId,
+      groups,
+    ]);
+
+  // ✅ MVP: tout le monde a accès
+  const canOpenMember = true;
 
   if (!user) {
     return (
@@ -425,7 +352,7 @@ export default function ClassementScreen() {
     );
   }
 
-  if (loadingTier || loadingSeason) {
+  if (loadingSeason) {
     return (
       <>
         <Stack.Screen options={{ title: t("leaderboard.title") }} />
@@ -492,21 +419,20 @@ export default function ClassementScreen() {
     <>
       <Stack.Screen options={{ title: t("leaderboard.title") }} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        {/* ✅ Modal seulement PRO/VIP */}
         <LeaderboardMemberModal
           visible={modalOpen && canOpenMember}
           onClose={() => setModalOpen(false)}
           row={selectedRow ? normalizeMemberRow(selectedRow) : null}
           peerRows={selectedPeers}
           colors={colors}
-          tierLower={tierLower}
-          onUpgrade={() => router.push(SUBSCRIBE_ROUTE)}
+          tierLower="vip"
+          onUpgrade={() => {}}
         />
 
         <FlatList
           ListHeaderComponent={
             <View style={{ gap: 12 }}>
-              <LeaderboardLegend colors={colors} tierLower={tierLower} onUpgrade={() => router.push(SUBSCRIBE_ROUTE)}/>
+              <LeaderboardLegend colors={colors} />
               {!!seasonId ? (
                 <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "800" }}>
                   {t("leaderboard.seasonLine", {
@@ -518,19 +444,6 @@ export default function ClassementScreen() {
                 </Text>
               ) : null}
             </View>
-          }
-          ListFooterComponent={
-            showFooterFree ? (
-              <LeaderboardUpgradeFooterFree
-                colors={colors}
-                onPress={() => router.push(SUBSCRIBE_ROUTE)}
-              />
-            ) : showFooterPro ? (
-              <LeaderboardUpgradeFooterPro
-                colors={colors}
-                onPress={() => router.push(SUBSCRIBE_ROUTE)}
-              />
-            ) : null
           }
           contentInsetAdjustmentBehavior="automatic"
           automaticallyAdjustContentInsets
@@ -563,11 +476,6 @@ export default function ClassementScreen() {
                   defaultValue: "Aucun classement disponible.",
                 })}
                 onRowPress={(row) => {
-                  if (!canOpenMember) {
-                    // ✅ CTA soft: en FREE, un tap sur un participant amène aux forfaits
-                    router.push(SUBSCRIBE_ROUTE);
-                    return;
-                  }
                   openMember(row, rows);
                 }}
               />

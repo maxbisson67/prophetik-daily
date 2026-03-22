@@ -12,22 +12,11 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { Stack, useRouter } from "expo-router";
 
-// 🔁 RN Firebase Firestore
+import RNFBAuth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 
-// Auth web (tu peux garder ton provider actuel)
-import { signInAnonymously, updateProfile } from "firebase/auth";
-
-// Safe auth
 import { useAuth } from "@src/auth/SafeAuthProvider";
-
-// Si tu utilises encore auth web dans ton SafeAuthProvider :
-import { auth } from "@src/lib/firebase";
-
-// Thème
 import { useTheme } from "@src/theme/ThemeProvider";
-
-// i18n (singleton)
 import i18n from "@src/i18n/i18n";
 
 export default function ProfileScreen() {
@@ -45,13 +34,13 @@ export default function ProfileScreen() {
   const [participantLoaded, setParticipantLoaded] = useState(false);
   const didPatchOnboardingRef = useRef(false);
 
-  // --- sync visuel sur changement d'UID
+  // Sync visuel quand le user change
   useEffect(() => {
     setDisplayName(user?.displayName || "");
     setPhotoURL(user?.photoURL ?? null);
-  }, [user?.uid]);
+  }, [user?.uid, user?.displayName, user?.photoURL]);
 
-  // --- fetch participant (LIVE)
+  // Lecture live de participants/{uid}
   useEffect(() => {
     if (!user?.uid) {
       setParticipant(null);
@@ -68,12 +57,15 @@ export default function ProfileScreen() {
           const p = snap.data() || {};
           setParticipant({ id: snap.id, ...p });
 
-          setDisplayName(p?.displayName || user.displayName || "");
+          // La source de vérité UI vient de participants.displayName
+          setDisplayName(p?.displayName || user?.displayName || "");
 
           const nextPhoto = p?.photoURL ?? p?.avatarUrl ?? user?.photoURL ?? null;
           setPhotoURL(nextPhoto);
         } else {
           setParticipant(null);
+          setDisplayName(user?.displayName || "");
+          setPhotoURL(user?.photoURL ?? null);
         }
 
         setParticipantLoaded(true);
@@ -88,7 +80,7 @@ export default function ProfileScreen() {
         unsub();
       } catch {}
     };
-  }, [user?.uid]);
+  }, [user?.uid, user?.displayName, user?.photoURL]);
 
   const needsOnboardingFlag =
     !!user?.uid &&
@@ -96,7 +88,7 @@ export default function ProfileScreen() {
     (!participant?.onboarding ||
       typeof participant?.onboarding?.welcomeSeen !== "boolean");
 
-  // --- patch onboarding (une seule fois)
+  // Patch onboarding au besoin
   useEffect(() => {
     if (!user?.uid) return;
     if (!participantLoaded) return;
@@ -107,7 +99,13 @@ export default function ProfileScreen() {
 
     firestore()
       .doc(`participants/${user.uid}`)
-      .set({ onboarding: { welcomeSeen: false } }, { merge: true })
+      .set(
+        {
+          onboarding: { welcomeSeen: false },
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      )
       .then(() => {
         setParticipant((prev) =>
           prev
@@ -124,7 +122,6 @@ export default function ProfileScreen() {
       .catch(() => {});
   }, [user?.uid, participantLoaded, needsOnboardingFlag]);
 
-  // --- helpers
   const ensureParticipantDoc = async (u) => {
     const ref = firestore().doc(`participants/${u.uid}`);
     const snap = await ref.get();
@@ -139,9 +136,6 @@ export default function ProfileScreen() {
           updatedAt: firestore.FieldValue.serverTimestamp(),
           betaEligible: true,
           onboarding: { welcomeSeen: false },
-
-          // ✅ Optionnel: tu peux garder/enlever selon ton modèle de données
-          // credits: { balance: 0 },
         },
         { merge: true }
       );
@@ -154,7 +148,7 @@ export default function ProfileScreen() {
     try {
       setBusy(true);
 
-      const res = await signInAnonymously(auth);
+      const res = await RNFBAuth().signInAnonymously();
       await ensureParticipantDoc(res.user);
 
       Alert.alert(
@@ -193,7 +187,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // === SAUVEGARDE (FireStore RNFirebase) ===
   const saveProfile = async () => {
     if (!user?.uid) {
       Alert.alert(
@@ -208,6 +201,7 @@ export default function ProfileScreen() {
     try {
       setBusy(true);
 
+      const cleanDisplayName = String(displayName || "").trim() || null;
       const newPhotoURL =
         photoURL ??
         participant?.photoURL ??
@@ -217,40 +211,43 @@ export default function ProfileScreen() {
 
       const isFirstSave = !participant;
 
-      // MAJ profil auth
-      if (auth?.currentUser) {
-        await updateProfile(auth.currentUser, {
-          displayName: displayName || null,
+      // 1) Mettre à jour RNFirebase Auth
+      const currentUser = RNFBAuth().currentUser;
+      if (currentUser) {
+        await currentUser.updateProfile({
+          displayName: cleanDisplayName,
           photoURL: newPhotoURL || null,
         });
+        await currentUser.reload().catch(() => {});
       }
 
+      // 2) Mettre à jour participants/{uid}
       const ref = firestore().doc(`participants/${user.uid}`);
 
       if (isFirstSave) {
         await ref.set(
           {
-            displayName: displayName || null,
+            displayName: cleanDisplayName,
             email: user.email || null,
             betaEligible: true,
             createdAt: firestore.FieldValue.serverTimestamp(),
             updatedAt: firestore.FieldValue.serverTimestamp(),
             onboarding: { welcomeSeen: false },
-
-            ...(newPhotoURL ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL } : {}),
-
-            // ✅ Optionnel: tu peux garder/enlever selon ton modèle de données
-            // credits: { balance: 0 },
+            ...(newPhotoURL
+              ? { photoURL: newPhotoURL, avatarUrl: newPhotoURL }
+              : {}),
           },
           { merge: true }
         );
 
-        router.replace("/onboarding/welcome");
+        Alert.alert(
+          i18n.t("profile.alert.savedTitle", { defaultValue: "Profile updated" })
+        );
         return;
       }
 
       const updatePayload = {
-        displayName: displayName || null,
+        displayName: cleanDisplayName,
         updatedAt: firestore.FieldValue.serverTimestamp(),
       };
 
@@ -259,12 +256,30 @@ export default function ProfileScreen() {
         updatePayload.avatarUrl = newPhotoURL;
       }
 
-      await ref.update(updatePayload);
+      await ref.set(updatePayload, { merge: true });
 
       if (needsOnboardingFlag && !didPatchOnboardingRef.current) {
-        await ref.set({ onboarding: { welcomeSeen: false } }, { merge: true });
+        await ref.set(
+          {
+            onboarding: { welcomeSeen: false },
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
         didPatchOnboardingRef.current = true;
       }
+
+      // 3) Mettre à jour profiles_public aussi pour garder l’app cohérente
+      await firestore()
+        .doc(`profiles_public/${user.uid}`)
+        .set(
+          {
+            displayName: cleanDisplayName,
+            ...(newPhotoURL ? { avatarUrl: newPhotoURL } : {}),
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
 
       Alert.alert(
         i18n.t("profile.alert.savedTitle", { defaultValue: "Profile updated" })
@@ -323,7 +338,6 @@ export default function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="always"
       >
-        {/* Carte profil */}
         <View
           style={{
             padding: 16,

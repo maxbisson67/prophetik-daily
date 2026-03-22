@@ -1,5 +1,4 @@
-// app/sports/MatchLiveScreen.js
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,63 +9,56 @@ import {
   Image,
   Modal,
   ScrollView,
-} from 'react-native';
-
-import {  useRouter } from 'expo-router';
-import { useAuth } from '@src/auth/SafeAuthProvider';
-
+} from "react-native";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useAuth } from "@src/auth/SafeAuthProvider";
 import FirstGoalChallengeModal from "@src/firstGoal/FirstGoalChallengeModal";
-
-
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@src/theme/ThemeProvider';
-
-// 🔥 RNFirebase
-import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
-
-// i18n
-import i18n from '@src/i18n/i18n';
-
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@src/theme/ThemeProvider";
+import firestore from "@react-native-firebase/firestore";
+import functions from "@react-native-firebase/functions";
+import i18n from "@src/i18n/i18n";
+import { crashLog, setCrashContext, recordNonFatal } from "@src/services/crashlytics";
+import Analytics from "@src/services/analytics";
 
 /* ========================
    Helpers date / logos
 ========================= */
 
 const LOGO_MAP = {
-  ANA: require('../../../assets/nhl-logos/ANA.png'),
-  ARI: require('../../../assets/nhl-logos/ARI.png'),
-  BOS: require('../../../assets/nhl-logos/BOS.png'),
-  BUF: require('../../../assets/nhl-logos/BUF.png'),
-  CAR: require('../../../assets/nhl-logos/CAR.png'),
-  CBJ: require('../../../assets/nhl-logos/CBJ.png'),
-  CGY: require('../../../assets/nhl-logos/CGY.png'),
-  CHI: require('../../../assets/nhl-logos/CHI.png'),
-  COL: require('../../../assets/nhl-logos/COL.png'),
-  DAL: require('../../../assets/nhl-logos/DAL.png'),
-  DET: require('../../../assets/nhl-logos/DET.png'),
-  EDM: require('../../../assets/nhl-logos/EDM.png'),
-  FLA: require('../../../assets/nhl-logos/FLA.png'),
-  LAK: require('../../../assets/nhl-logos/LAK.png'),
-  MIN: require('../../../assets/nhl-logos/MIN.png'),
-  MTL: require('../../../assets/nhl-logos/MTL.png'),
-  NJD: require('../../../assets/nhl-logos/NJD.png'),
-  NSH: require('../../../assets/nhl-logos/NSH.png'),
-  NYI: require('../../../assets/nhl-logos/NYI.png'),
-  NYR: require('../../../assets/nhl-logos/NYR.png'),
-  OTT: require('../../../assets/nhl-logos/OTT.png'),
-  PHI: require('../../../assets/nhl-logos/PHI.png'),
-  PIT: require('../../../assets/nhl-logos/PIT.png'),
-  SEA: require('../../../assets/nhl-logos/SEA.png'),
-  SJS: require('../../../assets/nhl-logos/SJS.png'),
-  STL: require('../../../assets/nhl-logos/STL.png'),
-  TBL: require('../../../assets/nhl-logos/TBL.png'),
-  TOR: require('../../../assets/nhl-logos/TOR.png'),
-  UTA: require('../../../assets/nhl-logos/UTA.png'),
-  VAN: require('../../../assets/nhl-logos/VAN.png'),
-  VGK: require('../../../assets/nhl-logos/VGK.png'),
-  WPG: require('../../../assets/nhl-logos/WPG.png'),
-  WSH: require('../../../assets/nhl-logos/WSH.png'),
+  ANA: require("../../../assets/nhl-logos/ANA.png"),
+  ARI: require("../../../assets/nhl-logos/ARI.png"),
+  BOS: require("../../../assets/nhl-logos/BOS.png"),
+  BUF: require("../../../assets/nhl-logos/BUF.png"),
+  CAR: require("../../../assets/nhl-logos/CAR.png"),
+  CBJ: require("../../../assets/nhl-logos/CBJ.png"),
+  CGY: require("../../../assets/nhl-logos/CGY.png"),
+  CHI: require("../../../assets/nhl-logos/CHI.png"),
+  COL: require("../../../assets/nhl-logos/COL.png"),
+  DAL: require("../../../assets/nhl-logos/DAL.png"),
+  DET: require("../../../assets/nhl-logos/DET.png"),
+  EDM: require("../../../assets/nhl-logos/EDM.png"),
+  FLA: require("../../../assets/nhl-logos/FLA.png"),
+  LAK: require("../../../assets/nhl-logos/LAK.png"),
+  MIN: require("../../../assets/nhl-logos/MIN.png"),
+  MTL: require("../../../assets/nhl-logos/MTL.png"),
+  NJD: require("../../../assets/nhl-logos/NJD.png"),
+  NSH: require("../../../assets/nhl-logos/NSH.png"),
+  NYI: require("../../../assets/nhl-logos/NYI.png"),
+  NYR: require("../../../assets/nhl-logos/NYR.png"),
+  OTT: require("../../../assets/nhl-logos/OTT.png"),
+  PHI: require("../../../assets/nhl-logos/PHI.png"),
+  PIT: require("../../../assets/nhl-logos/PIT.png"),
+  SEA: require("../../../assets/nhl-logos/SEA.png"),
+  SJS: require("../../../assets/nhl-logos/SJS.png"),
+  STL: require("../../../assets/nhl-logos/STL.png"),
+  TBL: require("../../../assets/nhl-logos/TBL.png"),
+  TOR: require("../../../assets/nhl-logos/TOR.png"),
+  UTA: require("../../../assets/nhl-logos/UTA.png"),
+  VAN: require("../../../assets/nhl-logos/VAN.png"),
+  VGK: require("../../../assets/nhl-logos/VGK.png"),
+  WPG: require("../../../assets/nhl-logos/WPG.png"),
+  WSH: require("../../../assets/nhl-logos/WSH.png"),
 };
 
 function teamLogo(abbr) {
@@ -78,7 +70,6 @@ function formatShortDateLocalized(ymd, locale) {
   const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
   const dt = new Date(y, (m || 1) - 1, d || 1);
 
-  // ex: "27 February" / "27 février"
   return new Intl.DateTimeFormat(locale || "en", {
     day: "numeric",
     month: "long",
@@ -88,15 +79,26 @@ function formatShortDateLocalized(ymd, locale) {
 function todayYMD() {
   const d = new Date();
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function addDaysToYMD(baseYmd, delta) {
+  if (!baseYmd || typeof baseYmd !== "string" || baseYmd.length < 10) return baseYmd;
+  const [y, m, d] = baseYmd.split("-").map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 /**
  * Règle NHL:
- *  - Après 9h locale → date du jour
- *  - Avant 9h locale → date de la VEILLE (matchs de la soirée précédente)
+ * - Après 9h locale → date du jour
+ * - Avant 9h locale → date de la veille
  */
 function computeNhlYmd() {
   const now = new Date();
@@ -109,24 +111,20 @@ function computeNhlYmd() {
   return base;
 }
 
-// Gère Date / string / Timestamp Firestore
 function fmtTime(d) {
-  if (!d) return '—';
+  if (!d) return "—";
   let date;
   try {
-    if (d?.toDate) {
-      date = d.toDate();
-    } else if (d instanceof Date) {
-      date = d;
-    } else {
-      date = new Date(d);
-    }
+    if (d?.toDate) date = d.toDate();
+    else if (d instanceof Date) date = d;
+    else date = new Date(d);
   } catch {
-    return '—';
+    return "—";
   }
-  if (!date || isNaN(date.getTime())) return '—';
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
+
+  if (!date || isNaN(date.getTime())) return "—";
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
 }
 
@@ -136,19 +134,15 @@ function isGameToday(doc, ymdStr) {
 
   let dt;
   try {
-    if (t?.toDate) {
-      dt = t.toDate(); // Timestamp Firestore
-    } else {
-      dt = new Date(t); // string ISO ou ms
-    }
+    dt = t?.toDate ? t.toDate() : new Date(t);
   } catch {
     return false;
   }
   if (!dt || isNaN(dt.getTime())) return false;
 
   const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, '0');
-  const d = String(dt.getDate()).padStart(2, '0');
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
   const ymd = `${y}-${m}-${d}`;
 
   return ymd === ymdStr;
@@ -165,77 +159,31 @@ function gStartMillis(g) {
   }
 }
 
-function addDaysToYMD(baseYmd, delta) {
-  if (!baseYmd || typeof baseYmd !== 'string' || baseYmd.length < 10) return baseYmd;
-  const [y, m, d] = baseYmd.split('-').map((x) => parseInt(x, 10));
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + delta);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${yy}-${mm}-${dd}`;
-}
-
-/**
- * Affichage "30 novembre" à partir de "2025-11-30"
- * (encore codé en FR ici – on pourra plus tard le brancher aussi sur i18n)
- */
-function formatFrenchShortDate(ymd) {
-  if (!ymd || typeof ymd !== 'string' || ymd.length < 10) return '';
-  const [, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
-  const months = [
-    'janvier',
-    'février',
-    'mars',
-    'avril',
-    'mai',
-    'juin',
-    'juillet',
-    'août',
-    'septembre',
-    'octobre',
-    'novembre',
-    'décembre',
-  ];
-  const monthName = months[(m || 1) - 1] || '';
-  return `${d} ${monthName}`;
-}
-
-/**
- * Période (sans temps)
- * - Si isFinal → "Final", "Final (P)", "Final (TB)"
- * - Si live → "Période X" / "Prolongation" / "Tirs de barrage"
- * - Sinon → null (on affiche seulement l’heure de début)
- */
 function periodLabelFromGame(game) {
   const { period, periodType, isLive, isFinal } = game || {};
+  const pt = String(periodType || "").toUpperCase();
 
-  const pt = (periodType || '').toUpperCase();
-
-  // 🏁 Match terminé : Final / Final (P) / Final (TB)
   if (isFinal) {
-    if (pt === 'SO' || period === 5) {
-      return i18n.t('live.status.finalSO', 'Final (TB)');
+    if (pt === "SO" || period === 5) {
+      return i18n.t("live.status.finalSO", "Final (TB)");
     }
-    if (pt === 'OT' || period === 4) {
-      return i18n.t('live.status.finalOT', 'Final (P)');
+    if (pt === "OT" || period === 4) {
+      return i18n.t("live.status.finalOT", "Final (P)");
     }
-    return i18n.t('live.status.final', 'Final');
+    return i18n.t("live.status.final", "Final");
   }
 
-  // Match pas live → pas d’info de période (pré-match)
   if (!isLive) return null;
 
-  // Match en cours → affiche seulement la période
-  if (pt === 'OT') {
-    return i18n.t('live.detail.ot', 'Prolongation');
+  if (pt === "OT") {
+    return i18n.t("live.detail.ot", "Prolongation");
   }
-  if (pt === 'SO') {
-    return i18n.t('live.detail.so', 'Tirs de barrage');
+  if (pt === "SO") {
+    return i18n.t("live.detail.so", "Tirs de barrage");
   }
   if (period != null) {
-    return i18n.t('live.detail.period', {
-      defaultValue: 'Période {{period}}',
+    return i18n.t("live.detail.period", {
+      defaultValue: "Période {{period}}",
       period,
     });
   }
@@ -244,7 +192,7 @@ function periodLabelFromGame(game) {
 }
 
 function shortName(fullName) {
-  if (!fullName || typeof fullName !== 'string') return '';
+  if (!fullName || typeof fullName !== "string") return "";
   const parts = fullName.trim().split(/\s+/);
   if (parts.length === 1) return parts[0];
 
@@ -255,11 +203,21 @@ function shortName(fullName) {
   return `${initial}. ${last}`;
 }
 
+function statusRank(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "open") return 0;
+  if (s === "locked") return 1;
+  if (s === "pending") return 2;
+  if (s === "decided") return 3;
+  if (s === "closed") return 4;
+  return 5;
+}
+
 /* ========================
    Composant de ligne
 ========================= */
 
-function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
+function GameRow({ game, onPress, colors, challenges = [], onPressChallenge, groupNameById = {} }) {
   const {
     homeAbbr,
     awayAbbr,
@@ -275,33 +233,7 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
   const timeRemaining = game.timeRemaining ?? null;
   const periodLabel = periodLabelFromGame(game);
   const isIntermission = !!inIntermission;
-
-  // On n’affiche pas "Terminé" si le match est final (le "Final..." vient de periodLabel)
   const displayStatusText = isFinal ? null : statusText;
-
-  const ch = challenge || null;
-  const chStatus = String(ch?.status || "").toLowerCase();
-  const chParticipants = Number(ch?.participantsCount || 0);
-
-  const chLine =
-    chStatus === "open"
-      ? `🟢 ${i18n.t("firstGoal.status.open", { defaultValue: "Ouvert" })}`
-      : chStatus === "locked"
-      ? `🔒 ${i18n.t("firstGoal.status.locked", { defaultValue: "Verrouillé" })}`
-      : chStatus === "pending"
-      ? `⏳ ${i18n.t("firstGoal.status.pending", { defaultValue: "En vérification" })}`
-      : chStatus === "decided"
-      ? `✅ ${i18n.t("firstGoal.status.decided", { defaultValue: "Résultats" })}`
-      : chStatus
-      ? chStatus
-      : null;
-
-  const chResult =
-    chStatus === "decided" || chStatus === "closed"
-      ? ch?.firstGoal?.playerName
-        ? `${i18n.t("firstGoal.result.prefix", { defaultValue: "Premier but:" })} ${ch.firstGoal.playerName}`
-        : i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })
-      : null;
 
   return (
     <View
@@ -314,12 +246,7 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
         marginBottom: 10,
       }}
     >
-      {/* Zone tappable pour ouvrir la modale du match */}
-      <TouchableOpacity
-        onPress={() => onPress?.(game)}
-        activeOpacity={0.85}
-        style={{}}
-      >
+      <TouchableOpacity onPress={() => onPress?.(game)} activeOpacity={0.85}>
         <View
           style={{
             flexDirection: "row",
@@ -327,9 +254,7 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
             alignItems: "center",
           }}
         >
-          {/* Infos gauche : équipes + score */}
           <View style={{ flex: 1 }}>
-            {/* Away */}
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
               {teamLogo(awayAbbr) && (
                 <Image source={teamLogo(awayAbbr)} style={{ width: 26, height: 26, marginRight: 8 }} />
@@ -340,7 +265,6 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
               </Text>
             </View>
 
-            {/* Home */}
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               {teamLogo(homeAbbr) && (
                 <Image source={teamLogo(homeAbbr)} style={{ width: 26, height: 26, marginRight: 8 }} />
@@ -352,7 +276,6 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
             </View>
           </View>
 
-          {/* Colonne droite : LIVE + période + heure/temps */}
           <View style={{ alignItems: "flex-end", marginLeft: 12 }}>
             {isLive && (
               <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 2 }}>
@@ -410,32 +333,61 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
         </View>
       </TouchableOpacity>
 
-      {/* ✅ Zone tappable séparée pour le First Goal Challenge */}
-      {ch?.id ? (
-        <TouchableOpacity
-          onPress={() => onPressChallenge?.(ch)}
-          activeOpacity={0.85}
-          style={{
-            marginTop: 10,
-            paddingVertical: 8,
-            paddingHorizontal: 10,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.card2,
-          }}
-        >
-          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
-            🎯 {i18n.t("firstGoal.label", { defaultValue: "Premier but" })} • {chParticipants}
-          </Text>
+      {challenges.length > 0 ? (
+        <View style={{ marginTop: 10, gap: 8 }}>
+          {challenges.map((ch) => {
+            const chStatus = String(ch?.status || "").toLowerCase();
+            const chParticipants = Number(ch?.participantsCount || 0);
+            const groupName = groupNameById[String(ch.groupId || "")] || String(ch.groupId || "");
 
-          {chLine ? (
-            <Text style={{ marginTop: 2, color: colors.subtext, fontSize: 12 }} numberOfLines={1}>
-              {chLine}
-              {chResult ? ` • ${chResult}` : ""}
-            </Text>
-          ) : null}
-        </TouchableOpacity>
+            const chLine =
+              chStatus === "open"
+                ? `🟢 ${i18n.t("firstGoal.status.open", { defaultValue: "Ouvert" })}`
+                : chStatus === "locked"
+                ? `🔒 ${i18n.t("firstGoal.status.locked", { defaultValue: "Verrouillé" })}`
+                : chStatus === "pending"
+                ? `⏳ ${i18n.t("firstGoal.status.pending", { defaultValue: "En vérification" })}`
+                : chStatus === "decided"
+                ? `✅ ${i18n.t("firstGoal.status.decided", { defaultValue: "Résultats" })}`
+                : chStatus === "closed"
+                ? `🏁 ${i18n.t("firstGoal.status.closed", { defaultValue: "Terminé" })}`
+                : chStatus || null;
+
+            const chResult =
+              chStatus === "decided" || chStatus === "closed"
+                ? ch?.firstGoal?.playerName
+                  ? `${i18n.t("firstGoal.result.prefix", { defaultValue: "Premier but:" })} ${ch.firstGoal.playerName}`
+                  : i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })
+                : null;
+
+            return (
+              <TouchableOpacity
+                key={String(ch.id)}
+                onPress={() => onPressChallenge?.(ch)}
+                activeOpacity={0.85}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card2,
+                }}
+              >
+                <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
+                  🎯 {groupName} • {chParticipants}
+                </Text>
+
+                {chLine ? (
+                  <Text style={{ marginTop: 2, color: colors.subtext, fontSize: 12 }} numberOfLines={2}>
+                    {chLine}
+                    {chResult ? ` • ${chResult}` : ""}
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       ) : (
         <View
           style={{
@@ -460,27 +412,20 @@ function GameRow({ game, onPress, colors, challenge, onPressChallenge  }) {
 ========================= */
 
 function GameDetailModal({ visible, onClose, game, colors }) {
-  const { user } = useAuth();
-
   const [gameDoc, setGameDoc] = useState(null);
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(false);
 
-
   useEffect(() => {
-    console.log("TIMEMNOW",
-      new Date().toString(),
-      Intl.DateTimeFormat().resolvedOptions().timeZone
-    );
-        if (!visible || !game?.id) {
+    if (!visible || !game?.id) {
       setGameDoc(null);
       setGoals([]);
       setLoading(false);
       return;
     }
 
-    const ref = firestore().collection('nhl_live_games').doc(String(game.id));
-    const goalsRef = ref.collection('goals');
+    const ref = firestore().collection("nhl_live_games").doc(String(game.id));
+    const goalsRef = ref.collection("goals");
 
     setLoading(true);
 
@@ -489,13 +434,13 @@ function GameDetailModal({ visible, onClose, game, colors }) {
         setGameDoc(snap.exists ? { id: snap.id, ...snap.data() } : null);
       },
       (err) => {
-        console.log('[MatchLive] game doc error', err?.message || err);
+        console.log("[MatchLive] game doc error", err?.message || err);
       }
     );
 
     const unsubGoals = goalsRef
-      .orderBy('period', 'asc')
-      .orderBy('timeInPeriod', 'asc')
+      .orderBy("period", "asc")
+      .orderBy("timeInPeriod", "asc")
       .onSnapshot(
         (snap) => {
           const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -503,20 +448,23 @@ function GameDetailModal({ visible, onClose, game, colors }) {
           setLoading(false);
         },
         (err) => {
-          console.log('[MatchLive] goals error', err?.message || err);
+          console.log("[MatchLive] goals error", err?.message || err);
           setLoading(false);
         }
       );
 
     return () => {
-      try { unsubGame(); } catch {}
-      try { unsubGoals(); } catch {}
+      try {
+        unsubGame();
+      } catch {}
+      try {
+        unsubGoals();
+      } catch {}
     };
   }, [visible, game?.id]);
 
   const g = gameDoc || game || null;
 
-  // Regroupement des buts par période, avec codes internes
   const goalsByPeriod = useMemo(() => {
     const map = {
       P1: [],
@@ -529,23 +477,21 @@ function GameDetailModal({ visible, onClose, game, colors }) {
 
     goals.forEach((goal) => {
       const p = goal.period;
-      const pt = (goal.periodType || '').toUpperCase();
+      const pt = String(goal.periodType || "").toUpperCase();
 
-      let code = 'UNKNOWN';
-      if (pt === 'SO') code = 'SO';
-      else if (pt === 'OT') code = 'OT';
-      else if (p === 1) code = 'P1';
-      else if (p === 2) code = 'P2';
-      else if (p === 3) code = 'P3';
+      let code = "UNKNOWN";
+      if (pt === "SO") code = "SO";
+      else if (pt === "OT") code = "OT";
+      else if (p === 1) code = "P1";
+      else if (p === 2) code = "P2";
+      else if (p === 3) code = "P3";
 
       map[code].push(goal);
     });
 
-    const order = ['P1', 'P2', 'P3', 'OT', 'SO', 'UNKNOWN'];
+    const order = ["P1", "P2", "P3", "OT", "SO", "UNKNOWN"];
 
-    return order
-      .filter((code) => map[code]?.length)
-      .map((code) => ({ code, goals: map[code] }));
+    return order.filter((code) => map[code]?.length).map((code) => ({ code, goals: map[code] }));
   }, [goals]);
 
   if (!visible || !g) return null;
@@ -568,41 +514,31 @@ function GameDetailModal({ visible, onClose, game, colors }) {
   const isIntermission = !!inIntermission;
 
   let periodLabel = null;
-  const ptModal = (periodType || '').toUpperCase();
+  const ptModal = String(periodType || "").toUpperCase();
 
   if (isFinal) {
-    if (ptModal === 'SO' || period === 5) {
-      periodLabel = i18n.t('live.status.finalSO', 'Final (TB)');
-    } else if (ptModal === 'OT' || period === 4) {
-      periodLabel = i18n.t('live.status.finalOT', 'Final (P)');
+    if (ptModal === "SO" || period === 5) {
+      periodLabel = i18n.t("live.status.finalSO", "Final (TB)");
+    } else if (ptModal === "OT" || period === 4) {
+      periodLabel = i18n.t("live.status.finalOT", "Final (P)");
     } else {
-      periodLabel = i18n.t('live.status.final', 'Final');
+      periodLabel = i18n.t("live.status.final", "Final");
     }
   } else if (period != null) {
-    periodLabel = i18n.t('live.detail.periodWithSuffix', {
-      defaultValue: 'Période {{period}}{{suffix}}',
+    periodLabel = i18n.t("live.detail.periodWithSuffix", {
+      defaultValue: "Période {{period}}{{suffix}}",
       period,
-      suffix:
-        ptModal === 'OT'
-          ? ' (Prolong.)'
-          : ptModal === 'SO'
-          ? ' (TB)'
-          : '',
+      suffix: ptModal === "OT" ? " (Prolong.)" : ptModal === "SO" ? " (TB)" : "",
     });
   }
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View
         style={{
           flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.4)',
-          justifyContent: 'flex-end',
+          backgroundColor: "rgba(0,0,0,0.4)",
+          justifyContent: "flex-end",
         }}
       >
         <View
@@ -611,16 +547,10 @@ function GameDetailModal({ visible, onClose, game, colors }) {
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
             padding: 16,
-            maxHeight: '80%',
+            maxHeight: "80%",
           }}
         >
-          {/* Handle */}
-          <View
-            style={{
-              alignItems: 'center',
-              marginBottom: 8,
-            }}
-          >
+          <View style={{ alignItems: "center", marginBottom: 8 }}>
             <View
               style={{
                 width: 48,
@@ -631,11 +561,10 @@ function GameDetailModal({ visible, onClose, game, colors }) {
             />
           </View>
 
-          {/* Header */}
           <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
+              flexDirection: "row",
+              alignItems: "center",
               marginBottom: 12,
             }}
           >
@@ -643,55 +572,39 @@ function GameDetailModal({ visible, onClose, game, colors }) {
               style={{
                 flex: 1,
                 fontSize: 18,
-                fontWeight: '800',
+                fontWeight: "800",
                 color: colors.text,
               }}
             >
-              {i18n.t('live.detail.title', 'Détail du match')}
+              {i18n.t("live.detail.title", "Détail du match")}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 16 }}
-          >
-            {/* Bloc central score */}
-            <View
-              style={{
-                alignItems: 'center',
-                marginBottom: 16,
-              }}
-            >
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
+            <View style={{ alignItems: "center", marginBottom: 16 }}>
               <View
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                   marginBottom: 8,
                 }}
               >
-                {/* Away */}
-                <View style={{ alignItems: 'center', marginRight: 16 }}>
+                <View style={{ alignItems: "center", marginRight: 16 }}>
                   {teamLogo(awayAbbr) && (
-                    <Image
-                      source={teamLogo(awayAbbr)}
-                      style={{ width: 40, height: 40, marginBottom: 4 }}
-                    />
+                    <Image source={teamLogo(awayAbbr)} style={{ width: 40, height: 40, marginBottom: 4 }} />
                   )}
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>
-                    {awayAbbr}
-                  </Text>
+                  <Text style={{ color: colors.text, fontWeight: "700" }}>{awayAbbr}</Text>
                 </View>
 
-                {/* Score */}
-                <View style={{ alignItems: 'center', marginHorizontal: 8 }}>
+                <View style={{ alignItems: "center", marginHorizontal: 8 }}>
                   <Text
                     style={{
                       fontSize: 28,
-                      fontWeight: '900',
+                      fontWeight: "900",
                       color: colors.text,
                     }}
                   >
@@ -700,84 +613,66 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                   <Text
                     style={{
                       marginTop: 4,
-                      color: isLive
-                        ? '#dc2626'
-                        : isFinal
-                        ? colors.subtext
-                        : colors.text,
-                      fontWeight: '700',
+                      color: isLive ? "#dc2626" : isFinal ? colors.subtext : colors.text,
+                      fontWeight: "700",
                     }}
                   >
                     {statusText}
                   </Text>
                 </View>
 
-                {/* Home */}
-                <View style={{ alignItems: 'center', marginLeft: 16 }}>
+                <View style={{ alignItems: "center", marginLeft: 16 }}>
                   {teamLogo(homeAbbr) && (
-                    <Image
-                      source={teamLogo(homeAbbr)}
-                      style={{ width: 40, height: 40, marginBottom: 4 }}
-                    />
+                    <Image source={teamLogo(homeAbbr)} style={{ width: 40, height: 40, marginBottom: 4 }} />
                   )}
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>
-                    {homeAbbr}
-                  </Text>
+                  <Text style={{ color: colors.text, fontWeight: "700" }}>{homeAbbr}</Text>
                 </View>
               </View>
 
-              {/* Ligne infos période / temps ou début */}
               {isLive ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
                   {isIntermission
-                    ? (
-                      periodLabel
-                        ? i18n.t('live.detail.intermissionWithPeriod', {
-                            defaultValue: '{{period}} • {{label}}',
-                            period: periodLabel,
-                            label: i18n.t('live.detail.intermission', 'Entracte'),
-                          })
-                        : i18n.t('live.detail.intermission', 'Entracte')
-                    )
+                    ? periodLabel
+                      ? i18n.t("live.detail.intermissionWithPeriod", {
+                          defaultValue: "{{period}} • {{label}}",
+                          period: periodLabel,
+                          label: i18n.t("live.detail.intermission", "Entracte"),
+                        })
+                      : i18n.t("live.detail.intermission", "Entracte")
                     : periodLabel
-                    ? i18n.t('live.detail.liveWithPeriod', {
-                        defaultValue: '{{period}}{{time}}',
+                    ? i18n.t("live.detail.liveWithPeriod", {
+                        defaultValue: "{{period}}{{time}}",
                         period: periodLabel,
                         time: timeRemaining
-                          ? ` • ${i18n.t('live.detail.timeRemaining', {
-                              defaultValue: 'Temps restant: {{time}}',
+                          ? ` • ${i18n.t("live.detail.timeRemaining", {
+                              defaultValue: "Temps restant: {{time}}",
                               time: timeRemaining,
                             })}`
-                          : '',
+                          : "",
                       })
                     : timeRemaining
-                    ? i18n.t('live.detail.timeRemaining', {
-                        defaultValue: 'Temps restant: {{time}}',
+                    ? i18n.t("live.detail.timeRemaining", {
+                        defaultValue: "Temps restant: {{time}}",
                         time: timeRemaining,
                       })
-                    : i18n.t('live.detail.inProgress', 'En cours')}
+                    : i18n.t("live.detail.inProgress", "En cours")}
                 </Text>
               ) : isFinal ? (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  {periodLabel ||
-                    i18n.t('live.status.final', 'Final')}
+                  {periodLabel || i18n.t("live.status.final", "Final")}
                 </Text>
               ) : (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
                   {startTimeUTC
-                    ? i18n.t('live.detail.startAt', {
-                        defaultValue: 'Début: {{time}}',
+                    ? i18n.t("live.detail.startAt", {
+                        defaultValue: "Début: {{time}}",
                         time: fmtTime(startTimeUTC),
                       })
-                    : i18n.t(
-                        'live.detail.startUnknown',
-                        'Heure de début inconnue'
-                      )}
+                    : i18n.t("live.detail.startUnknown", "Heure de début inconnue")}
                 </Text>
               )}
-               </View> 
+            </View>
 
-            {/* Buts par période */}
             <View
               style={{
                 padding: 12,
@@ -790,29 +685,26 @@ function GameDetailModal({ visible, onClose, game, colors }) {
             >
               <Text
                 style={{
-                  fontWeight: '700',
+                  fontWeight: "700",
                   marginBottom: 6,
                   color: colors.text,
                 }}
               >
-                {i18n.t('live.detail.summaryTitle', 'Sommaire du match')}
+                {i18n.t("live.detail.summaryTitle", "Sommaire du match")}
               </Text>
 
               {loading && (
                 <View
                   style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
+                    flexDirection: "row",
+                    alignItems: "center",
                     gap: 8,
                     marginTop: 4,
                   }}
                 >
                   <ActivityIndicator size="small" color={colors.subtext} />
                   <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                    {i18n.t(
-                      'live.detail.loadingGoals',
-                      'Chargement des buts…'
-                    )}
+                    {i18n.t("live.detail.loadingGoals", "Chargement des buts…")}
                   </Text>
                 </View>
               )}
@@ -820,8 +712,8 @@ function GameDetailModal({ visible, onClose, game, colors }) {
               {!loading && goalsByPeriod.length === 0 && (
                 <Text style={{ color: colors.subtext, fontSize: 13 }}>
                   {i18n.t(
-                    'live.detail.noGoals',
-                    'Aucun but ou statistiques non disponibles pour ce match.'
+                    "live.detail.noGoals",
+                    "Aucun but ou statistiques non disponibles pour ce match."
                   )}
                 </Text>
               )}
@@ -830,23 +722,23 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                 goalsByPeriod.map((group) => {
                   let label;
                   switch (group.code) {
-                    case 'P1':
-                      label = i18n.t('live.goals.period1', 'Période 1');
+                    case "P1":
+                      label = i18n.t("live.goals.period1", "Période 1");
                       break;
-                    case 'P2':
-                      label = i18n.t('live.goals.period2', 'Période 2');
+                    case "P2":
+                      label = i18n.t("live.goals.period2", "Période 2");
                       break;
-                    case 'P3':
-                      label = i18n.t('live.goals.period3', 'Période 3');
+                    case "P3":
+                      label = i18n.t("live.goals.period3", "Période 3");
                       break;
-                    case 'OT':
-                      label = i18n.t('live.goals.ot', 'Prolongation');
+                    case "OT":
+                      label = i18n.t("live.goals.ot", "Prolongation");
                       break;
-                    case 'SO':
-                      label = i18n.t('live.goals.so', 'Tirs de barrage');
+                    case "SO":
+                      label = i18n.t("live.goals.so", "Tirs de barrage");
                       break;
                     default:
-                      label = i18n.t('live.goals.unknown', 'Inconnu');
+                      label = i18n.t("live.goals.unknown", "Inconnu");
                   }
 
                   return (
@@ -854,7 +746,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                       <Text
                         style={{
                           color: colors.text,
-                          fontWeight: '700',
+                          fontWeight: "700",
                           marginBottom: 4,
                         }}
                       >
@@ -862,106 +754,71 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                       </Text>
 
                       {group.goals.map((goal) => {
-                        const time = goal.timeInPeriod || '??:??';
+                        const time = goal.timeInPeriod || "??:??";
+                        const scorerShort = shortName(goal.scoringPlayerName || "");
 
-                        const scorerShort = shortName(
-                          goal.scoringPlayerName || ''
-                        );
                         const scoringTotal =
-                          typeof goal.scoringPlayerTotal === 'number'
+                          typeof goal.scoringPlayerTotal === "number"
                             ? goal.scoringPlayerTotal
-                            : typeof goal.scoringPlayerTotal === 'string' &&
-                              goal.scoringPlayerTotal !== ''
+                            : typeof goal.scoringPlayerTotal === "string" && goal.scoringPlayerTotal !== ""
                             ? goal.scoringPlayerTotal
                             : null;
 
                         const assists = [];
-                        if (goal.assist1PlayerName)
-                          assists.push(shortName(goal.assist1PlayerName));
-                        if (goal.assist2PlayerName)
-                          assists.push(shortName(goal.assist2PlayerName));
+                        if (goal.assist1PlayerName) assists.push(shortName(goal.assist1PlayerName));
+                        if (goal.assist2PlayerName) assists.push(shortName(goal.assist2PlayerName));
 
-                        let assistsText = '';
+                        let assistsText = "";
                         if (assists.length === 1) {
-                          assistsText = i18n.t(
-                            'live.detail.assistOne',
-                            {
-                              defaultValue: 'Assisté de {{player}}',
-                              player: assists[0],
-                            }
-                          );
+                          assistsText = i18n.t("live.detail.assistOne", {
+                            defaultValue: "Assisté de {{player}}",
+                            player: assists[0],
+                          });
                         } else if (assists.length === 2) {
-                          assistsText = i18n.t(
-                            'live.detail.assistTwo',
-                            {
-                              defaultValue:
-                                'Assisté de {{player1}} et {{player2}}',
-                              player1: assists[0],
-                              player2: assists[1],
-                            }
-                          );
+                          assistsText = i18n.t("live.detail.assistTwo", {
+                            defaultValue: "Assisté de {{player1}} et {{player2}}",
+                            player1: assists[0],
+                            player2: assists[1],
+                          });
                         }
 
-                        const strength =
-                          goal.strength && goal.strength !== 'EV'
-                            ? ` • ${goal.strength}`
-                            : '';
-
+                        const strength = goal.strength && goal.strength !== "EV" ? ` • ${goal.strength}` : "";
                         const avatarUrl = goal.scoringPlayerAvatarUrl;
-                        const smallLogo = teamLogo(
-                          goal.scoringPlayerTeamAbbr || goal.teamAbbr
-                        );
+                        const smallLogo = teamLogo(goal.scoringPlayerTeamAbbr || goal.teamAbbr);
 
                         return (
-                          <View
-                            key={goal.id}
-                            style={{
-                              flexDirection: 'row',
-                              paddingVertical: 6,
-                            }}
-                          >
-                            {/* Avatar joueur */}
+                          <View key={goal.id} style={{ flexDirection: "row", paddingVertical: 6 }}>
                             <View
                               style={{
                                 width: 32,
                                 height: 32,
                                 borderRadius: 16,
-                                overflow: 'hidden',
+                                overflow: "hidden",
                                 marginRight: 8,
-                                alignItems: 'center',
-                                justifyContent: 'center',
+                                alignItems: "center",
+                                justifyContent: "center",
                                 backgroundColor: colors.card,
                                 borderWidth: 1,
                                 borderColor: colors.border,
                               }}
                             >
                               {avatarUrl ? (
-                                <Image
-                                  source={{ uri: avatarUrl }}
-                                  style={{ width: 32, height: 32 }}
-                                  resizeMode="cover"
-                                />
+                                <Image source={{ uri: avatarUrl }} style={{ width: 32, height: 32 }} resizeMode="cover" />
                               ) : (
                                 <Text
                                   style={{
                                     fontSize: 10,
-                                    fontWeight: '700',
+                                    fontWeight: "700",
                                     color: colors.text,
                                   }}
                                 >
-                                  {goal.teamAbbr || '??'}
+                                  {goal.teamAbbr || "??"}
                                 </Text>
                               )}
                             </View>
 
-                            {/* Texte buteur + assists */}
                             <View style={{ flex: 1 }}>
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  alignItems: 'center',
-                                }}
-                              >
+                              <View style={{ flexDirection: "row", alignItems: "center" }}>
                                 {smallLogo && (
                                   <Image
                                     source={smallLogo}
@@ -976,18 +833,12 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                                 <Text
                                   style={{
                                     color: colors.text,
-                                    fontWeight: '700',
+                                    fontWeight: "700",
                                   }}
                                   numberOfLines={1}
                                 >
-                                  {scorerShort ||
-                                    i18n.t(
-                                      'live.detail.goalFallback',
-                                      'But'
-                                    )}
-                                  {scoringTotal != null
-                                    ? ` (${scoringTotal})`
-                                    : ''}
+                                  {scorerShort || i18n.t("live.detail.goalFallback", "But")}
+                                  {scoringTotal != null ? ` (${scoringTotal})` : ""}
                                   {strength}
                                 </Text>
                               </View>
@@ -1001,7 +852,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
                                 numberOfLines={2}
                               >
                                 {time}
-                                {assistsText ? ` - ${assistsText}` : ''}
+                                {assistsText ? ` - ${assistsText}` : ""}
                               </Text>
                             </View>
                           </View>
@@ -1024,6 +875,13 @@ function GameDetailModal({ visible, onClose, game, colors }) {
 
 export default function MatchLiveScreen() {
   const { colors } = useTheme();
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const params = useLocalSearchParams();
+  const requestedGameId = String(params?.gameId || "");
+  const openedFromFgc = String(params?.from || "") === "fgc";
+
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1031,16 +889,28 @@ export default function MatchLiveScreen() {
   const [selectedGame, setSelectedGame] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // 🔑 "todayKey" dynamique (règle NHL avec 9h) qui se met à jour tout seul
   const [todayKey, setTodayKey] = useState(() => computeNhlYmd());
 
-  const router = useRouter();
   const [firstGoalByGameId, setFirstGoalByGameId] = useState({});
+  const [allowedGroupIds, setAllowedGroupIds] = useState([]);
+  const [groupNameById, setGroupNameById] = useState({});
 
   const [fgModalOpen, setFgModalOpen] = useState(false);
   const [fgSelectedChallenge, setFgSelectedChallenge] = useState(null);
 
-  // Met à jour todayKey toutes les 60s (pour refléter changement de journée)
+  useEffect(() => {
+    crashLog("Opened MatchLiveScreen");
+
+    setCrashContext({
+      screen: "MatchLiveScreen",
+      requestedGameId: requestedGameId || "",
+      openedFromFgc: openedFromFgc ? "true" : "false",
+      uid: user?.uid || "anonymous",
+    });
+  }, [requestedGameId, openedFromFgc, user?.uid]);
+
+
+
   useEffect(() => {
     const id = setInterval(() => {
       const next = computeNhlYmd();
@@ -1050,10 +920,8 @@ export default function MatchLiveScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // Écoute globale de nhl_live_games, puis filtre côté client sur todayKey
   useEffect(() => {
-    const ref = firestore().collection('nhl_live_games');
-
+    const ref = firestore().collection("nhl_live_games");
     setLoading(true);
 
     const unsub = ref.onSnapshot(
@@ -1064,113 +932,367 @@ export default function MatchLiveScreen() {
         setLoading(false);
       },
       (err) => {
-        console.log('[MatchLive] nhl_live_games error', err?.message || err);
+        console.log("[MatchLive] nhl_live_games error", err?.message || err);
+
+        recordNonFatal(err, {
+          screen: "MatchLiveScreen",
+          action: "listen_nhl_live_games",
+          todayKey: todayKey || "",
+          uid: user?.uid || "anonymous",
+        });
+
         setLoading(false);
       }
     );
 
     return () => {
-      try { unsub(); } catch {}
+      try {
+        unsub();
+      } catch {}
     };
-  }, [todayKey]);
+  }, [todayKey, user?.uid]);
 
-  // ✅ Défis "first goal" du jour (tous groupes)
+  // Groupes permis
   useEffect(() => {
-    setFirstGoalByGameId({});
+    if (!user?.uid) {
+      setAllowedGroupIds([]);
+      setGroupNameById({});
+      return;
+    }
 
-    const ymd = String(todayKey || "");
-    if (!ymd) return;
+    const qByUid = firestore()
+      .collection("group_memberships")
+      .where("uid", "==", String(user.uid));
 
-    const q = firestore()
-      .collection("first_goal_challenges")
-      .where("league", "==", "NHL")
-      .where("type", "==", "first_goal")
-      .where("gameYmd", "==", ymd);
+    const qOwnerCreated = firestore()
+      .collection("groups")
+      .where("createdBy", "==", String(user.uid));
 
-    const unsub = q.onSnapshot(
+    const qOwnerOwnerId = firestore()
+      .collection("groups")
+      .where("ownerId", "==", String(user.uid));
+
+    let memberships = [];
+    let ownedCreated = [];
+    let ownedOwnerId = [];
+
+    const recompute = () => {
+      const memberIds = memberships
+        .filter((m) => {
+          const st = String(m?.status || "").toLowerCase();
+          if (st) return ["active", "open", "approved"].includes(st);
+          return m?.active !== false;
+        })
+        .map((m) => String(m.groupId || ""))
+        .filter(Boolean);
+
+      const ownerRows = [...ownedCreated, ...ownedOwnerId];
+      const ownerIds = ownerRows.map((g) => String(g.id || "")).filter(Boolean);
+
+      setAllowedGroupIds(Array.from(new Set([...memberIds, ...ownerIds])));
+
+      const names = {};
+      ownerRows.forEach((g) => {
+        const id = String(g.id || "");
+        if (!id) return;
+        names[id] = g?.name || g?.title || id;
+      });
+      setGroupNameById((prev) => ({ ...prev, ...names }));
+    };
+
+    const un1 = qByUid.onSnapshot(
       (snap) => {
-        // rebuild map à chaque fois (simple, évite fantômes)
-        const map = {};
-        snap.docs.forEach((d) => {
-          const ch = { id: d.id, ...d.data() };
-          const gid = String(ch.gameId || "");
-          if (!gid) return;
-
-          // si plusieurs défis sur même gameId, on garde le plus "important"
-          // ordre: open > locked > pending > decided > closed/other
-          const rank = (st) => {
-            const s = String(st || "").toLowerCase();
-            if (s === "open") return 0;
-            if (s === "locked") return 1;
-            if (s === "pending") return 2;
-            if (s === "decided") return 3;
-            if (s === "closed") return 4;
-            return 5;
-          };
-
-          const prev = map[gid];
-          if (!prev || rank(ch.status) < rank(prev.status)) {
-            map[gid] = ch;
-          }
-        });
-
-        setFirstGoalByGameId(map);
+        memberships = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        recompute();
       },
       (err) => {
-        console.log("[MatchLive] first_goal_challenges error", err?.message || err);
+        console.log("[MatchLive] group_memberships error", err?.message || err);
+
+        recordNonFatal(err, {
+          screen: "MatchLiveScreen",
+          action: "listen_group_memberships",
+          uid: user?.uid || "anonymous",
+        });
+      }
+    );
+
+    const un2 = qOwnerCreated.onSnapshot(
+      (snap) => {
+        ownedCreated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        recompute();
+      },
+      (err) => {
+        console.log("[MatchLive] groups(createdBy) error", err?.message || err);
+
+        recordNonFatal(err, {
+          screen: "MatchLiveScreen",
+          action: "listen_groups_createdBy",
+          uid: user?.uid || "anonymous",
+        });
+      }
+    );
+
+    const un3 = qOwnerOwnerId.onSnapshot(
+      (snap) => {
+        ownedOwnerId = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        recompute();
+      },
+      (err) => {
+        console.log("[MatchLive] groups(ownerId) error", err?.message || err);
+
+        recordNonFatal(err, {
+          screen: "MatchLiveScreen",
+          action: "listen_groups_ownerId",
+          uid: user?.uid || "anonymous",
+        });
       }
     );
 
     return () => {
-      try { unsub(); } catch {}
+      try {
+        un1();
+      } catch {}
+      try {
+        un2();
+      } catch {}
+      try {
+        un3();
+      } catch {}
     };
-  }, [todayKey]);
+  }, [user?.uid]);
+
+  // Compléter les noms de groupes manquants
+  useEffect(() => {
+    if (!allowedGroupIds.length) return;
+
+    const missingIds = allowedGroupIds.filter((gid) => !groupNameById[gid]);
+    if (!missingIds.length) return;
+
+    const unsubs = [];
+
+    missingIds.forEach((gid) => {
+      const un = firestore()
+        .collection("groups")
+        .doc(String(gid))
+        .onSnapshot((snap) => {
+          if (!snap.exists) return;
+          const data = snap.data() || {};
+          setGroupNameById((prev) => ({
+            ...prev,
+            [gid]: data?.name || data?.title || gid,
+          }));
+        });
+
+      unsubs.push(un);
+    });
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
+  }, [allowedGroupIds.join("|"), Object.keys(groupNameById).join("|")]);
+
+  // FGC visibles du jour
+  useEffect(() => {
+    setFirstGoalByGameId({});
+
+    const ymd = String(todayKey || "");
+    if (!ymd || !allowedGroupIds.length) return;
+
+    const unsubs = [];
+    const mapByDocId = new Map();
+    const docIdsByGroup = new Map();
+
+    const rebuildByGameId = () => {
+      const byGameId = {};
+      const all = Array.from(mapByDocId.values());
+
+      all.forEach((ch) => {
+        const gameId = String(ch.gameId || "");
+        if (!gameId) return;
+
+        if (!byGameId[gameId]) byGameId[gameId] = [];
+        byGameId[gameId].push(ch);
+      });
+
+      Object.keys(byGameId).forEach((gameId) => {
+        byGameId[gameId].sort((a, b) => {
+          const ra = statusRank(a.status);
+          const rb = statusRank(b.status);
+          if (ra !== rb) return ra - rb;
+
+          const ga = groupNameById[String(a.groupId || "")] || String(a.groupId || "");
+          const gb = groupNameById[String(b.groupId || "")] || String(b.groupId || "");
+          return ga.localeCompare(gb);
+        });
+      });
+
+      setFirstGoalByGameId(byGameId);
+    };
+
+    allowedGroupIds.forEach((groupId) => {
+      const gid = String(groupId || "").trim();
+      if (!gid) return;
+
+      const q = firestore()
+        .collection("first_goal_challenges")
+        .where("league", "==", "NHL")
+        .where("type", "==", "first_goal")
+        .where("gameYmd", "==", ymd)
+        .where("groupId", "==", gid);
+
+      const unsub = q.onSnapshot(
+        (snap) => {
+          const prevDocIds = docIdsByGroup.get(gid) || new Set();
+          const nextDocIds = new Set(snap.docs.map((d) => d.id));
+
+          prevDocIds.forEach((docId) => {
+            if (!nextDocIds.has(docId)) {
+              mapByDocId.delete(docId);
+            }
+          });
+
+          snap.docs.forEach((d) => {
+            mapByDocId.set(d.id, { id: d.id, ...d.data() });
+          });
+
+          docIdsByGroup.set(gid, nextDocIds);
+          rebuildByGameId();
+        },
+        (err) => {
+          console.log("[MatchLive] first_goal_challenges group error", gid, err?.message || err);
+
+          recordNonFatal(err, {
+            screen: "MatchLiveScreen",
+            action: "listen_first_goal_challenges",
+            groupId: gid,
+            todayKey: ymd || "",
+            uid: user?.uid || "anonymous",
+          });
+        }
+      );
+
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
+  }, [todayKey, allowedGroupIds.join("|"), Object.keys(groupNameById).join("|"), user?.uid]);
+
+
+    const hasLoggedMatchLiveViewRef = React.useRef(false);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (hasLoggedMatchLiveViewRef.current) return;
+    hasLoggedMatchLiveViewRef.current = true;
+
+    Analytics.matchLiveView({
+      date: todayKey || null,
+      gamesCount: Array.isArray(games) ? games.length : 0,
+      from: openedFromFgc ? "fgc" : "app",
+    });
+  }, [loading, todayKey, games, openedFromFgc]);
 
   const sortedGames = useMemo(() => {
     const s = [...games];
     const weight = (g) => (g.isLive ? 0 : g.isFinal ? 2 : 1);
+
     s.sort((a, b) => {
       const w = weight(a) - weight(b);
-      if (w !== 0) return w;
+      if (w !== 0) return w - 0;
 
       const ta = gStartMillis(a);
       const tb = gStartMillis(b);
       return ta - tb;
     });
+
     return s;
   }, [games]);
 
   const handlePressGame = useCallback((game) => {
+    crashLog(`Open game details: ${String(game?.id || "")}`);
+
+    setCrashContext({
+      screen: "MatchLiveScreen",
+      selectedGameId: String(game?.id || ""),
+      homeAbbr: String(game?.homeAbbr || ""),
+      awayAbbr: String(game?.awayAbbr || ""),
+      uid: user?.uid || "anonymous",
+    });
+
+    Analytics.matchLiveGameOpen({
+      gameId: String(game?.id || ""),
+      homeAbbr: String(game?.homeAbbr || ""),
+      awayAbbr: String(game?.awayAbbr || ""),
+      status: game?.isLive ? "live" : game?.isFinal ? "final" : "scheduled",
+    });
+
     setSelectedGame(game);
     setModalVisible(true);
-  }, []);
+  }, [user?.uid]);
 
-  const handlePressFirstGoal = useCallback((ch, game) => {
-    const st = String(ch?.status || "").toLowerCase();
+  const handlePressFirstGoal = useCallback(
+    (ch, game) => {
+      crashLog(`Open FGC challenge: ${String(ch?.id || "")}`);
 
-    // 1) Défi ouvert -> page de pick (join / edit)
-    if (st === "open") {
-      router.push(`/(first-goal)/pick/${String(ch.id)}`);
-      return;
-    }
+      setCrashContext({
+        screen: "MatchLiveScreen",
+        challengeId: String(ch?.id || ""),
+        challengeStatus: String(ch?.status || ""),
+        groupId: String(ch?.groupId || ""),
+        gameId: String(ch?.gameId || game?.id || ""),
+        uid: user?.uid || "anonymous",
+      });
 
-    // 2) Lock / live / pending -> modale participants + choix
-    // 3) decided / closed -> modale participants + choix + winners badge
-    setFgSelectedChallenge({ ...ch, gameId: ch.gameId || game?.id });
-    setFgModalOpen(true);
-  }, [router]);
+      Analytics.matchLiveFgcOpen({
+        challengeId: String(ch?.id || ""),
+        challengeStatus: String(ch?.status || "").toLowerCase(),
+        groupId: String(ch?.groupId || ""),
+        gameId: String(ch?.gameId || game?.id || ""),
+      });
+
+      const st = String(ch?.status || "").toLowerCase();
+
+      if (st === "open") {
+        router.push(`/(first-goal)/pick/${String(ch.id)}`);
+        return;
+      }
+
+      setFgSelectedChallenge({ ...ch, gameId: ch.gameId || game?.id });
+      setFgModalOpen(true);
+    },
+    [router, user?.uid]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const fn = functions().httpsCallable('updateNhlLiveGamesNow');
+      crashLog("MatchLiveScreen manual refresh");
+      const fn = functions().httpsCallable("updateNhlLiveGamesNow");
       await fn({});
     } catch (e) {
-      console.log('[MatchLive] manual refresh error', e?.message || e);
+      console.log("[MatchLive] manual refresh error", e?.message || e);
+
+      recordNonFatal(e, {
+        screen: "MatchLiveScreen",
+        action: "manualRefresh",
+        todayKey: todayKey || "",
+        uid: user?.uid || "anonymous",
+      });
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [todayKey, user?.uid]);
 
   const locale = i18n.language?.startsWith("fr") ? "fr-CA" : "en-CA";
 
@@ -1179,94 +1301,113 @@ export default function MatchLiveScreen() {
     [todayKey, locale]
   );
 
-  const headerTitle = i18n.t('live.title', 'Match Live');
-
   return (
-    <>
-    
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
-        {loading ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={colors.primary} />
-            <Text style={{ marginTop: 8, color: colors.subtext }}>
-              {i18n.t('live.loading', 'Chargement des matchs…')}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {openedFromFgc ? (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (router.canGoBack?.()) router.back();
+              else router.replace("/(drawer)/(tabs)/AccueilScreen");
+            }}
+            style={{
+              alignSelf: "flex-start",
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+            }}
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+            <Text style={{ marginLeft: 6, color: colors.text, fontWeight: "800" }}>
+              Fermer
             </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={sortedGames}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.primary}
-              />
-            }
-            ListHeaderComponent={() => (
-              <View style={{ marginBottom: 12 }}>
-                <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: '800',
-                    color: colors.text,
-                    marginBottom: 4,
-                  }}
-                >
-                  {prettyDateLabel
-                    ? i18n.t('live.headerWithDate', {
-                        defaultValue: 'Matchs NHL du {{date}}',
-                        date: prettyDateLabel,
-                      })
-                    : i18n.t('live.headerNoDate', 'Matchs NHL')}
-                </Text>
-                <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  {i18n.t(
-                    'live.tapHint',
-                    'Touchez un match pour voir les buts et les buteurs en temps réel.'
-                  )}
-                </Text>
-              </View>
-            )}
-            renderItem={({ item }) => (
-              <GameRow
-                game={item}
-                onPress={handlePressGame}
-                colors={colors}
-                challenge={firstGoalByGameId[String(item.id)] || null}
-                onPressChallenge={(ch) => handlePressFirstGoal(ch, item)}
-              />
-            )}
-            ListEmptyComponent={() => (
-              <View style={{ marginTop: 40, alignItems: 'center' }}>
-                <Text style={{ color: colors.subtext }}>
-                  {prettyDateLabel
-                    ? i18n.t('live.emptyWithDate', {
-                        defaultValue: 'Aucun match trouvé pour le {{date}}.',
-                        date: prettyDateLabel,
-                      })
-                    : i18n.t('live.emptyNoDate', 'Aucun match trouvé.')}
-                </Text>
-              </View>
-            )}
-          />
-        )}
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
-        <FirstGoalChallengeModal
-          visible={fgModalOpen}
-          onClose={() => setFgModalOpen(false)}
-          challenge={fgSelectedChallenge}
-          colors={colors}
+      {loading ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={{ marginTop: 8, color: colors.subtext }}>
+            {i18n.t("live.loading", "Chargement des matchs…")}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={sortedGames}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
+          ListHeaderComponent={() => (
+            <View style={{ marginBottom: 12 }}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "800",
+                  color: colors.text,
+                  marginBottom: 4,
+                }}
+              >
+                {prettyDateLabel
+                  ? i18n.t("live.headerWithDate", {
+                      defaultValue: "Matchs NHL du {{date}}",
+                      date: prettyDateLabel,
+                    })
+                  : i18n.t("live.headerNoDate", "Matchs NHL")}
+              </Text>
+              <Text style={{ color: colors.subtext, fontSize: 13 }}>
+                {i18n.t(
+                  "live.tapHint",
+                  "Touchez un match pour voir les buts et les buteurs en temps réel."
+                )}
+              </Text>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <GameRow
+              game={item}
+              onPress={handlePressGame}
+              colors={colors}
+              challenges={firstGoalByGameId[String(item.id)] || []}
+              onPressChallenge={(ch) => handlePressFirstGoal(ch, item)}
+              groupNameById={groupNameById}
+            />
+          )}
+          ListEmptyComponent={() => (
+            <View style={{ marginTop: 40, alignItems: "center" }}>
+              <Text style={{ color: colors.subtext }}>
+                {prettyDateLabel
+                  ? i18n.t("live.emptyWithDate", {
+                      defaultValue: "Aucun match trouvé pour le {{date}}.",
+                      date: prettyDateLabel,
+                    })
+                  : i18n.t("live.emptyNoDate", "Aucun match trouvé.")}
+              </Text>
+            </View>
+          )}
         />
+      )}
 
-        <GameDetailModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          game={selectedGame}
-          colors={colors}
-        />
-      </View>
-    </>
+      <FirstGoalChallengeModal
+        visible={fgModalOpen}
+        onClose={() => setFgModalOpen(false)}
+        challenge={fgSelectedChallenge}
+        colors={colors}
+      />
+
+      <GameDetailModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        game={selectedGame}
+        colors={colors}
+      />
+    </View>
   );
 }

@@ -16,6 +16,7 @@ import {
   isAscensionDefi,
   ascLabel,
   normalDefiLabel,
+  getSignupDeadlineOrFallback
 } from "@src/home/homeUtils";
 
 // --- UI atoms locaux ---
@@ -100,11 +101,13 @@ export default function DefiListItem({
 
   const pot = Number(item?.pot || 0);
 
+  const signupDeadlineValue = getSignupDeadlineOrFallback(item, 15);
+
   const { canJoin, lockedBy } = canJoinDefiUi({
     tier: tierLower,
     defiType: item?.type,
     uiStatus,
-    signupDeadline: item?.signupDeadline,
+    signupDeadline: signupDeadlineValue,
   });
 
   const lockedByPlan = lockedBy === "PLAN";
@@ -119,6 +122,8 @@ export default function DefiListItem({
 
   const isAsc = isAscensionDefi(item);
   const title = isAsc ? ascLabel(item) : normalDefiLabel(item);
+
+  
 
   return (
     <TouchableOpacity
@@ -196,8 +201,8 @@ export default function DefiListItem({
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
           <MaterialCommunityIcons name="clock-outline" size={16} color={colors.subtext} />
           <Text style={{ color: colors.subtext }}>
-            {item?.signupDeadline
-              ? `${i18n.t("home.challengeLimit")} ${fmtTSLocalHM(item.signupDeadline)}`
+            {signupDeadlineValue
+              ? `${i18n.t("home.challengeLimit")} ${fmtTSLocalHM(signupDeadlineValue)}`
               : item?.firstGameUTC
               ? `${i18n.t("home.challengeStarts")} ${fmtTSLocalHM(item.firstGameUTC)}`
               : "—"}

@@ -28,32 +28,11 @@ import i18n from "@src/i18n/i18n";
 // ✅ QR scan modal
 import ScanInviteQrModal from "@src/groups/ScanInviteQrModal";
 
+import Analytics from "@src/services/analytics";
+
 const CODE_LEN = 8;
 const ALPHABET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
 
-function pickDisplayName(profile, user) {
-  const p = profile || {};
-  return (
-    p.displayName ||
-    p.name ||
-    (p.email ? String(p.email).split("@")[0] : "") ||
-    user?.displayName ||
-    "Invité"
-  );
-}
-
-function pickAvatarUrl(profile, user) {
-  const p = profile || {};
-  return (
-    p.photoURL ||
-    p.avatarUrl ||
-    p.photoUrl ||
-    p.avatar ||
-    user?.photoURL ||
-    user?.photoUrl ||
-    null
-  );
-}
 
 async function buildIdentityFromParticipants(uid, user) {
   try {
@@ -175,6 +154,11 @@ export default function JoinGroupScreen() {
 
       const groupId = res?.groupId;
       if (!groupId) throw new Error(i18n.t("groups.join.alertServerUnexpected"));
+
+      Analytics.joinGroup({
+        method: "invite_code",
+        groupId,
+      });
 
       router.replace({
         pathname: "/(drawer)/groups/[groupId]",

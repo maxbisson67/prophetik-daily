@@ -25,6 +25,8 @@ import ProphetikIcons from "@src/ui/ProphetikIcons";
 // Ascension
 import useAscensionGlobalState from "@src/ascensions/useAscensionGlobalState";
 import AscensionProgressModal from "@src/ascensions/components/AscensionProgressModal";
+import AscensionHomeCard from "@src/ascensions/components/AscensionHomeCard";
+
 
 import { useRouter, Stack, useLocalSearchParams } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
@@ -204,7 +206,7 @@ function ProgressBar({ value, max, colors }) {
       {/* ✅ sans “Base / Sommet” */}
       <View style={{ marginTop: 6, alignItems: "center" }}>
         <Text style={{ color: colors.subtext, fontWeight: "900" }}>
-          {value} / {max} défis
+          {value} / {max} {i18n.t("ascensions.labels.challenges", { defaultValue: "challenges" })}
         </Text>
       </View>
     </View>
@@ -244,12 +246,11 @@ function AscensionJackpotBannerASC7({ colors, asc7InProgress, pointsBonisTotal, 
             </Text>
           </View>
         </View>
-
         <Chip
           bg={colors.card2}
           fg={colors.text}
           icon="progress-clock"
-          label={i18n.t("common.inProgress", { defaultValue: "En cours" })}
+          label={i18n.t("ascensions.status.inProgress", { defaultValue: "En cours" })}
         />
       </View>
     </TouchableOpacity>
@@ -293,6 +294,74 @@ function defiPrimaryCta(defi, i18n) {
     label: i18n.t("defi.cta.open", { defaultValue: "Ouvrir" }),
     intent: "open",
   };
+}
+
+function InfoBubbleAscension({ colors }) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <View
+      style={{
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.card2,
+        marginTop: 10,
+        marginBottom: 10,
+        overflow: "hidden",
+      }}
+    >
+      <TouchableOpacity
+        onPress={() => setOpen((v) => !v)}
+        activeOpacity={0.85}
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+          <MaterialCommunityIcons
+            name="information-outline"
+            size={18}
+            color={colors.subtext}
+            style={{ marginTop: 1 }}
+          />
+          <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8, flex: 1 }}>
+            {i18n.t("ascensions.infoTitle", {
+              defaultValue: "What is an Ascension?",
+            })}
+          </Text>
+        </View>
+
+        <MaterialCommunityIcons
+          name={open ? "chevron-up" : "chevron-down"}
+          size={22}
+          color={colors.subtext}
+        />
+      </TouchableOpacity>
+
+      {open ? (
+        <View
+          style={{
+            paddingHorizontal: 12,
+            paddingBottom: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+          }}
+        >
+          <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
+            {i18n.t("ascensions.infoBody", {
+              defaultValue:
+                "An Ascension is a multi-day challenge where you progress step by step. Each completed challenge advances your climb, and daily bonus points can increase the reward at the summit.",
+            })}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 
@@ -580,6 +649,7 @@ export default function AccueilScreen() {
               ownerId: data.ownerId || null,
               createdBy: data.createdBy || null,
               status: data.status || null,
+              fgcBonus: Number(data.fgcBonus ?? 1),
             },
           }));
         },
@@ -683,7 +753,7 @@ export default function AccueilScreen() {
         setLoadingDefis(false);
 
         const ascCount = rows.filter((x) => isAscensionDefi?.(x)).length;
-        console.log(`[HOME DBG] activeDefis=${rows.length} ascDefis=${ascCount}`);
+        //console.log(`[HOME DBG] activeDefis=${rows.length} ascDefis=${ascCount}`);
       },
       `defis:active:${currentGroupId}`,
       (e) => {
@@ -757,6 +827,7 @@ export default function AccueilScreen() {
           avatarUrl: meta.avatarUrl || null,
           ownerId: meta.ownerId || null,
           createdBy: meta.createdBy || null,
+          fgcBonus: Number(meta.fgcBonus ?? 1),
         };
       }),
     [groupIds.join("|"), JSON.stringify(groupsMeta)]
@@ -786,19 +857,14 @@ export default function AccueilScreen() {
     return true;
   }
 
-  function openDefi(router, defi, intent) {
+  function openDefi(router, defi) {
     const id = String(defi?.id || "").trim();
     if (!id) return;
 
-    // ✅ Uniforme: tu peux garder la page /defis/:id qui redirige elle-même
-    // vers participate/live/results selon l’état (ou l’UI interne).
-    router.push("/(drawer)/defis/" + id);
-
-    // OPTION (si tu veux des routes dédiées plus tard):
-    // if (intent === "pick") router.push(`/(drawer)/defis/${id}/participate`);
-    // else if (intent === "live") router.push(`/(drawer)/defis/${id}/live`);
-    // else if (intent === "results") router.push(`/(drawer)/defis/${id}/results`);
-    // else router.push(`/(drawer)/defis/${id}`);
+    router.push({
+      pathname: "/(drawer)/defis/[defiId]",
+      params: { defiId: id },
+    });
   }
 
   function onPressCreateDefi() {
@@ -978,117 +1044,47 @@ export default function AccueilScreen() {
                         bg={colors.card2}
                         fg={colors.text}
                         icon="progress-clock"
-                        label={i18n.t("common.inProgress", { defaultValue: "En cours" })}
+                        label={i18n.t("home.status.live", { defaultValue: "En cours" })}
                       />
                     ) : (
-                      <SectionCreateAction onPress={onPressCreateAscension} label={i18n.t("common.create")} />
+                      <SectionCreateAction
+                        onPress={onPressCreateAscension}
+                        label={i18n.t("common.create", { defaultValue: "Créer" })}
+                      />
                     )
                   }
                 />
 
-              {loadingAsc7Member ? (
-                <View style={{ marginTop: 10, alignItems: "center" }}>
-                  <ActivityIndicator />
-                </View>
-              ) : (
-                <ProgressBar value={asc7Progress.stepsDone} max={asc7Progress.maxSteps} colors={colors} />
-              )}
-
-                {/* ✅ “Jackpot” => “Points bonis” */}
-                <View style={{ marginTop: 10 }}>
-                  <Text style={{ color: colors.subtext }}>
-                    {i18n.t("ascensions.labels.pointsBonis", { defaultValue: "Points bonis" })}:{" "}
-                    <Text style={{ color: colors.text, fontWeight: "900" }}>{asc7PointsBonisTotal}</Text>
-                  </Text>
-                  <Text style={{ color: colors.subtext, marginTop: 4 }}>
-                    {i18n.t("ascensions.labels.dailyPlus2", { defaultValue: "+2 points ajoutés par jour" })}
-                  </Text>
-                </View>
-
-                {/* ✅ Défi lié à l’ascension (super clair) */}
-                {asc7Defi ? (
-                  <View style={{ marginTop: 12 }}>
-                    <View
-                      style={{
-                        padding: 12,
-                        borderRadius: 14,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        backgroundColor: colors.card2,
-                      }}
-                    >
-
-
-                      <Text style={{ color: colors.text, fontWeight: "900", marginTop: 6 }}>
-                        {String(asc7Defi.title || asc7Defi.name || i18n.t("common.challenge", { defaultValue: "Défi" }))}
-                      </Text>
-
-                      {(() => {
-                        const cta = defiPrimaryCta(asc7Defi, i18n);
-
-                        return (
-                          <TouchableOpacity
-                            onPress={() => openDefi(router, asc7Defi, cta.intent)}
-                            activeOpacity={0.9}
-                            style={{
-                              marginTop: 10,
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                              alignItems: "center",
-                              backgroundColor: RED,
-                            }}
-                          >
-                            <Text style={{ color: "#fff", fontWeight: "900" }}>{cta.label}</Text>
-                          </TouchableOpacity>
-                        );
-                      })()}
-
-
-                    </View>
-                  </View>
-                ) : (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={{ color: colors.subtext }}>
-                      {i18n.t("ascensions.labels.noLinkedDefi", { defaultValue: "Aucun défi d’ascension actif pour l’instant." })}
-                    </Text>
-                  </View>
-                )}
-
-                                {/* ✅ CTA “Détails de l’ascension” (au lieu d’un libellé interne type “Ascensions sur 7 jours”) */}
-                <TouchableOpacity
-                  onPress={() => setAscProgressOpen(true)}
-                  style={{
-                    marginTop: 12,
-                    paddingVertical: 12,
-                    borderRadius: 14,
-                    alignItems: "center",
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    backgroundColor: colors.card2,
+                <AscensionHomeCard
+                  colors={colors}
+                  tierLower={tierLower}
+                  title={i18n.t("ascensions.summit.title", { defaultValue: "Sommet Prophetik" })}
+                  inProgress={asc7InProgress}
+                  loadingMember={loadingAsc7Member}
+                  progress={asc7Progress}
+                  pointsBonisTotal={asc7PointsBonisTotal}
+                  defi={asc7Defi}
+                  onPressCreateAscension={onPressCreateAscension}
+                  onPressDefi={() => {
+                    if (!asc7Defi) return;
+                    openDefi(router, asc7Defi);
                   }}
-                >
-                  <Text style={{ color: colors.text, fontWeight: "900" }}>
-                    {i18n.t("ascensions.cta.details", { defaultValue: "Détails de l’ascension" })}
-                  </Text> 
-                </TouchableOpacity>
+                  onPressResults={() => {
+                    const id = String(asc7Defi?.id || "").trim();
+                    if (!id) return;
 
-                {/* Historique */}
-                <TouchableOpacity
-                  onPress={() => router.push(`/(drawer)/groups/${currentGroupId}/ascensions/history`)}
-                  style={{
-                    marginTop: 10,
-                    paddingVertical: 12,
-                    borderRadius: 14,
-                    alignItems: "center",
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    backgroundColor: colors.card2,
+                    router.push({
+                      pathname: "/(drawer)/defis/[defiId]/results",
+                      params: { defiId: id },
+                    });
                   }}
-                >
-                  <Text style={{ color: colors.text, fontWeight: "900" }}>
-                    {i18n.t("ascensions.cta.past", { defaultValue: "Voir les ascensions passées" })}
-                  </Text>
-                </TouchableOpacity>
+                  onPressDetails={() => setAscProgressOpen(true)}
+                  onPressPast={() => {
+                    if (!currentGroupId) return;
+                    router.push(`/(drawer)/groups/${currentGroupId}/ascensions/history`);
+                  }}
+                  createLabel={i18n.t("common.create", { defaultValue: "Créer" })}
+                />
               </View>
             </View>
           </ScrollView>

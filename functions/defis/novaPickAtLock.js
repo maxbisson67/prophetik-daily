@@ -5,7 +5,7 @@ import { db, FieldValue } from "../utils.js";
 
 // Nova
 const NOVA_UID = "ai";
-const LOCK_MINUTES_BEFORE = 60;
+const LOCK_MINUTES_BEFORE = 15;
 
 // 🎯 Bonus cagnotte quand Nova participe (si aucun autre montant n'est défini)
 const NOVA_POT_BONUS_DEFAULT = 1;

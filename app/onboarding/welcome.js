@@ -18,29 +18,29 @@ export default function WelcomeOnboarding() {
   const { colors } = useTheme();
   const [saving, setSaving] = useState(false);
 
-  async function markSeenAndGo(nextPath) {
-    if (!user?.uid) {
-      router.replace("/");
-      return;
-    }
-    try {
-      setSaving(true);
-      await firestore()
-        .doc(`participants/${user.uid}`)
-        .set(
-          {
-            "onboarding.welcomeSeen": true,
-            updatedAt: firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-    } catch (e) {
-      Alert.alert("Oups", String(e?.message || e));
-    } finally {
-      setSaving(false);
-      router.replace(nextPath || "/(drawer)/(tabs)/AccueilScreen");
-    }
+async function markSeenAndGo(nextPath) {
+  if (!user?.uid) {
+    router.replace("/");
+    return;
   }
+
+  try {
+    setSaving(true);
+
+    await firestore()
+      .doc(`participants/${user.uid}`)
+      .update({
+        "onboarding.welcomeSeen": true,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
+
+  } catch (e) {
+    Alert.alert("Oups", String(e?.message || e));
+  } finally {
+    setSaving(false);
+    router.replace(nextPath || "/(drawer)/(tabs)/AccueilScreen");
+  }
+}
 
   return (
     <>

@@ -1,10 +1,16 @@
 // app/_layout.js
 import React, { useEffect, useState, useRef } from "react";
-import "../app/_prelude"; 
+import "../app/_prelude";
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
-import {  ImageBackground, StyleSheet, Animated, Easing, Platform } from "react-native";
-import { Stack, useRouter, useRootNavigationState, usePathname, useSegments } from "expo-router";
+import { ImageBackground, StyleSheet, Animated, Easing, Platform } from "react-native";
+import {
+  Stack,
+  useRouter,
+  useRootNavigationState,
+  usePathname,
+  useSegments,
+} from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Notifications from "expo-notifications";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -12,8 +18,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@src/auth/SafeAuthProvider";
 import { AppVisibilityProvider } from "@src/providers/AppVisibilityProvider";
 import "@src/lib/safeAsyncStorage";
-import { ThemeProvider, useTheme  } from "@src/theme/ThemeProvider";
-import { LanguageProvider } from '@src/i18n/LanguageProvider';
+import { ThemeProvider, useTheme } from "@src/theme/ThemeProvider";
+import { LanguageProvider } from "@src/i18n/LanguageProvider";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 
 import {
@@ -29,6 +35,8 @@ import SplashRingsRotating from "@src/ui/SplashRingsRotating";
 import * as SystemUI from "expo-system-ui";
 
 import { initPurchases } from "@src/lib/purchases/initPurchases";
+
+import Analytics from "@src/services/analytics";
 
 SystemUI.setBackgroundColorAsync("#ffffff");
 
@@ -49,16 +57,13 @@ function subscribeParticipantDoc(uid, onNext, onError) {
   if (!uid) return () => {};
 
   if (Platform.OS === "web") {
-    // Web → SDK Web
-    // Import tardif pour éviter que Metro bundle le SDK Web en natif
     const { doc, onSnapshot, getFirestore } = require("firebase/firestore");
-    const { app } = require("@src/lib/firebase"); // sur web, ton index.web exporte app/db/etc.
+    const { app } = require("@src/lib/firebase");
     const db = getFirestore(app);
     const ref = doc(db, "participants", uid);
     return onSnapshot(ref, onNext, onError);
   }
 
-  // iOS/Android → RNFirebase
   const firestore = require("@react-native-firebase/firestore").default;
   return firestore().collection("participants").doc(uid).onSnapshot(onNext, onError);
 }
@@ -77,21 +82,18 @@ function AuthGateMount() {
     if (!authReady || !navReady) return;
 
     const currentPath = pathname || "";
+    const firstSegment = Array.isArray(segments) ? segments[0] : null;
 
-    // 🧯 HOTFIX : NE *JAMAIS* REDIRIGER DEPUIS L'ÉCRAN PHONE-LOGIN
-    // (peu importe comment expo-router construit le path)
+    // 🧯 HOTFIX : NE JAMAIS rediriger depuis phone-login
     if (
       currentPath === "/phone-login" ||
       currentPath === "/(auth)/phone-login"
     ) {
-      // On laisse l’utilisateur entrer son numéro puis son code
-      // sans aucune redirection automatique.
       return;
     }
 
     const isRoot = currentPath === "/" || currentPath === "";
 
-    // 👉 On liste tous les écrans d’auth connus, avec ou sans le groupe dans le path
     const authPaths = new Set([
       "/auth-choice",
       "/(auth)/auth-choice",
@@ -99,31 +101,33 @@ function AuthGateMount() {
       "/(auth)/sign-in",
       "/phone-login",
       "/(auth)/phone-login",
+      "/SignUpScreen",
+      "/(auth)/SignUpScreen",
+      "/phone-signup",
+      "/(auth)/phone-signup",
     ]);
 
     const inAuthByPath = authPaths.has(currentPath);
-
-    const firstSegment = Array.isArray(segments) ? segments[0] : null;
-    const inAuthByGroup =
-      firstSegment === "(auth)" || firstSegment === "auth";
-
+    const inAuthByGroup = firstSegment === "(auth)" || firstSegment === "auth";
     const inAuthByPrefix = currentPath.startsWith("/(auth)/");
 
     const isInAuth = inAuthByPath || inAuthByGroup || inAuthByPrefix;
+
+    const inOnboarding =
+      currentPath.startsWith("/onboarding") || firstSegment === "onboarding";
 
     if (isRoot) {
       router.replace(user ? "/(drawer)" : "/(auth)/auth-choice");
       return;
     }
 
-    if (!user && !isInAuth) {
+    if (!user && !isInAuth && !inOnboarding) {
       router.replace("/(auth)/auth-choice");
       return;
     }
 
-    if (user && isInAuth) {
+    if (user && isInAuth && !inOnboarding) {
       router.replace("/(drawer)");
-      return;
     }
   }, [authReady, navReady, user, pathname, segments, router]);
 
@@ -156,6 +160,7 @@ function NotificationsMount() {
     });
 
     let stopRefresh = null;
+
     (async () => {
       try {
         if (user?.uid) {
@@ -183,16 +188,20 @@ function NotificationsMount() {
 function RootLayoutInner() {
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
   const fade = useRef(new Animated.Value(1)).current;
+
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  const hasRoutedOnboarding = useRef(false);
+  const segments = useSegments();
+
   const onboardingUnsubRef = useRef(null);
 
-  // Garde-fou onboarding (ne déclenche que depuis des entrées "accueil")
   useEffect(() => {
-    // Nettoyage si user change ou on démonte
+    initPurchases();
+  }, []);
+
+  useEffect(() => {
     return () => {
       try {
         onboardingUnsubRef.current?.();
@@ -202,48 +211,55 @@ function RootLayoutInner() {
   }, []);
 
   useEffect(() => {
-    initPurchases();
-  }, []);
-
-  useEffect(() => {
     try {
       onboardingUnsubRef.current?.();
     } catch {}
     onboardingUnsubRef.current = null;
 
     if (!user?.uid) return;
-    if (hasRoutedOnboarding.current) return;
 
-    const isEntryPath = (() => {
-      const p = pathname || "";
-      return (
-        p === "/" ||
-        p === "/(drawer)" ||
-        p === "/(drawer)/(tabs)" ||
-        p === "/(drawer)/(tabs)/AccueilScreen"
-      );
-    })();
+    const currentPath = pathname || "";
+    const firstSegment = Array.isArray(segments) ? segments[0] : null;
 
-    // On ne met le listener que si on est à une “entrée” (évite les boucles)
-    if (!isEntryPath) return;
+    const inAuth =
+      currentPath.startsWith("/(auth)/") ||
+      currentPath === "/(auth)" ||
+      firstSegment === "(auth)" ||
+      firstSegment === "auth";
+
+    const inOnboarding =
+      currentPath.startsWith("/onboarding") ||
+      firstSegment === "onboarding";
 
     onboardingUnsubRef.current = subscribeParticipantDoc(
       user.uid,
       (snap) => {
-        const seen = !!snap.data()?.onboarding?.welcomeSeen;
-        const inOnboarding = (pathname || "").startsWith("/onboarding");
-        if (!seen && !inOnboarding && !hasRoutedOnboarding.current) {
-          hasRoutedOnboarding.current = true;
+        const data = snap?.data?.() || {};
+        const welcomeSeen = data?.onboarding?.welcomeSeen === true;
+
+        if (!welcomeSeen && !inOnboarding && !inAuth) {
           router.replace("/onboarding/welcome");
+          return;
+        }
+
+        if (welcomeSeen && inOnboarding) {
+          router.replace("/(drawer)/(tabs)/AccueilScreen");
         }
       },
       (e) => {
         console.log("[onboarding listener] error:", e?.code, e?.message || String(e));
       }
     );
-  }, [user?.uid, pathname, router]);
 
-  // Splash animé (fade-out)
+    return () => {
+      try {
+        onboardingUnsubRef.current?.();
+      } catch {}
+      onboardingUnsubRef.current = null;
+    };
+  }, [user?.uid, pathname, segments, router]);
+
+  // Splash animé
   useEffect(() => {
     const t = setTimeout(() => {
       Animated.timing(fade, {
@@ -253,6 +269,7 @@ function RootLayoutInner() {
         useNativeDriver: true,
       }).start(() => setShowAnimatedSplash(false));
     }, 4200);
+
     return () => clearTimeout(t);
   }, [fade]);
 
@@ -263,24 +280,19 @@ function RootLayoutInner() {
         style={styles.bg}
         resizeMode="cover"
       >
-      <Stack
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.background }, // 👈 fond de l’écran
-        headerStyle: { backgroundColor: colors.header },      // 👈 fond du header
-        headerTintColor: colors.headerTint,                   // 👈 texte + icônes du header
-        headerTitleStyle: { color: colors.headerTint },
-        headerShadowVisible: !isDark,                         // optionnel : pas d’ombre en dark
-      }}
-    >
-      {/* Section principale : drawer */}
-      <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-
-      {/* Auth (login, signup) */}
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-
-      {/* Onboarding global */}
-      <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
-    </Stack>
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: colors.background },
+            headerStyle: { backgroundColor: colors.header },
+            headerTintColor: colors.headerTint,
+            headerTitleStyle: { color: colors.headerTint },
+            headerShadowVisible: !isDark,
+          }}
+        >
+          <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
+        </Stack>
 
         <AuthGateMount />
         <NotificationsMount />
@@ -298,7 +310,13 @@ function RootLayoutInner() {
               opacity: fade,
             }}
           >
-            <SplashRingsRotating size={260} color="#000" rings={2} logoSize={72} logoColor="#000" />
+            <SplashRingsRotating
+              size={260}
+              color="#000"
+              rings={2}
+              logoSize={72}
+              logoColor="#000"
+            />
           </Animated.View>
         )}
       </ImageBackground>
@@ -309,19 +327,23 @@ function RootLayoutInner() {
 /* ---------------- Root “Outer” : fournit le Provider ---------------- */
 
 export default function RootLayout() {
+  useEffect(() => {
+    Analytics.logEvent("app_open");
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <BottomSheetModalProvider>
-        <ThemeProvider>
-          <LanguageProvider>
-          <AppVisibilityProvider>
-            <AuthProvider>
-                <RootLayoutInner />
-            </AuthProvider>
-          </AppVisibilityProvider>
-          </LanguageProvider>
-        </ThemeProvider>
+          <ThemeProvider>
+            <LanguageProvider>
+              <AppVisibilityProvider>
+                <AuthProvider>
+                  <RootLayoutInner />
+                </AuthProvider>
+              </AppVisibilityProvider>
+            </LanguageProvider>
+          </ThemeProvider>
         </BottomSheetModalProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

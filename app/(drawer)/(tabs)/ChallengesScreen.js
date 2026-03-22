@@ -15,6 +15,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { getSignupDeadlineOrFallback ,computeUiStatus, canJoinDefiUi} from '@src/home/homeUtils';
+
+
 // ✅ i18n
 import i18n from '@src/i18n/i18n';
 
@@ -31,17 +34,6 @@ import { useTheme } from '@src/theme/ThemeProvider';
 import CreateDefiModal from '../defis/CreateDefiModal';
 
 const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
-
-function hasStarted(defi) {
-  // on essaie firstGameUTC, sinon gameStartTimeUTC, sinon startTimeUTC
-  const startMs =
-    tsToMillis(defi?.firstGameUTC) ||
-    tsToMillis(defi?.gameStartTimeUTC) ||
-    tsToMillis(defi?.startTimeUTC);
-
-  if (!startMs) return false; // si on n'a pas la date, on n'empêche pas
-  return Date.now() >= startMs;
-}
 
 function fmtTSLocalHM(v) {
   try {
@@ -77,28 +69,6 @@ function initialsFrom(nameOrEmail = '') {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
-
-  function isAscensionDefi(item) {
-    // adapte si tu as une propriété officielle (ex: item.isAscension, item.ascKey, item.ascensionType)
-    return item?.ascKey || item?.ascensionType || item?.isAscension;
-  }
-
-  function ascensionLabel(item) {
-    const key = item?.ascension?.key;
-
-    if (key === "ASC4") return "Ascension 4";
-    if (key === "ASC7") return "Ascension 7";
-
-    return null;
-  }
-
-  function defiFormatLabel(item) {
-    // item.type = 2 -> "2x2"
-    const t = Number(item?.type);
-    if (Number.isFinite(t) && t > 0) return `${t}x${t}`;
-    // fallback si title contient déjà "Défi 2x2" etc.
-    return null;
-  }
 
 export default function ChallengesScreen() {
   const { user } = useAuth();
@@ -298,14 +268,14 @@ export default function ChallengesScreen() {
           setActiveDefis((prev) => {
             const withoutGroup = prev.filter((x) => x.groupId !== gid);
             const merged = [...withoutGroup, ...actives].sort((a, b) => {
-              const va =
-                tsToMillis(a.signupDeadline) ||
-                tsToMillis(a.firstGameUTC) ||
-                tsToMillis(a.createdAt);
-              const vb =
-                tsToMillis(b.signupDeadline) ||
-                tsToMillis(b.firstGameUTC) ||
-                tsToMillis(b.createdAt);
+            const va =
+              tsToMillis(getSignupDeadlineOrFallback(a, 15)) ||
+              tsToMillis(a.firstGameUTC) ||
+              tsToMillis(a.createdAt);
+            const vb =
+              tsToMillis(getSignupDeadlineOrFallback(b, 15)) ||
+              tsToMillis(b.firstGameUTC) ||
+              tsToMillis(b.createdAt);
               return va - vb;
             });
             return merged;
@@ -507,7 +477,6 @@ export default function ChallengesScreen() {
     return s;
   }, [activeDefis, pastLimited]);
 
-
   const WinnerRow = ({ uid, share }) => {
     const info = winnerInfoMap[uid] || {
       name: uid,
@@ -567,40 +536,74 @@ export default function ChallengesScreen() {
     );
   };
 
-
-
   // Rendu d'une carte de défi
   const renderCard = (item, isActive) => {
-  const groupName = groupsMap[item.groupId]?.name || item.groupId;
+    const groupName =
+      groupsMap[item.groupId]?.name || item.groupId;
+    const title =
+      item.title ||
+      (item.type
+        ? i18n.t('home.challenge') + ` ${item.type}x${item.type}`
+        : i18n.t('home.challenge'));
+    const pot = Number.isFinite(item.pot) ? item.pot : 0;
 
-  // ✅ remet ces variables (elles étaient avant)
-  const statusKey = String(item?.status || "").toLowerCase();
+    const statusKey = String(item.status || '').toLowerCase();
+    const winners = Array.isArray(item.winners)
+      ? item.winners
+      : [];
+    const winnerShares = item.winnerShares || {};
 
-  const winners = Array.isArray(item?.winners) ? item.winners : [];
-  const winnerShares = item?.winnerShares || {};
+    const isGhostCancelled = statusKey === 'cancelled_ghost';
 
-  const isGhostCancelled = statusKey === "cancelled_ghost";
+    let statusLabel = '';
+    let statusColor = '#6b7280';
+    let statusIcon = 'checkmark-circle';
 
-  const started = hasStarted(item);
-  const canJoin = (statusKey === "open" || statusKey === "live") && !started && !isGhostCancelled;
+    if (statusKey === 'open' || statusKey === 'live') {
+      statusLabel = i18n.t('challenges.status.active');
+      statusColor = '#16a34a';
+      statusIcon = 'flame';
+    } else if (statusKey === 'awaiting_result') {
+      statusLabel = i18n.t('challenges.status.awaiting');
+      statusColor = '#ea580c';
+      statusIcon = 'timer-outline';
+    } else if (isGhostCancelled) {
+      statusLabel = i18n.t('challenges.status.cancelledGhost');
+      statusColor = '#9ca3af';
+      statusIcon = 'alert-circle-outline';
+    } else {
+      statusLabel = i18n.t('challenges.status.completed');
+      statusColor = '#6b7280';
+      statusIcon = 'checkmark-circle';
+    }
 
-  // --- ton nouveau UI ---
-  const formatLabel = defiFormatLabel(item); // "2x2"
-  const ascLabel = ascensionLabel(item);     // "Ascension 4/7" ou null
+    const potLabel = i18n.t('challenges.potLabel', { count: pot });
+    const entryCost = item.participationCost ?? item.type;
 
-  const signupCount =
-    Number(item?.signupCount ?? item?.participantsCount ?? item?.entriesCount ?? item?.nParticipants ?? 0) || 0;
+    const signupDeadlineValue = getSignupDeadlineOrFallback(item, 15);
 
-  const signupCountLabel =
-    i18n.t("challenges.signupCountLabel", { count: signupCount, defaultValue: "{{count}} inscription(s)" });
+    const uiStatus = computeUiStatus({
+      ...item,
+      signupDeadline: signupDeadlineValue,
+    });
 
-  // ✅ maintenant winners existe
-  const winnersTitle =
-    winners.length > 1
-      ? i18n.t("challenges.winnersTitlePlural")
-      : i18n.t("challenges.winnersTitleSingular");
+    const { canJoin, lockedBy } = canJoinDefiUi({
+      tier: 'vip', // ou ton vrai tier si tu l'as ici
+      defiType: item?.type,
+      uiStatus,
+      signupDeadline: signupDeadlineValue,
+    });
 
-  // ... return (...) inchangé
+  const showResultsCta =
+  lockedBy === 'DEADLINE' ||
+  uiStatus === 'live' ||
+  uiStatus === 'awaiting_result' ||
+  uiStatus === 'completed';
+
+    const winnersTitle =
+      winners.length > 1
+        ? i18n.t('challenges.winnersTitlePlural')
+        : i18n.t('challenges.winnersTitleSingular');
 
     return (
       <View
@@ -614,63 +617,62 @@ export default function ChallengesScreen() {
           borderColor: colors.border,
         }}
       >
-
-        {/* En-tête avec avatar groupe (logo + 2 lignes) */}
+        {/* En-tête avec avatar groupe */}
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          {/* Logo / avatar du groupe */}
-          <Image
-            source={
-              groupsMap[item.groupId]?.avatarUrl
-                ? { uri: groupsMap[item.groupId].avatarUrl }
-                : GROUP_PLACEHOLDER
-            }
+          <View
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              backgroundColor: colors.card2,
-              borderWidth: 1,
-              borderColor: colors.border,
+              flexDirection: 'row',
+              alignItems: 'center',
+              flex: 1,
+              minWidth: 0,
             }}
-          />
-
-          {/* Textes (2 lignes) */}
-          <View style={{ flex: 1, minWidth: 0 }}>
-            {/* 1) Nom du groupe */}
+          >
+            <Image
+              source={
+                groupsMap[item.groupId]?.avatarUrl
+                  ? { uri: groupsMap[item.groupId].avatarUrl }
+                  : GROUP_PLACEHOLDER
+              }
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: colors.card2,
+                borderWidth: 1,
+                borderColor: colors.border,
+                marginRight: 8,
+              }}
+            />
             <Text
               style={{
-                fontWeight: "900",
+                fontWeight: '700',
                 fontSize: 16,
+                flexShrink: 1,
                 color: colors.text,
               }}
               numberOfLines={1}
-              ellipsizeMode="tail"
             >
-              {groupName}
+              {groupName} – {title}
             </Text>
+          </View>
 
-            {/* 2) Ascension + Type défi */}
+          {/* Badge de statut */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name={statusIcon} size={18} color={statusColor} />
             <Text
               style={{
-                marginTop: 2,
-                fontWeight: "800",
-                color: colors.subtext,
+                marginLeft: 6,
+                color: statusColor,
+                fontWeight: '700',
               }}
-              numberOfLines={1}
-              ellipsizeMode="tail"
             >
-              {[
-                ascLabel, // "Ascension 4"
-                formatLabel ? `Défi ${formatLabel}` : null, // "Défi 2x2"
-              ]
-                .filter(Boolean)
-                .join(" • ") || i18n.t("home.challenge")}
+              {statusLabel}
             </Text>
           </View>
         </View>
@@ -686,18 +688,22 @@ export default function ChallengesScreen() {
             <>
               <Text style={{ color: colors.text }}>
                 {i18n.t('challenges.signupDeadlineLabel')}{' '}
-                {fmtTSLocalHM(item.signupDeadline)}
+                {fmtTSLocalHM(signupDeadlineValue)}
+              </Text>
+              <Text style={{ color: colors.text }}>
+                {i18n.t('challenges.firstGameLabel')}{' '}
+                {fmtTSLocalHM(item.firstGameUTC)}
               </Text>
             </>
           )}
 
-          {/* Nbr d'inscriptions */}
+          {/* Cagnotte */}
           <View
             style={{
               marginTop: 6,
-              alignSelf: "stretch",
-              flexDirection: "row",
-              alignItems: "center",
+              alignSelf: 'stretch',
+              flexDirection: 'row',
+              alignItems: 'center',
               paddingVertical: 8,
               paddingHorizontal: 10,
               borderRadius: 10,
@@ -706,9 +712,19 @@ export default function ChallengesScreen() {
               borderColor: colors.border,
             }}
           >
-            <MaterialCommunityIcons name="account-multiple" size={16} color="#b91c1c" />
-            <Text style={{ marginLeft: 6, color: colors.text, fontWeight: "800" }}>
-              {signupCountLabel}
+            <MaterialCommunityIcons
+              name="cash-multiple"
+              size={16}
+              color="#b91c1c"
+            />
+            <Text
+              style={{
+                marginLeft: 6,
+                color: colors.text,
+                fontWeight: '800',
+              }}
+            >
+              {potLabel}
             </Text>
           </View>
 
@@ -777,14 +793,17 @@ export default function ChallengesScreen() {
             )}
         </View>
 
-        {/* Boutons */}
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: 8,
-            marginTop: 10,
-          }}
-        >
+
+      {/* Boutons */}
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: 8,
+          marginTop: 10,
+          justifyContent: 'flex-end',
+        }}
+      >
+        {!showResultsCta ? (
           <TouchableOpacity
             onPress={() =>
               router.push(
@@ -810,63 +829,53 @@ export default function ChallengesScreen() {
               {i18n.t('challenges.seeResults')}
             </Text>
           </TouchableOpacity>
+        ) : null}
 
-          <View
+        {showResultsCta ? (
+          <TouchableOpacity
+            onPress={() => router.push(`/(drawer)/defis/${item.id}/results`)}
             style={{
-              flexDirection: "row",
-              gap: 8,
-              marginTop: 10,
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+              alignItems: 'center',
+              backgroundColor: colors.card2,
             }}
           >
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/(drawer)/defis/${item.id}/results`)
-              }
+            <Text
               style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 10,
-                borderWidth: 1,
-                borderColor: colors.border,
-                alignItems: "center",
-                backgroundColor: colors.card2,
+                color: colors.text,
+                fontWeight: '700',
               }}
             >
-              <Text
-                style={{
-                  fontWeight: "700",
-                  color: colors.text,
-                }}
-              >
-                {i18n.t("challenges.seeResults")}
-              </Text>
-            </TouchableOpacity>
-
-            {canJoin && (
-              <TouchableOpacity
-                onPress={() =>
-                  router.push(`/(drawer)/defis/${item.id}`)
-                }
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                  backgroundColor: "#b91c1c",
-                }}
-              >
-                <Text
-                  style={{
-                    color: "#fff",
-                    fontWeight: "700",
-                  }}
-                >
-                  {i18n.t("challenges.participate")}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+              {i18n.t('challenges.seeResults')}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => router.push(`/(drawer)/defis/${item.id}`)}
+            disabled={!canJoin}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 10,
+              alignItems: 'center',
+              backgroundColor: canJoin ? '#b91c1c' : '#9ca3af',
+            }}
+          >
+            <Text
+              style={{
+                color: '#fff',
+                fontWeight: '700',
+              }}
+            >
+              {i18n.t('challenges.participate')}
+            </Text>
+          </TouchableOpacity>
+        )}
+</View>
       </View>
     );
   };

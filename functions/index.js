@@ -21,7 +21,7 @@ export { ingestStatsForDate, ingestStatsForDateCron, syncDefiLiveScores } from "
 
 export { finalizeDefiWinners } from "./finalize.js";
 export { ingestSkaterStatsForSeason, cronIngestSkaterStatsDaily } from "./nhlIngest.js";
-export { cronIngestNhlDailyContext,cronRefreshNhlScheduleWindow } from "./nhlContextIngest.js";
+export { cronIngestNhlDailyContext,cronRefreshNhlScheduleWindow,cronRefreshNhlScheduleRecentScores} from "./nhlContextIngest.js";
 
 
 export { precheckPhoneLogin } from "./precheckPhoneLogin.js";
@@ -72,6 +72,6 @@ export * from "./firstGoalChallenge/firstGoalResolveMutualized.js";
 export { lockFirstGoalChallenges } from "./firstGoalChallenge/firstGoalLock.js";
 export { fgcPick } from "./firstGoalChallenge/fgcPick.js";
 export { fgcCreate } from "./firstGoalChallenge/fgcCreate.js";
+export { applyFirstGoalChallengePayout } from "./firstGoalChallenge/applyFirstGoalChallengePayout.js";
 
-
-
+export { repairFirstGoalGameCallable } from "./firstGoalChallenge/repairFirstGoalGameCallable.js";

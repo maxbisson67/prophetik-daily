@@ -15,19 +15,29 @@ function isDecided(status) {
   return st === "decided" || st === "closed";
 }
 
+function statusRank(status) {
+  const st = String(status || "").toLowerCase();
+  if (st === "open") return 0;
+  if (st === "locked") return 1;
+  if (st === "pending") return 2;
+  if (st === "decided") return 3;
+  if (st === "closed") return 4;
+  return 5;
+}
+
 export default function FirstGoalLiveCard({ visible, gameId, colors }) {
   const router = useRouter();
   const { user } = useAuth();
 
   const [firstGoalChallenges, setFirstGoalChallenges] = useState([]);
-  const [entriesByChallengeId, setEntriesByChallengeId] = useState({}); // my entry
-  const [allEntriesByChallengeId, setAllEntriesByChallengeId] = useState({}); // all entries
+  const [entriesByChallengeId, setEntriesByChallengeId] = useState({});
+  const [allEntriesByChallengeId, setAllEntriesByChallengeId] = useState({});
   const [loadingFirstGoal, setLoadingFirstGoal] = useState(false);
+  const [allowedGroupIds, setAllowedGroupIds] = useState([]);
+  const [groupNameById, setGroupNameById] = useState({});
 
-  // keep unsubscribers for entries listeners
   const entriesUnsubsRef = useRef({});
 
-  // Cleanup all entry listeners
   const cleanupEntryListeners = () => {
     const map = entriesUnsubsRef.current || {};
     Object.keys(map).forEach((cid) => {
@@ -38,6 +48,134 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
     entriesUnsubsRef.current = {};
   };
 
+  // 1) Groupes permis pour l'utilisateur
+  useEffect(() => {
+    if (!user?.uid) {
+      setAllowedGroupIds([]);
+      setGroupNameById({});
+      return;
+    }
+
+    const qByUid = firestore()
+      .collection("group_memberships")
+      .where("uid", "==", String(user.uid));
+
+    const qOwnerCreated = firestore()
+      .collection("groups")
+      .where("createdBy", "==", String(user.uid));
+
+    const qOwnerOwnerId = firestore()
+      .collection("groups")
+      .where("ownerId", "==", String(user.uid));
+
+    let memberships = [];
+    let ownedCreated = [];
+    let ownedOwnerId = [];
+
+    const recompute = () => {
+      const memberIds = memberships
+        .filter((m) => {
+          const st = String(m?.status || "").toLowerCase();
+          if (st) return ["active", "open", "approved"].includes(st);
+          return m?.active !== false;
+        })
+        .map((m) => String(m.groupId || ""))
+        .filter(Boolean);
+
+      const ownerRows = [...ownedCreated, ...ownedOwnerId];
+      const ownerIds = ownerRows.map((g) => String(g.id || "")).filter(Boolean);
+
+      const ids = Array.from(new Set([...memberIds, ...ownerIds]));
+      setAllowedGroupIds(ids);
+
+      const names = {};
+      ownerRows.forEach((g) => {
+        const id = String(g.id || "");
+        if (!id) return;
+        names[id] = g?.name || g?.title || id;
+      });
+
+      setGroupNameById((prev) => ({ ...prev, ...names }));
+    };
+
+    const un1 = qByUid.onSnapshot(
+      (snap) => {
+        memberships = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        recompute();
+      },
+      (err) => {
+        console.log("[FirstGoalLiveCard] group_memberships error", err?.message || err);
+      }
+    );
+
+    const un2 = qOwnerCreated.onSnapshot(
+      (snap) => {
+        ownedCreated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        recompute();
+      },
+      (err) => {
+        console.log("[FirstGoalLiveCard] groups(createdBy) error", err?.message || err);
+      }
+    );
+
+    const un3 = qOwnerOwnerId.onSnapshot(
+      (snap) => {
+        ownedOwnerId = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        recompute();
+      },
+      (err) => {
+        console.log("[FirstGoalLiveCard] groups(ownerId) error", err?.message || err);
+      }
+    );
+
+    return () => {
+      try {
+        un1();
+      } catch {}
+      try {
+        un2();
+      } catch {}
+      try {
+        un3();
+      } catch {}
+    };
+  }, [user?.uid]);
+
+  // 2) Compléter les noms de groupe manquants
+  useEffect(() => {
+    if (!allowedGroupIds.length) return;
+
+    const missingIds = allowedGroupIds.filter((gid) => !groupNameById[gid]);
+    if (!missingIds.length) return;
+
+    const unsubs = [];
+
+    missingIds.forEach((gid) => {
+      const un = firestore()
+        .collection("groups")
+        .doc(String(gid))
+        .onSnapshot((snap) => {
+          if (!snap.exists) return;
+          const data = snap.data() || {};
+          setGroupNameById((prev) => ({
+            ...prev,
+            [gid]: data?.name || data?.title || gid,
+          }));
+        });
+
+      unsubs.push(un);
+    });
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
+  }, [allowedGroupIds.join("|"), Object.keys(groupNameById).join("|")]);
+
+  // 3) Charger les FGC visibles pour ce match
   useEffect(() => {
     if (!visible || !gameId) {
       setFirstGoalChallenges([]);
@@ -48,20 +186,43 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
       return;
     }
 
+    if (!allowedGroupIds.length) {
+      setFirstGoalChallenges([]);
+      setEntriesByChallengeId({});
+      setAllEntriesByChallengeId({});
+      setLoadingFirstGoal(false);
+      cleanupEntryListeners();
+      return;
+    }
+
     setLoadingFirstGoal(true);
+
+    const allowed = new Set(allowedGroupIds.map(String));
 
     const q = firestore()
       .collection("first_goal_challenges")
       .where("gameId", "==", String(gameId))
       .orderBy("createdAt", "desc")
-      .limit(5);
+      .limit(20);
 
     const unsub = q.onSnapshot(
       async (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((ch) => allowed.has(String(ch.groupId || "")))
+          .sort((a, b) => {
+            const ra = statusRank(a.status);
+            const rb = statusRank(b.status);
+            if (ra !== rb) return ra - rb;
+
+            const ga = groupNameById[String(a.groupId || "")] || String(a.groupId || "");
+            const gb = groupNameById[String(b.groupId || "")] || String(b.groupId || "");
+            return ga.localeCompare(gb);
+          });
+
         setFirstGoalChallenges(list);
 
-        // (1) Load "my entry" for each challenge (comme avant)
+        // Mon entrée dans chaque challenge
         if (!user?.uid || list.length === 0) {
           setEntriesByChallengeId({});
         } else {
@@ -80,22 +241,22 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
             );
 
             const map = {};
-            results.forEach(([cid, data]) => (map[cid] = data));
+            results.forEach(([cid, data]) => {
+              map[cid] = data;
+            });
             setEntriesByChallengeId(map);
           } catch (e) {
             console.log("[FirstGoalLiveCard] entry check error", e?.message || e);
           }
         }
 
-        // (2) Attach listeners to entries subcollection WHEN locked/live/pending/decided/closed
-        // Avoid duplicate listeners
+        // Listeners sur entries seulement quand utile
         const wantIds = new Set(
           list
             .filter((ch) => shouldShowEntries(ch.status))
             .map((ch) => String(ch.id))
         );
 
-        // remove listeners no longer needed
         Object.keys(entriesUnsubsRef.current || {}).forEach((cid) => {
           if (!wantIds.has(cid)) {
             try {
@@ -110,7 +271,6 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
           }
         });
 
-        // add missing listeners
         wantIds.forEach((cid) => {
           if (entriesUnsubsRef.current[cid]) return;
 
@@ -119,8 +279,6 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
             .doc(cid)
             .collection("entries");
 
-          // Option: limit si tu veux éviter trop de docs
-          // .limit(50) (mais Firestore n'autorise pas limit sans orderBy dans certains cas)
           const unsubEntries = entriesRef.onSnapshot(
             (esnap) => {
               const rows = esnap.docs.map((d) => ({
@@ -151,7 +309,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
       } catch {}
       cleanupEntryListeners();
     };
-  }, [visible, gameId, user?.uid]);
+  }, [visible, gameId, user?.uid, allowedGroupIds.join("|"), Object.keys(groupNameById).join("|")]);
 
   const cardTitle = useMemo(
     () => i18n.t("firstGoal.live.title", { defaultValue: "Défi: Premier but" }),
@@ -182,7 +340,9 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
         </View>
       ) : firstGoalChallenges.length === 0 ? (
         <Text style={{ color: colors.subtext, fontSize: 13 }}>
-          {i18n.t("firstGoal.live.none", { defaultValue: "Aucun défi 'premier but' pour ce match." })}
+          {i18n.t("firstGoal.live.none", {
+            defaultValue: "Aucun défi 'premier but' pour ce match.",
+          })}
         </Text>
       ) : (
         <View style={{ gap: 10 }}>
@@ -191,6 +351,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
             const st = String(ch.status || "").toLowerCase();
             const entry = entriesByChallengeId[cid] || null;
             const participantsCount = Number(ch.participantsCount || 0);
+            const groupName = groupNameById[String(ch.groupId || "")] || String(ch.groupId || "");
 
             const decided = isDecided(st);
             const pending = st === "pending";
@@ -199,9 +360,6 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
             const allEntries = allEntriesByChallengeId[cid] || [];
             const showEntries = shouldShowEntries(st);
 
-            // Winners:
-            // (1) if winnersPreviewUids exists -> use that
-            // (2) else derive from firstGoal.playerId and entries
             const firstGoalPlayerId = ch?.firstGoal?.playerId || null;
             const winnerUids =
               Array.isArray(ch?.winnersPreviewUids) && ch.winnersPreviewUids.length
@@ -218,7 +376,6 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                 : winnerUids
                     .map((uid) => {
                       const e = allEntries.find((x) => String(x.uid) === String(uid));
-                      // si tu stockes displayName dans l’entrée c’est parfait
                       return e?.displayName || e?.name || e?.playerOwnerName || uid.slice(0, 6);
                     })
                     .join(", ");
@@ -228,9 +385,13 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                 ? `✅ ${ch.firstGoal.playerName} (${ch.firstGoal.teamAbbr || ""})`
                 : `✅ ${i18n.t("firstGoal.live.noWinner", { defaultValue: "Aucun gagnant" })}`
               : pending
-              ? `⏳ ${i18n.t("firstGoal.live.pending", { defaultValue: "Provisoire / en révision NHL…" })}`
+              ? `⏳ ${i18n.t("firstGoal.live.pending", {
+                  defaultValue: "Provisoire / en révision NHL…",
+                })}`
               : st === "locked"
-              ? `🔒 ${i18n.t("firstGoal.live.locked", { defaultValue: "Verrouillé (match commencé)" })}`
+              ? `🔒 ${i18n.t("firstGoal.live.locked", {
+                  defaultValue: "Verrouillé (match commencé)",
+                })}`
               : st === "open"
               ? `🟢 ${i18n.t("firstGoal.live.open", { defaultValue: "Ouvert" })}`
               : `ℹ️ ${st}`;
@@ -246,7 +407,11 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                   backgroundColor: colors.card2,
                 }}
               >
-                <Text style={{ color: colors.text, fontWeight: "800" }}>
+                <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
+                  {groupName}
+                </Text>
+
+                <Text style={{ color: colors.text, fontWeight: "800", marginTop: 4 }}>
                   {i18n.t("firstGoal.live.participants", {
                     defaultValue: "{{n}} participant(s)",
                     n: participantsCount,
@@ -257,32 +422,52 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                   {resultLine}
                 </Text>
 
-                {/* ✅ Gagnants quand decided */}
                 {decided ? (
-                  <Text style={{ color: colors.text, marginTop: 8, fontSize: 13, fontWeight: "800" }}>
+                  <Text
+                    style={{
+                      color: colors.text,
+                      marginTop: 8,
+                      fontSize: 13,
+                      fontWeight: "800",
+                    }}
+                  >
                     🏆 {i18n.t("firstGoal.live.winners", { defaultValue: "Gagnant(s):" })}{" "}
                     <Text style={{ fontWeight: "700" }}>{winnersLabel}</Text>
                   </Text>
                 ) : null}
 
-                {/* ✅ Participants + choix dès que locké/live/pending/decided */}
                 {showEntries ? (
                   <View style={{ marginTop: 10 }}>
-                    <Text style={{ color: colors.text, fontWeight: "800", fontSize: 13, marginBottom: 6 }}>
-                      {i18n.t("firstGoal.live.picksTitle", { defaultValue: "Participants & choix" })}
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontWeight: "800",
+                        fontSize: 13,
+                        marginBottom: 6,
+                      }}
+                    >
+                      {i18n.t("firstGoal.live.picksTitle", {
+                        defaultValue: "Participants & choix",
+                      })}
                     </Text>
 
                     {allEntries.length === 0 ? (
                       <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                        {i18n.t("firstGoal.live.noEntriesYet", { defaultValue: "Aucune participation encore." })}
+                        {i18n.t("firstGoal.live.noEntriesYet", {
+                          defaultValue: "Aucune participation encore.",
+                        })}
                       </Text>
                     ) : (
                       <View style={{ gap: 6 }}>
                         {allEntries.slice(0, 30).map((e) => {
                           const who =
-                            e?.displayName || e?.name || e?.playerOwnerName || String(e.uid || "").slice(0, 6);
+                            e?.displayName ||
+                            e?.name ||
+                            e?.playerOwnerName ||
+                            String(e.uid || "").slice(0, 6);
                           const pick = e?.playerName || "—";
                           const isWinner = decided && winnerUids.includes(String(e.uid));
+
                           return (
                             <Text key={String(e.uid)} style={{ color: colors.subtext, fontSize: 13 }}>
                               {isWinner ? "✅ " : "• "}
@@ -292,6 +477,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                             </Text>
                           );
                         })}
+
                         {allEntries.length > 30 ? (
                           <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4 }}>
                             {i18n.t("firstGoal.live.moreEntries", {
@@ -305,7 +491,6 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                   </View>
                 ) : null}
 
-                {/* ✅ Mon choix */}
                 {entry ? (
                   <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
                     🎯{" "}
@@ -331,8 +516,12 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                   >
                     <Text style={{ color: "#fff", fontWeight: "900" }}>
                       {entry
-                        ? i18n.t("firstGoal.live.viewPick", { defaultValue: "Voir mon choix" })
-                        : i18n.t("firstGoal.live.join", { defaultValue: "Participer" })}
+                        ? i18n.t("firstGoal.live.viewPick", {
+                            defaultValue: "Voir mon choix",
+                          })
+                        : i18n.t("firstGoal.live.join", {
+                            defaultValue: "Participer",
+                          })}
                     </Text>
                   </TouchableOpacity>
                 </View>

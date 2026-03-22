@@ -1,10 +1,10 @@
-// functions/firstGoalChallenge/fgcCreate.js
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 
 import { APP_TZ, toYmdInTz } from "../ProphetikDate.js";
+import { sendPushToGroup } from "../utils/pushUtils.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -21,7 +21,7 @@ function safeAbbr(v) {
 
 function toDateSafe(v) {
   if (!v) return null;
-  if (v?.toDate && typeof v.toDate === "function") return v.toDate(); // Timestamp
+  if (v?.toDate && typeof v.toDate === "function") return v;
   if (v instanceof Date) return v;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -49,20 +49,6 @@ async function assertGroupOwnerOrThrow(tx, groupId, uid) {
   return { g };
 }
 
-/**
- * fgcCreate
- * data:
- * {
- *   groupId: string,
- *   league?: "NHL",
- *   gameId: string,
- *   gameStartTimeUTC: Timestamp|Date|string,
- *   homeAbbr: string,
- *   awayAbbr: string,
- *   // optionnels
- *   expiresHours?: number (default 48)
- * }
- */
 export const fgcCreate = onCall(
   { region: "us-central1" },
   async (req) => {
@@ -90,13 +76,11 @@ export const fgcCreate = onCall(
     const expiresHours = Number(data.expiresHours ?? EXPIRES_HOURS);
     const safeExpiresHours = Number.isFinite(expiresHours) && expiresHours > 0 ? expiresHours : EXPIRES_HOURS;
 
-    // ✅ ID déterministe => idempotence & anti-doublon
     const challengeId = `fgc_${groupId}_${gameId}`;
     const chRef = db.collection("first_goal_challenges").doc(challengeId);
 
     try {
       const out = await db.runTransaction(async (tx) => {
-        // ✅ permission (owner)
         await assertGroupOwnerOrThrow(tx, groupId, uid);
 
         const chSnap = await tx.get(chRef);
@@ -126,17 +110,51 @@ export const fgcCreate = onCall(
           winnersCount: 0,
           winnersPreviewUids: [],
 
-          // firstGoal: (absent au départ)
-          // decidedAt / lockedAt / resultMessage: (absent au départ)
-
           createdBy: uid,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
-          expiresAt, // Date OK: admin SDK va le convertir
+          expiresAt,
         });
 
         return { ok: true, challengeId, alreadyExisted: false, status: "open" };
       });
+
+      if (!out.alreadyExisted) {
+        const title = "Premier but — Nouveau défi";
+        const body = `${awayAbbr} vs ${homeAbbr} • Fais ton choix avant le début du match.`;
+
+        const pushData = {
+          action: "OPEN_FGC",
+          challengeId: String(out.challengeId),
+          groupId: String(groupId),
+          gameId: String(gameId),
+          type: "first_goal",
+        };
+
+        try {
+          const res = await sendPushToGroup({
+            groupId,
+            includeAi: false,
+            title,
+            body,
+            data: pushData,
+            channelId: "challenges_v2",
+            logTag: "fgcCreate",
+          });
+
+          logger.info("[fgcCreate] push done", {
+            challengeId: out.challengeId,
+            groupId,
+            ...res,
+          });
+        } catch (e) {
+          logger.warn("[fgcCreate] push failed", {
+            challengeId: out.challengeId,
+            groupId,
+            err: String(e?.message || e),
+          });
+        }
+      }
 
       return out;
     } catch (e) {

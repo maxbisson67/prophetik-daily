@@ -19,13 +19,13 @@ function isExpectedFsError(e) {
 function devLog(tag, payload) {
   if (!__DEV__) return;
   // eslint-disable-next-line no-console
-  console.log(`[ASC:${tag}]`, payload);
+  //console.log(`[ASC:${tag}]`, payload);
 }
 
 function devWarn(tag, payload) {
   if (!__DEV__) return;
   // eslint-disable-next-line no-console
-  console.warn(`[ASC:${tag}]`, payload);
+  //console.warn(`[ASC:${tag}]`, payload);
 }
 
 /**

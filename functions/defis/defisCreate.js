@@ -253,13 +253,18 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
     // --- règle 72h (meilleure UX: refuser AVANT création) ---
     const isSpecial = input.isSpecial === true;
 
-    // on exige firstGameUTC pour appliquer la règle (sinon pas de contrôle possible)
+    // on exige firstGameUTC pour appliquer la règle
     const firstGameUTC = toDateOrNull(input.firstGameUTC);
     if (!firstGameUTC) {
       throw new HttpsError("invalid-argument", "firstGameUTC requis.", {
         reason: "FIRST_GAME_UTC_REQUIRED",
       });
     }
+
+    // deadline explicite si fournie, sinon fallback à 15 min avant le premier match
+    const signupDeadline =
+      toDateOrNull(input.signupDeadline) ||
+      new Date(firstGameUTC.getTime() - 15 * 60 * 1000);
 
     const now = new Date();
     const aheadHours = (firstGameUTC.getTime() - now.getTime()) / (1000 * 60 * 60);
@@ -306,10 +311,8 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
         createdBy: uid,
         participationCost,
         status,
-
-        firstGameUTC: toDateOrNull(input.firstGameUTC) || undefined,
-        signupDeadline: toDateOrNull(input.signupDeadline) || undefined,
-
+        firstGameUTC,
+        signupDeadline,
         defiKey: `${gameDateYmd}_${formatDefiKey(type)}`,
         format: input.format || undefined,
         availability: input.availability || undefined,

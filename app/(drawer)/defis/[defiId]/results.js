@@ -37,6 +37,7 @@ import { DrawerToggleButton } from '@react-navigation/drawer';
 
 // ✅ i18n
 import i18n from '@src/i18n/i18n';
+import Analytics from "@src/services/analytics";
 
 /* ----------------------------- Utils ----------------------------- */
 const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
@@ -690,6 +691,36 @@ export default function DefiResultsScreen() {
     return Number(defi?.participantsCount ?? 0);
   }, [parts, defi?.participantsCount]);
 
+    const hasLoggedResultViewRef = useRef(null);
+
+  useEffect(() => {
+    if (loadingDefi) return;
+    if (!defi?.id) return;
+
+    const key = String(defi.id);
+    if (hasLoggedResultViewRef.current === key) return;
+
+    hasLoggedResultViewRef.current = key;
+
+    Analytics.viewChallengeResult({
+      challengeType: "standard",
+      challengeId: String(defi.id),
+      format: defi?.type ? `${defi.type}x${defi.type}` : null,
+      status: String(defi?.status || "").toLowerCase(),
+      participantsCount: Number(defi?.participantsCount ?? parts?.length ?? 0),
+      pot: Number(defi?.pot ?? 0),
+    });
+
+  }, [
+    loadingDefi,
+    defi?.id,
+    defi?.type,
+    defi?.status,
+    defi?.participantsCount,
+    defi?.pot,
+    parts?.length,
+  ]);
+
   useEffect(() => {
     if (missingPlayerMeta.length === 0 || !nhlPlayersReadable) return;
     let cancelled = false;
@@ -774,6 +805,8 @@ export default function DefiResultsScreen() {
       </>
     );
   }
+
+
 
   return (
     <>

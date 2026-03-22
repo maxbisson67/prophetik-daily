@@ -53,6 +53,30 @@
         }
       }
     },
+    "@react-native-firebase/analytics": {
+      "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/analytics",
+      "name": "@react-native-firebase/analytics",
+      "platforms": {
+        "ios": {
+          "podspecPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/analytics/RNFBAnalytics.podspec",
+          "version": "23.5.0",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/analytics/android",
+          "packageImportPath": "import io.invertase.firebase.analytics.ReactNativeFirebaseAnalyticsPackage;",
+          "packageInstance": "new ReactNativeFirebaseAnalyticsPackage()",
+          "buildTypes": [],
+          "componentDescriptors": [],
+          "cmakeListsPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/analytics/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
     "@react-native-firebase/app": {
       "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/app",
       "name": "@react-native-firebase/app",
@@ -103,6 +127,40 @@
           "buildTypes": [],
           "componentDescriptors": [],
           "cmakeListsPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/auth/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
+    "@react-native-firebase/crashlytics": {
+      "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/crashlytics",
+      "name": "@react-native-firebase/crashlytics",
+      "platforms": {
+        "ios": {
+          "podspecPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/crashlytics/RNFBCrashlytics.podspec",
+          "version": "23.5.0",
+          "configurations": [],
+          "scriptPhases": [
+            {
+              "name": "[RNFB] Crashlytics Configuration",
+              "path": "./ios_config.sh",
+              "execution_position": "after_compile",
+              "input_files": [
+                "${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+                "$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)"
+              ]
+            }
+          ]
+        },
+        "android": {
+          "sourceDir": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/crashlytics/android",
+          "packageImportPath": "import io.invertase.firebase.crashlytics.ReactNativeFirebaseCrashlyticsPackage;",
+          "packageInstance": "new ReactNativeFirebaseCrashlyticsPackage()",
+          "buildTypes": [],
+          "componentDescriptors": [],
+          "cmakeListsPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/crashlytics/android/build/generated/source/codegen/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,

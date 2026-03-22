@@ -73,7 +73,7 @@ function usePublicProfilesFor(uids) {
   return map;
 }
 
-export default function LeaderboardTable({ rows, colors, columns, onRowPress }) {
+export default function LeaderboardTable({ rows, colors, columns, onRowPress, hideHeader = false}) {
   const firstSortKey = columns?.[0]?.key || 'wins';
   const [sort, setSort] = useState({ key: firstSortKey, dir: 'desc' });
   const t = i18n.t.bind(i18n);
@@ -116,84 +116,80 @@ export default function LeaderboardTable({ rows, colors, columns, onRowPress }) 
       }}
     >
 
-      {/* header */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          backgroundColor: colors.card2,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <View style={{ width: 40 }} />
-        <View style={{ flex: 1.5 }}>
-        <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>
-            {t("leaderboard.legend.name", { defaultValue: "Nom" })}
-        </Text>
-        </View>
+ 
+      {!hideHeader && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            backgroundColor: colors.card2,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+          }}
+        >
+          <View style={{ width: 40 }} />
+          <View style={{ flex: 1.5 }}>
+            <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>
+              {t("leaderboard.legend.name", { defaultValue: "Nom" })}
+            </Text>
+          </View>
 
-        {(columns || []).map((c) => {
-          const isActive = sort.key === c.key;
-          const IconSet = c.iconSet === 'fa6' ? FontAwesome6 : MaterialCommunityIcons;
+          {(columns || []).map((c) => {
+            const isActive = sort.key === c.key;
+            const IconSet = c.iconSet === 'fa6' ? FontAwesome6 : MaterialCommunityIcons;
 
-          // init ref si manquant
-          if (!infoRefs.current[c.key]) infoRefs.current[c.key] = React.createRef();
+            if (!infoRefs.current[c.key]) infoRefs.current[c.key] = React.createRef();
 
-          return (
-            <View
-              key={c.key}
-              style={{
-                flex: c.flex ?? 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {/* Zone TRI (flex:1) */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => toggleSort(c.key)}
+            return (
+              <View
+                key={c.key}
                 style={{
-                  flex: 1,
+                  flex: c.flex ?? 1,
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 6,
-                  paddingVertical: 6,
                 }}
               >
-                {c.header ? (
-                // ✅ Header custom (ex: <ProphetikIcons .../>)
-                c.header
-                ) : c.icon ? (
-                // ✅ Fallback: icône standard si définie
-                <IconSet
-                    name={c.icon}
-                    size={18}
-                    color={isActive ? colors.primary : colors.text}
-                />
-                ) : (
-                // ✅ Dernier fallback: texte (clé)
-                <Text style={{ color: isActive ? colors.primary : colors.text, fontWeight: "800" }}>
-                    {String(c.key)}
-                </Text>
-                )}
-                {isActive ? (
-                  <MaterialCommunityIcons
-                    name={sort.dir === 'asc' ? 'chevron-up' : 'chevron-down'}
-                    size={22}
-                    color={colors.primary}
-                  />
-                ) : null}
-              </TouchableOpacity>
-            
-            </View>
-          );
-        })}
-      </View>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => toggleSort(c.key)}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 6,
+                  }}
+                >
+                  {c.header ? (
+                    c.header
+                  ) : c.icon ? (
+                    <IconSet
+                      name={c.icon}
+                      size={18}
+                      color={isActive ? colors.primary : colors.text}
+                    />
+                  ) : (
+                    <Text style={{ color: isActive ? colors.primary : colors.text, fontWeight: "800" }}>
+                      {String(c.key)}
+                    </Text>
+                  )}
+                  {isActive ? (
+                    <MaterialCommunityIcons
+                      name={sort.dir === 'asc' ? 'chevron-up' : 'chevron-down'}
+                      size={22}
+                      color={colors.primary}
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       {/* rows */}
       {sorted.map((r, idx) => {

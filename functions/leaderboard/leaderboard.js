@@ -28,9 +28,6 @@ export const typeKey = (defiType) => {
  * - potInc = payout + bonus
  * - won si potInc > 0
  *
- * NOTE: on ne stocke plus potTotal dans le leaderboard, mais on garde
- * la règle de "won" basée sur payout+bonus (c’est le plus cohérent).
- *
  * ✅ Ajout:
  * - nhlPoints: somme des points NHL réels de la sélection
  */
@@ -111,6 +108,110 @@ function safeDiv(a, b) {
   return bb > 0 ? aa / bb : 0;
 }
 
+/* -------------------- Challenge family helpers -------------------- */
+
+function challengeFamily(defi = {}) {
+  const ascKey = String(defi?.ascension?.key || "").toUpperCase();
+  if (ascKey === "ASC7") return "ascension";
+
+  const title = String(defi?.title || "").toLowerCase();
+  const defiKey = String(defi?.defiKey || "").toLowerCase();
+  const mode = String(defi?.mode || "").toLowerCase();
+  const category = String(defi?.category || "").toLowerCase();
+  const type = String(defi?.type || "").toLowerCase();
+
+  const isFGC =
+    type === "first_goal" ||
+    defiKey.includes("fgc") ||
+    title.includes("fgc") ||
+    title.includes("first goal") ||
+    title.includes("premier but") ||
+    mode === "fgc" ||
+    category === "fgc";
+
+  if (isFGC) return "fgc";
+
+  return "standard";
+}
+
+function emptyFamilyStats() {
+  return { points: 0, plays: 0, wins: 0 };
+}
+
+function makeEmptyAgg(uid) {
+  return {
+    uid,
+    participations: 0,
+    wins: 0,
+
+    // ✅ Prophetik (cagnotte)
+    pointsTotal: 0,
+    pointsByWeek: {},
+    winsByWeek: {},
+    pointsByMonth: {},
+    winsByMonth: {},
+
+    // ✅ NHL réel (qualité)
+    nhlPointsTotal: 0,
+    nhlGamesTotal: 0,
+    nhlPointsByWeek: {},
+    nhlGamesByWeek: {},
+    nhlPointsByMonth: {},
+    nhlGamesByMonth: {},
+
+    // ✅ per format (1x1, 2x2, 3x3...)
+    winsByType: {},
+
+    // ✅ per family (FGC / standard / ascension)
+    families: {
+      fgc: emptyFamilyStats(),
+      standard: emptyFamilyStats(),
+      ascension: emptyFamilyStats(),
+    },
+
+    displayName: null,
+    avatarUrl: null,
+    avatarId: null,
+  };
+}
+
+function ensureAgg(totals, uid) {
+  const cur = totals.get(uid) || makeEmptyAgg(uid);
+  totals.set(uid, cur);
+  return cur;
+}
+
+/**
+ * FGC entry parsing
+ *
+ * payout: vrai payout si la function FGC l’écrit
+ * won:
+ * - payout > 0
+ * - OU flag won=true
+ * - OU uid présent dans winnersPreviewUids (fallback)
+ *
+ * points FGC MVP:
+ * - payout si présent
+ * - sinon 1 si gagné
+ * - sinon 0
+ */
+function parseFgcEntry({ entry = {}, winnersPreviewUids = [] }) {
+  const payout = toNumber(entry?.payout, 0);
+  const won =
+    entry?.won === true ||
+    payout > 0 ||
+    winnersPreviewUids.includes(String(entry?.uid || entry?.pickedBy || ""));
+
+  const points = payout > 0 ? payout : won ? 1 : 0;
+
+  return {
+    payout,
+    won,
+    points,
+    displayName: entry?.displayName || null,
+  };
+}
+
 /**
  * Rebuild (Season + Group)
  */
@@ -128,6 +229,10 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
   const from = String(fromYmd).slice(0, 10);
   const to = String(toYmd).slice(0, 10);
 
+  // uid -> aggregates
+  const totals = new Map();
+
+  /* -------------------- 1) DEFIS: Standard + Ascension -------------------- */
   const defisSnap = await db
     .collection("defis")
     .where("groupId", "==", groupId)
@@ -136,12 +241,22 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
     .where("gameDate", "<=", to)
     .get();
 
-  // uid -> aggregates
-  const totals = new Map();
+  // ✅ summary global pour comparaison future avec moyenne des autres
+  const summary = {
+    membersCount: 0,
+    defisCount: defisSnap.size,
+    fgcCount: 0,
+    totals: {
+      fgc: emptyFamilyStats(),
+      standard: emptyFamilyStats(),
+      ascension: emptyFamilyStats(),
+    },
+  };
 
   for (const d of defisSnap.docs) {
     const defi = d.data() || {};
     const tKey = typeKey(defi?.type);
+    const family = challengeFamily(defi);
     const gameDate = ymd10(defi?.gameDate);
 
     const weekKey = weekKeyFromGameDate({ seasonId, fromYmd: from, gameDate });
@@ -152,33 +267,7 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       const uid = p.id;
       const { finalPoints, won, displayName, potInc, picksLen } = parseParticipation(p.data());
 
-      const cur =
-        totals.get(uid) || {
-          uid,
-          participations: 0,
-          wins: 0,
-
-          // ✅ Prophetik (cagnotte)
-          pointsTotal: 0,
-          pointsByWeek: {},
-          winsByWeek: {},
-          pointsByMonth: {},
-          winsByMonth: {},
-
-          // ✅ NHL réel (qualité)
-          nhlPointsTotal: 0,
-          nhlGamesTotal: 0,
-          nhlPointsByWeek: {},
-          nhlGamesByWeek: {},
-          nhlPointsByMonth: {},
-          nhlGamesByMonth: {},
-
-          winsByType: {},
-
-          displayName: null,
-          avatarUrl: null,
-          avatarId: null,
-        };
+      const cur = ensureAgg(totals, uid);
 
       // --- counts
       cur.participations += 1;
@@ -203,7 +292,17 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       incMap(cur.nhlPointsByMonth, monthKey, finalPoints);
       incMap(cur.nhlGamesByMonth, monthKey, picksLen);
 
-      // --- by type
+      // --- ✅ family aggregates (MVP leaderboard)
+      cur.families[family].plays += 1;
+      cur.families[family].points += toNumber(potInc, 0);
+      if (won) cur.families[family].wins += 1;
+
+      // --- ✅ global summary aggregates
+      summary.totals[family].plays += 1;
+      summary.totals[family].points += toNumber(potInc, 0);
+      if (won) summary.totals[family].wins += 1;
+
+      // --- by format type
       if (!cur.winsByType[tKey]) {
         cur.winsByType[tKey] = {
           plays: 0,
@@ -222,17 +321,99 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       if (won) cur.winsByType[tKey].wins += 1;
 
       cur.winsByType[tKey].pointsTotal += toNumber(potInc, 0);
-
       cur.winsByType[tKey].nhlPointsTotal += toNumber(finalPoints, 0);
       cur.winsByType[tKey].nhlGamesTotal += toNumber(picksLen, 0);
 
       if (!cur.displayName && displayName) cur.displayName = displayName;
+    }
+  }
 
-      totals.set(uid, cur);
+  /* -------------------- 2) FGC: first_goal_challenges -------------------- */
+  const fgcSnap = await db
+    .collection("first_goal_challenges")
+    .where("groupId", "==", groupId)
+    .where("status", "in", ["decided", "closed"])
+    .where("gameYmd", ">=", from)
+    .where("gameYmd", "<=", to)
+    .get();
+
+  summary.fgcCount = fgcSnap.size;
+
+  for (const chDoc of fgcSnap.docs) {
+    const ch = chDoc.data() || {};
+    const gameDate = ymd10(ch?.gameYmd);
+    const weekKey = weekKeyFromGameDate({ seasonId, fromYmd: from, gameDate });
+    const monthKey = monthKeyFromGameDate(gameDate);
+    const winnersPreviewUids = Array.isArray(ch?.winnersPreviewUids)
+      ? ch.winnersPreviewUids.map(String)
+      : [];
+
+    const entriesSnap = await db.collection(`first_goal_challenges/${chDoc.id}/entries`).get();
+
+    for (const e of entriesSnap.docs) {
+      const entry = e.data() || {};
+      const uid = String(entry?.uid || entry?.pickedBy || e.id);
+      if (!uid) continue;
+
+      const { won, points, displayName } = parseFgcEntry({
+        entry: { ...entry, uid },
+        winnersPreviewUids,
+      });
+
+      const cur = ensureAgg(totals, uid);
+
+      // ✅ FGC compte comme une participation pour le leaderboard MVP
+      cur.participations += 1;
+      if (won) cur.wins += 1;
+
+      // ✅ Prophetik points globaux incluent FGC
+      cur.pointsTotal += toNumber(points, 0);
+      incMap(cur.pointsByWeek, weekKey, points);
+      incMap(cur.pointsByMonth, monthKey, points);
+
+      if (won) {
+        incMap(cur.winsByWeek, weekKey, 1);
+        incMap(cur.winsByMonth, monthKey, 1);
+      }
+
+      // ✅ family aggregates
+      cur.families.fgc.plays += 1;
+      cur.families.fgc.points += toNumber(points, 0);
+      if (won) cur.families.fgc.wins += 1;
+
+      // ✅ summary
+      summary.totals.fgc.plays += 1;
+      summary.totals.fgc.points += toNumber(points, 0);
+      if (won) summary.totals.fgc.wins += 1;
+
+      // ✅ winsByType: on isole FGC dans une clé spéciale
+      const fgcTypeKey = "FGC";
+      if (!cur.winsByType[fgcTypeKey]) {
+        cur.winsByType[fgcTypeKey] = {
+          plays: 0,
+          wins: 0,
+          pointsTotal: 0,
+          nhlPointsTotal: 0,
+          nhlGamesTotal: 0,
+        };
+      }
+
+      cur.winsByType[fgcTypeKey].plays += 1;
+      if (won) cur.winsByType[fgcTypeKey].wins += 1;
+      cur.winsByType[fgcTypeKey].pointsTotal += toNumber(points, 0);
+
+      if (!cur.displayName && displayName) cur.displayName = displayName;
+      if (!cur.avatarUrl) {
+        const avatarUrl = pickString(entry?.avatarUrl);
+        if (avatarUrl) cur.avatarUrl = avatarUrl;
+      }
     }
   }
 
   const allUids = [...totals.keys()];
+  summary.membersCount = totals.size;
+
+  /* -------------------- 3) Enrichissement noms / avatars -------------------- */
 
   // 1) Complète displayName manquant depuis participants/{uid}
   const uidsNeedingName = [...totals.entries()]
@@ -272,7 +453,7 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
 
       const needFallback = batchIds.filter((uid) => {
         const cur = totals.get(uid);
-        return cur && !cur.avatarUrl && !cur.avatarId;
+        return cur && (!cur.avatarUrl || !cur.avatarId);
       });
 
       if (needFallback.length) {
@@ -284,14 +465,36 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
           const data = snap.data() || {};
           const avatarUrl = pickString(data.avatarUrl);
           const avatarId = pickString(data.avatarId);
-          if (avatarUrl) cur.avatarUrl = avatarUrl;
-          if (avatarId) cur.avatarId = avatarId;
+          if (!cur.avatarUrl && avatarUrl) cur.avatarUrl = avatarUrl;
+          if (!cur.avatarId && avatarId) cur.avatarId = avatarId;
         });
       }
     }
   }
 
-  // Écriture metadata saison
+  /* -------------------- 4) summary averages -------------------- */
+
+  const count = summary.membersCount || 0;
+  const averages = {
+    fgc: {
+      points: safeDiv(summary.totals.fgc.points, count),
+      wins: safeDiv(summary.totals.fgc.wins, count),
+      plays: safeDiv(summary.totals.fgc.plays, count),
+    },
+    standard: {
+      points: safeDiv(summary.totals.standard.points, count),
+      wins: safeDiv(summary.totals.standard.wins, count),
+      plays: safeDiv(summary.totals.standard.plays, count),
+    },
+    ascension: {
+      points: safeDiv(summary.totals.ascension.points, count),
+      wins: safeDiv(summary.totals.ascension.wins, count),
+      plays: safeDiv(summary.totals.ascension.plays, count),
+    },
+  };
+
+  /* -------------------- 5) Écriture metadata + summary -------------------- */
+
   await db.doc(`groups/${groupId}/leaderboards/${seasonId}`).set(
     {
       seasonId,
@@ -300,13 +503,35 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       toYmd: to,
       membersCount: totals.size,
       defisCount: defisSnap.size,
+      fgcCount: fgcSnap.size,
       rebuiltAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
 
-  // Écriture members (batch)
+  await db.doc(`groups/${groupId}/leaderboards/${seasonId}/stats/summary`).set(
+    {
+      seasonId,
+      groupId,
+      fromYmd: from,
+      toYmd: to,
+
+      membersCount: summary.membersCount,
+      defisCount: summary.defisCount,
+      fgcCount: summary.fgcCount,
+
+      totals: summary.totals,
+      averages,
+
+      updatedAt: FieldValue.serverTimestamp(),
+      rebuiltAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  /* -------------------- 6) Écriture members -------------------- */
+
   const base = `groups/${groupId}/leaderboards/${seasonId}/members`;
   const entries = [...totals.entries()];
 
@@ -327,6 +552,10 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
         winsByType[k] = t;
       }
 
+      const fgc = agg.families?.fgc || emptyFamilyStats();
+      const standard = agg.families?.standard || emptyFamilyStats();
+      const ascension = agg.families?.ascension || emptyFamilyStats();
+
       batch.set(
         db.doc(`${base}/${uid}`),
         {
@@ -340,7 +569,7 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
           wins: agg.wins,
           winRate,
 
-          // ✅ Prophetik
+          // ✅ Prophetik global
           pointsTotal: agg.pointsTotal,
           pointsByWeek: agg.pointsByWeek || {},
           winsByWeek: agg.winsByWeek || {},
@@ -357,8 +586,27 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
           nhlPointsByMonth: agg.nhlPointsByMonth || {},
           nhlGamesByMonth: agg.nhlGamesByMonth || {},
 
-          // ✅ per type
+          // ✅ per format (existant)
           winsByType,
+
+          // ✅ MVP leaderboard families
+          families: {
+            fgc,
+            standard,
+            ascension,
+          },
+
+          fgcPoints: fgc.points,
+          standardPoints: standard.points,
+          ascensionPoints: ascension.points,
+
+          fgcWins: fgc.wins,
+          standardWins: standard.wins,
+          ascensionWins: ascension.wins,
+
+          fgcPlays: fgc.plays,
+          standardPlays: standard.plays,
+          ascensionPlays: ascension.plays,
 
           updatedAt: FieldValue.serverTimestamp(),
         },
@@ -369,7 +617,8 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
     await batch.commit();
   }
 
-  // ✅ Clear dirty flag (optionnel)
+  /* -------------------- 7) Clear dirty flag -------------------- */
+
   if (clearDirty) {
     await db.doc(`groups/${groupId}`).set(
       {
@@ -387,6 +636,7 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
     seasonId,
     users: totals.size,
     defis: defisSnap.size,
+    fgc: fgcSnap.size,
     fromYmd: from,
     toYmd: to,
     clearedDirty: !!clearDirty,

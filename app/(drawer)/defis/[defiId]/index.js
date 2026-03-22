@@ -1,4 +1,4 @@
-// app/defis/[defiId]/index.js
+// app/(drawer)/defis/[defiId]/index.js
 // Écran de participation à un défi NHL (RNFirebase)
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -44,6 +44,8 @@ import {
   ymdTorontoFromUTC,
   fmtStartLocalHMFromUTCString,
 } from "./utils/defiFormatters";
+
+import Analytics from "@src/services/analytics";
 
 /* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
@@ -557,6 +559,14 @@ export default function DefiParticipationScreen() {
         setHasSavedOnce(true);
         savedPicksRef.current = selected.map((p) => ({ playerId: String(p?.playerId ?? "") }));
 
+        Analytics.submitPick({
+          challengeType: "standard",
+          challengeId: String(defi.id),
+          format: `${defi?.type}x${defi?.type}`,
+          picksCount: payloadPicks.length,
+          isEdit: !!_isEditAfterFirstSave,
+        });
+
         Alert.alert(
           i18n.t("defi.alerts.successTitle"),
           i18n.t("defi.alerts.successMessage", { potMessage: i18n.t("defi.alerts.successPotMessageSimple") }),
@@ -735,15 +745,7 @@ export default function DefiParticipationScreen() {
 
           {/* Pickers */}
           <SectionCard title={i18n.t("defi.pickersCard.title")}>
-            {!!requirementsText ? (
-              <Text style={{ textAlign: "center", color: colors.text, fontWeight: "800", marginBottom: 8 }}>
-                {i18n.t("defi.pickersCard.requirementsPrefix")} {requirementsText}.
-              </Text>
-            ) : null}
 
-            <Text style={{ textAlign: "center", color: colors.subtext, fontSize: 12, marginBottom: 10 }}>
-              {i18n.t("defi.tiers.legend")}
-            </Text>
 
             <View style={{ gap: 10 }}>
               {Array.from({ length: maxChoices }).map((_, i) => (

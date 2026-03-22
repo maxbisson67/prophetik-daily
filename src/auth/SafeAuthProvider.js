@@ -32,12 +32,18 @@ export function AuthProvider({ children }) {
   const [authReady, setAuthReady] = useState(false);
   const [webBridged, setWebBridged] = useState(false);
 
-  // ✅ RC state
+  // RevenueCat
   const [rcReady, setRcReady] = useState(false);
   const [rcAppUserId, setRcAppUserId] = useState(null);
 
   const settledRef = useRef(false);
   const safetyTimerRef = useRef(null);
+
+  // ✅ anti double logout
+  const signOutInFlightRef = useRef(false);
+
+  // ✅ anti race condition RC logIn/logOut
+  const rcCycleRef = useRef(0);
 
   // 1) Auth natif
   useEffect(() => {
@@ -50,11 +56,15 @@ export function AuthProvider({ children }) {
 
     const unsub = RNFBAuth().onAuthStateChanged((u) => {
       setUser(mapUser(u));
+
       if (!settledRef.current) {
         settledRef.current = true;
         setAuthReady(true);
-        clearTimeout(safetyTimerRef.current);
-        safetyTimerRef.current = null;
+
+        if (safetyTimerRef.current) {
+          clearTimeout(safetyTimerRef.current);
+          safetyTimerRef.current = null;
+        }
       }
     });
 
@@ -62,12 +72,15 @@ export function AuthProvider({ children }) {
       try {
         unsub?.();
       } catch {}
-      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-      safetyTimerRef.current = null;
+
+      if (safetyTimerRef.current) {
+        clearTimeout(safetyTimerRef.current);
+        safetyTimerRef.current = null;
+      }
     };
   }, []);
 
-  // 2) Bridge native -> web (tu l’as laissé en standby)
+  // 2) Bridge native -> web
   useEffect(() => {
     let cancelled = false;
 
@@ -79,6 +92,7 @@ export function AuthProvider({ children }) {
           try {
             await webSignOut(webAuth);
           } catch {}
+
           if (!cancelled) setWebBridged(false);
           return;
         }
@@ -91,6 +105,7 @@ export function AuthProvider({ children }) {
     }
 
     if (authReady) run();
+
     return () => {
       cancelled = true;
     };
@@ -101,39 +116,32 @@ export function AuthProvider({ children }) {
     if (!authReady) return;
 
     let cancelled = false;
+    const cycle = ++rcCycleRef.current;
 
     (async () => {
       try {
         setRcReady(false);
         setRcAppUserId(null);
 
-        // ✅ configure UNE fois (idempotent)
+        // configure une seule fois / idempotent
         initPurchases();
 
-        // ✅ si user null, on garde RC logged-out (anon) et rcReady=false
+        // si pas de user, on reste "not ready"
         if (!user?.uid) {
           return;
         }
 
-        // ✅ IMPORTANT: NE PAS faire logOut() ici
-        // Sinon tu recrées des $RCAnonymousID et tu risques d’écrire au mauvais doc.
-        const { customerInfo, created } = await Purchases.logIn(String(user.uid));
-        // created = true si nouvel user RC
-
+        await Purchases.logIn(String(user.uid));
         const currentId = await Purchases.getAppUserID();
 
-        if (!cancelled) {
+        if (!cancelled && rcCycleRef.current === cycle) {
           setRcAppUserId(currentId);
-          setRcReady(currentId === String(user.uid)); // garde-fou
+          setRcReady(currentId === String(user.uid));
         }
-
-        // (debug safe)
-        console.log("[RC] logIn created:", created);
-        console.log("[RC] appUserId:", currentId);
-        console.log("[RC] originalAppUserId:", customerInfo?.originalAppUserId);
       } catch (e) {
         console.log("[RC] init/logIn error:", e?.message || e);
-        if (!cancelled) {
+
+        if (!cancelled && rcCycleRef.current === cycle) {
           setRcReady(false);
           setRcAppUserId(null);
         }
@@ -154,33 +162,44 @@ export function AuthProvider({ children }) {
       webBridged,
       initializing,
 
-      // ✅ expose RC readiness
       rcReady,
       rcAppUserId,
 
       signOut: async () => {
-        // 1) Firebase
+        if (signOutInFlightRef.current) return;
+        signOutInFlightRef.current = true;
+
         try {
-          await RNFBAuth().signOut();
-        } catch (e) {
-          console.log("[Auth] signOut native:", e?.message || String(e));
+          // 1) RevenueCat d'abord
+          try {
+            await Purchases.logOut();
+          } catch (e) {
+            console.log("[RC] logOut error:", e?.message || e);
+          }
+
+          // invalide aussi tout cycle RC en cours
+          rcCycleRef.current += 1;
+
+          // 2) Web SDK
+          try {
+            await webSignOut(webAuth);
+          } catch (e) {
+            console.log("[Auth] signOut web:", e?.message || String(e));
+          }
+
+          // 3) Firebase natif en dernier
+          try {
+            await RNFBAuth().signOut();
+          } catch (e) {
+            console.log("[Auth] signOut native:", e?.message || String(e));
+          }
+
+          setWebBridged(false);
+          setRcReady(false);
+          setRcAppUserId(null);
+        } finally {
+          signOutInFlightRef.current = false;
         }
-
-        // 2) Web SDK (si utilisé)
-        try {
-          await webSignOut(webAuth);
-        } catch {}
-
-        // 3) RevenueCat: ✅ logOut ICI seulement
-        try {
-          await Purchases.logOut();
-        } catch (e) {
-          console.log("[RC] logOut error:", e?.message || e);
-        }
-
-        setWebBridged(false);
-        setRcReady(false);
-        setRcAppUserId(null);
       },
 
       waitForAuthReady: () =>
@@ -207,7 +226,6 @@ export function AuthProvider({ children }) {
               }, 50);
             }),
 
-      // ✅ pour empêcher un achat tant que RC pas aligné sur uid
       waitForRcReady: () =>
         rcReady
           ? Promise.resolve()

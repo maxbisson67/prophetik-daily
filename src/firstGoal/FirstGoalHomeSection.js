@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import { useRouter } from "expo-router";
+import { useAuth } from "@src/auth/SafeAuthProvider";
 import i18n from "@src/i18n/i18n";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { TeamLogo } from "@src/nhl/nhlAssets";
@@ -67,6 +68,41 @@ function getSignupDeadline(ch) {
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
+}
+
+/**
+ * ✅ À AJUSTER ICI si ton path Firestore est différent.
+ *
+ * Hypothèse actuelle:
+ * first_goal_challenges/{challengeId}/picks/{uid}
+ *
+ * On considère qu'il y a déjà une sélection si le doc existe
+ * et contient playerId / selectedPlayerId / pickPlayerId.
+ */
+function listenMyPickForChallenge({ challengeId, uid, onData, onError }) {
+  if (!challengeId || !uid) return () => {};
+
+  const ref = firestore()
+    .collection("first_goal_challenges")
+    .doc(String(challengeId))
+    .collection("entries")
+    .doc(String(uid));
+
+  return ref.onSnapshot(
+    (snap) => {
+      const data = snap?.exists ? snap.data() || null : null;
+      const hasPick = !!data?.playerId;
+
+      onData?.({
+        exists: !!snap?.exists,
+        hasPick,
+        data,
+      });
+    },
+    (err) => {
+      onError?.(err);
+    }
+  );
 }
 
 /* ------------------------------ UI subcomponents --------------------------- */
@@ -168,6 +204,7 @@ export default function FirstGoalHomeSection({
   onHasChallengeChange,
 }) {
   const router = useRouter();
+  const { user } = useAuth();
 
   const groupIds = useMemo(() => {
     return (groups || []).map((g) => String(g?.id || "")).filter(Boolean);
@@ -196,6 +233,9 @@ export default function FirstGoalHomeSection({
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // ✅ état des picks du user courant par challenge
+  const [myPickByChallengeId, setMyPickByChallengeId] = useState({});
 
   const mergeAndSet = useCallback((mapById) => {
     const list = Array.from(mapById.values());
@@ -286,7 +326,6 @@ export default function FirstGoalHomeSection({
       unsubs.push(unsub);
     });
 
-    // ✅ FIX: fermeture correcte du forEach
     return () => {
       unsubs.forEach((u) => {
         try {
@@ -295,6 +334,86 @@ export default function FirstGoalHomeSection({
       });
     };
   }, [groupIds.join("|"), currentGroupId, mergeAndSet]);
+
+  // ✅ écoute des picks du user pour les défis affichés
+  useEffect(() => {
+    const visibleChallengeIds = items
+      .slice(0, 6)
+      .map((ch) => String(ch?.id || "").trim())
+      .filter(Boolean);
+
+    if (!user?.uid || !visibleChallengeIds.length) {
+      setMyPickByChallengeId({});
+      return;
+    }
+
+    const nextMap = {};
+    const unsubs = [];
+
+    visibleChallengeIds.forEach((challengeId) => {
+      const unsub = listenMyPickForChallenge({
+        challengeId,
+        uid: String(user.uid),
+        onData: ({ hasPick, data }) => {
+          nextMap[challengeId] = {
+            hasPick,
+            data: data || null,
+          };
+
+          setMyPickByChallengeId((prev) => ({
+            ...prev,
+            [challengeId]: {
+              hasPick,
+              data: data || null,
+            },
+          }));
+        },
+        onError: (err) => {
+          console.log(
+            "[FirstGoalHomeSection] my pick error",
+            challengeId,
+            err?.message || err
+          );
+
+          setMyPickByChallengeId((prev) => ({
+            ...prev,
+            [challengeId]: {
+              hasPick: false,
+              data: null,
+            },
+          }));
+        },
+      });
+
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
+  }, [items, user?.uid]);
+
+  const selectedGroupBoni = useMemo(() => {
+    const gid = String(currentGroupId || "").trim();
+
+    if (gid) return groupBoniById[gid] ?? 1;
+
+    const firstGroupId = groupIds[0] || null;
+    return firstGroupId ? groupBoniById[firstGroupId] ?? 1 : 1;
+  }, [currentGroupId, groupIds, groupBoniById]);
+
+  const selectedGroupName = useMemo(() => {
+    const gid = String(currentGroupId || "").trim();
+
+    if (gid) return groupNameById[gid] || null;
+
+    const firstGroupId = groupIds[0] || null;
+    return firstGroupId ? groupNameById[firstGroupId] || null : null;
+  }, [currentGroupId, groupIds, groupNameById]);
 
   return (
     <View style={{ marginBottom: 14 }}>
@@ -307,11 +426,25 @@ export default function FirstGoalHomeSection({
       <InfoBubbleFGC colors={colors} />
 
       {items.length === 0 ? (
-        <Text style={{ color: colors.subtext, fontSize: 13 }}>
-          {i18n.t("firstGoal.home.empty", {
-            defaultValue: "Aucun défi 'premier but' aujourd’hui dans tes groupes.",
-          })}
-        </Text>
+        <View
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+          }}
+        >
+          <Text style={{ color: "#f97316", fontWeight: "900", fontSize: 14 }}>
+            🔥 {i18n.t("firstGoal.home.boni", { defaultValue: "Boni" })}: +{selectedGroupBoni}
+          </Text>
+
+          <Text style={{ color: colors.subtext, fontSize: 13, marginTop: 8 }}>
+            {i18n.t("firstGoal.home.empty", {
+              defaultValue: "Aucun défi 'premier but' aujourd’hui dans tes groupes.",
+            })}
+          </Text>
+        </View>
       ) : (
         <View style={{ gap: 10 }}>
           {items.slice(0, 6).map((ch) => {
@@ -340,16 +473,30 @@ export default function FirstGoalHomeSection({
                   : i18n.t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" })
                 : null;
 
+            const challengeId = String(ch?.id || "").trim();
+            const hasMyPick = !!myPickByChallengeId?.[challengeId]?.hasPick;
+
             const ctaLabel = deadlinePassed
               ? i18n.t("firstGoal.cta.matchLive", { defaultValue: "Match Live" })
+              : hasMyPick
+              ? i18n.t("firstGoal.cta.modifyPick", { defaultValue: "Modifier mon joueur" })
               : i18n.t("firstGoal.cta.pickScorer", { defaultValue: "Choisir mon joueur" });
 
             const onPressCta = () => {
-              const id = String(ch.id || "").trim();
-              if (!id) return;
+              const gameId = String(ch.gameId || "").trim();
 
-              if (deadlinePassed) router.push(`/(first-goal)/pick/${id}?mode=live`);
-              else router.push(`/(first-goal)/pick/${id}`);
+              if (!challengeId) return;
+
+              if (deadlinePassed) {
+                if (gameId) {
+                  router.push(`/(drawer)/sports/MatchLiveScreen?gameId=${gameId}&from=fgc`);
+                } else {
+                  router.push(`/(drawer)/sports/MatchLiveScreen?from=fgc`);
+                }
+                return;
+              }
+
+              router.push(`/(first-goal)/pick/${challengeId}`);
             };
 
             return (
@@ -376,7 +523,9 @@ export default function FirstGoalHomeSection({
                     defaultValue: "Heure limite d'inscription",
                   })}
                   {": "}
-                  <Text style={{ color: colors.text, fontWeight: "900" }}>{deadlineHM || "—"}</Text>
+                  <Text style={{ color: colors.text, fontWeight: "900" }}>
+                    {deadlineHM || "—"}
+                  </Text>
                 </Text>
 
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>

@@ -241,7 +241,7 @@ function CustomDrawerContent(props) {
         {i18n.t('drawer.section.personal', { defaultValue: 'Personal' })}
       </SectionLabel>
 
-
+{/* 
       <DrawerItem
           {...itemCommonProps}
           label={i18n.t('drawer.howItWorks', { defaultValue: 'Comment ça marche' })}
@@ -265,6 +265,7 @@ function CustomDrawerContent(props) {
           <MaterialCommunityIcons name="crown-outline" size={size} color={colors.text} />
         )}
       />
+      */}
     
       <DrawerItem
         {...itemCommonProps}

@@ -410,9 +410,6 @@ export default function GroupDetailScreen() {
     (m) => m.uidNorm !== 'ai'
   );
 
-  const hasOtherHumanMembers =
-    humanMembers.length > 1;
-
   const name = group?.name;
   const codeInvitation = group?.codeInvitation;
 
@@ -510,8 +507,7 @@ export default function GroupDetailScreen() {
           try {
             await leaveGroupService({ groupId: group.id });
             Alert.alert(
-              i18n.t('groups.detail.leaveDoneTitle') || 'OK',
-              i18n.t('groups.detail.leaveDoneMessage') ||
+              i18n.t('groups.detail.leaveConfirmTitle') || 'OK'
                 (isOwner ? 'Groupe archivé.' : 'Tu as quitté le groupe.')
             );
             r.replace('/(drawer)/(tabs)/GroupsScreen');

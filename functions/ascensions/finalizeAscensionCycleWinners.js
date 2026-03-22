@@ -97,9 +97,13 @@ export const finalizeAscensionCycleWinners = onSchedule(
 
           const d = dSnap.data() || {};
           const asc = d.ascension || {};
-          if (String(asc.key || "").toUpperCase() !== "ASC7") return { ok: false, reason: "not-asc7" };
+          if (String(asc.key || "").toUpperCase() !== "ASC7") {
+            return { ok: false, reason: "not-asc7" };
+          }
 
-          if (asc.runProcessed === true) return { ok: true, skipped: true, reason: "already-processed" };
+          if (asc.runProcessed === true) {
+            return { ok: true, skipped: true, reason: "already-processed" };
+          }
 
           const groupId = d.groupId ? String(d.groupId) : null;
           const runId = asc.runId ? String(asc.runId) : null;
@@ -145,14 +149,21 @@ export const finalizeAscensionCycleWinners = onSchedule(
             return { ok: true, skipped: true, reason: "run-already-completed" };
           }
 
-          // 1) Apply progression for winners
+          // -------------------------
+          // PHASE 1: ALL READS FIRST
+          // -------------------------
+          const memberRefs = winners.map((uid) => runRef.collection("members").doc(uid));
+          const memberSnaps = await Promise.all(memberRefs.map((ref) => tx.get(ref)));
+
+          const membersByUid = new Map();
           const newlyCompletedUids = [];
 
-          for (const uid of winners) {
-            const mRef = runRef.collection("members").doc(uid);
-            const mSnap = await tx.get(mRef);
+          for (let i = 0; i < winners.length; i++) {
+            const uid = winners[i];
+            const mSnap = memberSnaps[i];
             const m = mSnap.exists ? mSnap.data() || {} : {};
-            const winsByType = m.winsByType && typeof m.winsByType === "object" ? { ...m.winsByType } : {};
+            const winsByType =
+              m.winsByType && typeof m.winsByType === "object" ? { ...m.winsByType } : {};
 
             const k = String(stepType);
             winsByType[k] = (winsByType[k] ?? 0) + 1;
@@ -160,51 +171,79 @@ export const finalizeAscensionCycleWinners = onSchedule(
             const completedNow = hasAllSeven(winsByType);
             if (completedNow && m.completed !== true) newlyCompletedUids.push(uid);
 
+            membersByUid.set(uid, {
+              ref: memberRefs[i],
+              exists: mSnap.exists,
+              winsByType,
+              completedNow,
+            });
+          }
+
+          let payoutUsers = [];
+          let shares = [];
+
+          if (newlyCompletedUids.length) {
+            const jackpot = Number(run.jackpot ?? 0);
+            shares = splitEven(jackpot, newlyCompletedUids.length);
+
+            const payoutRefs = newlyCompletedUids.map((uid) => db.collection("participants").doc(uid));
+            const payoutSnaps = await Promise.all(payoutRefs.map((ref) => tx.get(ref)));
+
+            payoutUsers = newlyCompletedUids.map((uid, i) => {
+              const uSnap = payoutSnaps[i];
+              const curU = uSnap.exists ? uSnap.data() || {} : {};
+              const curBal = readAnyBalance(curU);
+              return {
+                uid,
+                ref: payoutRefs[i],
+                curBal,
+                amount: shares[i] || 0,
+              };
+            });
+          }
+
+          // -------------------------
+          // PHASE 2: WRITES ONLY
+          // -------------------------
+          for (const uid of winners) {
+            const info = membersByUid.get(uid);
             tx.set(
-              mRef,
+              info.ref,
               {
                 uid,
                 groupId,
                 runId,
                 ascKey: "ASC7",
-                winsByType,
-                completed: completedNow,
+                winsByType: info.winsByType,
+                completed: info.completedNow,
                 updatedAt: FieldValue.serverTimestamp(),
-                ...(mSnap.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+                ...(info.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
               },
               { merge: true }
             );
           }
 
-          // 2) If someone completed all 7 on this defi => complete run + pay jackpot
           let runCompleted = false;
 
           if (newlyCompletedUids.length) {
-            const jackpot = Number(run.jackpot ?? 0);
-            const shares = splitEven(jackpot, newlyCompletedUids.length);
-
-            for (let i = 0; i < newlyCompletedUids.length; i++) {
-              const uid = newlyCompletedUids[i];
-              const amt = shares[i] || 0;
-              if (!(amt > 0)) continue;
-
-              const uRef = db.collection("participants").doc(uid);
-              const uSnap = await tx.get(uRef);
-              const curU = uSnap.exists ? uSnap.data() || {} : {};
-              const curBal = readAnyBalance(curU);
+            for (const p of payoutUsers) {
+              if (!(p.amount > 0)) continue;
 
               tx.set(
-                uRef,
-                { "credits.balance": FieldValue.increment(amt), updatedAt: FieldValue.serverTimestamp() },
+                p.ref,
+                {
+                  "credits.balance": FieldValue.increment(p.amount),
+                  updatedAt: FieldValue.serverTimestamp(),
+                },
                 { merge: true }
               );
 
-              const logRef = uRef.collection("credit_logs").doc();
+              const logRef = p.ref.collection("credit_logs").doc();
               tx.set(logRef, {
                 type: "ascension_jackpot",
-                amount: amt,
-                fromBalance: curBal,
-                toBalance: curBal + amt,
+                amount: p.amount,
+                fromBalance: p.curBal,
+                toBalance: p.curBal + p.amount,
                 runId,
                 groupId,
                 defiId,
@@ -241,7 +280,6 @@ export const finalizeAscensionCycleWinners = onSchedule(
             runCompleted = true;
           }
 
-          // 3) Mark defi processed
           tx.set(
             dRef,
             {

@@ -11,11 +11,12 @@ import ProphetikIcons from "@src/ui/ProphetikIcons";
 import { useRouter } from "expo-router";
 import useEntitlement from "../subscriptions/useEntitlement";
 import firestore from "@react-native-firebase/firestore";
-
+import Analytics from "@src/services/analytics";
 
 import { Ionicons } from "@expo/vector-icons";
 
 const APP_TZ = "America/Toronto";
+const SIGNUP_DEADLINE_MINUTES_BEFORE_FIRST_GAME = 15;
 
 
 function ymdToCompact(ymd) {
@@ -432,7 +433,7 @@ const nova = useMemo(() => {
   const signupDeadlineLocal = useMemo(() => {
     if (!verifyFirstISO) return null;
     const first = new Date(verifyFirstISO);
-    return new Date(first.getTime() - 60 * 60 * 1000);
+    return new Date(first.getTime() - SIGNUP_DEADLINE_MINUTES_BEFORE_FIRST_GAME * 60 * 1000);
   }, [verifyFirstISO]);
 
   const verifyDate = useCallback(async () => {
@@ -585,7 +586,7 @@ const nova = useMemo(() => {
       }
 
       const firstGameDate = new Date(firstISO);
-      const signupDeadline = signupDeadlineLocal || new Date(firstGameDate.getTime() - 60 * 60 * 1000);
+      const signupDeadline = signupDeadlineLocal || new Date(firstGameDate.getTime() - SIGNUP_DEADLINE_MINUTES_BEFORE_FIRST_GAME * 60 * 1000);
 
       if (new Date() >= signupDeadline) {
         const hh = pad2(signupDeadline.getHours());
@@ -628,6 +629,13 @@ const nova = useMemo(() => {
         );
         return;
       }
+
+      Analytics.createChallenge({
+        type: "standard",
+        groupId: String(selectedGroupId),
+        format: String(size),
+        gameDate: String(gameDateYmd),
+      });
 
       const created = res?.data;
       onCreated?.({ defiId: created?.id || null, groupId: selectedGroupId });
@@ -994,7 +1002,7 @@ const nova = useMemo(() => {
 
         <Text style={{ color: colors.subtext, fontSize: 12 }}>
           {i18n.t("defi.create.hint.signupDeadline", {
-            defaultValue: "Tu peux t'inscrire jusqu'à 1h avant le premier match.",
+            defaultValue: "Tu peux t'inscrire jusqu'à 15 minutes avant le premier match.",
           })}
         </Text>
       </View>

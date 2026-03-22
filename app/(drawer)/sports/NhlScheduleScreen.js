@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback,useRef } from "react";
 import { View, Text, ActivityIndicator, FlatList, RefreshControl, Image } from "react-native";
 import { Stack } from "expo-router";
 import { Calendar } from "react-native-calendars";
@@ -6,11 +6,10 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
-
+import Analytics from "@src/services/analytics";
 
 /* ========================
-   Logos (reprend ton mapping NHL)
-   ⚠️ Ajuste le path si nécessaire selon ton fichier
+   Logos
 ========================= */
 const LOGO_MAP = {
   ANA: require("../../../assets/nhl-logos/ANA.png"),
@@ -62,11 +61,11 @@ function ymdToronto(date = new Date()) {
     day: "2-digit",
   }).formatToParts(date);
   const get = (t) => parts.find((p) => p.type === t)?.value;
-  return `${get("year")}-${get("month")}-${get("day")}`; // YYYY-MM-DD
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 function ymdCompact(ymd) {
-  return String(ymd || "").replaceAll("-", ""); // YYYYMMDD
+  return String(ymd || "").replaceAll("-", "");
 }
 
 function monthStartYmd(ymd) {
@@ -78,7 +77,7 @@ function monthEndYmd(ymd) {
   const [yy, mm] = String(ymd).split("-");
   const y = Number(yy);
   const m = Number(mm);
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate(); // 0 => dernier jour du mois précédent
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return `${yy}-${mm}-${String(lastDay).padStart(2, "0")}`;
 }
 
@@ -93,7 +92,6 @@ function fmtTimeToronto(utcOrTs) {
   }
   if (!dt || Number.isNaN(dt.getTime())) return "—";
 
-  // Heure locale du device (souvent ok), sinon forcer Toronto :
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Toronto",
     hour: "2-digit",
@@ -107,7 +105,6 @@ function fmtTimeToronto(utcOrTs) {
 }
 
 function safeAbbr(team) {
-  // selon ton normalizeSchedule, tu as home/away : { abbr, name... }
   return (
     team?.abbr ||
     team?.teamAbbrev?.default ||
@@ -117,32 +114,90 @@ function safeAbbr(team) {
   );
 }
 
+function pickScore(v, fallback = null) {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return fallback;
+}
+
+function pickNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function gameStateKind(item) {
+  const state = String(item?.gameState || "").toUpperCase();
+  const sched = String(item?.gameScheduleState || "").toUpperCase();
+  const lastPeriodType = String(item?.gameOutcome?.lastPeriodType || "").toUpperCase();
+
+  if (
+    state.includes("FINAL") ||
+    sched.includes("FINAL") ||
+    state === "OFF" ||
+    sched === "OFF"
+  ) {
+    return "FINAL";
+  }
+
+  if (
+    state.includes("LIVE") ||
+    state.includes("CRIT") ||
+    sched.includes("LIVE") ||
+    sched.includes("CRIT")
+  ) {
+    return "LIVE";
+  }
+
+  if (lastPeriodType === "OT" || lastPeriodType === "SO") {
+    return "FINAL";
+  }
+
+  return "FUTURE";
+}
+
+function liveMeta(item) {
+  const period = pickNumber(item?.period, 0);
+  const periodType = String(item?.periodType || "").toUpperCase();
+  const clock = String(item?.clock || "").trim();
+
+  if (periodType === "OT") return clock ? `OT ${clock}` : "OT";
+  if (periodType === "SO") return "SO";
+  if (period > 0) return clock ? `P${period} ${clock}` : `P${period}`;
+  return "";
+}
+
+function scoreText(item) {
+  const awayScore = pickScore(item?.awayScore);
+  const homeScore = pickScore(item?.homeScore);
+  if (awayScore === null || homeScore === null) return null;
+  return `${awayScore} - ${homeScore}`;
+}
+
 export default function NhlScheduleScreen() {
   const { colors } = useTheme();
 
-  // Date sélectionnée pour la liste (YYYY-MM-DD)
   const today = useMemo(() => ymdToronto(new Date()), []);
   const [selectedYmd, setSelectedYmd] = useState(today);
-
-  // Mois affiché dans le calendrier (on garde un “anchor” YYYY-MM-DD)
   const [visibleMonthYmd, setVisibleMonthYmd] = useState(today);
 
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [monthDayIds, setMonthDayIds] = useState([]); // ["20260103","20260104",...]
+  const [monthDayIds, setMonthDayIds] = useState([]);
   const [games, setGames] = useState([]);
 
   const headerTitle = i18n.t("nhl.schedule.title", { defaultValue: "Calendrier NHL" });
 
-  /** ---------- 1) Charger les jours du mois qui ont un doc nhl_schedule_daily/{yyyymmdd} ---------- */
+  const hasLoggedScheduleViewRef = useRef(false);
+  const lastLoggedDateRef = useRef(null);
+  const lastLoggedMonthRef = useRef(null);
+
   useEffect(() => {
     setBusy(true);
 
     const start = ymdCompact(monthStartYmd(visibleMonthYmd));
     const end = ymdCompact(monthEndYmd(visibleMonthYmd));
 
-    // onSnapshot sur la collection des jours (docs) du mois
     const ref = firestore()
       .collection("nhl_schedule_daily")
       .orderBy(firestore.FieldPath.documentId())
@@ -151,7 +206,7 @@ export default function NhlScheduleScreen() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const ids = snap.docs.map((d) => d.id); // yyyymmdd
+        const ids = snap.docs.map((d) => d.id);
         setMonthDayIds(ids);
         setBusy(false);
       },
@@ -163,11 +218,12 @@ export default function NhlScheduleScreen() {
     );
 
     return () => {
-      try { unsub(); } catch {}
+      try {
+        unsub();
+      } catch {}
     };
   }, [visibleMonthYmd]);
 
-  /** ---------- 2) Charger les matchs de la journée sélectionnée ---------- */
   useEffect(() => {
     const dayId = ymdCompact(selectedYmd);
 
@@ -180,8 +236,12 @@ export default function NhlScheduleScreen() {
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => {
-          const ta = a.startTimeUTC?.toDate ? a.startTimeUTC.toDate().getTime() : new Date(a.startTimeUTC || 0).getTime();
-          const tb = b.startTimeUTC?.toDate ? b.startTimeUTC.toDate().getTime() : new Date(b.startTimeUTC || 0).getTime();
+          const ta = a.startTimeUTC?.toDate
+            ? a.startTimeUTC.toDate().getTime()
+            : new Date(a.startTimeUTC || 0).getTime();
+          const tb = b.startTimeUTC?.toDate
+            ? b.startTimeUTC.toDate().getTime()
+            : new Date(b.startTimeUTC || 0).getTime();
           return ta - tb;
         });
         setGames(list);
@@ -193,15 +253,15 @@ export default function NhlScheduleScreen() {
     );
 
     return () => {
-      try { unsub(); } catch {}
+      try {
+        unsub();
+      } catch {}
     };
   }, [selectedYmd]);
 
-  /** ---------- Marquage du calendrier ---------- */
   const markedDates = useMemo(() => {
     const marks = {};
 
-    // jours avec matchs (point)
     for (const dayId of monthDayIds) {
       const ymd = `${dayId.slice(0, 4)}-${dayId.slice(4, 6)}-${dayId.slice(6, 8)}`;
       marks[ymd] = {
@@ -210,7 +270,6 @@ export default function NhlScheduleScreen() {
       };
     }
 
-    // jour sélectionné (surbrillance)
     marks[selectedYmd] = {
       ...(marks[selectedYmd] || {}),
       selected: true,
@@ -220,107 +279,234 @@ export default function NhlScheduleScreen() {
     return marks;
   }, [monthDayIds, selectedYmd, colors.primary]);
 
-  /** ---------- Refresh manuel (optionnel) ---------- */
+  function finalMeta(item, t) {
+    const periodType = String(
+      item?.gameOutcome?.lastPeriodType || item?.periodType || ""
+    ).toUpperCase();
+
+    if (periodType === "OT") {
+      return t("nhl.schedule.finalOt", { defaultValue: "Final • Prol." });
+    }
+
+    if (periodType === "SO") {
+      return t("nhl.schedule.finalSo", { defaultValue: "Final • TDB" });
+    }
+
+    return t("nhl.schedule.final", { defaultValue: "Final" });
+  }
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      // Option A: tu n’as rien à faire si le cron remplit déjà la fenêtre.
-      // Option B: si tu crées un callable "updateNhlScheduleWindowNow", appelle-le ici.
+      // Optionnel si tu crées un callable plus tard
       // const fn = functions().httpsCallable("updateNhlScheduleWindowNow");
       // await fn({ month: visibleMonthYmd });
-
-      // Fallback: noop
     } catch (e) {
       console.log("[NhlSchedule] refresh error", e?.message || e);
     } finally {
       setRefreshing(false);
     }
-  }, [visibleMonthYmd]);
+  }, []);
 
-const renderRow = ({ item }) => {
-  const away = safeAbbr(item.away) || item.awayAbbr || "AWY";
-  const home = safeAbbr(item.home) || item.homeAbbr || "HOM";
+  useEffect(() => {
+    if (busy) return;
+    if (hasLoggedScheduleViewRef.current) return;
 
-  const awayLogo = teamLogo(away);
-  const homeLogo = teamLogo(home);
+    hasLoggedScheduleViewRef.current = true;
 
-  return (
-    <View
-      style={{
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.card,
-        marginBottom: 10,
-      }}
-    >
-      {/* Ligne équipes */}
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        {/* Away */}
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-          <View
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              backgroundColor: colors.background,
-              borderWidth: 1,
-              borderColor: colors.border,
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-              marginRight: 10,
-            }}
-          >
-            {awayLogo ? (
-              <Image source={awayLogo} style={{ width: 28, height: 28 }} resizeMode="contain" />
+    Analytics.nhlScheduleView({
+      selectedDate: selectedYmd || null,
+      visibleMonth: visibleMonthYmd || null,
+      gamesCount: Array.isArray(games) ? games.length : 0,
+    });
+  }, [busy, selectedYmd, visibleMonthYmd, games]);
+
+  useEffect(() => {
+    if (busy) return;
+    if (!selectedYmd) return;
+    if (lastLoggedDateRef.current === selectedYmd) return;
+
+    lastLoggedDateRef.current = selectedYmd;
+
+    Analytics.nhlScheduleDateChanged({
+      selectedDate: selectedYmd,
+      gamesCount: Array.isArray(games) ? games.length : 0,
+    });
+  }, [busy, selectedYmd, games]);
+
+  useEffect(() => {
+    if (busy) return;
+    if (!visibleMonthYmd) return;
+    if (lastLoggedMonthRef.current === visibleMonthYmd) return;
+
+    lastLoggedMonthRef.current = visibleMonthYmd;
+
+    Analytics.nhlScheduleMonthChanged({
+      visibleMonth: visibleMonthYmd,
+      markedDaysCount: Array.isArray(monthDayIds) ? monthDayIds.length : 0,
+    });
+  }, [busy, visibleMonthYmd, monthDayIds]);
+
+  const renderRow = ({ item }) => {
+    const away = safeAbbr(item.away) || item.awayAbbr || "AWY";
+    const home = safeAbbr(item.home) || item.homeAbbr || "HOM";
+
+    const awayLogo = teamLogo(away);
+    const homeLogo = teamLogo(home);
+
+    const score = scoreText(item);
+    const kind = gameStateKind(item);
+    const isLive = kind === "LIVE";
+    const isFinal = kind === "FINAL";
+
+    return (
+      <View
+        style={{
+          padding: 12,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
+          marginBottom: 10,
+        }}
+      >
+        {/* Ligne équipes + score */}
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Away */}
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <View
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                backgroundColor: colors.background,
+                borderWidth: 1,
+                borderColor: colors.border,
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                marginRight: 10,
+              }}
+            >
+              {awayLogo ? (
+                <Image source={awayLogo} style={{ width: 28, height: 28 }} resizeMode="contain" />
+              ) : (
+                <Text style={{ color: colors.subtext, fontWeight: "900" }}>{away}</Text>
+              )}
+            </View>
+
+            <Text style={{ color: colors.text, fontWeight: "900" }}>{away}</Text>
+          </View>
+
+          {/* Centre */}
+          <View style={{ minWidth: 88, alignItems: "center", justifyContent: "center" }}>
+            {score ? (
+              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
+                {score}
+              </Text>
             ) : (
-              <Text style={{ color: colors.subtext, fontWeight: "900" }}>{away}</Text>
+              <Text style={{ color: colors.subtext, fontWeight: "800" }}>@</Text>
             )}
           </View>
 
-          <Text style={{ color: colors.text, fontWeight: "900" }}>{away}</Text>
+          {/* Home */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              flex: 1,
+              justifyContent: "flex-end",
+            }}
+          >
+            <Text style={{ color: colors.text, fontWeight: "900", marginRight: 10 }}>{home}</Text>
+
+            <View
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                backgroundColor: colors.background,
+                borderWidth: 1,
+                borderColor: colors.border,
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              {homeLogo ? (
+                <Image source={homeLogo} style={{ width: 28, height: 28 }} resizeMode="contain" />
+              ) : (
+                <Text style={{ color: colors.subtext, fontWeight: "900" }}>{home}</Text>
+              )}
+            </View>
+          </View>
         </View>
 
-        <Text style={{ color: colors.subtext, fontWeight: "800", marginHorizontal: 10 }}>@</Text>
+        {/* Ligne statut */}
+        <View
+          style={{
+            marginTop: 8,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {isFinal ? (
+            <View
+              style={{
+                paddingVertical: 4,
+                paddingHorizontal: 10,
+                borderRadius: 999,
+                backgroundColor: colors.background,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 11 }}>
+                {finalMeta(item, i18n.t.bind(i18n))}
+              </Text>
+            </View>
+          ) : isLive ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Text style={{ color: colors.subtext }}>
+                {i18n.t("nhl.schedule.liveWithPeriod", {
+                  defaultValue: "En cours • {{meta}}",
+                  meta: liveMeta(item) || "LIVE",
+                })}
+              </Text>
 
-        {/* Home */}
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1, justifyContent: "flex-end" }}>
-          <Text style={{ color: colors.text, fontWeight: "900", marginRight: 10 }}>{home}</Text>
-
-          <View
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              backgroundColor: colors.background,
-              borderWidth: 1,
-              borderColor: colors.border,
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-            }}
-          >
-            {homeLogo ? (
-              <Image source={homeLogo} style={{ width: 28, height: 28 }} resizeMode="contain" />
-            ) : (
-              <Text style={{ color: colors.subtext, fontWeight: "900" }}>{home}</Text>
-            )}
-          </View>
+              <View
+                style={{
+                  paddingVertical: 4,
+                  paddingHorizontal: 8,
+                  borderRadius: 999,
+                  backgroundColor: "rgba(239,68,68,0.12)",
+                  borderWidth: 1,
+                  borderColor: "rgba(239,68,68,0.25)",
+                }}
+              >
+                <Text style={{ color: "#ef4444", fontWeight: "900", fontSize: 11 }}>
+                  LIVE
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={{ color: colors.subtext }}>
+              {i18n.t("nhl.schedule.startAt", {
+                defaultValue: "Début: {{t}}",
+                t: fmtTimeToronto(item.startTimeUTC),
+              })}
+            </Text>
+          )}
         </View>
       </View>
-
-      {/* Heure */}
-      <Text style={{ color: colors.subtext, marginTop: 8 }}>
-        {i18n.t("nhl.schedule.startAt", {
-          defaultValue: "Début: {{t}}",
-          t: fmtTimeToronto(item.startTimeUTC),
-        })}
-      </Text>
-    </View>
-  );
-};
+    );
+  };
 
   return (
     <>
@@ -336,13 +522,11 @@ const renderRow = ({ item }) => {
           </View>
         ) : null}
 
-        {/* Calendrier */}
         <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
           <Calendar
             current={selectedYmd}
             onDayPress={(day) => setSelectedYmd(day.dateString)}
             onMonthChange={(m) => {
-              // m.dateString = YYYY-MM-DD (1er du mois en général)
               setVisibleMonthYmd(m.dateString);
             }}
             markedDates={markedDates}
@@ -360,13 +544,16 @@ const renderRow = ({ item }) => {
           />
         </View>
 
-        {/* Liste des matchs du jour */}
         <FlatList
           data={games}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
           }
           ListHeaderComponent={() => (
             <View style={{ marginBottom: 12 }}>
@@ -381,7 +568,9 @@ const renderRow = ({ item }) => {
           ListEmptyComponent={() => (
             <View style={{ marginTop: 16, alignItems: "center" }}>
               <Text style={{ color: colors.subtext }}>
-                {i18n.t("nhl.schedule.emptyForDay", { defaultValue: "Aucun match pour cette journée." })}
+                {i18n.t("nhl.schedule.emptyForDay", {
+                  defaultValue: "Aucun match pour cette journée.",
+                })}
               </Text>
             </View>
           )}

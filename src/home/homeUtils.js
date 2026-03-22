@@ -137,3 +137,13 @@ export function ascensionIconSource(ascKey) {
   if (k === "ASC4") return require("@src/assets/asc4.png");
   return null;
 }
+
+export function getSignupDeadlineOrFallback(defi, minutesBeforeFirstGame = 15) {
+  const direct = toDateOrNull(defi?.signupDeadline);
+  if (direct) return direct;
+
+  const firstGame = toDateOrNull(defi?.firstGameUTC);
+  if (!firstGame) return null;
+
+  return new Date(firstGame.getTime() - minutesBeforeFirstGame * 60 * 1000);
+}

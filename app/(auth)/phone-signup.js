@@ -12,6 +12,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import Analytics from '@src/services/analytics';
 
 // i18n
 import i18n from '@src/i18n/i18n';
@@ -101,6 +102,9 @@ export default function PhoneSignUpScreen() {
       }
 
       setBusy(true);
+
+      Analytics.authStart("sms");
+
       const confirmation = await auth().signInWithPhoneNumber(normalized, true);
       confirmationRef.current = confirmation;
 
@@ -156,7 +160,13 @@ export default function PhoneSignUpScreen() {
       }
 
       const cred = await confirmation.confirm(code.trim());
+      Analytics.authSuccess("sms");
       const user = cred?.user || auth().currentUser;
+      if (user?.uid) {
+        Analytics.setUserId(user.uid);
+        Analytics.setUserProperty("auth_method", "sms");
+      }
+
       if (!user) {
         throw new Error(
           i18n.t('auth.phoneSignup.errors.userUnavailable', {

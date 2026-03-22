@@ -1,5 +1,5 @@
 // app/(drawer)/(tabs)/SportHubScreen.js
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -55,6 +55,7 @@ function BigBtn({ icon, title, subtitle, onPress, colors }) {
       >
         {icon}
       </View>
+
       <View style={{ flex: 1 }}>
         <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
           {title}
@@ -63,6 +64,7 @@ function BigBtn({ icon, title, subtitle, onPress, colors }) {
           {subtitle}
         </Text>
       </View>
+
       <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
     </TouchableOpacity>
   );
@@ -75,14 +77,20 @@ export default function SportsHubScreen() {
   const [sport, setSport] = useState("nhl"); // 'nhl' | 'mlb'
 
   const title = i18n.t("sports.hub.title", { defaultValue: "Sports" });
-
   const isNhl = sport === "nhl";
 
   return (
     <>
       <Stack.Screen options={{ title }} />
 
-      <View style={{ flex: 1, backgroundColor: colors.background, padding: 16, gap: 14 }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.background,
+          padding: 16,
+          gap: 14,
+        }}
+      >
         {/* Sport selector */}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pill
@@ -104,8 +112,15 @@ export default function SportsHubScreen() {
           colors={colors}
           icon={<Ionicons name="flash-outline" size={20} color={colors.text} />}
           title={i18n.t("sports.hub.live", { defaultValue: "Match Live" })}
-          subtitle={isNhl ? i18n.t("sports.hub.liveNhl", { defaultValue: "Scores & buts en temps réel" })
-                          : i18n.t("sports.hub.liveMlb", { defaultValue: "Bientôt disponible" })}
+          subtitle={
+            isNhl
+              ? i18n.t("sports.hub.liveNhl", {
+                  defaultValue: "Scores & buts en temps réel",
+                })
+              : i18n.t("sports.hub.liveMlb", {
+                  defaultValue: "Bientôt disponible",
+                })
+          }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/MatchLiveScreen");
             else router.push("/(drawer)/sports/MlbComingSoon");
@@ -116,8 +131,15 @@ export default function SportsHubScreen() {
           colors={colors}
           icon={<Ionicons name="trophy-outline" size={20} color={colors.text} />}
           title={i18n.t("sports.hub.standings", { defaultValue: "Classement" })}
-          subtitle={isNhl ? i18n.t("sports.hub.standingsNhl", { defaultValue: "Classement officiel NHL" })
-                          : i18n.t("sports.hub.standingsMlb", { defaultValue: "Bientôt disponible" })}
+          subtitle={
+            isNhl
+              ? i18n.t("sports.hub.standingsNhl", {
+                  defaultValue: "Classement officiel NHL",
+                })
+              : i18n.t("sports.hub.standingsMlb", {
+                  defaultValue: "Bientôt disponible",
+                })
+          }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/NhlStandingsScreen");
             else router.push("/(drawer)/sports/MlbComingSoon");
@@ -128,10 +150,36 @@ export default function SportsHubScreen() {
           colors={colors}
           icon={<Ionicons name="calendar-outline" size={20} color={colors.text} />}
           title={i18n.t("sports.hub.schedule", { defaultValue: "Calendrier" })}
-          subtitle={isNhl ? i18n.t("sports.hub.scheduleNhl", { defaultValue: "Matchs de la journée" })
-                          : i18n.t("sports.hub.scheduleMlb", { defaultValue: "Bientôt disponible" })}
+          subtitle={
+            isNhl
+              ? i18n.t("sports.hub.scheduleNhl", {
+                  defaultValue: "Matchs de la journée",
+                })
+              : i18n.t("sports.hub.scheduleMlb", {
+                  defaultValue: "Bientôt disponible",
+                })
+          }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/NhlScheduleScreen");
+            else router.push("/(drawer)/sports/MlbComingSoon");
+          }}
+        />
+
+        <BigBtn
+          colors={colors}
+          icon={<Ionicons name="bar-chart-outline" size={20} color={colors.text} />}
+          title={i18n.t("sports.hub.leaders", { defaultValue: "Leaders" })}
+          subtitle={
+            isNhl
+              ? i18n.t("sports.hub.leadersNhl", {
+                  defaultValue: "Liste des joueurs et statistiques",
+                })
+              : i18n.t("sports.hub.leadersMlb", {
+                  defaultValue: "Bientôt disponible",
+                })
+          }
+          onPress={() => {
+            if (isNhl) router.push("/(drawer)/sports/NhlSkaterLeadersScreen");
             else router.push("/(drawer)/sports/MlbComingSoon");
           }}
         />

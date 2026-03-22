@@ -214,6 +214,7 @@ export const onFirstGoalCandidateFromGoalCreated_mutualized = onDocumentCreated(
           teamAbbr: first.teamAbbr || null,
           period: first.period ?? null,
           timeInPeriod: first.timeInPeriod || null,
+          periodType: first.periodType || null,
           observedAt: FieldValue.serverTimestamp(),
           revealAfterSeconds: REVEAL_DELAY_SECONDS,
         },
@@ -265,23 +266,86 @@ export const confirmPendingFirstGoalsGames_mutualized = onSchedule(
       const revealAt = fg.revealAt?.toDate?.() || null;
       const finalReviewAt = fg.finalReviewAt?.toDate?.() || null;
 
-      if (!gameId || !candidate?.goalId) {
-        await fgRef.set(
-          {
-            status: "none",
-            candidate: FieldValue.delete(),
-            revealAt: FieldValue.delete(),
-            finalReviewAt: FieldValue.delete(),
-            provisionalAt: FieldValue.delete(),
-            confirmedAt: FieldValue.delete(),
-            result: FieldValue.delete(),
-            message: "État invalide. Reset.",
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        continue;
-      }
+if (!gameId) {
+  await fgRef.set(
+    {
+      status: "none",
+      candidate: FieldValue.delete(),
+      revealAt: FieldValue.delete(),
+      finalReviewAt: FieldValue.delete(),
+      provisionalAt: FieldValue.delete(),
+      confirmedAt: FieldValue.delete(),
+      result: FieldValue.delete(),
+      message: "État invalide. Reset.",
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  continue;
+}
+
+  if (!candidate?.goalId) {
+    let rebuiltFirst = null;
+
+    try {
+      rebuiltFirst = await computeFirstValidGoalFromGoals(gameId);
+    } catch (e) {
+      logger.warn("[FG-M] auto-rebuild candidate failed", {
+        gameId,
+        err: String(e?.message || e),
+      });
+    }
+
+    if (!rebuiltFirst) {
+      await fgRef.set(
+        {
+          status: "none",
+          candidate: FieldValue.delete(),
+          revealAt: FieldValue.delete(),
+          finalReviewAt: FieldValue.delete(),
+          provisionalAt: FieldValue.delete(),
+          confirmedAt: FieldValue.delete(),
+          result: FieldValue.delete(),
+          message: "État invalide. Reset.",
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      continue;
+    }
+
+    // ✅ réparation manuelle accélérée :
+    // au prochain tick, le scheduler pourra aller rapidement vers provisional/confirmed
+    const revealAt2 = new Date(now.getTime() - 5 * 1000);
+    const finalReviewAt2 = new Date(now.getTime() - 5 * 1000);
+
+    await fgRef.set(
+      {
+        status: "pending",
+        revealAt: Timestamp.fromDate(revealAt2),
+        finalReviewAt: Timestamp.fromDate(finalReviewAt2),
+        candidate: {
+          goalId: String(rebuiltFirst.goalId),
+          scoringPlayerId: rebuiltFirst.scoringPlayerId || null,
+          scoringPlayerName: rebuiltFirst.scoringPlayerName || null,
+          teamAbbr: rebuiltFirst.teamAbbr || null,
+          period: rebuiltFirst.period ?? null,
+          timeInPeriod: rebuiltFirst.timeInPeriod || null,
+          periodType: rebuiltFirst.periodType || null,
+          observedAt: FieldValue.serverTimestamp(),
+          revealAfterSeconds: REVEAL_DELAY_SECONDS,
+        },
+        provisionalAt: FieldValue.delete(),
+        confirmedAt: FieldValue.delete(),
+        result: FieldValue.delete(),
+        message: "Candidat premier but reconstruit automatiquement.",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    continue;
+  }
 
       // garde-fou âge max
       const observedAt = candidate.observedAt?.toDate?.() || null;
@@ -396,20 +460,37 @@ export const confirmPendingFirstGoalsGames_mutualized = onSchedule(
 
       // candidate toujours le même?
       const sameGoal = String(currentFirst.goalId) === String(candidate.goalId);
+    
       if (!sameGoal) {
-        // on reset et on attend le “bon” premier but (le prochain goalCreated remettra un candidate)
+        // ✅ on relance vite avec le nouveau vrai premier but
+        const revealAt2 = new Date(now.getTime() - 5 * 1000);
+        const finalReviewAt2 = new Date(now.getTime() - 5 * 1000);
+
         await fgRef.set(
           {
-            status: "none",
-            candidate: FieldValue.delete(),
-            revealAt: FieldValue.delete(),
-            finalReviewAt: FieldValue.delete(),
+            status: "pending",
+            revealAt: Timestamp.fromDate(revealAt2),
+            finalReviewAt: Timestamp.fromDate(finalReviewAt2),
+            candidate: {
+              goalId: String(currentFirst.goalId),
+              scoringPlayerId: currentFirst.scoringPlayerId || null,
+              scoringPlayerName: currentFirst.scoringPlayerName || null,
+              teamAbbr: currentFirst.teamAbbr || null,
+              period: currentFirst.period ?? null,
+              timeInPeriod: currentFirst.timeInPeriod || null,
+              periodType: currentFirst.periodType || null,
+              observedAt: FieldValue.serverTimestamp(),
+              revealAfterSeconds: REVEAL_DELAY_SECONDS,
+            },
             provisionalAt: FieldValue.delete(),
-            message: "Premier but ajusté par la ligue. Reset en attente du bon événement.",
+            confirmedAt: FieldValue.delete(),
+            result: FieldValue.delete(),
+            message: "Premier but ajusté par la ligue. Nouveau candidat détecté.",
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
+
         continue;
       }
 

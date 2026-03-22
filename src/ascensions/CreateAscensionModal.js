@@ -10,6 +10,7 @@ import useEntitlement from "../../app/(drawer)/subscriptions/useEntitlement";
 import { Ionicons } from "@expo/vector-icons";
 import { createAscension } from "@src/ascensions/api";
 import NovaBubble from "@src/ui/NovaBubble";
+import Analytics from "@src/services/analytics";
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -500,64 +501,71 @@ export default function CreateAscensionModal({
     (step === 2 && !canGoNextFromStep2) ||
     (step === 3 && !canGoNextFromStep3);
 
+
   async function handleCreateAscension() {
-    if (!user?.uid) return;
-    if (!selectedGroupId) return;
+      if (!user?.uid) return;
+      if (!selectedGroupId) return;
 
-    if (!canCreate) {
-      Alert.alert(
-        i18n.t("ascension.create.alert.cannot.title", { defaultValue: "Impossible de créer" }),
-        i18n.t("ascension.create.alert.cannot.body", { defaultValue: "Vérifie les étapes et réessaie." })
-      );
-      return;
-    }
+      if (!canCreate) {
+        Alert.alert(
+          i18n.t("ascension.create.alert.cannot.title", { defaultValue: "Impossible de créer" }),
+          i18n.t("ascension.create.alert.cannot.body", { defaultValue: "Vérifie les étapes et réessaie." })
+        );
+        return;
+      }
 
-    setCreating(true);
+      setCreating(true);
 
-    try {
-      const res = await createAscension({
-        groupId: selectedGroupId,
-        startDateYmd, // ✅ demain
-      });
+      try {
+        const res = await createAscension({
+          groupId: selectedGroupId,
+          startDateYmd,
+        });
+
+        if (!res?.ok) {
+          Alert.alert(
+            i18n.t("ascension.create.alert.error.title", { defaultValue: "Création impossible" }),
+            i18n.t("common.genericError", { defaultValue: "Une erreur est survenue. Veuillez réessayer." })
+          );
+          return;
+        }
+
+        Analytics.createChallenge({
+          type: "ascension",
+          groupId: String(selectedGroupId),
+          startDate: String(startDateYmd),
+          ascKey: String(res?.ascKey || "ASC7"),
+        });
 
         setSuccessPayload(res);
         setSuccessVisible(true);
 
         Alert.alert(
-            "Ascension créée ✅",
-            `Ton ascension ${res.ascKey} a été créée et démarrera le (${res.runId}).`,
-            [
+          "Ascension créée ✅",
+          `Ton ascension ${res.ascKey} a été créée avec succès et démarrera le (${res.runId}).`,
+          [
             {
-                text: "OK",
-                onPress: () => {
+              text: "OK",
+              onPress: () => {
                 setSuccessVisible(false);
-                // 👇 voir étape 2
                 onCreated?.(res?.defiId || null, { justCreatedAsc: true, ...res });
-                },
+              },
             },
-            ]
+          ]
         );
 
-      if (!res?.ok) {
+        onClose?.();
+      
+      } catch (e) {
         Alert.alert(
           i18n.t("ascension.create.alert.error.title", { defaultValue: "Création impossible" }),
-          i18n.t("common.genericError", { defaultValue: "Une erreur est survenue. Veuillez réessayer." })
+          e?.message || i18n.t("common.genericError", { defaultValue: "Une erreur est survenue. Veuillez réessayer." })
         );
-        return;
+        console.warn("[createAscension] err", { code: e?.code, message: e?.message, raw: e });
+      } finally {
+        setCreating(false);
       }
-
-      onClose?.();
-      onCreated?.(res);
-    } catch (e) {
-      Alert.alert(
-        i18n.t("ascension.create.alert.error.title", { defaultValue: "Création impossible" }),
-        e?.message || i18n.t("common.genericError", { defaultValue: "Une erreur est survenue. Veuillez réessayer." })
-      );
-      console.warn("[createAscension] err", { code: e?.code, message: e?.message, raw: e });
-    } finally {
-      setCreating(false);
     }
-  }
 
   const handleClose = useCallback(() => {
     setStep(1);

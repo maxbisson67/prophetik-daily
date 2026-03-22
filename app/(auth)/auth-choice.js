@@ -126,14 +126,14 @@ export default function AuthChoiceScreen() {
             icon={<Ionicons name="chatbubble-ellipses-outline" size={20} color="#111827" />}
           />
 
-          {/* 3) Email password (temp) */}
+          {/* 3) Email password (temp) 
           <Button
             variant="outline"
             onPress={() => router.push("/(auth)/email-login")}
             label={continueEmail}
             testID="btn-continue-email"
             icon={<Ionicons name="mail-outline" size={20} color="#111827" />}
-          />
+          />*/}
 
           <View
             style={{

@@ -18,6 +18,8 @@ import i18n from "@src/i18n/i18n";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { TeamLogo } from "@src/nhl/nhlAssets";
 import functions from "@react-native-firebase/functions";
+import { useLanguage } from "@src/i18n/LanguageProvider";
+import Analytics from "@src/services/analytics";
 
 /* ---------------- helpers ---------------- */
 
@@ -283,7 +285,7 @@ const PlayerRow = React.memo(function PlayerRow({
               fontWeight: "800",
             }}
           >
-            Ma sélection
+            {i18n.t("firstGoal.pick.mySelection", { defaultValue: "Ma sélection" })}
           </Text>
         ) : (
           <View style={{ height: 16, marginTop: 2 }} />
@@ -335,6 +337,7 @@ async function buildIdentityForEntry(user) {
 export default function FirstGoalPickScreen() {
   const { challengeId } = useLocalSearchParams();
   const { user } = useAuth();
+  const { lang } = useLanguage();
   const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -419,6 +422,7 @@ export default function FirstGoalPickScreen() {
   /* ---------------- load players ---------------- */
 
   useEffect(() => {
+
     const home = safeAbbr(challenge?.homeAbbr);
     const away = safeAbbr(challenge?.awayAbbr);
     if (!home || !away) return;
@@ -476,7 +480,7 @@ export default function FirstGoalPickScreen() {
       ? locked
         ? `🎯 ${i18n.t("firstGoal.pick.alreadyPicked", { defaultValue: "Ton choix est verrouillé" })}`
         : `✏️ ${i18n.t("firstGoal.pick.editUntil", { defaultValue: "Tu peux modifier ton choix jusqu’à" })} ${
-            cutoffHm || ""
+            cutoffHm || "" 
           }`
       : locked
       ? `⏱️ ${i18n.t("firstGoal.pick.locked", { defaultValue: "Le défi est verrouillé" })}`
@@ -498,7 +502,7 @@ export default function FirstGoalPickScreen() {
       cutoffHm,
       canEditPick,
     };
-  }, [challenge, entry]);
+  }, [challenge, entry, lang]);
 
   // init toggle (une seule fois quand on a away/home)
   useEffect(() => {
@@ -598,6 +602,14 @@ function strOrNull(v) {
 
         const isFirst = !!res?.data?.isFirstParticipation;
 
+        Analytics.submitPick({
+          challengeType: "fgc",
+          challengeId: String(cid),
+          playerId: String(playerId),
+          teamAbbr: teamAbbr || undefined,
+          isFirstPick: isFirst,
+        });
+
         Alert.alert(
           i18n.t("firstGoal.pick.successTitle", { defaultValue: "Choix enregistré" }),
           isFirst
@@ -632,7 +644,7 @@ function strOrNull(v) {
         selectedPlayerId={entry?.playerId}
       />
     ),
-    [derived.locked, saving, pickPlayer, colors, entry?.playerId]
+    [derived.locked, saving, pickPlayer, colors, entry?.playerId,lang]
   );
 
   const ItemSeparator = useCallback(() => <View style={{ height: 10 }} />, []);
@@ -680,7 +692,7 @@ function strOrNull(v) {
         />
       </View>
     );
-  }, [colors, derived.away, derived.home, derived.startHm, selectedTeam, challenge?.participantsCount]);
+  }, [colors, derived.away, derived.home, derived.startHm, selectedTeam, challenge?.participantsCount,lang]);
 
   /* ---------------- render ---------------- */
 

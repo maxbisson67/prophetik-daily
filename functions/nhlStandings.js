@@ -67,7 +67,7 @@ export const updateNhlStandingsNow = onCall(
    Scheduled refresh
 ========================= */
 export const refreshNhlStandings = onSchedule(
-  { schedule: "every 120 minutes", region: "us-central1" },
+  { schedule: "every 30 minutes", region: "us-central1" },
   async () => {
     try {
       const data = await fetchStandings();
