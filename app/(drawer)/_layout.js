@@ -266,6 +266,18 @@ function CustomDrawerContent(props) {
         )}
       />
       */}
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t('drawer.playoffs', { defaultValue: 'Playoffs' })}
+        onPress={() => {
+          props.navigation.dispatch(DrawerActions.closeDrawer());
+          requestAnimationFrame(() => router.push('/(drawer)/playoffs'));
+        }}
+        icon={({ size }) => (
+          <Ionicons name="flame-outline" size={size} color={colors.text} />
+        )}
+      />
     
       <DrawerItem
         {...itemCommonProps}

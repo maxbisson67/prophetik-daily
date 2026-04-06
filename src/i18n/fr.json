@@ -219,10 +219,10 @@
       "activeChallenges": "Défis actifs",
       "unknownGroup": "Groupe",
       "totalPot": "Gain potentiel",
-      "todayChallenge": "Mes défis Standards",
+      "todayChallenge": "Défis top scoreurs",
       "challenge": "Défi",
-      "todayChallengeInfoTitle": "C’est quoi le défi Standard?",
-      "todayChallengeInfoBody":"Chaque défi Standard te demande de choisir un certain nombre de joueurs selon le format (ex. 2x2, 3x3). Tes joueurs accumulent des points réels selon leurs performances, et le meilleur total remporte le défi.",
+      "todayChallengeInfoTitle": "C’est quoi le défi top scoreurs?",
+      "todayChallengeInfoBody":"Chaque défi top scoreurs te demande de choisir un certain nombre de joueurs selon le format (ex. 2x2, 3x3). Tes joueurs accumulent des points réels selon leurs performances, et le meilleur total remporte le défi.",
       "create":"Créer",
       "challengeDate": "Date NHL",
       "challengeLimit": "Limite d’inscription :",
@@ -292,7 +292,7 @@
     },
     "firstGoal": {
       "home": {
-        "title": "Mes défis Premier but",
+        "title": "Défis premier but",
         "empty": "Aucun défi premier but aujourd'hui dans tes groupes",
         "signupDeadline": "Heure limite d'inscription",
         "infoTitle":"Comment fonctionne ce défi?",
@@ -1068,7 +1068,7 @@
     "profile": {
       "title": "Profil",
 
-      "chooseAvatarCta": "🎨 Choisir un avatar",
+      "chooseAvatarCta": "🎨 Choisir un Jersey",
 
       "displayNameLabel": "Nom d’affichage",
       "displayNamePlaceholder": "Ton nom",

@@ -91,7 +91,6 @@ export default function SportsHubScreen() {
           gap: 14,
         }}
       >
-        {/* Sport selector */}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pill
             active={sport === "nhl"}
@@ -107,7 +106,6 @@ export default function SportsHubScreen() {
           />
         </View>
 
-        {/* Actions */}
         <BigBtn
           colors={colors}
           icon={<Ionicons name="flash-outline" size={20} color={colors.text} />}
@@ -137,12 +135,12 @@ export default function SportsHubScreen() {
                   defaultValue: "Classement officiel NHL",
                 })
               : i18n.t("sports.hub.standingsMlb", {
-                  defaultValue: "Bientôt disponible",
+                  defaultValue: "Classement MLB",
                 })
           }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/NhlStandingsScreen");
-            else router.push("/(drawer)/sports/MlbComingSoon");
+            else router.push("/(drawer)/sports/MlbStandingsScreen");
           }}
         />
 
@@ -156,12 +154,12 @@ export default function SportsHubScreen() {
                   defaultValue: "Matchs de la journée",
                 })
               : i18n.t("sports.hub.scheduleMlb", {
-                  defaultValue: "Bientôt disponible",
+                  defaultValue: "Calendrier MLB",
                 })
           }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/NhlScheduleScreen");
-            else router.push("/(drawer)/sports/MlbComingSoon");
+            else router.push("/(drawer)/sports/MlbScheduleScreen");
           }}
         />
 

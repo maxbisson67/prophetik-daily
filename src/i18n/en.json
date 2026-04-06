@@ -225,9 +225,9 @@
     "activeChallenges": "Active challenges",
     "unknownGroup": "Group",
     "totalPot": "Potential Winnings",
-    "todayChallenge": "My Standard Challenges",
-    "todayChallengeInfoTitle": "What is the Standard challenge?",
-    "todayChallengeInfoBody": "Each Standard challenge asks you to pick a certain number of players based on the format (e.g., 2x2, 3x3). Your players earn real points based on their performance, and the highest total wins the challenge.",
+    "todayChallenge": "Top scores Challenges",
+    "todayChallengeInfoTitle": "What is the top scores challenge?",
+    "todayChallengeInfoBody": "Each top scores challenge asks you to pick a certain number of players based on the format (e.g., 2x2, 3x3). Your players earn real points based on their performance, and the highest total wins the challenge.",
     "create":"Create",
     "challenge": "Challenge",
     "challengeDate": "NHL date",
@@ -1084,7 +1084,7 @@
   "profile": {
     "title": "Profile",
 
-    "chooseAvatarCta": "🎨 Choose an avatar",
+    "chooseAvatarCta": "🎨 Choose a Jersey",
 
     "displayNameLabel": "Display name",
     "displayNamePlaceholder": "Your name",

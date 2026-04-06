@@ -11,6 +11,13 @@ import {
   Alert,
 } from "react-native";
 
+import useAppUpdateCheck from "@src/hooks/useAppUpdateCheck";
+import ProphetikUpdateBanner from "@src/home/components/ProphetikUpdateBanner";
+
+import CreateTeamPredictionModal from "@src/defis/CreateTeamPredictionModal";
+
+import TeamPredictionHomeSection from "@src/defis/TeamPredictionHomeSection";
+
 import CreateFirstGoalModal from "@src/firstGoal/CreateFirstGoalModal";
 import FirstGoalHomeSection from "@src/firstGoal/FirstGoalHomeSection";
 
@@ -364,6 +371,13 @@ function InfoBubbleAscension({ colors }) {
   );
 }
 
+function isTsDefi(item) {
+  const typeNum = Number(item?.type);
+  return (
+    (typeNum >= 1 && typeNum <= 7)
+  )
+}
+
 
 /* =========================
    SCREEN
@@ -397,22 +411,8 @@ export default function AccueilScreen() {
 
   const { season } = useCurrentSeason();
   const seasonId = season?.seasonId;
-
-  // Ascension
-  const [ascModalVisible, setAscModalVisible] = useState(false);
-  const asc7 = useAscensionGlobalState({ groupId: currentGroupId, ascKey: "ASC7" });
-
-  const asc7PointsBonisTotal = asc7?.state?.jackpotTotal ?? 0; // (ton champ actuel; on l’affiche comme “Points bonis”)
-  const asc7InProgress = useMemo(() => {
-    const st = asc7?.state || null;
-    if (!st) return false;
-    if (st.enabled === false) return false;
-    if (!st.activeRunId) return false;
-    return st.completed !== true;
-  }, [asc7?.state]);
   
 
-  const [ascProgressOpen, setAscProgressOpen] = useState(false);
   const [showFirstGoalModal, setShowFirstGoalModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -420,66 +420,26 @@ export default function AccueilScreen() {
 
   const [hasFirstGoalForGroup, setHasFirstGoalForGroup] = useState(false);
 
-  const [asc7Member, setAsc7Member] = useState(null);
   const [loadingAsc7Member, setLoadingAsc7Member] = useState(false);
+
+  const {
+    loading: loadingAppUpdate,
+    updateAvailable,
+    forceUpdate,
+    message: updateMessage,
+    currentVersion,
+    latestVersion,
+    storeUrl,
+  } = useAppUpdateCheck();
+
+const [hideUpdateBanner, setHideUpdateBanner] = useState(false);
+
+const [showTeamPredictionModal, setShowTeamPredictionModal] = useState(false);
+
+const [hasTeamPredictionForGroup, setHasTeamPredictionForGroup] = useState(false);
+
+const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   
-  useEffect(() => {
-    if (params?.cold === "1") setError(null);
-  }, [params?.t, params?.cold]);
-
-  useEffect(() => {
-    if (!authReady || !user?.uid || !currentGroupId) return;
-
-    const runId = asc7?.state?.activeRunId ? String(asc7.state.activeRunId) : null;
-
-    // important: si pas de run actif, on nettoie
-    if (!runId) {
-      setAsc7Member(null);
-      setLoadingAsc7Member(false);
-      return;
-    }
-
-    setAsc7Member(null);          // évite d’afficher une vieille progression
-    setLoadingAsc7Member(true);
-
-    const ref = firestore()
-      .collection("groups").doc(String(currentGroupId))
-      .collection("ascensions").doc("ASC7")
-      .collection("runs").doc(runId)
-      .collection("members").doc(String(user.uid));
-
-    const un = listenRNFB(
-      ref,
-      (snap) => {
-        const data = snap?.data?.() || null;
-        setAsc7Member(data);
-        setLoadingAsc7Member(false);
-      },
-      `asc7:member:${currentGroupId}:${runId}:${user.uid}`,
-      (e) => {
-        setLoadingAsc7Member(false);
-        setAsc7Member(null);
-        setError(e);
-      },
-      { logAttach: true }
-    );
-
-    return () => { try { un?.(); } catch {} };
-  }, [authReady, user?.uid, currentGroupId, asc7?.state?.activeRunId]);
-
-  const asc7Progress = useMemo(() => {
-    const w =
-      asc7Member?.winsByType && typeof asc7Member.winsByType === "object"
-        ? asc7Member.winsByType
-        : {};
-
-    let stepsDone = 0;
-    for (let i = 1; i <= 7; i++) {
-      if ((w[String(i)] ?? 0) >= 1) stepsDone++;
-    }
-
-    return { stepsDone, maxSteps: 7, winsByType: w };
-  }, [asc7Member]);
 
   // day tick
   const [dayTick, setDayTick] = useState(0);
@@ -512,6 +472,39 @@ export default function AccueilScreen() {
 
   // Participant doc
   const { meDoc, error: meError } = useMeDoc({ authReady, uid: user?.uid, dayTick });
+
+  const avatarKind = meDoc?.avatarKind || null;
+
+  const jerseyFrontUrl = meDoc?.jerseyFrontUrl || null;
+  const jerseyBackUrl = meDoc?.jerseyBackUrl || null;
+
+  const [roleBadge, setRoleBadge] = useState(null);
+
+  useEffect(() => {
+    if (!authReady || !user?.uid || !currentGroupId) {
+      setRoleBadge(null);
+      return;
+    }
+
+    const ref = firestore().doc(`group_memberships/${currentGroupId}_${user.uid}`);
+
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        const data = snap?.data?.() || {};
+        setRoleBadge(data.roleBadge || null);
+      },
+      (err) => {
+        console.log("[HOME] roleBadge error", err?.message || err);
+        setRoleBadge(null);
+      }
+    );
+
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
+  }, [authReady, user?.uid, currentGroupId]);
 
   // Groups list
   useEffect(() => {
@@ -650,6 +643,7 @@ export default function AccueilScreen() {
               createdBy: data.createdBy || null,
               status: data.status || null,
               fgcBonus: Number(data.fgcBonus ?? 1),
+              tpBonus: Number(data.tpBonus ?? 0),
             },
           }));
         },
@@ -768,53 +762,106 @@ export default function AccueilScreen() {
     };
   }, [authReady, user?.uid, currentGroupId]);
 
+  // Les participations du user
+  useEffect(() => {
+    if (!authReady || !user?.uid) {
+      setMyParticipationsByDefiId({});
+      return;
+    }
+
+    const visibleTsDefis = (normalDefisBase || [])
+      .filter((d) => isTsDefi(d))
+      .slice(0, 6);
+
+    if (!visibleTsDefis.length) {
+      setMyParticipationsByDefiId({});
+      return;
+    }
+
+    const unsubs = [];
+
+    visibleTsDefis.forEach((defi) => {
+      const defiId = String(defi?.id || "").trim();
+      if (!defiId) return;
+
+      const ref = firestore()
+        .collection("defis")
+        .doc(defiId)
+        .collection("participations")
+        .doc(String(user.uid));
+
+      const unsub = ref.onSnapshot(
+        (snap) => {
+          const data = snap?.exists ? snap.data() || null : null;
+
+          setMyParticipationsByDefiId((prev) => ({
+            ...prev,
+            [defiId]: data,
+          }));
+        },
+        (err) => {
+          console.log("[HOME] TS participation error", defiId, err?.message || err);
+
+          setMyParticipationsByDefiId((prev) => ({
+            ...prev,
+            [defiId]: null,
+          }));
+        }
+      );
+
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
+  }, [authReady, user?.uid, normalDefisBase]);
+
   // Derived
   const combinedError = error || meError;
 
+ const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
 
-  const avatarUrl =
-    meDoc?.photoURL ??
-    meDoc?.photoUrl ??
-    meDoc?.avatarUrl ??
-    meDoc?.avatar?.url ??
-    user?.photoURL ??
-    null;
+const isCurrentGroupOwner =
+  !!user?.uid &&
+  !!currentGroupMeta &&
+  (currentGroupMeta.ownerId === user.uid || currentGroupMeta.createdBy === user.uid); 
+
+const avatarUrl =
+  meDoc?.avatarKind === "jersey"
+    ? meDoc?.jerseyFrontUrl || meDoc?.avatarUrl || null
+    : meDoc?.avatarUrl ??
+      meDoc?.photoURL ??
+      meDoc?.photoUrl ??
+      meDoc?.avatar?.url ??
+      user?.photoURL ??
+      null;
 
   const ascensionDefis = useMemo(() => {
   const rows = Array.isArray(activeDefis) ? activeDefis : [];
     return rows.filter((d) => isAscensionDefi?.(d));
   }, [activeDefis]);
 
-  const normalDefis = useMemo(() => {
+  const normalDefisBase = useMemo(() => {
     const rows = Array.isArray(activeDefis) ? activeDefis : [];
     return rows.filter((d) => !isAscensionDefi?.(d));
   }, [activeDefis]);
 
-  // ✅ choix du “défi ascension” à afficher
-  const asc7Defi = useMemo(() => {
-    if (!ascensionDefis.length) return null;
+  const hasTsForGroup = useMemo(() => {
+    return (normalDefisBase || []).some((d) => isTsDefi(d));
+  }, [normalDefisBase]);
 
-    // Priorité: live, sinon open
-    const live = ascensionDefis.find((d) => String(d.status || "").toLowerCase() === "live");
-    if (live) return live;
+  const normalDefis = useMemo(() => {
+    return (normalDefisBase || []).map((defi) => ({
+      ...defi,
+      myParticipation: myParticipationsByDefiId[String(defi.id)] || null,
+    }));
+  }, [normalDefisBase, myParticipationsByDefiId]);
 
-    // Sinon le plus proche (signupDeadline / firstGameUTC / createdAt)
-    const sorted = [...ascensionDefis].sort((a, b) => {
-      const ta =
-        (a.signupDeadline?.toDate?.() ??
-          a.firstGameUTC?.toDate?.() ??
-          a.createdAt?.toDate?.() ??
-          0).valueOf?.() || 0;
-      const tb =
-        (b.signupDeadline?.toDate?.() ??
-          b.firstGameUTC?.toDate?.() ??
-          b.createdAt?.toDate?.() ??
-          0).valueOf?.() || 0;
-      return ta - tb;
-    });
-
-    return sorted[0] || null;
-  }, [ascensionDefis]);
 
   const userGroups = useMemo(
     () =>
@@ -828,12 +875,14 @@ export default function AccueilScreen() {
           ownerId: meta.ownerId || null,
           createdBy: meta.createdBy || null,
           fgcBonus: Number(meta.fgcBonus ?? 1),
+          tpBonus: Number(meta.tpBonus ?? 0),
         };
       }),
     [groupIds.join("|"), JSON.stringify(groupsMeta)]
   );
 
   const favoriteGroupId = meDoc?.favoriteGroupId || null;
+
 
   function requireGroupOrExplain({ onOk }) {
     if (loadingGroups) return false;
@@ -875,13 +924,14 @@ export default function AccueilScreen() {
     requireGroupOrExplain({ onOk: () => setShowFirstGoalModal(true) });
   };
 
-  const onPressCreateAscension = () => {
-    requireGroupOrExplain({ onOk: () => setAscModalVisible(true) });
-  };
 
   function onSelectGroup(gid) {
     setCurrentGroupId(String(gid));
   }
+
+  const onPressCreateTeamPrediction = () => {
+  requireGroupOrExplain({ onOk: () => setShowTeamPredictionModal(true) });
+};
 
   /* ----------------------------- UI ----------------------------- */
   return (
@@ -896,26 +946,26 @@ export default function AccueilScreen() {
         onCreated={() => setShowFirstGoalModal(false)}
       />
 
+      <CreateTeamPredictionModal
+        visible={showTeamPredictionModal}
+        onClose={() => setShowTeamPredictionModal(false)}
+        groups={userGroups}
+        initialGroupId={favoriteGroupId}
+        onCreated={() => {
+          setShowTeamPredictionModal(false);
+          router.replace({
+            pathname: "/(drawer)/(tabs)/AccueilScreen",
+            params: { cold: "1", t: String(Date.now()) },
+          });
+        }}
+      />
+
       <CreateDefiModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         groups={userGroups}
         initialGroupId={favoriteGroupId}
         onCreated={() => setShowCreateModal(false)}
-      />
-
-      <CreateAscensionModal
-        visible={ascModalVisible}
-        onClose={() => setAscModalVisible(false)}
-        groups={userGroups}
-        initialGroupId={currentGroupId}
-        onCreated={() => {
-          setAscModalVisible(false);
-          router.replace({
-            pathname: "/(drawer)/(tabs)/AccueilScreen",
-            params: { cold: "1", t: String(Date.now()) },
-          });
-        }}
       />
 
       <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -944,22 +994,38 @@ export default function AccueilScreen() {
             {/* Header profil */}
             <View style={[cardShadow()]}>
               <View style={sectionCardStyle(colors, RED)}>
-                <ProfileHeaderCard
-                  colors={colors}
-                  avatarUrl={avatarUrl}
-                  displayName={meDoc?.displayName || meDoc?.name}
-                  points={defaultGroupPoints}
-                  onEditAvatar={() => router.push("/avatars/AvatarsScreen")}
-                  onPressPoints={() => router.push("/(drawer)/credits")}
-                  onCreateDefi={onPressCreateDefi}
-                  onCreateAscension={onPressCreateAscension}
-                  onCreateFirstGoal={onPressCreateFirstGoal}
-                  groups={userGroups}
-                  currentGroupId={currentGroupId}
-                  onSelectGroup={onSelectGroup}
-                />
+              <ProfileHeaderCard
+                colors={colors}
+                avatarKind={avatarKind}
+                avatarUrl={avatarUrl}
+                jerseyFrontUrl={jerseyFrontUrl}
+                jerseyBackUrl={jerseyBackUrl}
+                displayName={meDoc?.displayName || meDoc?.name}
+                points={defaultGroupPoints}
+                onEditAvatar={() => router.push("/avatars/JerseysScreen")}
+                onPressPoints={() => router.push("/(drawer)/credits")}
+                onCreateDefi={onPressCreateDefi}
+                onCreateFirstGoal={onPressCreateFirstGoal}
+                groups={userGroups}
+                currentGroupId={currentGroupId}
+                onSelectGroup={onSelectGroup}
+                roleBadge={roleBadge}
+              />
               </View>
             </View>
+
+            {!loadingAppUpdate && updateAvailable && !hideUpdateBanner ? (
+              <ProphetikUpdateBanner
+                colors={colors}
+                visible={true}
+                message={updateMessage}
+                currentVersion={currentVersion}
+                latestVersion={latestVersion}
+                storeUrl={storeUrl}
+                forceUpdate={forceUpdate}
+                onDismiss={() => setHideUpdateBanner(true)}
+              />
+            ) : null}
 
             {/* ✅ “Trois façons…” entre Profil et First Goal + centré */}
             <View style={{ marginTop: 2, marginBottom: 2, alignItems: "center" }}>
@@ -993,16 +1059,53 @@ export default function AccueilScreen() {
               </View>
             </View>
 
-            {/* 2) Défis du jour */}
             <View style={[cardShadow()]}>
               <View style={sectionCardStyle(colors, RED)}>
                 <SectionHeader
                   flat
                   colors={colors}
                   kicker={i18n.t("home.way2", { defaultValue: "Deuxième façon de jouer" })}
+                  leftIcon={<ProphetikIcons mode="emoji" emoji="🏆" size="lg" />}
+                  title={i18n.t("tp.home.title", { defaultValue: "Défi équipe gagnante" })}
+                  subtitle={i18n.t("tp.home.subtitleEmpty", {
+                    defaultValue: "Choisis le gagnant, le score exact et le type de victoire.",
+                  })}
+                  rightAction={
+                    isCurrentGroupOwner && !hasTeamPredictionForGroup ? (
+                      <SectionCreateAction
+                        onPress={onPressCreateTeamPrediction}
+                        label={i18n.t("common.create", { defaultValue: "Créer" })}
+                      />
+                    ) : null
+                  }
+                />
+
+                <TeamPredictionHomeSection
+                  groups={userGroups}
+                  colors={colors}
+                  currentGroupId={currentGroupId}
+                  onHasChallengeChange={setHasTeamPredictionForGroup}
+                />
+              </View>
+            </View>
+
+            {/* 2) Défis du jour */}
+            <View style={[cardShadow()]}>
+              <View style={sectionCardStyle(colors, RED)}>
+                <SectionHeader
+                  flat
+                  colors={colors}
+                  kicker={i18n.t("home.way3", { defaultValue: "Troisième façon de jouer" })}
                   leftIcon={<ProphetikIcons mode="emoji" emoji="🎯" size="lg" />}
                   title={i18n.t("home.todayChallenge", { defaultValue: "Mes défis du jour" })}
-                  rightAction={<SectionCreateAction onPress={onPressCreateDefi} label={i18n.t("common.create")} />}
+                  rightAction={
+                    hasTsForGroup ? null : (
+                      <SectionCreateAction
+                        onPress={onPressCreateDefi}
+                        label={i18n.t("common.create")}
+                      />
+                    )
+                  }
                 />
                 <DefiListSection
                   hideHeader
@@ -1019,74 +1122,6 @@ export default function AccueilScreen() {
               </View>
             </View>
 
-            {/* Modal détails ascension */}
-            <AscensionProgressModal
-              visible={ascProgressOpen}
-              onClose={() => setAscProgressOpen(false)}
-              colors={colors}
-              groupId={currentGroupId}
-              ascKey="ASC7"
-              includeAllGroupMembers={true}
-            />
-
-            {/* 3) ASC7 only */}
-            <View style={[cardShadow()]}>
-              <View style={sectionCardStyle(colors, RED)}>
-                <SectionHeader
-                  flat
-                  colors={colors}
-                  kicker={i18n.t("home.way3", { defaultValue: "Troisième façon de jouer" })}
-                  leftIcon={<ProphetikIcons mode="emoji" emoji="🏔" size="lg" />}
-                  title={i18n.t("ascensions.summit.title", { defaultValue: "Sommet Prophetik" })}
-                  rightAction={
-                    asc7InProgress ? (
-                      <Chip
-                        bg={colors.card2}
-                        fg={colors.text}
-                        icon="progress-clock"
-                        label={i18n.t("home.status.live", { defaultValue: "En cours" })}
-                      />
-                    ) : (
-                      <SectionCreateAction
-                        onPress={onPressCreateAscension}
-                        label={i18n.t("common.create", { defaultValue: "Créer" })}
-                      />
-                    )
-                  }
-                />
-
-                <AscensionHomeCard
-                  colors={colors}
-                  tierLower={tierLower}
-                  title={i18n.t("ascensions.summit.title", { defaultValue: "Sommet Prophetik" })}
-                  inProgress={asc7InProgress}
-                  loadingMember={loadingAsc7Member}
-                  progress={asc7Progress}
-                  pointsBonisTotal={asc7PointsBonisTotal}
-                  defi={asc7Defi}
-                  onPressCreateAscension={onPressCreateAscension}
-                  onPressDefi={() => {
-                    if (!asc7Defi) return;
-                    openDefi(router, asc7Defi);
-                  }}
-                  onPressResults={() => {
-                    const id = String(asc7Defi?.id || "").trim();
-                    if (!id) return;
-
-                    router.push({
-                      pathname: "/(drawer)/defis/[defiId]/results",
-                      params: { defiId: id },
-                    });
-                  }}
-                  onPressDetails={() => setAscProgressOpen(true)}
-                  onPressPast={() => {
-                    if (!currentGroupId) return;
-                    router.push(`/(drawer)/groups/${currentGroupId}/ascensions/history`);
-                  }}
-                  createLabel={i18n.t("common.create", { defaultValue: "Créer" })}
-                />
-              </View>
-            </View>
           </ScrollView>
         )}
       </View>

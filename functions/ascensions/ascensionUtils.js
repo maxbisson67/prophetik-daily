@@ -187,7 +187,7 @@ export async function getFirstGameUtcForGameYmd(gameYmd) {
   return parseStartTimeUTCToDate(g?.startTimeUTC);
 }
 
-export function signupDeadlineFromFirstGame(firstGameUtc, minutesBefore = 60) {
+export function signupDeadlineFromFirstGame(firstGameUtc, minutesBefore = 15) {
   if (!firstGameUtc) return null;
   const ms = firstGameUtc.getTime() - minutesBefore * 60 * 1000;
   return new Date(ms);
@@ -234,7 +234,7 @@ export async function createAscensionDefiIfMissing({
 
   const firstGameUTC = fg.firstGameUTC;
 
-  const signupDeadline = signupDeadlineFromFirstGame(firstGameUTC, 60);
+  const signupDeadline = signupDeadlineFromFirstGame(firstGameUTC, 15);
   const ref = db.doc(`defis/${defiId}`);
 
   await db.runTransaction(async (tx) => {

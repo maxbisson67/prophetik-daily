@@ -112,13 +112,14 @@ function safeDiv(a, b) {
 
 function challengeFamily(defi = {}) {
   const ascKey = String(defi?.ascension?.key || "").toUpperCase();
-  if (ascKey === "ASC7") return "ascension";
+  if (ascKey === "ASC7") return "ascension_legacy"; // ignoré ensuite
 
   const title = String(defi?.title || "").toLowerCase();
   const defiKey = String(defi?.defiKey || "").toLowerCase();
   const mode = String(defi?.mode || "").toLowerCase();
   const category = String(defi?.category || "").toLowerCase();
-  const type = String(defi?.type || "").toLowerCase();
+  const typeRaw = defi?.type;
+  const type = String(typeRaw || "").toLowerCase();
 
   const isFGC =
     type === "first_goal" ||
@@ -131,7 +132,21 @@ function challengeFamily(defi = {}) {
 
   if (isFGC) return "fgc";
 
-  return "standard";
+  const isTP =
+    type === "team_prediction" ||
+    defiKey.includes("tp") ||
+    title.includes("team prediction") ||
+    title.includes("équipe gagnante") ||
+    title.includes("equipe gagnante") ||
+    mode === "tp" ||
+    category === "tp";
+
+  if (isTP) return "tp";
+
+  const nType = Number(typeRaw);
+  if (Number.isFinite(nType) && nType >= 1 && nType <= 7) return "ts";
+
+  return "ts";
 }
 
 function emptyFamilyStats() {
@@ -164,9 +179,9 @@ function makeEmptyAgg(uid) {
 
     // ✅ per family (FGC / standard / ascension)
     families: {
-      fgc: emptyFamilyStats(),
-      standard: emptyFamilyStats(),
-      ascension: emptyFamilyStats(),
+    fgc: emptyFamilyStats(),
+    tp: emptyFamilyStats(),
+    ts: emptyFamilyStats(),
     },
 
     displayName: null,
@@ -242,16 +257,16 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
     .get();
 
   // ✅ summary global pour comparaison future avec moyenne des autres
-  const summary = {
-    membersCount: 0,
-    defisCount: defisSnap.size,
-    fgcCount: 0,
-    totals: {
-      fgc: emptyFamilyStats(),
-      standard: emptyFamilyStats(),
-      ascension: emptyFamilyStats(),
-    },
-  };
+const summary = {
+  membersCount: 0,
+  defisCount: defisSnap.size,
+  fgcCount: 0,
+  totals: {
+    fgc: emptyFamilyStats(),
+    tp: emptyFamilyStats(),
+    ts: emptyFamilyStats(),
+  },
+};
 
   for (const d of defisSnap.docs) {
     const defi = d.data() || {};
@@ -292,15 +307,17 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       incMap(cur.nhlPointsByMonth, monthKey, finalPoints);
       incMap(cur.nhlGamesByMonth, monthKey, picksLen);
 
-      // --- ✅ family aggregates (MVP leaderboard)
-      cur.families[family].plays += 1;
-      cur.families[family].points += toNumber(potInc, 0);
-      if (won) cur.families[family].wins += 1;
+      if (cur.families[family]) {
+        cur.families[family].plays += 1;
+        cur.families[family].points += toNumber(potInc, 0);
+        if (won) cur.families[family].wins += 1;
+      }
 
-      // --- ✅ global summary aggregates
-      summary.totals[family].plays += 1;
-      summary.totals[family].points += toNumber(potInc, 0);
-      if (won) summary.totals[family].wins += 1;
+      if (summary.totals[family]) {
+        summary.totals[family].plays += 1;
+        summary.totals[family].points += toNumber(potInc, 0);
+        if (won) summary.totals[family].wins += 1;
+      }
 
       // --- by format type
       if (!cur.winsByType[tKey]) {
@@ -481,15 +498,15 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       wins: safeDiv(summary.totals.fgc.wins, count),
       plays: safeDiv(summary.totals.fgc.plays, count),
     },
-    standard: {
-      points: safeDiv(summary.totals.standard.points, count),
-      wins: safeDiv(summary.totals.standard.wins, count),
-      plays: safeDiv(summary.totals.standard.plays, count),
+    tp: {
+      points: safeDiv(summary.totals.tp.points, count),
+      wins: safeDiv(summary.totals.tp.wins, count),
+      plays: safeDiv(summary.totals.tp.plays, count),
     },
-    ascension: {
-      points: safeDiv(summary.totals.ascension.points, count),
-      wins: safeDiv(summary.totals.ascension.wins, count),
-      plays: safeDiv(summary.totals.ascension.plays, count),
+    ts: {
+      points: safeDiv(summary.totals.ts.points, count),
+      wins: safeDiv(summary.totals.ts.wins, count),
+      plays: safeDiv(summary.totals.ts.plays, count),
     },
   };
 
@@ -553,15 +570,19 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       }
 
       const fgc = agg.families?.fgc || emptyFamilyStats();
-      const standard = agg.families?.standard || emptyFamilyStats();
-      const ascension = agg.families?.ascension || emptyFamilyStats();
+      const tp = agg.families?.tp || emptyFamilyStats();
+      const ts = agg.families?.ts || emptyFamilyStats();
+
+      const cleanPointsTotal =
+        toNumber(fgc.points, 0) +
+        toNumber(tp.points, 0) +
+        toNumber(ts.points, 0);
 
       batch.set(
         db.doc(`${base}/${uid}`),
         {
           uid,
           displayName: agg.displayName || null,
-
           avatarUrl: agg.avatarUrl || null,
           avatarId: agg.avatarId || null,
 
@@ -569,8 +590,8 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
           wins: agg.wins,
           winRate,
 
-          // ✅ Prophetik global
-          pointsTotal: agg.pointsTotal,
+          // ✅ Prophetik global (sans ascension legacy)
+          pointsTotal: cleanPointsTotal,
           pointsByWeek: agg.pointsByWeek || {},
           winsByWeek: agg.winsByWeek || {},
           pointsByMonth: agg.pointsByMonth || {},
@@ -586,27 +607,38 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
           nhlPointsByMonth: agg.nhlPointsByMonth || {},
           nhlGamesByMonth: agg.nhlGamesByMonth || {},
 
-          // ✅ per format (existant)
           winsByType,
 
-          // ✅ MVP leaderboard families
           families: {
             fgc,
-            standard,
-            ascension,
+            tp,
+            ts,
           },
 
           fgcPoints: fgc.points,
-          standardPoints: standard.points,
-          ascensionPoints: ascension.points,
+          tpPoints: tp.points,
+          tsPoints: ts.points,
 
           fgcWins: fgc.wins,
-          standardWins: standard.wins,
-          ascensionWins: ascension.wins,
+          tpWins: tp.wins,
+          tsWins: ts.wins,
 
           fgcPlays: fgc.plays,
-          standardPlays: standard.plays,
-          ascensionPlays: ascension.plays,
+          tpPlays: tp.plays,
+          tsPlays: ts.plays,
+
+          // ✅ nettoyage legacy
+          "families.standard": FieldValue.delete(),
+          "families.ascension": FieldValue.delete(),
+
+          standardPoints: FieldValue.delete(),
+          ascensionPoints: FieldValue.delete(),
+
+          standardWins: FieldValue.delete(),
+          ascensionWins: FieldValue.delete(),
+
+          standardPlays: FieldValue.delete(),
+          ascensionPlays: FieldValue.delete(),
 
           updatedAt: FieldValue.serverTimestamp(),
         },
@@ -629,6 +661,87 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
       },
       { merge: true }
     );
+  }
+
+  /* -------------------- 8) Assign C / A -------------------- */
+
+  // 1) Lire tous les memberships du groupe pour pouvoir nettoyer correctement
+  const membershipsSnap = await db
+    .collection("group_memberships")
+    .where("groupId", "==", groupId)
+    .get();
+
+  const memberUids = membershipsSnap.docs
+    .map((d) => String(d.data()?.uid || ""))
+    .filter(Boolean);
+
+  // fallback si jamais certains memberships n'ont pas uid bien rempli
+  const memberDocMap = new Map();
+  for (const d of membershipsSnap.docs) {
+    const data = d.data() || {};
+    const uid = String(data.uid || "").trim();
+    if (uid) memberDocMap.set(uid, d.ref);
+  }
+
+  // 2) Construire le ranking avec tie-break stable
+  const leaderboardArray = memberUids
+    .map((uid) => {
+      const agg = totals.get(uid) || makeEmptyAgg(uid);
+
+      const fgc = agg.families?.fgc || emptyFamilyStats();
+      const tp = agg.families?.tp || emptyFamilyStats();
+      const ts = agg.families?.ts || emptyFamilyStats();
+
+      const cleanPointsTotal =
+        toNumber(fgc.points, 0) +
+        toNumber(tp.points, 0) +
+        toNumber(ts.points, 0);
+
+      return {
+        uid,
+        points: cleanPointsTotal,
+        wins: toNumber(agg.wins, 0),
+        displayName: String(agg.displayName || ""),
+      };
+    })
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      if (a.displayName !== b.displayName) return a.displayName.localeCompare(b.displayName);
+      return a.uid.localeCompare(b.uid);
+    });
+
+  // 3) Assigner les badges
+  const roleUpdates = leaderboardArray.map((row, index) => {
+    let role = null;
+
+    if (row.points > 0) {
+      if (index === 0) role = "C";
+      else if (index === 1) role = "A";
+    }
+
+    return { uid: row.uid, role };
+  });
+
+  // 4) Batch write sur tous les membres du groupe
+  for (const batchItems of chunk(roleUpdates, 450)) {
+    const batch = db.batch();
+
+    for (const { uid, role } of batchItems) {
+      const ref =
+        memberDocMap.get(uid) || db.doc(`group_memberships/${groupId}_${uid}`);
+
+      batch.set(
+        ref,
+        {
+          roleBadge: role,
+          roleUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    await batch.commit();
   }
 
   return {

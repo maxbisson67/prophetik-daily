@@ -64,9 +64,17 @@ export { ascensionsNotifyOnCreate } from "./ascensions/ascensionsNotifyOnCreate.
 export { finalizeAscensionCycleWinners } from "./ascensions/finalizeAscensionCycleWinners.js";
 export { applyAscensionDailyBonus } from "./ascensions/applyAscensionDailyBonus.js";
 
+//  Team Prediction Challenge
+export { createTeamPredictionChallenge } from "./teamPredictionChallenges/createTeamPredictionChallenge.js";
+export { submitTeamPredictionEntry } from "./teamPredictionChallenges/submitTeamPredictionEntry.js";
+export { resolveTeamPredictionResults } from "./teamPredictionChallenges/resolveTeamPredictionResults.js";
+export { applyTeamPredictionPayout } from "./teamPredictionChallenges/applyTeamPredictionPayout.js";
 
-//export { lockFirstGoalChallenges } from "./firstGoalLock.js";
-//export { confirmPendingFirstGoals, onFirstGoalCandidateFromGoalCreated } from "./firstGoalResolve.js";
+
+
+// Jerseys
+export { generateUserJersey } from "./jerseys/generateUserJersey.js";
+
 
 export * from "./firstGoalChallenge/firstGoalResolveMutualized.js";
 export { lockFirstGoalChallenges } from "./firstGoalChallenge/firstGoalLock.js";
@@ -75,3 +83,9 @@ export { fgcCreate } from "./firstGoalChallenge/fgcCreate.js";
 export { applyFirstGoalChallengePayout } from "./firstGoalChallenge/applyFirstGoalChallengePayout.js";
 
 export { repairFirstGoalGameCallable } from "./firstGoalChallenge/repairFirstGoalGameCallable.js";
+
+// Baseball
+
+export { refreshMlbStandings,refreshMlbPreviousSeasonStandingsDaily} from "./mlb/mlbStandingsIngest.js";
+export { cronIngestMlbPlayerStatsDaily } from "./mlb/mlbPlayerStatsIngest.js";
+export { refreshMlbRecentSchedule,refreshMlbScheduleWindow,updateMlbScheduleWindowNow } from "./mlb/mlbScheduleContextIngest.js";

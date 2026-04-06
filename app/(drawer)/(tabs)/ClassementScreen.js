@@ -150,18 +150,31 @@ function normalizeMemberRow(row) {
   const r = row || {};
 
   const fgcPoints = Number(r.fgcPoints ?? r?.families?.fgc?.points ?? 0) || 0;
-  const standardPoints = Number(r.standardPoints ?? r?.families?.standard?.points ?? 0) || 0;
-  const ascensionPoints =
-    Number(r.ascensionPoints ?? r?.families?.ascension?.points ?? 0) || 0;
+  const tpPoints = Number(r.tpPoints ?? r?.families?.tp?.points ?? 0) || 0;
+  const tsPoints =
+    Number(
+      r.tsPoints ??
+        r.standardPoints ??
+        r?.families?.ts?.points ??
+        r?.families?.standard?.points ??
+        0
+    ) || 0;
 
   const pointsTotal =
-    Number(r.pointsTotal ?? fgcPoints + standardPoints + ascensionPoints) || 0;
+    Number(r.pointsTotal ?? fgcPoints + tpPoints + tsPoints) || 0;
 
   const fgcWins = Number(r.fgcWins ?? r?.families?.fgc?.wins ?? 0) || 0;
-  const standardWins = Number(r.standardWins ?? r?.families?.standard?.wins ?? 0) || 0;
-  const ascensionWins = Number(r.ascensionWins ?? r?.families?.ascension?.wins ?? 0) || 0;
+  const tpWins = Number(r.tpWins ?? r?.families?.tp?.wins ?? 0) || 0;
+  const tsWins =
+    Number(
+      r.tsWins ??
+        r.standardWins ??
+        r?.families?.ts?.wins ??
+        r?.families?.standard?.wins ??
+        0
+    ) || 0;
 
-  const wins = Number(r.wins ?? fgcWins + standardWins + ascensionWins) || 0;
+  const wins = Number(r.wins ?? fgcWins + tpWins + tsWins) || 0;
   const participations = Number(r.participations ?? 0) || 0;
   const winRate = participations > 0 ? wins / participations : 0;
 
@@ -176,12 +189,12 @@ function normalizeMemberRow(row) {
   return {
     ...r,
     fgcPoints,
-    standardPoints,
-    ascensionPoints,
+    tpPoints,
+    tsPoints,
     pointsTotal,
     fgcWins,
-    standardWins,
-    ascensionWins,
+    tpWins,
+    tsWins,
     wins,
     participations,
     winRate,
@@ -266,23 +279,23 @@ export default function ClassementScreen() {
       {
         key: "fgcPoints",
         header: <Text style={{ fontSize: 16 }}>🏒</Text>,
-        flex: 0.9,
+        flex: 0.85,
         align: "center",
         render: (row) => String(Number(row?.fgcPoints ?? 0) || 0),
       },
       {
-        key: "standardPoints",
-        header: <Text style={{ fontSize: 16 }}>🎯</Text>,
-        flex: 0.95,
+        key: "tpPoints",
+        header: <Text style={{ fontSize: 16 }}>🏆</Text>,
+        flex: 0.85,
         align: "center",
-        render: (row) => String(Number(row?.standardPoints ?? 0) || 0),
+        render: (row) => String(Number(row?.tpPoints ?? 0) || 0),
       },
       {
-        key: "ascensionPoints",
-        header: <Text style={{ fontSize: 16 }}>🏔</Text>,
-        flex: 0.95,
+        key: "tsPoints",
+        header: <Text style={{ fontSize: 16 }}>🎯</Text>,
+        flex: 0.85,
         align: "center",
-        render: (row) => String(Number(row?.ascensionPoints ?? 0) || 0),
+        render: (row) => String(Number(row?.tsPoints ?? 0) || 0),
       },
       {
         key: "pointsTotal",

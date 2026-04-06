@@ -369,7 +369,7 @@ export default function ProfileScreen() {
             />
 
             <TouchableOpacity
-              onPress={() => router.push("/avatars/AvatarsScreen")}
+              onPress={() => router.push("/avatars/JerseysScreen")}
               style={{
                 paddingHorizontal: 14,
                 paddingVertical: 10,
@@ -380,7 +380,7 @@ export default function ProfileScreen() {
             >
               <Text style={{ color: "#fff", fontWeight: "700" }}>
                 {i18n.t("profile.chooseAvatarCta", {
-                  defaultValue: "🎨 Choose an avatar",
+                  defaultValue: "🎨 Choose a Jersey",
                 })}
               </Text>
             </TouchableOpacity>
