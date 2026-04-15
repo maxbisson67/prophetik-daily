@@ -62,10 +62,87 @@ function getPlayerLastName(fullName) {
   return parts[parts.length - 1] || s;
 }
 
-function getPlayerAvatarUrl(playerId) {
-  const id = String(playerId || "").trim();
+function getPlayerAvatarUrl(player) {
+  const explicit =
+    player?.headshotUrl ||
+    player?.avatarUrl ||
+    player?.photoURL ||
+    null;
+
+  if (explicit) return explicit;
+
+  const id = String(player?.playerId || "").trim();
   if (!id) return null;
+
   return `https://assets.nhle.com/mugs/nhl/20252026/${id}.png`;
+}
+
+function normalizeTsPlayerRow(player, idx = 0) {
+  if (!player || typeof player !== "object") return null;
+
+  const playerName =
+    player?.playerName ||
+    player?.fullName ||
+    player?.name ||
+    player?.label ||
+    player?.displayName ||
+    null;
+
+  if (!playerName) return null;
+
+  return {
+    slotLabel:
+      player?.slotLabel ||
+      player?.slot ||
+      player?.positionLabel ||
+      `${idx + 1}-`,
+    playerName,
+    lastName: getPlayerLastName(playerName),
+    teamAbbr: player?.teamAbbr || player?.team || "",
+    playerId: player?.playerId || "",
+    avatarUrl: getPlayerAvatarUrl(player),
+  };
+}
+
+function objectValuesSorted(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return [];
+  return Object.keys(obj)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+    .map((k) => obj[k]);
+}
+
+function SecondaryTsCta({ colors, onPress, RED_DARK }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={{
+        marginTop: 10,
+        paddingVertical: 10,
+        borderRadius: 12,
+        alignItems: "center",
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        width: "100%",
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text
+          style={{
+            color: RED_DARK,
+            fontWeight: "900",
+            fontSize: 13,
+            marginLeft: 6,
+          }}
+        >
+          {i18n.t("home.viewParticipants", {
+            defaultValue: "Voir les participants",
+          })}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 function getTsSelectionLines(item) {
@@ -76,51 +153,34 @@ function getTsSelectionLines(item) {
     item?.participation ||
     null;
 
-  if (!entry) return [];
+  if (!entry || typeof entry !== "object") return [];
 
-  if (Array.isArray(entry?.picks)) {
-    return entry.picks
-      .map((p, idx) => ({
-        slotLabel: `${idx + 1}-`,
-        playerName: p?.playerName || p?.fullName || p?.name || p?.label || "—",
-        lastName: getPlayerLastName(
-          p?.playerName || p?.fullName || p?.name || p?.label || "—"
-        ),
-        teamAbbr: p?.teamAbbr || "",
-        playerId: p?.playerId || "",
-        avatarUrl: getPlayerAvatarUrl(p?.playerId),
-      }))
-      .filter((r) => r.playerName && r.playerName !== "—");
-  }
+  const candidateCollections = [
+    entry?.picks,
+    entry?.lines,
+    entry?.selectedPlayers,
+    entry?.players,
+    entry?.selectedPlayersBySlot,
+    entry?.picksBySlot,
+    entry?.roster,
+  ];
 
-  if (Array.isArray(entry?.lines)) {
-    return entry.lines
-      .map((row, idx) => ({
-        slotLabel: row?.slotLabel || row?.label || `${idx + 1}x${idx + 1}`,
-        playerName: row?.playerName || row?.name || row?.fullName || row?.label || "—",
-        lastName: getPlayerLastName(
-          row?.playerName || row?.name || row?.fullName || row?.label || "—"
-        ),
-        teamAbbr: row?.teamAbbr || "",
-        playerId: row?.playerId || "",
-        avatarUrl: getPlayerAvatarUrl(row?.playerId),
-      }))
-      .filter((r) => r.playerName && r.playerName !== "—");
-  }
+  for (const collection of candidateCollections) {
+    if (Array.isArray(collection)) {
+      const rows = collection
+        .map((p, idx) => normalizeTsPlayerRow(p, idx))
+        .filter(Boolean);
 
-  if (Array.isArray(entry?.selectedPlayers)) {
-    return entry.selectedPlayers
-      .map((p, idx) => ({
-        slotLabel: p?.slotLabel || p?.slot || `${idx + 1}x${idx + 1}`,
-        playerName: p?.playerName || p?.fullName || p?.name || p?.label || "—",
-        lastName: getPlayerLastName(
-          p?.playerName || p?.fullName || p?.name || p?.label || "—"
-        ),
-        teamAbbr: p?.teamAbbr || "",
-        playerId: p?.playerId || "",
-        avatarUrl: getPlayerAvatarUrl(p?.playerId),
-      }))
-      .filter((r) => r.playerName && r.playerName !== "—");
+      if (rows.length) return rows;
+    }
+
+    if (collection && typeof collection === "object") {
+      const rows = objectValuesSorted(collection)
+        .map((p, idx) => normalizeTsPlayerRow(p, idx))
+        .filter(Boolean);
+
+      if (rows.length) return rows;
+    }
   }
 
   const oneName =
@@ -133,18 +193,19 @@ function getTsSelectionLines(item) {
   if (oneName) {
     return [
       {
-        slotLabel: "1x1",
+        slotLabel: "1-",
         playerName: oneName,
         lastName: getPlayerLastName(oneName),
         teamAbbr: entry?.teamAbbr || "",
         playerId: entry?.playerId || "",
-        avatarUrl: getPlayerAvatarUrl(entry?.playerId),
+        avatarUrl: getPlayerAvatarUrl(entry),
       },
     ];
   }
 
   return [];
 }
+
 
 function getTsPickCount(item, lines) {
   if (lines?.length) return lines.length;
@@ -295,7 +356,9 @@ export default function DefiListItem({
   const isAsc = isAscensionDefi(item);
   const isTS = isTsDefi(item);
 
+
   const tsSelectionLines = isTS ? getTsSelectionLines(item) : [];
+
   const pickCount = getTsPickCount(item, tsSelectionLines);
   const title = isTS
     ? getTsDisplayTitle(item, pickCount, isAsc)
@@ -370,108 +433,132 @@ export default function DefiListItem({
 
         <TsSelectionBlock lines={tsSelectionLines} colors={colors} />
 
-        {lockedByPlan ? (
-          <View style={{ marginTop: 12 }}>
-            <Text
-              style={{
-                color: colors.subtext,
-                fontSize: 12,
-                fontWeight: "700",
-                marginBottom: 8,
-              }}
-            >
-              {i18n.t("home.upgradeToJoin", {
-                defaultValue: "Passe à Pro/Vip pour participer à ce défi.",
-              })}
-            </Text>
+<View style={{ marginTop: 12 }}>
+  {lockedByPlan ? (
+    <>
+      <Text
+        style={{
+          color: colors.subtext,
+          fontSize: 12,
+          fontWeight: "700",
+          marginBottom: 8,
+        }}
+      >
+        {i18n.t("home.upgradeToJoin", {
+          defaultValue: "Passe à Pro/Vip pour participer à ce défi.",
+        })}
+      </Text>
 
-            <TouchableOpacity
-              onPress={onPressUpgrade}
-              activeOpacity={0.85}
-              style={{
-                marginTop: 4,
-                paddingVertical: 10,
-                borderRadius: 12,
-                alignItems: "center",
-                backgroundColor: colors.card,
-                borderWidth: 1,
-                borderColor: colors.border,
-                width: "100%",
-              }}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <MaterialCommunityIcons
-                  name="lock-open-outline"
-                  size={16}
-                  color={RED_DARK}
-                />
-                <Text
-                  style={{
-                    color: RED_DARK,
-                    fontWeight: "900",
-                    fontSize: 13,
-                    marginLeft: 6,
-                  }}
-                >
-                  {ctaLabel}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        ) : showResultsCta ? (
-          <TouchableOpacity
-            onPress={onPressResults}
-            activeOpacity={0.85}
+      <TouchableOpacity
+        onPress={onPressUpgrade}
+        activeOpacity={0.85}
+        style={{
+          marginTop: 4,
+          paddingVertical: 10,
+          borderRadius: 12,
+          alignItems: "center",
+          backgroundColor: colors.card,
+          borderWidth: 1,
+          borderColor: colors.border,
+          width: "100%",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <MaterialCommunityIcons
+            name="lock-open-outline"
+            size={16}
+            color={RED_DARK}
+          />
+          <Text
             style={{
-              marginTop: 12,
-              paddingVertical: 10,
-              borderRadius: 12,
-              alignItems: "center",
-              backgroundColor: colors.card,
-              borderWidth: 1,
-              borderColor: colors.border,
-              width: "100%",
+              color: RED_DARK,
+              fontWeight: "900",
+              fontSize: 13,
+              marginLeft: 6,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <MaterialCommunityIcons
-                name="clipboard-text-outline"
-                size={16}
-                color={RED_DARK}
-              />
-              <Text
-                style={{
-                  color: RED_DARK,
-                  fontWeight: "900",
-                  fontSize: 13,
-                  marginLeft: 6,
-                }}
-              >
-                {ctaLabel}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            disabled={!canJoin}
-            onPress={onPressParticipate}
-            activeOpacity={0.85}
-            style={[
-              {
-                marginTop: 12,
-                paddingVertical: 10,
-                borderRadius: 12,
-                alignItems: "center",
-                backgroundColor: RED_DARK,
-              },
-              !canJoin && { opacity: 0.45 },
-            ]}
+            {ctaLabel}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <SecondaryTsCta
+        colors={colors}
+        onPress={onPressResults}
+        RED_DARK={RED_DARK}
+      />
+    </>
+  ) : showResultsCta ? (
+    <>
+      <TouchableOpacity
+        onPress={onPressResults}
+        activeOpacity={0.85}
+        style={{
+          marginTop: 12,
+          paddingVertical: 10,
+          borderRadius: 12,
+          alignItems: "center",
+          backgroundColor: colors.card,
+          borderWidth: 1,
+          borderColor: colors.border,
+          width: "100%",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <MaterialCommunityIcons
+            name="clipboard-text-outline"
+            size={16}
+            color={RED_DARK}
+          />
+          <Text
+            style={{
+              color: RED_DARK,
+              fontWeight: "900",
+              fontSize: 13,
+              marginLeft: 6,
+            }}
           >
-            <Text style={{ color: "#fff", fontWeight: "900", fontSize: 13 }}>
-              {ctaLabel}
-            </Text>
-          </TouchableOpacity>
-        )}
+            {ctaLabel}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <SecondaryTsCta
+        colors={colors}
+        onPress={onPressResults}
+        RED_DARK={RED_DARK}
+      />
+    </>
+  ) : (
+    <>
+      <TouchableOpacity
+        disabled={!canJoin}
+        onPress={onPressParticipate}
+        activeOpacity={0.85}
+        style={[
+          {
+            marginTop: 12,
+            paddingVertical: 10,
+            borderRadius: 12,
+            alignItems: "center",
+            backgroundColor: RED_DARK,
+          },
+          !canJoin && { opacity: 0.45 },
+        ]}
+      >
+        <Text style={{ color: "#fff", fontWeight: "900", fontSize: 13 }}>
+          {ctaLabel}
+        </Text>
+      </TouchableOpacity>
+
+      <SecondaryTsCta
+        colors={colors}
+        onPress={onPressResults}
+        RED_DARK={RED_DARK}
+      />
+    </>
+  )}
+</View>
       </TouchableOpacity>
     );
   }
@@ -550,7 +637,6 @@ export default function DefiListItem({
                   gap: 6,
                 }}
               >
-                <MaterialCommunityIcons name="lock-open-outline" size={16} color={RED_DARK} />
                 <Text style={{ color: RED_DARK, fontWeight: "900", fontSize: 13 }}>
                   {i18n.t("home.upgradeCta", { defaultValue: "Voir les forfaits" })}
                 </Text>
@@ -573,11 +659,6 @@ export default function DefiListItem({
                 gap: 6,
               }}
             >
-              <MaterialCommunityIcons
-                name="clipboard-text-outline"
-                size={16}
-                color={RED_DARK}
-              />
               <Text style={{ color: RED_DARK, fontWeight: "900", fontSize: 13 }}>
                 {i18n.t("home.viewResults", { defaultValue: "Voir les résultats" })}
               </Text>

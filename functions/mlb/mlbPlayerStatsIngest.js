@@ -262,6 +262,7 @@ export const cronIngestMlbPlayerStatsDaily = onSchedule(
   },
   async () => {
     try {
+      return;  // arrêter l'exécution pour le moment
       const seasonId = getCurrentSeason();
       logger.info("[cronIngestMlbPlayerStatsDaily] running", { seasonId });
       return await ingestSeason(seasonId);

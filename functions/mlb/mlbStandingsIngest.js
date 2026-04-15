@@ -399,6 +399,7 @@ export const refreshMlbPreviousSeasonStandingsDaily = onSchedule(
   },
   async () => {
     try {
+      return;  // arrêter l'exécution pour le moment
       const previousSeason = getPreviousSeason();
 
       const res = await ingestStandings({

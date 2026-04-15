@@ -459,6 +459,7 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
     setCurrentGroupId(null);
     setDefaultGroupPoints(0);
     setLoadingDefaultGroupPoints(true);
+    setMyParticipationsByDefiId({});
 
     for (const [, un] of groupMetaUnsubs.current) {
       try {
@@ -762,28 +763,53 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
     };
   }, [authReady, user?.uid, currentGroupId]);
 
-  // Les participations du user
+
+  const normalDefisBase = useMemo(() => {
+    const rows = Array.isArray(activeDefis) ? activeDefis : [];
+    return rows.filter((d) => !isAscensionDefi?.(d));
+  }, [activeDefis]);
+
+  const hasTsForGroup = useMemo(() => {
+    return (normalDefisBase || []).some((d) => isTsDefi(d));
+  }, [normalDefisBase]);
+
+  const normalDefis = useMemo(() => {
+    return (normalDefisBase || []).map((defi) => ({
+      ...defi,
+      myParticipation: myParticipationsByDefiId[String(defi.id)] || null,
+    }));
+  }, [normalDefisBase, myParticipationsByDefiId]);
+
+  // Les participations du user  // Les participations TS du user
   useEffect(() => {
     if (!authReady || !user?.uid) {
       setMyParticipationsByDefiId({});
       return;
     }
 
-    const visibleTsDefis = (normalDefisBase || [])
+    const tsIds = (normalDefisBase || [])
       .filter((d) => isTsDefi(d))
-      .slice(0, 6);
+      .map((d) => String(d?.id || "").trim())
+      .filter(Boolean)
+      .sort();
 
-    if (!visibleTsDefis.length) {
-      setMyParticipationsByDefiId({});
+    // Ne pas vider brutalement si la liste est transitoirement vide pendant un refresh
+    if (!tsIds.length) {
       return;
     }
 
     const unsubs = [];
 
-    visibleTsDefis.forEach((defi) => {
-      const defiId = String(defi?.id || "").trim();
-      if (!defiId) return;
+    // Conserver les participations déjà connues pour les défis encore visibles
+    setMyParticipationsByDefiId((prev) => {
+      const next = {};
+      tsIds.forEach((id) => {
+        next[id] = prev?.[id] ?? null;
+      });
+      return next;
+    });
 
+    tsIds.forEach((defiId) => {
       const ref = firestore()
         .collection("defis")
         .doc(defiId)
@@ -793,6 +819,8 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
       const unsub = ref.onSnapshot(
         (snap) => {
           const data = snap?.exists ? snap.data() || null : null;
+
+          console.log("[HOME TS SNAP]", defiId, "exists=", snap?.exists, "data=", data);
 
           setMyParticipationsByDefiId((prev) => ({
             ...prev,
@@ -815,11 +843,21 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
     return () => {
       unsubs.forEach((u) => {
         try {
-          u();
+          u?.();
         } catch {}
       });
     };
-  }, [authReady, user?.uid, normalDefisBase]);
+  }, [
+    authReady,
+    user?.uid,
+    JSON.stringify(
+      (normalDefisBase || [])
+        .filter((d) => isTsDefi(d))
+        .map((d) => String(d?.id || "").trim())
+        .filter(Boolean)
+        .sort()
+    ),
+  ]);
 
   // Derived
   const combinedError = error || meError;
@@ -841,26 +879,7 @@ const avatarUrl =
       user?.photoURL ??
       null;
 
-  const ascensionDefis = useMemo(() => {
-  const rows = Array.isArray(activeDefis) ? activeDefis : [];
-    return rows.filter((d) => isAscensionDefi?.(d));
-  }, [activeDefis]);
 
-  const normalDefisBase = useMemo(() => {
-    const rows = Array.isArray(activeDefis) ? activeDefis : [];
-    return rows.filter((d) => !isAscensionDefi?.(d));
-  }, [activeDefis]);
-
-  const hasTsForGroup = useMemo(() => {
-    return (normalDefisBase || []).some((d) => isTsDefi(d));
-  }, [normalDefisBase]);
-
-  const normalDefis = useMemo(() => {
-    return (normalDefisBase || []).map((defi) => ({
-      ...defi,
-      myParticipation: myParticipationsByDefiId[String(defi.id)] || null,
-    }));
-  }, [normalDefisBase, myParticipationsByDefiId]);
 
 
   const userGroups = useMemo(
@@ -1047,12 +1066,12 @@ const avatarUrl =
                   leftIcon={<ProphetikIcons mode="emoji" emoji="🏒" size="lg" />}
                   title={i18n.t("firstGoal.home.title")}
                   rightAction={
-                    hasFirstGoalForGroup ? null : (
+                    isCurrentGroupOwner && !hasFirstGoalForGroup ? (
                       <SectionCreateAction
                         onPress={onPressCreateFirstGoal}
                         label={i18n.t("common.create")}
                       />
-                    )
+                    ) : null
                   }
                 />
                 <FirstGoalHomeSection groups={userGroups} currentGroupId={currentGroupId} colors={colors} onHasChallengeChange={setHasFirstGoalForGroup}/>
@@ -1099,12 +1118,12 @@ const avatarUrl =
                   leftIcon={<ProphetikIcons mode="emoji" emoji="🎯" size="lg" />}
                   title={i18n.t("home.todayChallenge", { defaultValue: "Mes défis du jour" })}
                   rightAction={
-                    hasTsForGroup ? null : (
+                    isCurrentGroupOwner && !hasTsForGroup ? (
                       <SectionCreateAction
                         onPress={onPressCreateDefi}
                         label={i18n.t("common.create")}
                       />
-                    )
+                    ) : null
                   }
                 />
                 <DefiListSection

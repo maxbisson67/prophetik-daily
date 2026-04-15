@@ -8,7 +8,7 @@ if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const REGION = "us-central1";
-const TP_STAKE_POINTS = 1;
+const TP_BASE_POINTS = 3;
 
 function toNumber(v, def = 0) {
   if (typeof v === "number") return v;
@@ -23,24 +23,6 @@ function splitEven(total, n) {
   const base = Math.floor(total / n);
   let r = total - base * n;
   return Array.from({ length: n }, (_, i) => (i < r ? base + 1 : base));
-}
-
-function numOrNull(v) {
-  if (typeof v === "number") return v;
-  if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) {
-    return Number(v);
-  }
-  return null;
-}
-
-function readAnyBalance(doc) {
-  return (
-    numOrNull(doc?.credits?.balance) ??
-    numOrNull(doc?.credits) ??
-    numOrNull(doc?.credit) ??
-    numOrNull(doc?.balance) ??
-    0
-  );
 }
 
 function safeUpper(v) {
@@ -94,7 +76,10 @@ export const applyTeamPredictionPayout = onDocumentWritten(
       const result = await db.runTransaction(async (tx) => {
         const chRef = db.doc(`team_prediction_challenges/${challengeId}`);
         const chSnap = await tx.get(chRef);
-        if (!chSnap.exists) return { ok: false, reason: "missing-challenge" };
+
+        if (!chSnap.exists) {
+          return { ok: false, reason: "missing-challenge" };
+        }
 
         const ch = chSnap.data() || {};
 
@@ -131,23 +116,28 @@ export const applyTeamPredictionPayout = onDocumentWritten(
             },
             { merge: true }
           );
-          return { ok: true, skipped: true, reason: "missing-group-or-official-result" };
+
+          return {
+            ok: true,
+            skipped: true,
+            reason: "missing-group-or-official-result",
+          };
         }
 
         const groupRef = db.doc(`groups/${groupId}`);
         const groupSnap = await tx.get(groupRef);
         const group = groupSnap.exists ? groupSnap.data() || {} : {};
 
-        const participantsCount = Math.max(
-          0,
-          toNumber(ch.participantsCount, 0)
+        // Valeur courante du TP pour ce groupe.
+        // Si absente ou invalide, on repart à 3.
+        const currentTpPot = Math.max(
+          TP_BASE_POINTS,
+          toNumber(group.tpBonus, TP_BASE_POINTS)
         );
 
-        const carryBonus = Math.max(0, toNumber(group.tpBonus, 0));
-        const basePot = participantsCount * TP_STAKE_POINTS;
-        const totalPot = basePot + carryBonus;
-
-        const entriesQuery = db.collection(`team_prediction_challenges/${challengeId}/entries`);
+        const entriesQuery = db.collection(
+          `team_prediction_challenges/${challengeId}/entries`
+        );
         const entriesSnap = await tx.get(entriesQuery);
         const entryDocs = entriesSnap.docs || [];
 
@@ -158,11 +148,13 @@ export const applyTeamPredictionPayout = onDocumentWritten(
 
         const winnerUids = winners.map((d) => String(d.id));
 
-        // Aucun gagnant -> rollover
+        // Aucun gagnant -> le prochain TP passe à +1
         if (!winnerUids.length) {
           for (const d of entryDocs) {
             const uid = String(d.id);
-            const entryRef = db.doc(`team_prediction_challenges/${challengeId}/entries/${uid}`);
+            const entryRef = db.doc(
+              `team_prediction_challenges/${challengeId}/entries/${uid}`
+            );
 
             tx.set(
               entryRef,
@@ -184,7 +176,8 @@ export const applyTeamPredictionPayout = onDocumentWritten(
               payoutApplied: false,
               payoutAppliedReason: "no-winners",
               payoutTotal: 0,
-              bonusUsed: carryBonus,
+              bonusUsed: currentTpPot,
+              jackpotCarryIn: currentTpPot,
               winnerShares: {},
               winnersCount: 0,
               winnersPreviewUids: [],
@@ -196,7 +189,7 @@ export const applyTeamPredictionPayout = onDocumentWritten(
           tx.set(
             groupRef,
             {
-              tpBonus: totalPot,
+              tpBonus: currentTpPot + 1,
               tpBonusUpdatedAt: FieldValue.serverTimestamp(),
               tpBonusRolledFromChallengeId: challengeId,
               leaderboardSeasonDirty: true,
@@ -211,31 +204,16 @@ export const applyTeamPredictionPayout = onDocumentWritten(
             skipped: false,
             winners: 0,
             payoutTotal: 0,
-            rolledOver: totalPot,
+            nextTpBonus: currentTpPot + 1,
           };
         }
 
-        // Gagnants -> split
-        const shares = splitEven(totalPot, winnerUids.length);
+        // Gagnants -> partage égal de la valeur courante
+        const shares = splitEven(currentTpPot, winnerUids.length);
         const winnerShares = {};
+
         winnerUids.forEach((uid, i) => {
           winnerShares[uid] = shares[i] || 0;
-        });
-
-        const participantRefs = winnerUids.map((uid) => db.doc(`participants/${uid}`));
-        const participantSnaps = await Promise.all(
-          participantRefs.map((ref) => tx.get(ref))
-        );
-
-        const participants = winnerUids.map((uid, i) => {
-          const snap = participantSnaps[i];
-          const data = snap.exists ? snap.data() || {} : {};
-          return {
-            uid,
-            ref: participantRefs[i],
-            curBal: readAnyBalance(data),
-            amount: winnerShares[uid] || 0,
-          };
         });
 
         // Marquer toutes les entrées
@@ -245,7 +223,9 @@ export const applyTeamPredictionPayout = onDocumentWritten(
           const perfect = isPerfectPick(entry, official);
           const payout = winnerShares[uid] || 0;
 
-          const entryRef = db.doc(`team_prediction_challenges/${challengeId}/entries/${uid}`);
+          const entryRef = db.doc(
+            `team_prediction_challenges/${challengeId}/entries/${uid}`
+          );
 
           tx.set(
             entryRef,
@@ -260,47 +240,15 @@ export const applyTeamPredictionPayout = onDocumentWritten(
           );
         }
 
-        // Créditer les gagnants
-        for (const p of participants) {
-          if (p.amount <= 0) continue;
-
-          tx.set(
-            p.ref,
-            {
-              "credits.balance": FieldValue.increment(p.amount),
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-
-          const logRef = p.ref.collection("credit_logs").doc();
-          tx.set(logRef, {
-            type: "tp_payout",
-            amount: p.amount,
-            fromBalance: p.curBal,
-            toBalance: p.curBal + p.amount,
-            groupId,
-            challengeId,
-            challengeType: "team_prediction",
-
-            officialWinnerAbbr: officialWinner,
-            officialAwayScore,
-            officialHomeScore,
-            officialOutcome,
-
-            createdAt: FieldValue.serverTimestamp(),
-          });
-        }
-
-        // Mettre à jour le challenge
         tx.set(
           chRef,
           {
             payoutAppliedAt: FieldValue.serverTimestamp(),
             payoutApplied: true,
             payoutAppliedReason: "winners-paid",
-            payoutTotal: totalPot,
-            bonusUsed: carryBonus,
+            payoutTotal: currentTpPot,
+            bonusUsed: currentTpPot,
+            jackpotCarryIn: currentTpPot,
             winnerShares,
             winnersCount: winnerUids.length,
             winnersPreviewUids: winnerUids,
@@ -309,11 +257,11 @@ export const applyTeamPredictionPayout = onDocumentWritten(
           { merge: true }
         );
 
-        // Reset bonus TP
+        // Un TP a été remporté -> on repart à 3
         tx.set(
           groupRef,
           {
-            tpBonus: 0,
+            tpBonus: TP_BASE_POINTS,
             tpBonusPaidAt: FieldValue.serverTimestamp(),
             tpBonusPaidChallengeId: challengeId,
             leaderboardSeasonDirty: true,
@@ -327,8 +275,8 @@ export const applyTeamPredictionPayout = onDocumentWritten(
           ok: true,
           skipped: false,
           winners: winnerUids.length,
-          payoutTotal: totalPot,
-          rolledOver: 0,
+          payoutTotal: currentTpPot,
+          nextTpBonus: TP_BASE_POINTS,
         };
       });
 

@@ -890,15 +890,6 @@ export default function ChallengesScreen() {
         />
       </View>
 
-      <View style={{ paddingHorizontal: 16 }}>
-        <TodayChallengesList
-          items={todayItems}
-          colors={colors}
-          participationMaps={participationMaps}
-          onPressGoToAccueil={() => router.push("/(drawer)/(tabs)/AccueilScreen")}
-        />
-      </View>
-
       <SectionList
         sections={historySections}
         keyExtractor={(item) => item.key}
@@ -910,6 +901,18 @@ export default function ChallengesScreen() {
         maxToRenderPerBatch={6}
         windowSize={7}
         removeClippedSubviews={true}
+        ListHeaderComponent={
+          <View style={{ paddingTop: 4, paddingBottom: 8 }}>
+            <TodayChallengesList
+              items={todayItems}
+              colors={colors}
+              participationMaps={participationMaps}
+              onPressGoToAccueil={() =>
+                router.push("/(drawer)/(tabs)/AccueilScreen")
+              }
+            />
+          </View>
+        }
         ListEmptyComponent={() => (
           <Text
             style={{
@@ -918,7 +921,9 @@ export default function ChallengesScreen() {
               textAlign: "center",
             }}
           >
-            {i18n.t("challenges.noChallenges", { defaultValue: "Aucun défi à afficher." })}
+            {i18n.t("challenges.noChallenges", {
+              defaultValue: "Aucun défi à afficher.",
+            })}
           </Text>
         )}
       />

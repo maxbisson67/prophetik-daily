@@ -1,22 +1,22 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { useTheme } from '@src/theme/ThemeProvider';
 import { useLanguage } from '@src/i18n/LanguageProvider';
 import i18n from '@src/i18n/i18n';
 import crashlytics from '@react-native-firebase/crashlytics';
-
+import * as Application from 'expo-application';
 
 export default function SettingsScreen() {
   const { mode, setMode, colors } = useTheme();
   const { lang, setLang } = useLanguage();
 
+  const visibleVersion = Application.nativeApplicationVersion ?? '—';
+  const buildVersion = Application.nativeBuildVersion ?? '—';
+
   const setSafeTheme = (m) => {
     if (typeof setMode === 'function') setMode(m);
   };
-
-
-
 
   const Item = ({ label, selected, onPress, danger = false }) => (
     <TouchableOpacity
@@ -73,6 +73,26 @@ export default function SettingsScreen() {
         <Item label="Français" selected={lang === 'fr'} onPress={() => setLang('fr')} />
         <Item label="English" selected={lang === 'en'} onPress={() => setLang('en')} />
 
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800', marginTop: 24, marginBottom: 12 }}>
+          Version
+        </Text>
+
+        <View
+          style={{
+            padding: 14,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+          }}
+        >
+          <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 6 }}>
+            App: {visibleVersion}
+          </Text>
+          <Text style={{ color: colors.text, opacity: 0.8 }}>
+            {Platform.OS === 'android' ? 'Version code' : 'Build number'}: {buildVersion}
+          </Text>
+        </View>
       </View>
     </>
   );

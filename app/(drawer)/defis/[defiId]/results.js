@@ -1,1669 +1,1718 @@
-// app/(drawer)/defis/[defiId]/results.js
-// Résultats (riche) + Chat repliable (hors FlatList)
+  // app/(drawer)/defis/[defiId]/results.js
+  // Résultats (riche) + Chat repliable (hors FlatList)
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Animated,
-  Keyboard,
-} from 'react-native';
-import { SvgUri } from 'react-native-svg';
-import Toast from 'react-native-toast-message';
-import {
-  Stack,
-  useLocalSearchParams,
-  useFocusEffect,
-  useRouter,
-} from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import firestore from '@react-native-firebase/firestore';
-import { useAuth } from '@src/auth/SafeAuthProvider';
+  import React, { useEffect, useMemo, useRef, useState } from 'react';
+  import {
+    View,
+    Text,
+    ActivityIndicator,
+    Image,
+    TouchableOpacity,
+    ScrollView,
+    TextInput,
+    KeyboardAvoidingView,
+    Platform,
+    Animated,
+    Keyboard,
+  } from 'react-native';
+  import { SvgUri } from 'react-native-svg';
+  import Toast from 'react-native-toast-message';
+  import {
+    Stack,
+    useLocalSearchParams,
+    useFocusEffect,
+    useRouter,
+  } from 'expo-router';
+  import AsyncStorage from '@react-native-async-storage/async-storage';
+  import firestore from '@react-native-firebase/firestore';
+  import { useAuth } from '@src/auth/SafeAuthProvider';
 
-import { useTheme } from '@src/theme/ThemeProvider';
-import { useDefiChat } from '@src/defiChat/useDefiChat';
-import { useUnreadCount } from '@src/defiChat/useUnreadCount';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { useHeaderHeight, HeaderBackButton } from '@react-navigation/elements';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DrawerToggleButton } from '@react-navigation/drawer';
+  import { useTheme } from '@src/theme/ThemeProvider';
+  import { useDefiChat } from '@src/defiChat/useDefiChat';
+  import { useUnreadCount } from '@src/defiChat/useUnreadCount';
+  import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+  import { useHeaderHeight, HeaderBackButton } from '@react-navigation/elements';
+  import { useSafeAreaInsets } from 'react-native-safe-area-context';
+  import { DrawerToggleButton } from '@react-navigation/drawer';
 
-// ✅ i18n
-import i18n from '@src/i18n/i18n';
-import Analytics from "@src/services/analytics";
+  // ✅ i18n
+  import i18n from '@src/i18n/i18n';
+  import Analytics from "@src/services/analytics";
 
-/* ----------------------------- Utils ----------------------------- */
-const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
-const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
+  /* ----------------------------- Utils ----------------------------- */
+  const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
+  const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
 
-const CACHE_VERSION = 'v3_profiles_public_names';
-const PARTICIPANTS_CACHE_KEY = `${CACHE_VERSION}`;
+  const CACHE_VERSION = 'v3_profiles_public_names';
+  const PARTICIPANTS_CACHE_KEY = `${CACHE_VERSION}`;
 
-/* ----- NHL helpers ----- */
-const teamLogoUrl = (abbr) => {
-  const a = String(abbr || '').trim().toUpperCase();
-  return a
-    ? `https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(
-        a
-      )}_light.svg`
-    : null;
-};
-
-function fmtTSLocalHM(v) {
-  try {
-    const d = v?.toDate?.()
-      ? v.toDate()
-      : v instanceof Date
-      ? v
-      : v
-      ? new Date(v)
+  /* ----- NHL helpers ----- */
+  const teamLogoUrl = (abbr) => {
+    const a = String(abbr || '').trim().toUpperCase();
+    return a
+      ? `https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(
+          a
+        )}_light.svg`
       : null;
-    if (!d) return '—';
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-  } catch {
-    return '—';
-  }
-}
+  };
 
-function statusStyleBase(status) {
-  const key = (status || '').toLowerCase();
-  switch (key) {
-    case 'open':
-      return {
-        bg: '#ECFEFF',
-        fg: '#0E7490',
-        icon: 'clock-outline',
-        label: i18n.t('defi.results.status.open'),
-      };
-    case 'live':
-      return {
-        bg: '#F0FDF4',
-        fg: '#166534',
-        icon: 'broadcast',
-        label: i18n.t('defi.results.status.live'),
-      };
-    case 'awaiting_result':
-      return {
-        bg: '#FFF7ED',
-        fg: '#9A3412',
-        icon: 'timer-sand',
-        label: i18n.t('defi.results.status.awaiting'),
-      };
-    case 'closed':
-      return {
-        bg: '#FEF2F2',
-        fg: '#991B1B',
-        icon: 'lock',
-        label: i18n.t('defi.results.status.closed'),
-      };
-    default:
-      return {
-        bg: '#EFEFEF',
-        fg: '#111827',
-        icon: 'help-circle',
-        label: String(
-          status || i18n.t('defi.results.status.unknown')
-        ),
-      };
-  }
-}
-
-  function ymdInTorontoFromAny(v) {
+  function fmtTSLocalHM(v) {
     try {
-      const d = v?.toDate?.() ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
-      if (!d || isNaN(d.getTime())) return null;
-
-      const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Toronto",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).formatToParts(d);
-
-      const y = parts.find((p) => p.type === "year")?.value;
-      const m = parts.find((p) => p.type === "month")?.value;
-      const dd = parts.find((p) => p.type === "day")?.value;
-      return y && m && dd ? `${y}-${m}-${dd}` : null;
+      const d = v?.toDate?.()
+        ? v.toDate()
+        : v instanceof Date
+        ? v
+        : v
+        ? new Date(v)
+        : null;
+      if (!d) return '—';
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
     } catch {
-      return null;
+      return '—';
     }
   }
 
-  function extractTeamsFromParts(parts = [], playerMap = {}) {
-    const set = new Set();
+  function statusStyleBase(status) {
+    const key = (status || '').toLowerCase();
+    switch (key) {
+      case 'open':
+        return {
+          bg: '#ECFEFF',
+          fg: '#0E7490',
+          icon: 'clock-outline',
+          label: i18n.t('defi.results.status.open'),
+        };
+      case 'live':
+        return {
+          bg: '#F0FDF4',
+          fg: '#166534',
+          icon: 'broadcast',
+          label: i18n.t('defi.results.status.live'),
+        };
+      case 'awaiting_result':
+        return {
+          bg: '#FFF7ED',
+          fg: '#9A3412',
+          icon: 'timer-sand',
+          label: i18n.t('defi.results.status.awaiting'),
+        };
+      case 'closed':
+        return {
+          bg: '#FEF2F2',
+          fg: '#991B1B',
+          icon: 'lock',
+          label: i18n.t('defi.results.status.closed'),
+        };
+      default:
+        return {
+          bg: '#EFEFEF',
+          fg: '#111827',
+          icon: 'help-circle',
+          label: String(
+            status || i18n.t('defi.results.status.unknown')
+          ),
+        };
+    }
+  }
+
+    function ymdInTorontoFromAny(v) {
+      try {
+        const d = v?.toDate?.() ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
+        if (!d || isNaN(d.getTime())) return null;
+
+        const parts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Toronto",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(d);
+
+        const y = parts.find((p) => p.type === "year")?.value;
+        const m = parts.find((p) => p.type === "month")?.value;
+        const dd = parts.find((p) => p.type === "day")?.value;
+        return y && m && dd ? `${y}-${m}-${dd}` : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function extractTeamsFromParts(parts = [], playerMap = {}) {
+      const set = new Set();
+      for (const part of parts) {
+        const picks = Array.isArray(part?.picks) ? part.picks : [];
+        for (const p of picks) {
+          const pid = String(p?.playerId ?? "").trim();
+          const abbr =
+            (playerMap?.[pid]?.teamAbbr || p?.teamAbbr || "").toString().trim().toUpperCase();
+          if (abbr) set.add(abbr);
+        }
+      }
+      return Array.from(set);
+    }
+
+  /* ---------------------- Cache noms participants ---------------------- */
+  const memNames = { map: {}, info: {} }; // {uid -> name}, {uid -> {photoURL}}
+
+  async function readNamesCache() {
+    try {
+      const raw = await AsyncStorage.getItem(PARTICIPANTS_CACHE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.map) Object.assign(memNames.map, parsed.map);
+      if (parsed?.info) Object.assign(memNames.info, parsed.info);
+    } catch {}
+  }
+  async function writeNamesCache() {
+    try {
+      await AsyncStorage.setItem(
+        PARTICIPANTS_CACHE_KEY,
+        JSON.stringify(memNames)
+      );
+    } catch {}
+  }
+  function mergeNames(partialMap, partialInfo) {
+    let changed = false;
+    if (partialMap) {
+      for (const [uid, nm] of Object.entries(partialMap)) {
+        const nextName = typeof nm === 'string' && nm.trim() ? nm.trim() : null;
+        if (nextName && memNames.map[uid] !== nextName) {
+          memNames.map[uid] = nextName;
+          changed = true;
+        }
+      }
+    }
+    if (partialInfo) {
+      for (const [uid, obj] of Object.entries(partialInfo)) {
+        const old = memNames.info[uid] || {};
+        const next = { ...old };
+        if (obj && typeof obj === 'object') {
+          if (typeof obj.photoURL === 'string' && obj.photoURL.trim())
+            next.photoURL = obj.photoURL.trim();
+          for (const k of Object.keys(obj)) {
+            if (k === 'photoURL') continue;
+            if (obj[k] != null) next[k] = obj[k];
+          }
+        }
+        if (JSON.stringify(old) !== JSON.stringify(next)) {
+          memNames.info[uid] = next;
+          changed = true;
+        }
+      }
+    }
+    if (changed) writeNamesCache();
+    return changed;
+  }
+
+  /* ---------------- Toast config (statique) ---------------- */
+  export const toastConfig = {
+    liveDelta: ({ props }) => {
+      const items = Array.isArray(props?.items) ? props.items : [];
+      return (
+        <View
+          style={{
+            backgroundColor: '#111',
+            padding: 12,
+            borderRadius: 12,
+            marginTop: 40,
+            marginHorizontal: 8,
+            maxWidth: '96%',
+            elevation: 6,
+          }}
+        >
+          <Text
+            style={{
+              color: '#fff',
+              fontWeight: '800',
+              marginBottom: 8,
+            }}
+          >
+            {i18n.t('defi.results.toast.title')}
+          </Text>
+          {items.length === 0 ? (
+            <Text style={{ color: '#fff', opacity: 0.85 }}>
+              {i18n.t('defi.results.toast.empty')}
+            </Text>
+          ) : (
+            items.map((it, i) => (
+              <Text key={i} style={{ color: '#fff', marginVertical: 2 }}>
+                {it}
+              </Text>
+            ))
+          )}
+        </View>
+      );
+    },
+  };
+
+  function withCacheBust(url, tsMillis) {
+    if (!url) return null;
+    const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
+    return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
+  }
+
+  /* ----------------------------- Screen ----------------------------- */
+  export default function DefiResultsScreen() {
+    const { defiId } = useLocalSearchParams();
+    const { user } = useAuth();
+    const router = useRouter();
+    const { colors } = useTheme();
+
+    const [defi, setDefi] = useState(null);
+    const [group, setGroup] = useState(null);
+
+    const [loadingDefi, setLoadingDefi] = useState(true);
+    const [parts, setParts] = useState([]); // [{uid, livePoints, picks, updatedAt, _raw}]
+    const [namesMap, setNamesMap] = useState({});
+    const [participantInfoMap, setParticipantInfoMap] = useState({});
+
+    const [liveStats, setLiveStats] = useState({
+      playerGoals: {},
+      playerA1: {},
+      playerA2: {},
+      playerAssists: {},
+      playerPoints: {},
+    });
+    const [playerMap, setPlayerMap] = useState({});
+
+    // Chat accordéon
+    const [chatCollapsed, setChatCollapsed] = useState(true);
+    const open = useRef(new Animated.Value(0)).current;
+
+    const OPEN_HEIGHT = 360;
+    const headerHeight = useHeaderHeight();
+    const insets = useSafeAreaInsets();
+    const [kbH, setKbH] = useState(0);
+
+    const [nhlPlayersReadable, setNhlPlayersReadable] = useState(true);
+
+
+    // 🔵 Chat
+    const { messages, send, busy, markRead, canSend } = useDefiChat(defiId, {
+      pageSize: 50,
+      groupId: group?.id,
+      namesMap,
+      participantInfoMap,
+    });
+
+    // 🔔 Unread count
+    const unread = useUnreadCount(
+      defiId,
+      user?.uid,
+      group?.id
+        ? { useCollectionGroup: true, groupId: group.id }
+        : { useCollectionGroup: false }
+    );
+
+    const [showReveal, setShowReveal] = React.useState(false);
+    const [celebrateNow, setCelebrateNow] = React.useState(false);
+    const hasShownRevealRef = React.useRef(false);
+    const hasCelebratedRef = React.useRef(false);
+
+    const handleCloseReveal = React.useCallback(() => setShowReveal(false), []);
+
+    function computeCreditDelta(defi, winnersArr) {
+      const pot = Number(defi?.pot ?? 0);
+      const n = Math.max(1, winnersArr?.length ?? 1);
+      const rule = String(defi?.splitRule ?? 'winner_takes_all').toLowerCase();
+      return rule === 'split_even' ? Math.floor(pot / n) : pot;
+    }
+
+    const goNhlLive = React.useCallback(() => {
+      const ymd =
+        ymdInTorontoFromAny(defi?.firstGameUTC) ||
+        ymdInTorontoFromAny(defi?.signupDeadline) ||
+        null;
+
+      const focusTeamAbbrs = extractTeamsFromParts(parts, playerMap);
+
+      router.push({
+        pathname: "/sports/MatchLiveScreen",
+        params: {
+          // optionnel: MatchLiveScreen peut ignorer si non géré
+          ymd: ymd || "",
+          focusPlayerIds: JSON.stringify(allPickedIds || []),
+          focusTeamAbbrs: JSON.stringify(focusTeamAbbrs || []),
+          from: "defiResults",
+          defiId: String(defi?.id || ""),
+        },
+      });
+    }, [router, defi?.firstGameUTC, defi?.signupDeadline, defi?.id, parts, playerMap, allPickedIds]);
+
+
+    const allPickedIds = useMemo(() => {
+    const ids = new Set();
     for (const part of parts) {
       const picks = Array.isArray(part?.picks) ? part.picks : [];
       for (const p of picks) {
-        const pid = String(p?.playerId ?? "").trim();
-        const abbr =
-          (playerMap?.[pid]?.teamAbbr || p?.teamAbbr || "").toString().trim().toUpperCase();
-        if (abbr) set.add(abbr);
+        const pid = String(p?.playerId ?? '').trim();
+        if (pid) ids.add(pid);
       }
     }
-    return Array.from(set);
-  }
-
-/* ---------------------- Cache noms participants ---------------------- */
-const memNames = { map: {}, info: {} }; // {uid -> name}, {uid -> {photoURL}}
-
-async function readNamesCache() {
-  try {
-    const raw = await AsyncStorage.getItem(PARTICIPANTS_CACHE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (parsed?.map) Object.assign(memNames.map, parsed.map);
-    if (parsed?.info) Object.assign(memNames.info, parsed.info);
-  } catch {}
-}
-async function writeNamesCache() {
-  try {
-    await AsyncStorage.setItem(
-      PARTICIPANTS_CACHE_KEY,
-      JSON.stringify(memNames)
-    );
-  } catch {}
-}
-function mergeNames(partialMap, partialInfo) {
-  let changed = false;
-  if (partialMap) {
-    for (const [uid, nm] of Object.entries(partialMap)) {
-      const nextName = typeof nm === 'string' && nm.trim() ? nm.trim() : null;
-      if (nextName && memNames.map[uid] !== nextName) {
-        memNames.map[uid] = nextName;
-        changed = true;
-      }
-    }
-  }
-  if (partialInfo) {
-    for (const [uid, obj] of Object.entries(partialInfo)) {
-      const old = memNames.info[uid] || {};
-      const next = { ...old };
-      if (obj && typeof obj === 'object') {
-        if (typeof obj.photoURL === 'string' && obj.photoURL.trim())
-          next.photoURL = obj.photoURL.trim();
-        for (const k of Object.keys(obj)) {
-          if (k === 'photoURL') continue;
-          if (obj[k] != null) next[k] = obj[k];
-        }
-      }
-      if (JSON.stringify(old) !== JSON.stringify(next)) {
-        memNames.info[uid] = next;
-        changed = true;
-      }
-    }
-  }
-  if (changed) writeNamesCache();
-  return changed;
-}
-
-/* ---------------- Toast config (statique) ---------------- */
-export const toastConfig = {
-  liveDelta: ({ props }) => {
-    const items = Array.isArray(props?.items) ? props.items : [];
-    return (
-      <View
-        style={{
-          backgroundColor: '#111',
-          padding: 12,
-          borderRadius: 12,
-          marginTop: 40,
-          marginHorizontal: 8,
-          maxWidth: '96%',
-          elevation: 6,
-        }}
-      >
-        <Text
-          style={{
-            color: '#fff',
-            fontWeight: '800',
-            marginBottom: 8,
-          }}
-        >
-          {i18n.t('defi.results.toast.title')}
-        </Text>
-        {items.length === 0 ? (
-          <Text style={{ color: '#fff', opacity: 0.85 }}>
-            {i18n.t('defi.results.toast.empty')}
-          </Text>
-        ) : (
-          items.map((it, i) => (
-            <Text key={i} style={{ color: '#fff', marginVertical: 2 }}>
-              {it}
-            </Text>
-          ))
-        )}
-      </View>
-    );
-  },
-};
-
-function withCacheBust(url, tsMillis) {
-  if (!url) return null;
-  const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
-  return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
-}
-
-/* ----------------------------- Screen ----------------------------- */
-export default function DefiResultsScreen() {
-  const { defiId } = useLocalSearchParams();
-  const { user } = useAuth();
-  const router = useRouter();
-  const { colors } = useTheme();
-
-  const [defi, setDefi] = useState(null);
-  const [group, setGroup] = useState(null);
-
-  const [loadingDefi, setLoadingDefi] = useState(true);
-  const [parts, setParts] = useState([]); // [{uid, livePoints, picks, updatedAt, _raw}]
-  const [namesMap, setNamesMap] = useState({});
-  const [participantInfoMap, setParticipantInfoMap] = useState({});
-
-  const [liveStats, setLiveStats] = useState({
-    playerGoals: {},
-    playerA1: {},
-    playerA2: {},
-    playerAssists: {},
-    playerPoints: {},
-  });
-  const [playerMap, setPlayerMap] = useState({});
-
-  // Chat accordéon
-  const [chatCollapsed, setChatCollapsed] = useState(true);
-  const open = useRef(new Animated.Value(0)).current;
-
-  const OPEN_HEIGHT = 360;
-  const headerHeight = useHeaderHeight();
-  const insets = useSafeAreaInsets();
-  const [kbH, setKbH] = useState(0);
-
-  const [nhlPlayersReadable, setNhlPlayersReadable] = useState(true);
-
-
-  // 🔵 Chat
-  const { messages, send, busy, markRead, canSend } = useDefiChat(defiId, {
-    pageSize: 50,
-    groupId: group?.id,
-    namesMap,
-    participantInfoMap,
-  });
-
-  // 🔔 Unread count
-  const unread = useUnreadCount(
-    defiId,
-    user?.uid,
-    group?.id
-      ? { useCollectionGroup: true, groupId: group.id }
-      : { useCollectionGroup: false }
-  );
-
-  const [showReveal, setShowReveal] = React.useState(false);
-  const [celebrateNow, setCelebrateNow] = React.useState(false);
-  const hasShownRevealRef = React.useRef(false);
-  const hasCelebratedRef = React.useRef(false);
-
-  const handleCloseReveal = React.useCallback(() => setShowReveal(false), []);
-
-  function computeCreditDelta(defi, winnersArr) {
-    const pot = Number(defi?.pot ?? 0);
-    const n = Math.max(1, winnersArr?.length ?? 1);
-    const rule = String(defi?.splitRule ?? 'winner_takes_all').toLowerCase();
-    return rule === 'split_even' ? Math.floor(pot / n) : pot;
-  }
-
-  const goNhlLive = React.useCallback(() => {
-    const ymd =
-      ymdInTorontoFromAny(defi?.firstGameUTC) ||
-      ymdInTorontoFromAny(defi?.signupDeadline) ||
-      null;
-
-    const focusTeamAbbrs = extractTeamsFromParts(parts, playerMap);
-
-    router.push({
-      pathname: "/sports/MatchLiveScreen",
-      params: {
-        // optionnel: MatchLiveScreen peut ignorer si non géré
-        ymd: ymd || "",
-        focusPlayerIds: JSON.stringify(allPickedIds || []),
-        focusTeamAbbrs: JSON.stringify(focusTeamAbbrs || []),
-        from: "defiResults",
-        defiId: String(defi?.id || ""),
-      },
-    });
-  }, [router, defi?.firstGameUTC, defi?.signupDeadline, defi?.id, parts, playerMap, allPickedIds]);
-
-
-  const allPickedIds = useMemo(() => {
-  const ids = new Set();
-  for (const part of parts) {
-    const picks = Array.isArray(part?.picks) ? part.picks : [];
-    for (const p of picks) {
-      const pid = String(p?.playerId ?? '').trim();
-      if (pid) ids.add(pid);
-    }
-  }
-  return Array.from(ids);
-}, [parts]);
-
-  /* ----- Leaderboard (mémo) ----- */
-  const leaderboard = useMemo(() => {
-    const rows = [...parts].sort((a, b) => b.livePoints - a.livePoints);
-    if (!rows.length) return [];
-    const top = rows[0].livePoints;
-    return rows.map((r) => ({ ...r, isTiedForFirst: r.livePoints === top }));
+    return Array.from(ids);
   }, [parts]);
 
-  const chip = statusStyleBase(defi?.status);
+    /* ----- Leaderboard (mémo) ----- */
+    const leaderboard = useMemo(() => {
+      const rows = [...parts].sort((a, b) => b.livePoints - a.livePoints);
+      if (!rows.length) return [];
+      const top = rows[0].livePoints;
+      return rows.map((r) => ({ ...r, isTiedForFirst: r.livePoints === top }));
+    }, [parts]);
 
-  const finalists = React.useMemo(() => {
-    const src = Array.isArray(leaderboard) ? leaderboard : [];
-    return src
-      .filter(Boolean)
-      .slice()
-      .sort((a, b) => Number(b.livePoints || 0) - Number(a.livePoints || 0))
-      .slice(0, 3)
-      .map((r) => {
-        const uid = String(r.uid || '');
-        const displayName = namesMap?.[uid] || r.displayName || uid;
-        const info = participantInfoMap?.[uid] || {};
-        return {
-          ...r,
-          uid,
-          displayName,
-          avatarUrl: info.photoURL || null,
-        };
-      });
-  }, [leaderboard, namesMap, participantInfoMap]);
+    const chip = statusStyleBase(defi?.status);
 
-  const winners = useMemo(() => {
-    const rows = Array.isArray(leaderboard) ? leaderboard : [];
-    if (!rows.length) return [];
-    const top = Number(rows[0].livePoints || 0);
-    return rows.filter((r) => Number(r.livePoints || 0) === top);
-  }, [leaderboard]);
-
-  // Révélation / célébration
-  React.useEffect(() => {
-    const iAmWinner =
-      Array.isArray(winners) && winners.some((w) => w.uid === user?.uid);
-    if (!showReveal && iAmWinner && !hasCelebratedRef.current) {
-      hasCelebratedRef.current = true;
-      handleCelebrate();
-    }
-  }, [showReveal, winners, user?.uid]);
-
-
-  React.useEffect(() => {
-    if (!celebrateNow) hasCelebratedRef.current = false;
-  }, [celebrateNow]);
-
-  React.useEffect(() => {
-    const closed = String(defi?.status || '').toLowerCase() === 'closed';
-    if (!closed || !user?.uid) return;
-    const storageKey = `finalReveal:${defi?.id}:${user?.uid}`;
-    const iAmWinner =
-      Array.isArray(winners) && winners.some((w) => w.uid === user.uid);
-    (async () => {
-      try {
-        if (hasShownRevealRef.current) return;
-        const done = await AsyncStorage.getItem(storageKey);
-        if (!done && iAmWinner) {
-          hasShownRevealRef.current = true;
-          setShowReveal(true);
-          await AsyncStorage.setItem(storageKey, '1');
-        }
-      } catch {}
-    })();
-  }, [defi?.status, defi?.id, user?.uid, winners]);
-
-  React.useEffect(() => {
-    const closed = String(defi?.status || '').toLowerCase() === 'closed';
-    if (!closed || !user?.uid || !finalists.length) return;
-    const storageKey = `finalReveal:${defi.id}:${user.uid}`;
-    (async () => {
-      try {
-        if (hasShownRevealRef.current) return;
-        const done = await AsyncStorage.getItem(storageKey);
-        const inTop = finalists.some((f) => f.uid === user.uid);
-        if (!done && inTop) {
-          hasShownRevealRef.current = true;
-          setShowReveal(true);
-          await AsyncStorage.setItem(storageKey, '1');
-        }
-      } catch {}
-    })();
-  }, [defi?.status, defi?.id, user?.uid, finalists]);
-
-  const handleCelebrate = React.useCallback(() => {
-    setCelebrateNow(true);
-    setTimeout(() => setCelebrateNow(false), 2400);
-  }, []);
-
-  const headerTitle = React.useMemo(
-    () =>
-      defi?.title ||
-      (defi?.type
-        ? `${i18n.t('home.challenge')} ${defi.type}x${defi.type}`
-        : i18n.t('defi.results.header.defaultTitle')),
-    [defi]
-  );
-
-  // 🔒 Caviardage
-  const firstGameDate = React.useMemo(() => {
-    const v = defi?.firstGameUTC;
-    if (!v) return null;
-    if (v.toDate?.()) return v.toDate();
-    if (v instanceof Date) return v;
-    try {
-      return new Date(v);
-    } catch {
-      return null;
-    }
-  }, [defi?.firstGameUTC]);
-
-  const beforeFirstGame = React.useMemo(() => {
-    if (!firstGameDate) return false;
-    return Date.now() < firstGameDate.getTime();
-  }, [firstGameDate]);
-
-  const hideOthersPicks = React.useMemo(() => {
-    const status = String(defi?.status || '').toLowerCase();
-    return status === 'open' && beforeFirstGame;
-  }, [defi?.status, beforeFirstGame]);
-
-  const revealTimeLabel = React.useMemo(() => {
-    if (!firstGameDate) return null;
-    return fmtTSLocalHM(firstGameDate);
-  }, [firstGameDate]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const sh = Keyboard.addListener('keyboardDidShow', (e) =>
-      setKbH(e.endCoordinates?.height ?? 0)
-    );
-    const hd = Keyboard.addListener('keyboardDidHide', () => setKbH(0));
-    return () => {
-      sh.remove();
-      hd.remove();
-    };
-  }, []);
-
-  // Lu quand focus
-  useFocusEffect(
-    React.useCallback(() => {
-      if (defiId) markRead();
-    }, [defiId, markRead])
-  );
-
-  // Charger cache noms au boot
-  useEffect(() => {
-    readNamesCache().then(() => {
-      setNamesMap({ ...memNames.map });
-      setParticipantInfoMap({ ...memNames.info });
-    });
-  }, []);
-
-  /* ----- Defi doc ----- */
-  useEffect(() => {
-    if (!defiId) return;
-    setLoadingDefi(true);
-    const ref = firestore().doc(`defis/${String(defiId)}`);
-    const un = ref.onSnapshot(
-      (snap) => {
-        setDefi(snap.exists ? { id: snap.id, ...snap.data() } : null);
-        setLoadingDefi(false);
-      },
-      () => setLoadingDefi(false)
-    );
-    return () => un();
-  }, [defiId]);
-
-  // Group doc
-  useEffect(() => {
-    if (!defi?.groupId) return;
-    const ref = firestore().doc(`groups/${String(defi.groupId)}`);
-    const un = ref.onSnapshot((snap) => {
-      setGroup(snap.exists ? { id: snap.id, ...snap.data() } : null);
-    });
-    return () => un();
-  }, [defi?.groupId]);
-
-  /* ----- Participations ----- */
-  useEffect(() => {
-    if (!defi?.id) return;
-    const colRef = firestore().collection(
-      `defis/${String(defi.id)}/participations`
-    );
-    const un = colRef.onSnapshot((snap) => {
-      const next = [];
-      snap.forEach((docSnap) => {
-        const v = docSnap.data() || {};
-        const uid = docSnap.id;
-        next.push({
-          uid,
-          livePoints: Number(v.livePoints || 0),
-          picks: Array.isArray(v.picks) ? v.picks : [],
-          updatedAt: v.liveUpdatedAt || v.updatedAt || null,
-          _raw: v,
+    const finalists = React.useMemo(() => {
+      const src = Array.isArray(leaderboard) ? leaderboard : [];
+      return src
+        .filter(Boolean)
+        .slice()
+        .sort((a, b) => Number(b.livePoints || 0) - Number(a.livePoints || 0))
+        .slice(0, 3)
+        .map((r) => {
+          const uid = String(r.uid || '');
+          const displayName = namesMap?.[uid] || r.displayName || uid;
+          const info = participantInfoMap?.[uid] || {};
+          return {
+            ...r,
+            uid,
+            displayName,
+            avatarUrl: info.photoURL || null,
+          };
         });
-      });
-      setParts(next);
-    });
-    return () => un();
-  }, [defi?.id]);
+    }, [leaderboard, namesMap, participantInfoMap]);
 
-  // ----- profiles_public/{uid} -----
-  const profilesUnsubsRef = useRef(new Map());
-  useEffect(() => {
-    const neededUids = Array.from(
-      new Set(parts.map((p) => p.uid).filter(Boolean))
+    const winners = useMemo(() => {
+      const rows = Array.isArray(leaderboard) ? leaderboard : [];
+      if (!rows.length) return [];
+      const top = Number(rows[0].livePoints || 0);
+      return rows.filter((r) => Number(r.livePoints || 0) === top);
+    }, [leaderboard]);
+
+    // Révélation / célébration
+    React.useEffect(() => {
+      const iAmWinner =
+        Array.isArray(winners) && winners.some((w) => w.uid === user?.uid);
+      if (!showReveal && iAmWinner && !hasCelebratedRef.current) {
+        hasCelebratedRef.current = true;
+        handleCelebrate();
+      }
+    }, [showReveal, winners, user?.uid]);
+
+
+    React.useEffect(() => {
+      if (!celebrateNow) hasCelebratedRef.current = false;
+    }, [celebrateNow]);
+
+    React.useEffect(() => {
+      const closed = String(defi?.status || '').toLowerCase() === 'closed';
+      if (!closed || !user?.uid) return;
+      const storageKey = `finalReveal:${defi?.id}:${user?.uid}`;
+      const iAmWinner =
+        Array.isArray(winners) && winners.some((w) => w.uid === user.uid);
+      (async () => {
+        try {
+          if (hasShownRevealRef.current) return;
+          const done = await AsyncStorage.getItem(storageKey);
+          if (!done && iAmWinner) {
+            hasShownRevealRef.current = true;
+            setShowReveal(true);
+            await AsyncStorage.setItem(storageKey, '1');
+          }
+        } catch {}
+      })();
+    }, [defi?.status, defi?.id, user?.uid, winners]);
+
+    React.useEffect(() => {
+      const closed = String(defi?.status || '').toLowerCase() === 'closed';
+      if (!closed || !user?.uid || !finalists.length) return;
+      const storageKey = `finalReveal:${defi.id}:${user.uid}`;
+      (async () => {
+        try {
+          if (hasShownRevealRef.current) return;
+          const done = await AsyncStorage.getItem(storageKey);
+          const inTop = finalists.some((f) => f.uid === user.uid);
+          if (!done && inTop) {
+            hasShownRevealRef.current = true;
+            setShowReveal(true);
+            await AsyncStorage.setItem(storageKey, '1');
+          }
+        } catch {}
+      })();
+    }, [defi?.status, defi?.id, user?.uid, finalists]);
+
+    const handleCelebrate = React.useCallback(() => {
+      setCelebrateNow(true);
+      setTimeout(() => setCelebrateNow(false), 2400);
+    }, []);
+
+    const headerTitle = React.useMemo(
+      () =>
+        defi?.title ||
+        (defi?.type
+          ? `${i18n.t('home.challenge')} ${defi.type}x${defi.type}`
+          : i18n.t('defi.results.header.defaultTitle')),
+      [defi]
     );
 
-    for (const [uid, un] of profilesUnsubsRef.current) {
-      if (!neededUids.includes(uid)) {
-        try {
-          un();
-        } catch {}
-        profilesUnsubsRef.current.delete(uid);
+    // 🔒 Caviardage
+    const firstGameDate = React.useMemo(() => {
+      const v = defi?.firstGameUTC;
+      if (!v) return null;
+      if (v.toDate?.()) return v.toDate();
+      if (v instanceof Date) return v;
+      try {
+        return new Date(v);
+      } catch {
+        return null;
       }
-    }
+    }, [defi?.firstGameUTC]);
 
-    neededUids.forEach((uid) => {
-      if (profilesUnsubsRef.current.has(uid)) return;
+    const beforeFirstGame = React.useMemo(() => {
+      if (!firstGameDate) return false;
+      return Date.now() < firstGameDate.getTime();
+    }, [firstGameDate]);
 
-      const ref = firestore().doc(`profiles_public/${uid}`);
+    const hideOthersPicks = React.useMemo(() => {
+      const status = String(defi?.status || '').toLowerCase();
+      return status === 'open' && beforeFirstGame;
+    }, [defi?.status, beforeFirstGame]);
+
+    const revealTimeLabel = React.useMemo(() => {
+      if (!firstGameDate) return null;
+      return fmtTSLocalHM(firstGameDate);
+    }, [firstGameDate]);
+
+    useEffect(() => {
+      if (Platform.OS !== 'android') return;
+      const sh = Keyboard.addListener('keyboardDidShow', (e) =>
+        setKbH(e.endCoordinates?.height ?? 0)
+      );
+      const hd = Keyboard.addListener('keyboardDidHide', () => setKbH(0));
+      return () => {
+        sh.remove();
+        hd.remove();
+      };
+    }, []);
+
+    // Lu quand focus
+    useFocusEffect(
+      React.useCallback(() => {
+        if (defiId) markRead();
+      }, [defiId, markRead])
+    );
+
+    // Charger cache noms au boot
+    useEffect(() => {
+      readNamesCache().then(() => {
+        setNamesMap({ ...memNames.map });
+        setParticipantInfoMap({ ...memNames.info });
+      });
+    }, []);
+
+    /* ----- Defi doc ----- */
+    useEffect(() => {
+      if (!defiId) return;
+      setLoadingDefi(true);
+      const ref = firestore().doc(`defis/${String(defiId)}`);
       const un = ref.onSnapshot(
         (snap) => {
-          const v = snap.exists ? (snap.data() || {}) : {};
-          const displayName =
-            v.displayName || v.name || v.username || v.email || uid;
-          const avatarUrl = v.avatarUrl || v.photoURL || null;
-
-          const version = v.updatedAt?.toMillis?.()
-            ? v.updatedAt.toMillis()
-            : v.updatedAt?.toDate?.()
-            ? v.updatedAt.toDate().getTime()
-            : Date.now();
-
-          const changed = mergeNames(
-            { [uid]: displayName },
-            {
-              [uid]: avatarUrl
-                ? { photoURL: avatarUrl, version }
-                : { version },
-            }
-          );
-
-          if (changed) {
-            setNamesMap({ ...memNames.map });
-            setParticipantInfoMap({ ...memNames.info });
-          } else {
-            setNamesMap((prev) => ({
-              ...prev,
-              [uid]: memNames.map[uid] || displayName,
-            }));
-            setParticipantInfoMap((prev) => ({
-              ...prev,
-              [uid]:
-                memNames.info[uid] ||
-                (avatarUrl ? { photoURL: avatarUrl, version } : { version }),
-            }));
-          }
+          setDefi(snap.exists ? { id: snap.id, ...snap.data() } : null);
+          setLoadingDefi(false);
         },
-        () => {
-          const changed = mergeNames({ [uid]: uid }, { [uid]: {} });
-          if (changed) {
-            setNamesMap({ ...memNames.map });
-            setParticipantInfoMap({ ...memNames.info });
-          }
+        () => setLoadingDefi(false)
+      );
+      return () => un();
+    }, [defiId]);
+
+    // Group doc
+    useEffect(() => {
+      if (!defi?.groupId) return;
+      const ref = firestore().doc(`groups/${String(defi.groupId)}`);
+      const un = ref.onSnapshot((snap) => {
+        setGroup(snap.exists ? { id: snap.id, ...snap.data() } : null);
+      });
+      return () => un();
+    }, [defi?.groupId]);
+
+    /* ----- Participations ----- */
+    useEffect(() => {
+      if (!defi?.id) return;
+      const colRef = firestore().collection(
+        `defis/${String(defi.id)}/participations`
+      );
+      const un = colRef.onSnapshot((snap) => {
+        const next = [];
+        snap.forEach((docSnap) => {
+          const v = docSnap.data() || {};
+          const uid = docSnap.id;
+          next.push({
+            uid,
+            livePoints: Number(v.livePoints || 0),
+            picks: Array.isArray(v.picks) ? v.picks : [],
+            updatedAt: v.liveUpdatedAt || v.updatedAt || null,
+            _raw: v,
+          });
+        });
+        setParts(next);
+      });
+      return () => un();
+    }, [defi?.id]);
+
+    // ----- profiles_public/{uid} -----
+    // ----- participants/{uid} + profiles_public/{uid} -----
+const participantProfileUnsubsRef = useRef(new Map());
+
+useEffect(() => {
+  const neededUids = Array.from(new Set(parts.map((p) => p.uid).filter(Boolean)));
+
+  for (const [uid, cleanup] of participantProfileUnsubsRef.current) {
+    if (!neededUids.includes(uid)) {
+      try {
+        cleanup?.();
+      } catch {}
+      participantProfileUnsubsRef.current.delete(uid);
+    }
+  }
+
+  neededUids.forEach((uid) => {
+    if (participantProfileUnsubsRef.current.has(uid)) return;
+
+    let latestParticipant = {};
+    let latestPublic = {};
+
+    const applyMerged = () => {
+      const participantName =
+        latestParticipant.displayName ||
+        latestParticipant.name ||
+        null;
+
+      const publicName =
+        latestPublic.displayName ||
+        latestPublic.name ||
+        latestPublic.username ||
+        latestPublic.email ||
+        null;
+
+      const displayName = participantName || publicName || uid;
+
+      const participantAvatar =
+        latestParticipant.avatarUrl ||
+        latestParticipant.photoURL ||
+        null;
+
+      const publicAvatar =
+        latestPublic.avatarUrl ||
+        latestPublic.photoURL ||
+        null;
+
+      const avatarUrl = participantAvatar || publicAvatar || null;
+
+      const updatedAt =
+        latestParticipant.updatedAt ||
+        latestPublic.updatedAt ||
+        null;
+
+      const version = updatedAt?.toMillis?.()
+        ? updatedAt.toMillis()
+        : updatedAt?.toDate?.()
+        ? updatedAt.toDate().getTime()
+        : Date.now();
+
+      const changed = mergeNames(
+        { [uid]: displayName },
+        {
+          [uid]: avatarUrl
+            ? { photoURL: avatarUrl, version }
+            : { version },
         }
       );
 
-      profilesUnsubsRef.current.set(uid, un);
-    });
-  }, [parts]);
-
-  useEffect(() => {
-    return () => {
-      for (const [, un] of profilesUnsubsRef.current) {
-        try {
-          un();
-        } catch {}
-      }
-      profilesUnsubsRef.current.clear();
-    };
-  }, []);
-
-  /* ----- Live tallies ----- */
-  useEffect(() => {
-    if (!defi?.id) return;
-    const ref = firestore().doc(`defis/${String(defi.id)}/live/stats`);
-    const un = ref.onSnapshot((snap) => {
-      if (snap.exists) {
-        const d = snap.data() || {};
-        setLiveStats({
-          playerGoals: d.playerGoals || {},
-          playerA1: d.playerA1 || {},
-          playerA2: d.playerA2 || {},
-          playerAssists: d.playerAssists || d.assists || {},
-          playerPoints: d.playerPoints || {},
-        });
+      if (changed) {
+        setNamesMap({ ...memNames.map });
+        setParticipantInfoMap({ ...memNames.info });
       } else {
-        setLiveStats({
-          playerGoals: {},
-          playerA1: {},
-          playerA2: {},
-          playerAssists: {},
-          playerPoints: {},
-        });
+        setNamesMap((prev) => ({
+          ...prev,
+          [uid]: memNames.map[uid] || displayName,
+        }));
+        setParticipantInfoMap((prev) => ({
+          ...prev,
+          [uid]:
+            memNames.info[uid] ||
+            (avatarUrl ? { photoURL: avatarUrl, version } : { version }),
+        }));
       }
-    });
-    return () => un();
-  }, [defi?.id]);
+    };
 
-  /* ----- Player meta ----- */
-  const allTalliedIds = useMemo(() => {
-    return Array.from(
-      new Set([
-        ...Object.keys(liveStats.playerGoals || {}),
-        ...Object.keys(liveStats.playerA1 || {}),
-        ...Object.keys(liveStats.playerA2 || {}),
-        ...Object.keys(liveStats.playerAssists || {}),
-        ...Object.keys(liveStats.playerPoints || {}),
-      ])
-    );
-  }, [liveStats]);
+    const unParticipant = firestore()
+      .doc(`participants/${uid}`)
+      .onSnapshot(
+        (snap) => {
+          latestParticipant = snap.exists ? snap.data() || {} : {};
+          applyMerged();
+        },
+        () => {}
+      );
 
-  const missingPlayerMeta = useMemo(() => {
-    return allTalliedIds.filter((id) => !playerMap[id]);
-  }, [allTalliedIds, playerMap]);
+    const unPublic = firestore()
+      .doc(`profiles_public/${uid}`)
+      .onSnapshot(
+        (snap) => {
+          latestPublic = snap.exists ? snap.data() || {} : {};
+          applyMerged();
+        },
+        () => {
+          latestPublic = {};
+          applyMerged();
+        }
+      );
 
-  const participantsUiCount = React.useMemo(() => {
-    if (Array.isArray(parts) && parts.length > 0) return parts.length;
-    return Number(defi?.participantsCount ?? 0);
-  }, [parts, defi?.participantsCount]);
-
-    const hasLoggedResultViewRef = useRef(null);
-
-  useEffect(() => {
-    if (loadingDefi) return;
-    if (!defi?.id) return;
-
-    const key = String(defi.id);
-    if (hasLoggedResultViewRef.current === key) return;
-
-    hasLoggedResultViewRef.current = key;
-
-    Analytics.viewChallengeResult({
-      challengeType: "standard",
-      challengeId: String(defi.id),
-      format: defi?.type ? `${defi.type}x${defi.type}` : null,
-      status: String(defi?.status || "").toLowerCase(),
-      participantsCount: Number(defi?.participantsCount ?? parts?.length ?? 0),
-      pot: Number(defi?.pot ?? 0),
-    });
-
-  }, [
-    loadingDefi,
-    defi?.id,
-    defi?.type,
-    defi?.status,
-    defi?.participantsCount,
-    defi?.pot,
-    parts?.length,
-  ]);
-
-  useEffect(() => {
-    if (missingPlayerMeta.length === 0 || !nhlPlayersReadable) return;
-    let cancelled = false;
-    (async () => {
+    participantProfileUnsubsRef.current.set(uid, () => {
       try {
-        const updates = {};
-        const CHUNK = 10;
-        for (let i = 0; i < missingPlayerMeta.length; i += CHUNK) {
-          const idsChunk = missingPlayerMeta.slice(i, i + CHUNK).map(String);
-          const qRef = firestore()
-            .collection('nhl_players')
-            .where(firestore.FieldPath.documentId(), 'in', idsChunk);
-          const s = await qRef.get();
-          if (cancelled) return;
-          s.forEach((docSnap) => {
-            const v = docSnap.data() || {};
-            updates[docSnap.id] = {
-              fullName: v.fullName || '—',
-              teamAbbr: v.teamAbbr || '',
-            };
+        unParticipant?.();
+      } catch {}
+      try {
+        unPublic?.();
+      } catch {}
+    });
+  });
+}, [parts]);
+
+useEffect(() => {
+  return () => {
+    for (const [, cleanup] of participantProfileUnsubsRef.current) {
+      try {
+        cleanup?.();
+      } catch {}
+    }
+    participantProfileUnsubsRef.current.clear();
+  };
+}, []);
+
+    /* ----- Live tallies ----- */
+    useEffect(() => {
+      if (!defi?.id) return;
+      const ref = firestore().doc(`defis/${String(defi.id)}/live/stats`);
+      const un = ref.onSnapshot((snap) => {
+        if (snap.exists) {
+          const d = snap.data() || {};
+          setLiveStats({
+            playerGoals: d.playerGoals || {},
+            playerA1: d.playerA1 || {},
+            playerA2: d.playerA2 || {},
+            playerAssists: d.playerAssists || d.assists || {},
+            playerPoints: d.playerPoints || {},
+          });
+        } else {
+          setLiveStats({
+            playerGoals: {},
+            playerA1: {},
+            playerA2: {},
+            playerAssists: {},
+            playerPoints: {},
           });
         }
-        if (!cancelled && Object.keys(updates).length) {
-          setPlayerMap((prev) => ({ ...prev, ...updates }));
+      });
+      return () => un();
+    }, [defi?.id]);
+
+    /* ----- Player meta ----- */
+    const allTalliedIds = useMemo(() => {
+      return Array.from(
+        new Set([
+          ...Object.keys(liveStats.playerGoals || {}),
+          ...Object.keys(liveStats.playerA1 || {}),
+          ...Object.keys(liveStats.playerA2 || {}),
+          ...Object.keys(liveStats.playerAssists || {}),
+          ...Object.keys(liveStats.playerPoints || {}),
+        ])
+      );
+    }, [liveStats]);
+
+    const missingPlayerMeta = useMemo(() => {
+      return allTalliedIds.filter((id) => !playerMap[id]);
+    }, [allTalliedIds, playerMap]);
+
+    const participantsUiCount = React.useMemo(() => {
+      if (Array.isArray(parts) && parts.length > 0) return parts.length;
+      return Number(defi?.participantsCount ?? 0);
+    }, [parts, defi?.participantsCount]);
+
+      const hasLoggedResultViewRef = useRef(null);
+
+    useEffect(() => {
+      if (loadingDefi) return;
+      if (!defi?.id) return;
+
+      const key = String(defi.id);
+      if (hasLoggedResultViewRef.current === key) return;
+
+      hasLoggedResultViewRef.current = key;
+
+      Analytics.viewChallengeResult({
+        challengeType: "standard",
+        challengeId: String(defi.id),
+        format: defi?.type ? `${defi.type}x${defi.type}` : null,
+        status: String(defi?.status || "").toLowerCase(),
+        participantsCount: Number(defi?.participantsCount ?? parts?.length ?? 0),
+        pot: Number(defi?.pot ?? 0),
+      });
+
+    }, [
+      loadingDefi,
+      defi?.id,
+      defi?.type,
+      defi?.status,
+      defi?.participantsCount,
+      defi?.pot,
+      parts?.length,
+    ]);
+
+    useEffect(() => {
+      if (missingPlayerMeta.length === 0 || !nhlPlayersReadable) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const updates = {};
+          const CHUNK = 10;
+          for (let i = 0; i < missingPlayerMeta.length; i += CHUNK) {
+            const idsChunk = missingPlayerMeta.slice(i, i + CHUNK).map(String);
+            const qRef = firestore()
+              .collection('nhl_players')
+              .where(firestore.FieldPath.documentId(), 'in', idsChunk);
+            const s = await qRef.get();
+            if (cancelled) return;
+            s.forEach((docSnap) => {
+              const v = docSnap.data() || {};
+              updates[docSnap.id] = {
+                fullName: v.fullName || '—',
+                teamAbbr: v.teamAbbr || '',
+              };
+            });
+          }
+          if (!cancelled && Object.keys(updates).length) {
+            setPlayerMap((prev) => ({ ...prev, ...updates }));
+          }
+        } catch (e) {
+          if (e?.code === 'permission-denied') setNhlPlayersReadable(false);
         }
-      } catch (e) {
-        if (e?.code === 'permission-denied') setNhlPlayersReadable(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [missingPlayerMeta.join(','), nhlPlayersReadable]);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [missingPlayerMeta.join(','), nhlPlayersReadable]);
 
-  /* ----------------------------- UI ----------------------------- */
-  if (loadingDefi) {
+    /* ----------------------------- UI ----------------------------- */
+    if (loadingDefi) {
+      return (
+        <>
+          <Stack.Screen
+            options={{
+              title: i18n.t('defi.results.header.defaultTitle'),
+            }}
+          />
+          <View
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              backgroundColor: colors.background,
+            }}
+          >
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{ marginTop: 12, color: colors.text }}>
+              {i18n.t('defi.results.loading.generic')}
+            </Text>
+          </View>
+        </>
+      );
+    }
+    if (!defi) {
+      return (
+        <>
+          <Stack.Screen
+            options={{
+              title: i18n.t('defi.results.header.defaultTitle'),
+            }}
+          />
+          <View
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              backgroundColor: colors.background,
+            }}
+          >
+            <Text style={{ color: colors.text }}>
+              {i18n.t('defi.results.errors.notFound')}
+            </Text>
+          </View>
+        </>
+      );
+    }
+
+
+
     return (
       <>
         <Stack.Screen
           options={{
-            title: i18n.t('defi.results.header.defaultTitle'),
-          }}
-        />
-        <View
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            backgroundColor: colors.background,
-          }}
-        >
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, color: colors.text }}>
-            {i18n.t('defi.results.loading.generic')}
-          </Text>
-        </View>
-      </>
-    );
-  }
-  if (!defi) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            title: i18n.t('defi.results.header.defaultTitle'),
-          }}
-        />
-        <View
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            backgroundColor: colors.background,
-          }}
-        >
-          <Text style={{ color: colors.text }}>
-            {i18n.t('defi.results.errors.notFound')}
-          </Text>
-        </View>
-      </>
-    );
-  }
+            title: headerTitle,
+            headerLeft: ({ tintColor }) => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <HeaderBackButton
+                  tintColor={tintColor}
+                  onPress={() => {
+                    if (defi?.groupId) {
+                      router.replace({
+                        pathname: '/(drawer)/(tabs)/ChallengesScreen',
+                        params: { groupId: defi.groupId },
+                      });
+                    } else {
+                      router.replace('/(drawer)/(tabs)/ChallengesScreen');
+                    }
+                  }}
+                />
+                <DrawerToggleButton tintColor={tintColor} />
+              </View>
+            ),
+            headerRight: () => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
 
-
-
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: headerTitle,
-          headerLeft: ({ tintColor }) => (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <HeaderBackButton
-                tintColor={tintColor}
-                onPress={() => {
-                  if (defi?.groupId) {
-                    router.replace({
-                      pathname: '/(drawer)/(tabs)/ChallengesScreen',
-                      params: { groupId: defi.groupId },
-                    });
-                  } else {
-                    router.replace('/(drawer)/(tabs)/ChallengesScreen');
-                  }
-                }}
-              />
-              <DrawerToggleButton tintColor={tintColor} />
-            </View>
-          ),
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-
-               {/* ✅ Quick link NHL Live */}
-              <TouchableOpacity
-                onPress={goNhlLive}
-                activeOpacity={0.85}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                }}
-              >
-                <Ionicons name="pulse" size={16} color={colors.text} />
-                <Text style={{ marginLeft: 6, fontWeight: "800", color: colors.text, fontSize: 12 }}>
-                  NHL
-                </Text>
-              </TouchableOpacity>
-
-              <Ionicons
-                name="chatbubble-ellipses"
-                size={18}
-                color={colors.text}
-              />
-              <View
-                style={{
-                  minWidth: 18,
-                  height: 18,
-                  marginLeft: 6,
-                  borderRadius: 9,
-                  backgroundColor: unread > 0 ? '#ef4444' : colors.border,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingHorizontal: 4,
-                }}
-              >
-                <Text
+                {/* ✅ Quick link NHL Live */}
+                <TouchableOpacity
+                  onPress={goNhlLive}
+                  activeOpacity={0.85}
                   style={{
-                    color: '#fff',
-                    fontSize: 11,
-                    fontWeight: '800',
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
                   }}
                 >
-                  {unread > 99 ? '99+' : unread}
-                </Text>
-              </View>
-            </View>
-          ),
-        }}
-      />
+                  <Ionicons name="pulse" size={16} color={colors.text} />
+                  <Text style={{ marginLeft: 6, fontWeight: "800", color: colors.text, fontSize: 12 }}>
+                    NHL
+                  </Text>
+                </TouchableOpacity>
 
-      {/* 🔑 KeyboardAvoidingView au niveau racine */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-      >
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          {/* ====== CONTENU PRINCIPAL ====== */}
-          <ScrollView
-            style={{ flex: 1, backgroundColor: colors.background }}
-            keyboardShouldPersistTaps="always"
-            nestedScrollEnabled
-            contentContainerStyle={{ paddingBottom: 24 }}
-          >
-            {/* ====== HEADER GROUPE / DÉFI ====== */}
-            <View
-              style={{
-                padding: 12,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                elevation: 2,
-                shadowColor: '#000',
-                shadowOpacity: 0.06,
-                shadowRadius: 4,
-                shadowOffset: { width: 0, height: 2 },
-                margin: 16,
-                marginBottom: 8,
-              }}
+                <Ionicons
+                  name="chatbubble-ellipses"
+                  size={18}
+                  color={colors.text}
+                />
+                <View
+                  style={{
+                    minWidth: 18,
+                    height: 18,
+                    marginLeft: 6,
+                    borderRadius: 9,
+                    backgroundColor: unread > 0 ? '#ef4444' : colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: '800',
+                    }}
+                  >
+                    {unread > 99 ? '99+' : unread}
+                  </Text>
+                </View>
+              </View>
+            ),
+          }}
+        />
+
+        {/* 🔑 KeyboardAvoidingView au niveau racine */}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+        >
+          <View style={{ flex: 1, backgroundColor: colors.background }}>
+            {/* ====== CONTENU PRINCIPAL ====== */}
+            <ScrollView
+              style={{ flex: 1, backgroundColor: colors.background }}
+              keyboardShouldPersistTaps="always"
+              nestedScrollEnabled
+              contentContainerStyle={{ paddingBottom: 24 }}
             >
-              {/* Ligne 1 */}
+              {/* ====== HEADER GROUPE / DÉFI ====== */}
               <View
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 10,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  elevation: 2,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.06,
+                  shadowRadius: 4,
+                  shadowOffset: { width: 0, height: 2 },
+                  margin: 16,
+                  marginBottom: 8,
                 }}
               >
+                {/* Ligne 1 */}
                 <View
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    flex: 1,
+                    justifyContent: 'space-between',
+                    marginBottom: 10,
                   }}
                 >
-                  <Image
-                    source={
-                      group?.avatarUrl
-                        ? { uri: group.avatarUrl }
-                        : GROUP_PLACEHOLDER
-                    }
+                  <View
                     style={{
-                      width: 80,
-                      height: 80,
-                      borderRadius: 20,
-                      marginRight: 10,
-                      backgroundColor: colors.card2,
-                      borderWidth: 1,
-                      borderColor: colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      flex: 1,
                     }}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text
+                  >
+                    <Image
+                      source={
+                        group?.avatarUrl
+                          ? { uri: group.avatarUrl }
+                          : GROUP_PLACEHOLDER
+                      }
                       style={{
-                        fontWeight: '800',
-                        fontSize: 16,
-                        color: colors.text,
+                        width: 80,
+                        height: 80,
+                        borderRadius: 20,
+                        marginRight: 10,
+                        backgroundColor: colors.card2,
+                        borderWidth: 1,
+                        borderColor: colors.border,
                       }}
-                      numberOfLines={1}
-                    >
-                      {group?.name ||
-                        group?.title ||
-                        group?.id ||
-                        i18n.t('defi.results.header.groupFallback')}
-                    </Text>
-                    {!!defi?.title && (
+                    />
+                    <View style={{ flex: 1 }}>
                       <Text
-                        style={{ color: colors.subtext }}
+                        style={{
+                          fontWeight: '800',
+                          fontSize: 16,
+                          color: colors.text,
+                        }}
                         numberOfLines={1}
                       >
-                        {defi.title}
+                        {group?.name ||
+                          group?.title ||
+                          group?.id ||
+                          i18n.t('defi.results.header.groupFallback')}
                       </Text>
-                    )}
+                      {!!defi?.title && (
+                        <Text
+                          style={{ color: colors.subtext }}
+                          numberOfLines={1}
+                        >
+                          {defi.title}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                </View>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginLeft: 8,
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="account-group"
-                    size={20}
-                    color={colors.subtext}
-                  />
-                  <Text
+                  <View
                     style={{
-                      fontWeight: '700',
-                      marginLeft: 4,
-                      color: colors.text,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginLeft: 8,
                     }}
                   >
-                    {participantsUiCount}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Ligne 2 */}
-              <View style={{ marginTop: 4 }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="treasure-chest"
-                    size={20}
-                    color={colors.text}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      fontWeight: '800',
-                      marginLeft: 6,
-                      color: colors.text,
-                    }}
-                  >
-                    {i18n.t('defi.results.header.pot', {
-                      count: Number(defi?.pot ?? 0),
-                    })}
-                  </Text>
-                </View>
-
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    alignSelf: 'flex-start',
-                    paddingVertical: 4,
-                    paddingHorizontal: 8,
-                    borderRadius: 10,
-                    backgroundColor: statusStyleBase(defi?.status).bg,
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={statusStyleBase(defi?.status).icon}
-                    size={14}
-                    color={statusStyleBase(defi?.status).fg}
-                  />
-                  <Text
-                    style={{
-                      color: statusStyleBase(defi?.status).fg,
-                      marginLeft: 6,
-                      fontWeight: '700',
-                    }}
-                  >
-                    {statusStyleBase(defi?.status).label}
-                  </Text>
-                </View>
-
-                <View style={{ marginTop: 8 }}>
-                  <Text style={{ color: colors.subtext }}>
-                    {i18n.t('defi.results.header.startsAt')}{' '}
+                    <MaterialCommunityIcons
+                      name="account-group"
+                      size={20}
+                      color={colors.subtext}
+                    />
                     <Text
                       style={{
                         fontWeight: '700',
+                        marginLeft: 4,
                         color: colors.text,
                       }}
                     >
-                      {fmtTSLocalHM(defi?.firstGameUTC)}
+                      {participantsUiCount}
                     </Text>
-                  </Text>
-                  <Text style={{ color: colors.subtext }}>
-                    {i18n.t('defi.results.header.scoring')}
-                  </Text>
+                  </View>
                 </View>
-              </View>
-            </View>
 
-            {/* ====== TABLEAU DES PARTICIPANTS ====== */}
-            <ParticipantsCard
-              leaderboard={leaderboard}
-              namesMap={namesMap}
-              participantInfoMap={participantInfoMap}
-              colors={colors}
-              liveStats={liveStats}
-              playerMap={playerMap}
-              currentUid={user?.uid}
-              hideOthersPicks={hideOthersPicks}
-              revealTimeLabel={revealTimeLabel}
-            />
-          </ScrollView>
-
-          {/* ====== CHAT (hors ScrollView) ====== */}
-          <View
-            style={{
-              marginHorizontal: 16,
-              marginBottom: 16 + insets.bottom,
-              paddingBottom:
-                Platform.OS === 'android' ? Math.max(kbH, 8) : 0,
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 12,
-              overflow: 'hidden',
-              backgroundColor: colors.card,
-            }}
-          >
-            {/* Header accordéon */}
-            <TouchableOpacity
-              onPress={() => setChatCollapsed((v) => !v)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                backgroundColor: colors.card,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <Ionicons
-                  name="chatbubble-ellipses"
-                  size={16}
-                  color={colors.text}
-                />
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    color: colors.text,
-                  }}
-                >
-                  {i18n.t('defi.results.chat.title')}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontSize: 12,
-                  }}
-                >
-                  {i18n.t('defi.results.chat.count', {
-                    count: messages.length,
-                  })}
-                </Text>
-              </View>
-              <Ionicons
-                name={chatCollapsed ? 'chevron-down' : 'chevron-up'}
-                size={18}
-                color={colors.text}
-              />
-            </TouchableOpacity>
-
-            {/* Corps */}
-            {!chatCollapsed && (
-              <View
-                style={{
-                  maxHeight: 360,
-                  backgroundColor: colors.card,
-                }}
-              >
-                <InlineChat
-                  colors={colors}
-                  messages={messages}
-                  busy={busy}
-                  onSend={send}
-                  canSend={canSend}
-                  namesMap={namesMap}
-                  participantInfoMap={participantInfoMap}
-                />
-              </View>
-            )}
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* Toast en haut */}
-      <Toast position="top" config={toastConfig} topOffset={60} />
-    </>
-  );
-}
-
-function InlineChat({
-  colors,
-  messages,
-  onSend,
-  busy,
-  canSend,
-  namesMap,
-  participantInfoMap,
-}) {
-  const [text, setText] = React.useState('');
-
-  const INPUT_BAR_HEIGHT = 56;
-  const OPEN_HEIGHT = 360;
-
-  const data = React.useMemo(() => {
-    const millis = (v) =>
-      v?.toMillis?.()
-        ? v.toMillis()
-        : v?.toDate?.()
-        ? v.toDate().getTime()
-        : typeof v === 'number'
-        ? v
-        : 0;
-    return [...messages].sort(
-      (a, b) => millis(a?.createdAt) - millis(b?.createdAt)
-    );
-  }, [messages]);
-
-  const scrollRef = React.useRef(null);
-  const atBottomRef = React.useRef(true);
-  const [autoStick, setAutoStick] = React.useState(true);
-
-  const handleScroll = React.useCallback((e) => {
-    const { contentOffset, contentSize, layoutMeasurement } =
-      e.nativeEvent;
-    const dist =
-      contentSize.height -
-      (contentOffset.y + layoutMeasurement.height);
-    const next = dist < 80;
-    if (atBottomRef.current !== next) {
-      atBottomRef.current = next;
-      setAutoStick(next);
-    }
-  }, []);
-
-  const scrollToEnd = React.useCallback((animated = true) => {
-    scrollRef.current?.scrollToEnd?.({ animated });
-  }, []);
-
-  const handleContentSizeChange = React.useCallback(() => {
-    if (autoStick) requestAnimationFrame(() => scrollToEnd(true));
-  }, [autoStick, scrollToEnd]);
-
-  return (
-    <View
-      style={{
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-        backgroundColor: colors.card,
-      }}
-    >
-      {/* Liste des messages */}
-      <View style={{ height: OPEN_HEIGHT - INPUT_BAR_HEIGHT }}>
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={{ padding: 12 }}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode="interactive"
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-          onScroll={handleScroll}
-          onContentSizeChange={handleContentSizeChange}
-          scrollEventThrottle={16}
-        >
-          {data.length === 0 ? (
-            <Text style={{ color: colors.subtext }}>
-              {i18n.t('defi.results.chat.empty')}
-            </Text>
-          ) : (
-            <View>
-              {data.map((item) => {
-                if (!item || typeof item !== 'object') return null;
-
-                const uid = String(item.uid || '');
-                const name =
-                  namesMap?.[uid] || item.displayName || uid;
-
-                const info = participantInfoMap?.[uid] || {};
-                const uri = info.photoURL
-                  ? withCacheBust(info.photoURL, info.version)
-                  : null;
-                const imgKey = `${uid}:${info.version || 0}`;
-
-                return (
-                  <View key={item.id} style={{ marginBottom: 10 }}>
-                    <View
+                {/* Ligne 2 */}
+                <View style={{ marginTop: 4 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="treasure-chest"
+                      size={20}
+                      color={colors.text}
+                    />
+                    <Text
                       style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        marginBottom: 2,
+                        fontSize: 16,
+                        fontWeight: '800',
+                        marginLeft: 6,
+                        color: colors.text,
                       }}
                     >
-                      <Image
-                        key={imgKey}
-                        source={uri ? { uri } : AVATAR_PLACEHOLDER}
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 12,
-                          backgroundColor: colors.border,
-                          marginRight: 6,
-                        }}
-                        onError={() => {}}
-                      />
+                      {i18n.t('defi.results.header.pot', {
+                        count: Number(defi?.pot ?? 0),
+                      })}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      alignSelf: 'flex-start',
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: 10,
+                      backgroundColor: statusStyleBase(defi?.status).bg,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={statusStyleBase(defi?.status).icon}
+                      size={14}
+                      color={statusStyleBase(defi?.status).fg}
+                    />
+                    <Text
+                      style={{
+                        color: statusStyleBase(defi?.status).fg,
+                        marginLeft: 6,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {statusStyleBase(defi?.status).label}
+                    </Text>
+                  </View>
+
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={{ color: colors.subtext }}>
+                      {i18n.t('defi.results.header.startsAt')}{' '}
                       <Text
                         style={{
                           fontWeight: '700',
                           color: colors.text,
                         }}
                       >
-                        {name}
+                        {fmtTSLocalHM(defi?.firstGameUTC)}
                       </Text>
-                    </View>
-                    <Text style={{ color: colors.text }}>
-                      {String(item.text ?? '')}
+                    </Text>
+                    <Text style={{ color: colors.subtext }}>
+                      {i18n.t('defi.results.header.scoring')}
                     </Text>
                   </View>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
-      </View>
+                </View>
+              </View>
 
-      {/* Barre d'entrée */}
+              {/* ====== TABLEAU DES PARTICIPANTS ====== */}
+              <ParticipantsCard
+                leaderboard={leaderboard}
+                namesMap={namesMap}
+                participantInfoMap={participantInfoMap}
+                colors={colors}
+                liveStats={liveStats}
+                playerMap={playerMap}
+                currentUid={user?.uid}
+                hideOthersPicks={hideOthersPicks}
+                revealTimeLabel={revealTimeLabel}
+              />
+            </ScrollView>
+
+            {/* ====== CHAT (hors ScrollView) ====== */}
+            <View
+              style={{
+                marginHorizontal: 16,
+                marginBottom: 16 + insets.bottom,
+                paddingBottom:
+                  Platform.OS === 'android' ? Math.max(kbH, 8) : 0,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 12,
+                overflow: 'hidden',
+                backgroundColor: colors.card,
+              }}
+            >
+              {/* Header accordéon */}
+              <TouchableOpacity
+                onPress={() => setChatCollapsed((v) => !v)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  backgroundColor: colors.card,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <Ionicons
+                    name="chatbubble-ellipses"
+                    size={16}
+                    color={colors.text}
+                  />
+                  <Text
+                    style={{
+                      fontWeight: '800',
+                      color: colors.text,
+                    }}
+                  >
+                    {i18n.t('defi.results.chat.title')}
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.subtext,
+                      fontSize: 12,
+                    }}
+                  >
+                    {i18n.t('defi.results.chat.count', {
+                      count: messages.length,
+                    })}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={chatCollapsed ? 'chevron-down' : 'chevron-up'}
+                  size={18}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+
+              {/* Corps */}
+              {!chatCollapsed && (
+                <View
+                  style={{
+                    maxHeight: 360,
+                    backgroundColor: colors.card,
+                  }}
+                >
+                  <InlineChat
+                    colors={colors}
+                    messages={messages}
+                    busy={busy}
+                    onSend={send}
+                    canSend={canSend}
+                    namesMap={namesMap}
+                    participantInfoMap={participantInfoMap}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+
+        {/* Toast en haut */}
+        <Toast position="top" config={toastConfig} topOffset={60} />
+      </>
+    );
+  }
+
+  function InlineChat({
+    colors,
+    messages,
+    onSend,
+    busy,
+    canSend,
+    namesMap,
+    participantInfoMap,
+  }) {
+    const [text, setText] = React.useState('');
+
+    const INPUT_BAR_HEIGHT = 56;
+    const OPEN_HEIGHT = 360;
+
+    const data = React.useMemo(() => {
+      const millis = (v) =>
+        v?.toMillis?.()
+          ? v.toMillis()
+          : v?.toDate?.()
+          ? v.toDate().getTime()
+          : typeof v === 'number'
+          ? v
+          : 0;
+      return [...messages].sort(
+        (a, b) => millis(a?.createdAt) - millis(b?.createdAt)
+      );
+    }, [messages]);
+
+    const scrollRef = React.useRef(null);
+    const atBottomRef = React.useRef(true);
+    const [autoStick, setAutoStick] = React.useState(true);
+
+    const handleScroll = React.useCallback((e) => {
+      const { contentOffset, contentSize, layoutMeasurement } =
+        e.nativeEvent;
+      const dist =
+        contentSize.height -
+        (contentOffset.y + layoutMeasurement.height);
+      const next = dist < 80;
+      if (atBottomRef.current !== next) {
+        atBottomRef.current = next;
+        setAutoStick(next);
+      }
+    }, []);
+
+    const scrollToEnd = React.useCallback((animated = true) => {
+      scrollRef.current?.scrollToEnd?.({ animated });
+    }, []);
+
+    const handleContentSizeChange = React.useCallback(() => {
+      if (autoStick) requestAnimationFrame(() => scrollToEnd(true));
+    }, [autoStick, scrollToEnd]);
+
+    return (
       <View
         style={{
-          flexDirection: 'row',
-          padding: 8,
-          gap: 8,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: INPUT_BAR_HEIGHT,
           backgroundColor: colors.card,
         }}
       >
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder={i18n.t('defi.results.chat.inputPlaceholder')}
-          placeholderTextColor={colors.subtext}
+        {/* Liste des messages */}
+        <View style={{ height: OPEN_HEIGHT - INPUT_BAR_HEIGHT }}>
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={{ padding: 12 }}
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="interactive"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            onScroll={handleScroll}
+            onContentSizeChange={handleContentSizeChange}
+            scrollEventThrottle={16}
+          >
+            {data.length === 0 ? (
+              <Text style={{ color: colors.subtext }}>
+                {i18n.t('defi.results.chat.empty')}
+              </Text>
+            ) : (
+              <View>
+                {data.map((item) => {
+                  if (!item || typeof item !== 'object') return null;
+
+                  const uid = String(item.uid || '');
+                  const name =
+                    namesMap?.[uid] || item.displayName || uid;
+
+                  const info = participantInfoMap?.[uid] || {};
+                  const uri = info.photoURL
+                    ? withCacheBust(info.photoURL, info.version)
+                    : null;
+                  const imgKey = `${uid}:${info.version || 0}`;
+
+                  return (
+                    <View key={item.id} style={{ marginBottom: 10 }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          marginBottom: 2,
+                        }}
+                      >
+                        <Image
+                          key={imgKey}
+                          source={uri ? { uri } : AVATAR_PLACEHOLDER}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 12,
+                            backgroundColor: colors.border,
+                            marginRight: 6,
+                          }}
+                          onError={() => {}}
+                        />
+                        <Text
+                          style={{
+                            fontWeight: '700',
+                            color: colors.text,
+                          }}
+                        >
+                          {name}
+                        </Text>
+                      </View>
+                      <Text style={{ color: colors.text }}>
+                        {String(item.text ?? '')}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+
+        {/* Barre d'entrée */}
+        <View
           style={{
-            flex: 1,
-            padding: 12,
-            backgroundColor: colors.card2,
-            color: colors.text,
-            borderRadius: 10,
-          }}
-          textAlignVertical="center"
-          returnKeyType="send"
-          underlineColorAndroid="transparent"
-          onSubmitEditing={() => {
-            const t = text.trim();
-            if (!t || busy || !canSend) return;
-            setText('');
-            onSend(t);
-            requestAnimationFrame(() => scrollToEnd(true));
-          }}
-        />
-        <TouchableOpacity
-          onPress={() => {
-            const t = text.trim();
-            if (!t || busy || !canSend) return;
-            setText('');
-            onSend(t);
-            requestAnimationFrame(() => scrollToEnd(true));
-          }}
-          disabled={busy || !text.trim() || !canSend}
-          style={{
-            paddingHorizontal: 14,
-            justifyContent: 'center',
-            borderRadius: 10,
-            backgroundColor:
-              busy || !text.trim() || !canSend
-                ? colors.border
-                : colors.primary,
+            flexDirection: 'row',
+            padding: 8,
+            gap: 8,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            height: INPUT_BAR_HEIGHT,
+            backgroundColor: colors.card,
           }}
         >
-          <Text style={{ color: '#fff', fontWeight: '800' }}>
-            {i18n.t('defi.results.chat.send')}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function Avatar({ uri, size = 44 }) {
-  const [ok, setOk] = React.useState(!!uri);
-  const showUri =
-    ok && typeof uri === 'string' && /^https?:\/\//i.test(uri);
-  const { colors } = useTheme();
-
-  return showUri ? (
-    <Image
-      source={{ uri }}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: colors.card2,
-        marginRight: 10,
-      }}
-      onError={() => setOk(false)}
-    />
-  ) : (
-    <Image
-      source={AVATAR_PLACEHOLDER}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: colors.card2,
-        marginRight: 10,
-      }}
-    />
-  );
-}
-
-/* Helpers */
-function normId(v) {
-  if (v == null) return null;
-  const s = String(v).trim();
-  return /^\d+$/.test(s) ? String(Number(s)) : s;
-}
-
-function ParticipantsCard({
-  leaderboard,
-  namesMap,
-  participantInfoMap,
-  colors,
-  liveStats,
-  playerMap,
-  currentUid,
-  hideOthersPicks,
-  revealTimeLabel
-}) {
- 
-  if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
-    return (
-      <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
-        <Text
-          style={{ color: colors.subtext, textAlign: 'center' }}
-        >
-          {i18n.t('defi.results.participants.empty')}
-        </Text>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder={i18n.t('defi.results.chat.inputPlaceholder')}
+            placeholderTextColor={colors.subtext}
+            style={{
+              flex: 1,
+              padding: 12,
+              backgroundColor: colors.card2,
+              color: colors.text,
+              borderRadius: 10,
+            }}
+            textAlignVertical="center"
+            returnKeyType="send"
+            underlineColorAndroid="transparent"
+            onSubmitEditing={() => {
+              const t = text.trim();
+              if (!t || busy || !canSend) return;
+              setText('');
+              onSend(t);
+              requestAnimationFrame(() => scrollToEnd(true));
+            }}
+          />
+          <TouchableOpacity
+            onPress={() => {
+              const t = text.trim();
+              if (!t || busy || !canSend) return;
+              setText('');
+              onSend(t);
+              requestAnimationFrame(() => scrollToEnd(true));
+            }}
+            disabled={busy || !text.trim() || !canSend}
+            style={{
+              paddingHorizontal: 14,
+              justifyContent: 'center',
+              borderRadius: 10,
+              backgroundColor:
+                busy || !text.trim() || !canSend
+                  ? colors.border
+                  : colors.primary,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '800' }}>
+              {i18n.t('defi.results.chat.send')}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
-  return (
-    <View
-      style={{
-        marginHorizontal: 16,
-        marginBottom: 12,
-        padding: 12,
-        borderWidth: 1,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
-      }}
-    >
-      {/* 🔸 Info caviardage */}
-      {hideOthersPicks && (
-        <View style={{ marginBottom: 8 }}>
-          <Text
-            style={{
-              fontSize: 12,
-              color: colors.subtext,
-              textAlign: 'center',
-            }}
-          >
-            {i18n.t('defi.results.participants.hiddenUntil', {
-              time: revealTimeLabel || '',
-            })}
-          </Text>
-        </View>
-      )}
+  function Avatar({ uri, size = 44 }) {
+    const [ok, setOk] = React.useState(!!uri);
+    const showUri =
+      ok && typeof uri === 'string' && /^https?:\/\//i.test(uri);
+    const { colors } = useTheme();
 
-      {/* 🔸 LÉGENDE */}
-      <View style={{ alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ fontSize: 12, color: colors.subtext }}>
-          {i18n.t('defi.results.participants.legend')}
-        </Text>
-      </View>
-
-{leaderboard.map((item) => {
-  const info = participantInfoMap[item.uid] || {};
-  const name = namesMap[item.uid] || item.uid;
-  const photo = info.photoURL || null;
-
-  const picks = Array.isArray(item.picks) ? item.picks : [];
-  const rows = [];
-  const seen = new Set();
-
-  for (const p of picks) {
-    const pid = normId(p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id);
-    if (!pid || seen.has(pid)) continue;
-    seen.add(pid);
-
-    const g = Number(liveStats.playerGoals?.[pid] || 0);
-    const a1 = Number(liveStats.playerA1?.[pid] || 0);
-    const a2 = Number(liveStats.playerA2?.[pid] || 0);
-    const aC = Number(liveStats.playerAssists?.[pid] || 0);
-    const pts = Number(liveStats.playerPoints?.[pid] || 0);
-
-    const derived = Math.max(0, pts - g);
-    const assists = Math.max(a1 + a2, aC, derived);
-
-    const points = g + assists;
-
-    rows.push({
-      playerId: pid,
-      playerName:
-        playerMap[pid]?.fullName ?? p?.fullName ?? p?.name ?? 'Joueur',
-      teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
-      goals: g,
-      assists,
-      points,
-    });
+    return showUri ? (
+      <Image
+        source={{ uri }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: colors.card2,
+          marginRight: 10,
+        }}
+        onError={() => setOk(false)}
+      />
+    ) : (
+      <Image
+        source={AVATAR_PLACEHOLDER}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: colors.card2,
+          marginRight: 10,
+        }}
+      />
+    );
   }
 
-  rows.sort(
-    (a, b) =>
-      Number(b.points || 0) - Number(a.points || 0) ||
-      Number(b.goals || 0) - Number(a.goals || 0) ||
-      a.playerName.localeCompare(b.playerName)
-  );
+  /* Helpers */
+  function normId(v) {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return /^\d+$/.test(s) ? String(Number(s)) : s;
+  }
 
-  // ✅ IMPORTANT: totalPoints DOIT être ici, dans le map()
-  const totalPoints = rows.reduce((s, r) => s + (Number(r.points) || 0), 0);
+  function ParticipantsCard({
+    leaderboard,
+    namesMap,
+    participantInfoMap,
+    colors,
+    liveStats,
+    playerMap,
+    currentUid,
+    hideOthersPicks,
+    revealTimeLabel
+  }) {
+  
+    if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
+      return (
+        <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+          <Text
+            style={{ color: colors.subtext, textAlign: 'center' }}
+          >
+            {i18n.t('defi.results.participants.empty')}
+          </Text>
+        </View>
+      );
+    }
 
-  const isSelf = currentUid && item.uid === currentUid;
-  const cardBg = isSelf ? colors.card2 : colors.card;
-  const cardBorder = isSelf ? colors.primary : colors.border;
-
-return (
-  <View
-    key={item.uid}
-    style={{
-      paddingVertical: 12,
-      paddingHorizontal: 10,
-      backgroundColor: isSelf ? colors.card2 : colors.card,
-      borderWidth: 1,
-      borderColor: isSelf ? colors.primary : colors.border, // 🔴 bordure participant courant
-      borderRadius: 12,
-      marginBottom: 12,
-    }}
-  >
-    {/* Header */}
-    <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <Avatar uri={photo} size={48} />
-      <View style={{ flex: 1 }}>
-        <Text
-          numberOfLines={1}
-          style={{ fontWeight: "700", color: colors.text }}
-        >
-          {name}
-        </Text>
-      </View>
-
-      {/* totalPoints = livePoints (ou calc si tu veux) */}
+    return (
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          gap: 6,
+          marginHorizontal: 16,
+          marginBottom: 12,
+          padding: 12,
+          borderWidth: 1,
+          borderRadius: 12,
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          elevation: 2,
+          shadowColor: '#000',
+          shadowOpacity: 0.06,
+          shadowRadius: 4,
+          shadowOffset: { width: 0, height: 2 },
         }}
       >
-        <MaterialCommunityIcons
-          name="star-circle"
-          size={22}
-          color={colors.text}
-        />
-        <Text style={{ fontSize: 20, fontWeight: "800", color: colors.text }}>
-          {Number(item.livePoints || 0).toFixed(0)}
-        </Text>
-      </View>
-    </View>
-
-    {/* Rows */}
-    {!hideOthersPicks || isSelf ? (
-      <View style={{ marginTop: 10 }}>
-        {rows.map((row) => {
-          const goals = Number(row.goals) || 0;
-          const assists = Number(row.assists) || 0;
-          const points = goals + assists;
-
-          return (
-            <View
-              key={row.playerId}
+        {/* 🔸 Info caviardage */}
+        {hideOthersPicks && (
+          <View style={{ marginBottom: 8 }}>
+            <Text
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingVertical: 6,
+                fontSize: 12,
+                color: colors.subtext,
+                textAlign: 'center',
               }}
             >
-              {/* Logo équipe (UNE seule fois) */}
-              <View
-                style={{
-                  width: 28,
-                  height: 28,
-                  marginRight: 10,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {row.teamAbbr ? (
-                  <SvgUri
-                    uri={teamLogoUrl(row.teamAbbr)}
-                    width={28}
-                    height={28}
-                  />
-                ) : (
-                  <View
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: colors.border,
-                    }}
-                  />
-                )}
-              </View>
+              {i18n.t('defi.results.participants.hiddenUntil', {
+                time: revealTimeLabel || '',
+              })}
+            </Text>
+          </View>
+        )}
 
-              {/* Nom */}
-              <Text
-                numberOfLines={1}
-                style={{
-                  flex: 1,
-                  color: colors.text,
-                  fontSize: 14,
-                  fontWeight: "600",
-                  marginRight: 10,
-                }}
-              >
-                {row.playerName}
-              </Text>
+        {/* 🔸 LÉGENDE */}
+        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+          <Text style={{ fontSize: 12, color: colors.subtext }}>
+            {i18n.t('defi.results.participants.legend')}
+          </Text>
+        </View>
 
-              {/* Stats à droite */}
-              <Text
-                style={{
-                  minWidth: 86,
-                  textAlign: "right",
-                  fontWeight: "800",
-                  color: colors.text,
-                  fontVariant: ["tabular-nums"],
-                }}
-              >
-                {`${goals}-${assists}=${points}`}
-              </Text>
-            </View>
-          );
-        })}
+  {leaderboard.map((item) => {
+    const info = participantInfoMap[item.uid] || {};
+    const name = namesMap[item.uid] || item.uid;
+    const photo = info.photoURL || null;
+
+    const picks = Array.isArray(item.picks) ? item.picks : [];
+    const rows = [];
+    const seen = new Set();
+
+    for (const p of picks) {
+      const pid = normId(p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id);
+      if (!pid || seen.has(pid)) continue;
+      seen.add(pid);
+
+      const g = Number(liveStats.playerGoals?.[pid] || 0);
+      const a1 = Number(liveStats.playerA1?.[pid] || 0);
+      const a2 = Number(liveStats.playerA2?.[pid] || 0);
+      const aC = Number(liveStats.playerAssists?.[pid] || 0);
+      const pts = Number(liveStats.playerPoints?.[pid] || 0);
+
+      const derived = Math.max(0, pts - g);
+      const assists = Math.max(a1 + a2, aC, derived);
+
+      const points = g + assists;
+
+      rows.push({
+        playerId: pid,
+        playerName:
+          playerMap[pid]?.fullName ?? p?.fullName ?? p?.name ?? 'Joueur',
+        teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
+        goals: g,
+        assists,
+        points,
+      });
+    }
+
+    rows.sort(
+      (a, b) =>
+        Number(b.points || 0) - Number(a.points || 0) ||
+        Number(b.goals || 0) - Number(a.goals || 0) ||
+        a.playerName.localeCompare(b.playerName)
+    );
+
+    // ✅ IMPORTANT: totalPoints DOIT être ici, dans le map()
+    const totalPoints = rows.reduce((s, r) => s + (Number(r.points) || 0), 0);
+
+    const isSelf = currentUid && item.uid === currentUid;
+    const cardBg = isSelf ? colors.card2 : colors.card;
+    const cardBorder = isSelf ? colors.primary : colors.border;
+
+  return (
+    <View
+      key={item.uid}
+      style={{
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        backgroundColor: isSelf ? colors.card2 : colors.card,
+        borderWidth: 1,
+        borderColor: isSelf ? colors.primary : colors.border, // 🔴 bordure participant courant
+        borderRadius: 12,
+        marginBottom: 12,
+      }}
+    >
+      {/* Header */}
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Avatar uri={photo} size={48} />
+        <View style={{ flex: 1 }}>
+          <Text
+            numberOfLines={1}
+            style={{ fontWeight: "700", color: colors.text }}
+          >
+            {name}
+          </Text>
+        </View>
+
+        {/* totalPoints = livePoints (ou calc si tu veux) */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 6,
+          }}
+        >
+          <MaterialCommunityIcons
+            name="star-circle"
+            size={22}
+            color={colors.text}
+          />
+          <Text style={{ fontSize: 20, fontWeight: "800", color: colors.text }}>
+            {Number(item.livePoints || 0).toFixed(0)}
+          </Text>
+        </View>
       </View>
-    ) : (
-      <Text
-        style={{
-          color: colors.subtext,
-          marginTop: 10,
-          fontStyle: "italic",
-        }}
-      >
-        {i18n.t("defi.results.participants.hiddenSelections")}
-      </Text>
-    )}
-  </View>
-);
-})}
+
+      {/* Rows */}
+      {!hideOthersPicks || isSelf ? (
+        <View style={{ marginTop: 10 }}>
+          {rows.map((row) => {
+            const goals = Number(row.goals) || 0;
+            const assists = Number(row.assists) || 0;
+            const points = goals + assists;
+
+            return (
+              <View
+                key={row.playerId}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 6,
+                }}
+              >
+                {/* Logo équipe (UNE seule fois) */}
+                <View
+                  style={{
+                    width: 28,
+                    height: 28,
+                    marginRight: 10,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {row.teamAbbr ? (
+                    <SvgUri
+                      uri={teamLogoUrl(row.teamAbbr)}
+                      width={28}
+                      height={28}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: colors.border,
+                      }}
+                    />
+                  )}
+                </View>
+
+                {/* Nom */}
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    flex: 1,
+                    color: colors.text,
+                    fontSize: 14,
+                    fontWeight: "600",
+                    marginRight: 10,
+                  }}
+                >
+                  {row.playerName}
+                </Text>
+
+                {/* Stats à droite */}
+                <Text
+                  style={{
+                    minWidth: 86,
+                    textAlign: "right",
+                    fontWeight: "800",
+                    color: colors.text,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {`${goals}-${assists}=${points}`}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <Text
+          style={{
+            color: colors.subtext,
+            marginTop: 10,
+            fontStyle: "italic",
+          }}
+        >
+          {i18n.t("defi.results.participants.hiddenSelections")}
+        </Text>
+      )}
     </View>
   );
-}
+  })}
+      </View>
+    );
+  }

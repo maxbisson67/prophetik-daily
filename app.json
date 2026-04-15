@@ -47,14 +47,12 @@
       "icon": "./assets/prophetik_icon_1024.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.prophetik",
-      "buildNumber": "2.0.0",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "versionCode": 5,
       "backgroundColor": "#0B1020",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive_foreground_432_transparent_padded.png",

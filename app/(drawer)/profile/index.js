@@ -35,10 +35,10 @@ export default function ProfileScreen() {
   const didPatchOnboardingRef = useRef(false);
 
   // Sync visuel quand le user change
-  useEffect(() => {
-    setDisplayName(user?.displayName || "");
-    setPhotoURL(user?.photoURL ?? null);
-  }, [user?.uid, user?.displayName, user?.photoURL]);
+useEffect(() => {
+  setDisplayName(user?.displayName || "");
+  setPhotoURL(participant?.avatarUrl ?? participant?.photoURL ?? user?.photoURL ?? null);
+}, [user?.uid, user?.displayName, user?.photoURL, participant?.avatarUrl, participant?.photoURL]);
 
   // Lecture live de participants/{uid}
   useEffect(() => {
@@ -60,7 +60,7 @@ export default function ProfileScreen() {
           // La source de vérité UI vient de participants.displayName
           setDisplayName(p?.displayName || user?.displayName || "");
 
-          const nextPhoto = p?.photoURL ?? p?.avatarUrl ?? user?.photoURL ?? null;
+          const nextPhoto = p?.avatarUrl ?? p?.photoURL ?? user?.photoURL ?? null;
           setPhotoURL(nextPhoto);
         } else {
           setParticipant(null);
@@ -204,8 +204,8 @@ export default function ProfileScreen() {
       const cleanDisplayName = String(displayName || "").trim() || null;
       const newPhotoURL =
         photoURL ??
-        participant?.photoURL ??
         participant?.avatarUrl ??
+        participant?.photoURL ??
         user?.photoURL ??
         null;
 

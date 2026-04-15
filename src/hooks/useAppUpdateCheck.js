@@ -51,20 +51,24 @@ export default function useAppUpdateCheck() {
     };
   }, []);
 
-  const currentVersion = Application.nativeApplicationVersion || "0.0.0";
+  // Version visible par l'usager
+  const currentVersion = String(Application.nativeApplicationVersion || "0.0.0");
+
+  // Version interne à comparer avec Firestore
+  const currentBuildVersion = String(Application.nativeBuildVersion || "0");
 
   const latestVersion = String(config?.latestVersion || "");
   const minVersion = String(config?.minVersion || "");
 
   const updateAvailable = useMemo(() => {
     if (!latestVersion) return false;
-    return compareVersions(currentVersion, latestVersion) < 0;
-  }, [currentVersion, latestVersion]);
+    return compareVersions(currentBuildVersion, latestVersion) < 0;
+  }, [currentBuildVersion, latestVersion]);
 
   const forceUpdate = useMemo(() => {
     if (!minVersion) return false;
-    return config?.forceUpdate === true && compareVersions(currentVersion, minVersion) < 0;
-  }, [config?.forceUpdate, currentVersion, minVersion]);
+    return config?.forceUpdate === true || compareVersions(currentBuildVersion, minVersion) < 0;
+  }, [config?.forceUpdate, currentBuildVersion, minVersion]);
 
   const message = useMemo(() => {
     const lang = String(i18n.language || i18n.locale || "fr").toLowerCase();
@@ -90,6 +94,7 @@ export default function useAppUpdateCheck() {
     loading,
     config,
     currentVersion,
+    currentBuildVersion,
     latestVersion,
     minVersion,
     updateAvailable,

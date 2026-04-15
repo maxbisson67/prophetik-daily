@@ -32,11 +32,7 @@ function sectionCardStyle(colors, accent = RED) {
 }
 
 function EmojiIcon({ children }) {
-  return (
-    <Text style={{ fontSize: 18, lineHeight: 20 }}>
-      {children}
-    </Text>
-  );
+  return <Text style={{ fontSize: 18, lineHeight: 20 }}>{children}</Text>;
 }
 
 export default function LeaderboardLegend({ colors }) {
@@ -48,31 +44,31 @@ export default function LeaderboardLegend({ colors }) {
       {
         key: "fgc",
         icon: <EmojiIcon>🏒</EmojiIcon>,
-        label: t("leaderboard.legend.fgc.label", { defaultValue: "Premier but" }),
+        label: t("leaderboard.legend.fgc.label", { defaultValue: "Défi premier but" }),
         text: t("leaderboard.legend.fgc.text", {
-          defaultValue: "Points cumulés des défis « Premier but ».",
+          defaultValue: "Points cumulés des défis Premier but.",
         }),
       },
       {
-        key: "standard",
+        key: "tp",
+        icon: <EmojiIcon>🏆</EmojiIcon>,
+        label: t("leaderboard.legend.tp.label", { defaultValue: "Défi équipe gagnante" }),
+        text: t("leaderboard.legend.tp.text", {
+          defaultValue: "Points cumulés des défis Équipe gagnante.",
+        }),
+      },
+      {
+        key: "ts",
         icon: <EmojiIcon>🎯</EmojiIcon>,
-        label: t("leaderboard.legend.standard.label", { defaultValue: "Standards" }),
-        text: t("leaderboard.legend.standard.text", {
-          defaultValue: "Points cumulés des défis standards.",
-        }),
-      },
-      {
-        key: "ascension",
-        icon: <EmojiIcon>🏔</EmojiIcon>,
-        label: t("leaderboard.legend.ascension.label", { defaultValue: "Ascensions" }),
-        text: t("leaderboard.legend.ascension.text", {
-          defaultValue: "Points cumulés des défis Ascensions.",
+        label: t("leaderboard.legend.ts.label", { defaultValue: "Défi top scoreurs" }),
+        text: t("leaderboard.legend.ts.text", {
+          defaultValue: "Points cumulés des défis Top scoreur.",
         }),
       },
       {
         key: "total",
         icon: <ProphetikIcons mode="points" amount={null} size="sm" iconOnly />,
-        label: t("leaderboard.legend.total.label", { defaultValue: "Points totaux" }),
+        label: t("leaderboard.legend.total.label", { defaultValue: "Total" }),
         text: t("leaderboard.legend.total.text", {
           defaultValue: "Total des points gagnés dans le groupe.",
         }),

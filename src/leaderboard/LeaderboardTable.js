@@ -25,42 +25,80 @@ function asTextNode(value, colors, style) {
   );
 }
 
-function usePublicProfilesFor(uids) {
+function useProfilesFor(uids) {
   const [map, setMap] = React.useState({});
+
   React.useEffect(() => {
     const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
+
     if (!ids.length) {
       setMap({});
       return;
     }
+
     const unsubs = new Map();
+
     ids.forEach((uid) => {
-      const ref = firestore().collection('profiles_public').doc(uid);
-      const un = ref.onSnapshot(
-        (snap) => {
-          if (!snap.exists) {
-            setMap((prev) => {
-              if (!prev[uid]) return prev;
-              const next = { ...prev };
-              delete next[uid];
-              return next;
+      const unsubsForUid = [];
+
+      const mergeForUid = (patch) => {
+        setMap((prev) => ({
+          ...prev,
+          [uid]: {
+            ...(prev[uid] || {}),
+            ...patch,
+          },
+        }));
+      };
+
+      // 1) profiles_public
+      const unPub = firestore()
+        .collection("profiles_public")
+        .doc(uid)
+        .onSnapshot(
+          (snap) => {
+            if (!snap.exists) return;
+            const d = snap.data() || {};
+            mergeForUid({
+              publicDisplayName:
+                d.displayName || i18n.t("common.guest", { defaultValue: "Invité" }),
+              publicAvatarUrl: d.avatarUrl || null,
+              publicUpdatedAt: d.updatedAt || null,
             });
-            return;
-          }
-          const d = snap.data() || {};
-          setMap((prev) => ({
-            ...prev,
-            [uid]: {
-              displayName: d.displayName || i18n.t("common.guest", { defaultValue: "Invité" }),
-              avatarUrl: d.avatarUrl || null,
-              updatedAt: d.updatedAt || null,
-            },
-          }));
-        },
-        () => {}
-      );
-      unsubs.set(uid, un);
+          },
+          () => {}
+        );
+
+      unsubsForUid.push(unPub);
+
+      // 2) participants (source prioritaire pour le jersey)
+      const unParticipant = firestore()
+        .collection("participants")
+        .doc(uid)
+        .onSnapshot(
+          (snap) => {
+            if (!snap.exists) return;
+            const d = snap.data() || {};
+            mergeForUid({
+              participantDisplayName: d.displayName || null,
+              participantAvatarUrl: d.avatarUrl || null,
+              participantUpdatedAt: d.updatedAt || null,
+            });
+          },
+          () => {}
+        );
+
+      unsubsForUid.push(unParticipant);
+
+      unsubs.set(uid, () => {
+        unsubsForUid.forEach((u) => {
+          try {
+            u?.();
+          } catch {}
+        });
+      });
     });
+
     return () => {
       for (const [, un] of unsubs) {
         try {
@@ -82,7 +120,7 @@ export default function LeaderboardTable({ rows, colors, columns, onRowPress, hi
   const infoRefs = useRef({}); // key -> ref
 
   const uids = useMemo(() => (rows || []).map((r) => String(r.id)), [rows]);
-  const profiles = usePublicProfilesFor(uids);
+  const profiles = useProfilesFor(uids);
 
   const toggleSort = useCallback((key) => {
     setSort((s) =>
@@ -194,9 +232,25 @@ export default function LeaderboardTable({ rows, colors, columns, onRowPress, hi
       {/* rows */}
       {sorted.map((r, idx) => {
         const prof = profiles[String(r.id)] || {};
-        const version = prof?.updatedAt?.toMillis?.() ? prof.updatedAt.toMillis() : 0;
-        const display = prof.displayName || r.displayName || r.id;
-        const uri = prof.avatarUrl ? withCacheBust(prof.avatarUrl, version) : null;
+
+        const display =
+          prof.participantDisplayName ||
+          prof.publicDisplayName ||
+          r.displayName ||
+          r.id;
+
+        const avatarUrl =
+          prof.participantAvatarUrl ||
+          prof.publicAvatarUrl ||
+          null;
+
+        const updatedAt =
+          prof.participantUpdatedAt ||
+          prof.publicUpdatedAt ||
+          null;
+
+        const version = updatedAt?.toMillis?.() ? updatedAt.toMillis() : 0;
+        const uri = avatarUrl ? withCacheBust(avatarUrl, version) : null;
 
         return (
           <TouchableOpacity

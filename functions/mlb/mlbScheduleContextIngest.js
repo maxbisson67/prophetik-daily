@@ -313,6 +313,7 @@ export const refreshMlbScheduleWindow = onSchedule(
   },
   async () => {
     try {
+      return;  // arrêter l'exécution pour le moment
       const today = ymdToronto(new Date());
       const startYmd = addDaysToYmd(today, -7);
       const endYmd = addDaysToYmd(today, 60);

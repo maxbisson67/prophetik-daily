@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useTheme } from '@src/theme/ThemeProvider';
 import { usePublicProfile } from '@src/profile/usePublicProfile';
+import useMeDoc from "@src/home/hooks/useMeDoc";
 
 // ✅ i18n (uniforme partout)
 import i18n from '@src/i18n/i18n';
@@ -120,6 +121,7 @@ function DrawerHeader() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { profile: pub, loading: loadingPub } = usePublicProfile(user?.uid);
+  const { meDoc, loading: loadingMe } = useMeDoc({ authReady: true, uid: user?.uid, dayTick: 0 });
 
   const guestLabel = i18n.t('drawer.guest', { defaultValue: 'Guest' });
   const onlineLabel = i18n.t('drawer.online', { defaultValue: 'Signed in' });
@@ -127,16 +129,24 @@ function DrawerHeader() {
   const loadingLabel = i18n.t('common.loading', { defaultValue: 'Loading…' });
 
   const displayName =
+    meDoc?.displayName ||
     pub?.displayName ||
     user?.displayName ||
-    (user?.email ? user.email.split('@')[0] : guestLabel);
+    (user?.email ? user.email.split("@")[0] : guestLabel);
 
   const email = user?.email || '';
 
-  const rawAvatar = pub?.avatarUrl || user?.photoURL || null;
+  const rawAvatar =
+    meDoc?.avatarUrl ||
+    pub?.avatarUrl ||
+    user?.photoURL ||
+    null;
+
+  const avatarUpdatedAt = meDoc?.updatedAt || pub?.updatedAt || null;
+
   const avatarUri = useMemo(
-    () => withCacheBust(rawAvatar, pub?.updatedAt),
-    [rawAvatar, pub?.updatedAt]
+    () => withCacheBust(rawAvatar, avatarUpdatedAt),
+    [rawAvatar, avatarUpdatedAt]
   );
 
   const [bump, setBump] = React.useState(0);
@@ -179,7 +189,7 @@ function DrawerHeader() {
       />
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
-          {loadingPub ? loadingLabel : displayName}
+          {loadingPub || loadingMe ? loadingLabel : displayName}
         </Text>
         <Text style={{ color: colors.subtext, fontSize: 12 }}>
           {email || (user ? onlineLabel : offlineLabel)}
@@ -267,17 +277,6 @@ function CustomDrawerContent(props) {
       />
       */}
 
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t('drawer.playoffs', { defaultValue: 'Playoffs' })}
-        onPress={() => {
-          props.navigation.dispatch(DrawerActions.closeDrawer());
-          requestAnimationFrame(() => router.push('/(drawer)/playoffs'));
-        }}
-        icon={({ size }) => (
-          <Ionicons name="flame-outline" size={size} color={colors.text} />
-        )}
-      />
     
       <DrawerItem
         {...itemCommonProps}
