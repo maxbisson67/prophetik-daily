@@ -1,6 +1,6 @@
 // app/(drawer)/(tabs)/_layout.js
 import React from "react";
-import {View} from 'react-native';
+import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,16 +10,13 @@ import TabBadge from "@src/ui/TabBadge";
 
 import { useTheme } from "@src/theme/ThemeProvider";
 import { useAuth } from "@src/auth/SafeAuthProvider";
-import { useEligibleChallengesCount} from "@src/hooks/useEligibleChallengesCount";
-
+import { useEligibleChallengesCount } from "@src/hooks/useEligibleChallengesCount";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
   const { user } = useAuth();
 
- const eligibleCount = useEligibleChallengesCount({ userUid: user?.uid });
-
-
+  const eligibleCount = useEligibleChallengesCount({ userUid: user?.uid });
 
   return (
     <Tabs
@@ -41,21 +38,13 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="AccueilScreen"
         options={{
-          title: i18n.t("tabs.home", { defaultValue: "Home" }),
+          title: i18n.t("home.title", { defaultValue: "Aujourd’hui" }),
           headerLeft: (props) => <DrawerToggleButton {...props} />,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="GroupsScreen"
-        options={{
-          title: i18n.t("tabs.groups", { defaultValue: "Groups" }),
-          headerLeft: (props) => <DrawerToggleButton {...props} />,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" color={color} size={size} />
+            <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="calendar-outline" color={color} size={size} />
+              <TabBadge value={eligibleCount} colors={colors} />
+            </View>
           ),
         }}
       />
@@ -63,13 +52,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="ChallengesScreen"
         options={{
-          title: i18n.t("tabs.challenges", { defaultValue: "Challenges" }),
+          title: i18n.t("tabs.challenges", { defaultValue: "Mes résultats" }),
           headerLeft: (props) => <DrawerToggleButton {...props} />,
-          tabBarIcon: ({ size }) => (
-          <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-            <ProphetikIcons mode="emoji" emoji="🎯" size={size >= 28 ? "lg" : "md"} iconOnly />
-            <TabBadge value={eligibleCount} colors={colors} />
-          </View>
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="stats-chart-outline" color={color} size={size} />
           ),
         }}
       />
@@ -77,7 +63,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="ClassementScreen"
         options={{
-          title: i18n.t("tabs.leaderboard", { defaultValue: "Leaderboard" }),
+          title: i18n.t("tabs.leaderboard", { defaultValue: "Classement" }),
           headerLeft: (props) => <DrawerToggleButton {...props} />,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="podium" color={color} size={size} />
@@ -85,26 +71,9 @@ export default function TabsLayout() {
         }}
       />
 
-
-    <Tabs.Screen
-      name="sports"
-      options={{
-        title: i18n.t("drawer.sports", { defaultValue: "Sports" }),
-        headerLeft: (props) => <DrawerToggleButton {...props} />,
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name="radio-outline" size={size} color={color} />
-        ),
-      }}
-    />
-
-      {/* Route index masquée */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null,
-          headerShown: false,
-        }}
-      />
+      <Tabs.Screen name="GroupsScreen" options={{ href: null }} />
+      <Tabs.Screen name="sports" options={{ href: null }} />
+      <Tabs.Screen name="index" options={{ href: null, headerShown: false }} />
     </Tabs>
   );
 }

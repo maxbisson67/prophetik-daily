@@ -217,7 +217,7 @@
     }
   },
   "home": {
-    "title": "Home",
+    "title": "Today",
     "hello": "Hi",
     "points": "Points",
     "viewPoints": "My points",
@@ -1191,7 +1191,7 @@
       "personal": "Personal"
     },
 
-    "home": "Home",
+    "home": "Today",
     "groups": "Groups",
     "challenges": "Challenges",
     "leaderboard": "Leaderboard",
@@ -1207,11 +1207,12 @@
     "signOut": "Sign out"
   },
   "tabs": {
-    "home": "Home",
+    "today": "Today",
     "groups": "Groups",
-    "challenges": "Challenges",
+    "challenges": "My Challenges",
     "leaderboard": "Leaderboard",
-    "matchLive": "Live game"
+    "matchLive": "Live game",
+    "help":"Help"
   },
 
   "subscriptions": {

@@ -70,14 +70,31 @@ function BigBtn({ icon, title, subtitle, onPress, colors }) {
   );
 }
 
-export default function SportsHubScreen() {
+export default function SportsHubScreen({ initialLeague = "NHL", hideSportTabs = false }) {  
   const router = useRouter();
   const { colors } = useTheme();
+  const normalizedInitialLeague =
+  String(initialLeague || "NHL").toLowerCase() === "mlb" ? "mlb" : "nhl";
+  const [sport, setSport] = useState(normalizedInitialLeague);
+  React.useEffect(() => {
 
-  const [sport, setSport] = useState("nhl"); // 'nhl' | 'mlb'
+    setSport(normalizedInitialLeague);
 
+  }, [normalizedInitialLeague]);
   const title = i18n.t("sports.hub.title", { defaultValue: "Sports" });
   const isNhl = sport === "nhl";
+
+  console.log(
+
+  "[SportsHub]",
+
+  "initialLeague=", initialLeague,
+
+  "sport=", sport,
+
+  "hideSportTabs=", hideSportTabs
+
+);
 
   return (
     <>
@@ -91,6 +108,7 @@ export default function SportsHubScreen() {
           gap: 14,
         }}
       >
+      {!hideSportTabs ? (  
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pill
             active={sport === "nhl"}
@@ -105,6 +123,7 @@ export default function SportsHubScreen() {
             colors={colors}
           />
         </View>
+        ) : null}
 
         <BigBtn
           colors={colors}

@@ -26,6 +26,22 @@ export default function SportsLayout() {
       />
 
       {/* ✅ Sous-pages = back automatique (ne mets PAS headerLeft ici) */}
+
+      <Stack.Screen
+        name="nhl-live"
+        options={{
+          title: "NHL Live",
+          headerLeft: () => <DrawerToggleButton tintColor={colors.text} />,
+        }}
+      />
+
+      <Stack.Screen
+        name="mlb-live"
+        options={{
+          title: "MLB Live",
+          headerLeft: () => <DrawerToggleButton tintColor={colors.text} />,
+        }}
+      />
       <Stack.Screen name="MatchLiveScreen" options={{ title: "Match Live" }} />
       <Stack.Screen name="NhlStandingsScreen" options={{ title: "Classement NHL" }} />
       <Stack.Screen name="NhlScheduleScreen" options={{ title: "Calendrier" }} />

@@ -643,6 +643,7 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
               ownerId: data.ownerId || null,
               createdBy: data.createdBy || null,
               status: data.status || null,
+              sport: String(data.sport || data.league || "NHL").toUpperCase(),
               fgcBonus: Number(data.fgcBonus ?? 1),
               tpBonus: Number(data.tpBonus ?? 0),
             },
@@ -820,7 +821,7 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
         (snap) => {
           const data = snap?.exists ? snap.data() || null : null;
 
-          console.log("[HOME TS SNAP]", defiId, "exists=", snap?.exists, "data=", data);
+          //console.log("[HOME TS SNAP]", defiId, "exists=", snap?.exists, "data=", data);
 
           setMyParticipationsByDefiId((prev) => ({
             ...prev,
@@ -893,6 +894,7 @@ const avatarUrl =
           avatarUrl: meta.avatarUrl || null,
           ownerId: meta.ownerId || null,
           createdBy: meta.createdBy || null,
+          sport: String(meta.sport || "NHL").toUpperCase(),
           fgcBonus: Number(meta.fgcBonus ?? 1),
           tpBonus: Number(meta.tpBonus ?? 0),
         };

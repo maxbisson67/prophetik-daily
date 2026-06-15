@@ -421,6 +421,8 @@ export default function ChallengesScreen() {
           name: g.name || gid,
           avatarUrl: g.avatarUrl || null,
           isFavorite: !!g.isFavorite,
+          sport:  "NHL",
+          
         };
       }),
     [groupIds, groupsMap]

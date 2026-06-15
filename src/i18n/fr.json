@@ -211,7 +211,7 @@
       }
     },
     "home": {
-      "title": "Accueil",
+      "title": "Aujourd'hui",
       "hello": "Salut",
       "points": "Points",
       "viewPoints": "Mes points",
@@ -1175,7 +1175,7 @@
         "personal": "Personnel"
       },
 
-      "home": "Accueil",
+      "home": "Aujourd'hui",
       "groups": "Groupes",
       "challenges": "Défis",
       "leaderboard": "Classement",
@@ -1192,11 +1192,12 @@
     },
 
     "tabs": {
-      "home": "Accueil",
+      "today": "Aujourd'hui",
       "groups": "Groupes",
-      "challenges": "Défis",
+      "challenges": "Mes résultats",
       "leaderboard": "Classement",
-      "matchLive": "En direct"
+      "matchLive": "En direct",
+       "help":"Aide"
     },
 
     "subscriptions": {
