@@ -337,6 +337,7 @@ export const refreshMlbRecentSchedule = onSchedule(
   },
   async () => {
     try {
+      return;  
       const today = ymdToronto(new Date());
       const startYmd = addDaysToYmd(today, -1);
       const endYmd = addDaysToYmd(today, 1);
