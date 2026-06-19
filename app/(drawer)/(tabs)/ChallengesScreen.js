@@ -194,7 +194,7 @@ function normalizeTpDoc(doc) {
     kind: "tp",
     groupId: String(d?.groupId || ""),
     dateKey: normalizeYmdString(d?.gameYmd),
-    title: i18n.t("tp.home.title", { defaultValue: "Défi équipe gagnante" }),
+    title: i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" }),
     status: normalizeStatus(d?.status),
     createdAt: d?.createdAt || null,
     signupDeadline:

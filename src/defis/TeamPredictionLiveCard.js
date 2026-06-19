@@ -13,7 +13,12 @@ import firestore from "@react-native-firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import i18n from "@src/i18n/i18n";
-import { TeamLogo } from "@src/nhl/nhlAssets";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import {
+  formatMlbPitcherFallbackLabel,
+  formatMlbPitcherSummary,
+} from "@src/mlb/mlbPitcherDisplayHelpers";
 
 function shouldShowParticipants(status) {
   const st = String(status || "").toLowerCase();
@@ -176,6 +181,7 @@ function formatOutcomeLabel(outcome) {
   if (v === "REG") return "en temps régulier";
   if (v === "OT") return "en prolongation";
   if (v === "TB") return "en tirs de barrage";
+  if (v === "FINAL") return "";
 
   return v || "";
 }
@@ -281,6 +287,7 @@ function EntryRow({
   colors,
   awayAbbr,
   homeAbbr,
+  sport = "NHL",
 }) {
   const who =
     entry?.displayName ||
@@ -291,6 +298,8 @@ function EntryRow({
   const avatar = entry?.photoURL || entry?.avatarUrl || null;
   const { winnerAbbr, line } = formatEntryPick(entry, awayAbbr, homeAbbr);
   const shouldShowThisPick = revealPick || isMe;
+  const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
+  const winnerTeam = winnerAbbr ? lookupTeamByAbbr(league, winnerAbbr) : null;
 
   return (
     <View
@@ -334,12 +343,12 @@ function EntryRow({
 
         {shouldShowThisPick ? (
           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-            {winnerAbbr ? <TeamLogo abbr={winnerAbbr} size={16} /> : null}
+            {winnerTeam ? <TeamLogoBadge team={winnerTeam} size={16} colors={colors} /> : null}
             <Text
               style={{
                 color: colors.subtext,
                 fontSize: 12,
-                marginLeft: winnerAbbr ? 6 : 0,
+                marginLeft: winnerTeam ? 6 : 0,
                 fontWeight: "700",
               }}
               numberOfLines={1}
@@ -533,7 +542,7 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
       >
         <Text style={{ color: colors.subtext, fontSize: 13 }}>
           {i18n.t("tp.live.none", {
-            defaultValue: "Aucun défi équipe gagnante pour ce match.",
+            defaultValue: "Aucune prédiction de matchs disponible pour ce match.",
           })}
         </Text>
       </View>
@@ -541,8 +550,11 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
   }
 
   const st = String(challenge?.status || "").toLowerCase();
+  const league = String(challenge?.league || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
   const awayAbbr = safeAbbr(challenge?.awayAbbr);
   const homeAbbr = safeAbbr(challenge?.homeAbbr);
+  const awayTeam = lookupTeamByAbbr(league, awayAbbr);
+  const homeTeam = lookupTeamByAbbr(league, homeAbbr);
   const participantsCount = Number(challenge?.participantsCount || entries.length || 0);
 
   const decided = isDecided(st);
@@ -595,21 +607,53 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
         </View>
 
         <View style={{ marginTop: 10, marginBottom: 2 }}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <TeamLogo abbr={awayAbbr} size={22} />
-            <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
-              {awayAbbr || "—"}
-            </Text>
+          {league === "MLB" ? (
+            <View style={{ gap: 8 }}>
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <TeamLogoBadge team={awayTeam} size={22} colors={colors} />
+                  <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
+                    {awayAbbr || "—"}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "700", marginTop: 2, marginLeft: 30 }}>
+                  {formatMlbPitcherSummary(challenge?.awayProbablePitcher) ||
+                    formatMlbPitcherFallbackLabel(i18n.t.bind(i18n))}
+                </Text>
+              </View>
+              <Text style={{ color: colors.subtext, fontWeight: "900", textAlign: "center" }}>
+                vs
+              </Text>
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <TeamLogoBadge team={homeTeam} size={22} colors={colors} />
+                  <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
+                    {homeAbbr || "—"}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "700", marginTop: 2, marginLeft: 30 }}>
+                  {formatMlbPitcherSummary(challenge?.homeProbablePitcher) ||
+                    formatMlbPitcherFallbackLabel(i18n.t.bind(i18n))}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TeamLogoBadge team={awayTeam} size={22} colors={colors} />
+              <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
+                {awayAbbr || "—"}
+              </Text>
 
-            <Text style={{ color: colors.subtext, marginHorizontal: 10, fontWeight: "900" }}>
-              @
-            </Text>
+              <Text style={{ color: colors.subtext, marginHorizontal: 10, fontWeight: "900" }}>
+                @
+              </Text>
 
-            <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>
-              {homeAbbr || "—"}
-            </Text>
-            <TeamLogo abbr={homeAbbr} size={22} />
-          </View>
+              <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>
+                {homeAbbr || "—"}
+              </Text>
+              <TeamLogoBadge team={homeTeam} size={22} colors={colors} />
+            </View>
+          )}
         </View>
 
         <ResultBanner status={st} challenge={challenge} colors={colors} />
@@ -674,6 +718,7 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
                       colors={colors}
                       awayAbbr={awayAbbr}
                       homeAbbr={homeAbbr}
+                      sport={league}
                     />
                   );
                 })}

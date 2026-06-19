@@ -1,5 +1,9 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, FieldValue, logger } from "../utils.js";
+import {
+  parseAutopilotEnabled,
+  parseFavoriteTeam,
+} from "./groupConfigUtils.js";
 
 const AI_UID = "ai";
 
@@ -311,4 +315,66 @@ export const transferGroupOwnership = onCall(async (req) => {
 
   logger.info("transferGroupOwnership", { groupId, from: uid, to: newOwnerUid });
   return { ok: true, groupId, newOwnerUid };
+});
+
+/**
+ * Met à jour la configuration du groupe (owner seulement).
+ * - autopilotEnabled: boolean
+ * - favoriteTeam: null | { sport, teamId, abbreviation, name }
+ */
+export const updateGroupConfig = onCall(async (req) => {
+  const uid = req.auth?.uid || null;
+  if (!uid) throw new HttpsError("unauthenticated", "Authentification requise.");
+
+  const groupId = req.data?.groupId;
+  if (!groupId || typeof groupId !== "string") {
+    throw new HttpsError("invalid-argument", 'Paramètre "groupId" requis.');
+  }
+
+  if (typeof req.data?.autopilotEnabled !== "boolean") {
+    throw new HttpsError("invalid-argument", "autopilotEnabled must be a boolean");
+  }
+
+  const autopilotEnabled = parseAutopilotEnabled(req.data.autopilotEnabled);
+  const favoriteTeam = parseFavoriteTeam(
+    Object.prototype.hasOwnProperty.call(req.data || {}, "favoriteTeam")
+      ? req.data.favoriteTeam
+      : null
+  );
+
+  const { ref: gRef, data: g } = await getGroup(groupId);
+  if (!g) throw new HttpsError("not-found", "Groupe introuvable.");
+
+  const ownerId = g.ownerId || g.createdBy || null;
+  if (String(ownerId) !== String(uid)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Seul le propriétaire peut modifier la configuration du groupe."
+    );
+  }
+
+  const status = String(g.status || "active").toLowerCase();
+  if (status === "archived" || g.active === false) {
+    throw new HttpsError("failed-precondition", "GROUP_ARCHIVED");
+  }
+
+  const now = FieldValue.serverTimestamp();
+
+  await gRef.set(
+    {
+      autopilotEnabled,
+      favoriteTeam,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  logger.info("updateGroupConfig", {
+    groupId,
+    uid,
+    autopilotEnabled,
+    hasFavoriteTeam: favoriteTeam !== null,
+  });
+
+  return { ok: true, groupId, autopilotEnabled, favoriteTeam };
 });

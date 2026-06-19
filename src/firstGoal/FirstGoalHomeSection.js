@@ -12,8 +12,16 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import i18n from "@src/i18n/i18n";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { TeamLogo } from "@src/nhl/nhlAssets";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import FirstGoalLiveCard from "@src/firstGoal/FirstGoalLiveCard";
+import {
+  getFgcResultPlayerName,
+  getFgcResultTeamAbbr,
+  getFgcTitle,
+  getFgcResultPrefix,
+  getFgcMode,
+} from "@src/firstGoal/fgcChallengeUtils";
 
 /* --------------------------------- Helpers -------------------------------- */
 
@@ -74,15 +82,7 @@ function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function getStatusCtaLabel(status) {
-  const st = String(status || "").toLowerCase();
-
-  if (st === "open") {
-    return i18n.t("firstGoal.home.viewParticipants", {
-      defaultValue: "Voir les participants",
-    });
-  }
-
+function getStatusCtaLabel() {
   return i18n.t("firstGoal.home.viewPicks", {
     defaultValue: "Voir les choix",
   });
@@ -172,7 +172,7 @@ function InfoBubbleFGC({ colors }) {
           <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
             {i18n.t("firstGoal.home.infoBody", {
               defaultValue:
-                "Choisis le joueur qui marquera le premier but du match. Regarde les résultats dans l'onglet Sports/MatchLive. Un point sera alloué à celui qui a prédit le premier compteur. Si personne n'a fait la bonne prédiction, le point sera reporté et la cagnotte augmentera.",
+                "• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 5 points seront alloués à celui qui a prédit le bon joueur.",
             })}
           </Text>
         </View>
@@ -181,13 +181,16 @@ function InfoBubbleFGC({ colors }) {
   );
 }
 
-function MatchupRow({ awayAbbr, homeAbbr, colors }) {
+function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors }) {
   const away = safeAbbr(awayAbbr);
   const home = safeAbbr(homeAbbr);
+  const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
+  const awayTeam = lookupTeamByAbbr(league, away);
+  const homeTeam = lookupTeamByAbbr(league, home);
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <TeamLogo abbr={away} size={22} />
+      <TeamLogoBadge team={awayTeam} size={22} colors={colors} />
       <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
         {away || "—"}
       </Text>
@@ -199,7 +202,7 @@ function MatchupRow({ awayAbbr, homeAbbr, colors }) {
       <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>
         {home || "—"}
       </Text>
-      <TeamLogo abbr={home} size={22} />
+      <TeamLogoBadge team={homeTeam} size={22} colors={colors} />
     </View>
   );
 }
@@ -210,30 +213,29 @@ export default function FirstGoalHomeSection({
   groups = [],
   colors,
   currentGroupId = null,
+  currentSport = "NHL",
   onHasChallengeChange,
 }) {
   const router = useRouter();
   const { user } = useAuth();
 
-  const groupIds = useMemo(() => {
-    return (groups || []).map((g) => String(g?.id || "")).filter(Boolean);
-  }, [groups]);
+  const sportLeague = String(currentSport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
 
-  const groupBoniById = useMemo(() => {
-    const map = {};
-    (groups || []).forEach((g) => {
-      const id = String(g?.id || "");
-      if (!id) return;
-      map[id] = Math.max(1, Number(g?.fgcBonus ?? 1));
-    });
-    return map;
-  }, [groups]);
+  const groupIds = useMemo(() => {
+    return (groups || [])
+      .filter(
+        (g) => String(g?.sport || g?.league || "NHL").toUpperCase() === sportLeague
+      )
+      .map((g) => String(g?.id || ""))
+      .filter(Boolean);
+  }, [groups, sportLeague]);
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [myPickByChallengeId, setMyPickByChallengeId] = useState({});
   const [showStateModal, setShowStateModal] = useState(false);
   const [selectedGameId, setSelectedGameId] = useState(null);
+  const [selectedChallenge, setSelectedChallenge] = useState(null);
 
   const mergeAndSet = useCallback((mapById) => {
     const list = Array.from(mapById.values());
@@ -281,13 +283,19 @@ export default function FirstGoalHomeSection({
     const makeQuery = (ids) => {
       const base = firestore()
         .collection("first_goal_challenges")
-        .where("league", "==", "NHL")
+        .where("league", "==", sportLeague)
         .where("type", "==", "first_goal")
         .where("gameYmd", "==", ymd);
 
       if (ids.length === 1) return base.where("groupId", "==", String(ids[0]));
       return base.where("groupId", "in", ids);
     };
+
+    console.log("[HOME FGC QUERY]", {
+      currentSport: sportLeague,
+      gameYmd: ymd,
+      targetGroupIds,
+    });
 
     const idsChunks = gid ? [targetGroupIds] : chunk(targetGroupIds, 10);
 
@@ -305,8 +313,40 @@ export default function FirstGoalHomeSection({
           });
 
           snap.docs.forEach((d) => {
-            mapById.set(d.id, { id: d.id, ...d.data() });
+            const data = d.data() || {};
+            const league = String(data.league || sportLeague).toUpperCase();
+            if (league === sportLeague) {
+              mapById.set(d.id, { id: d.id, ...data });
+            } else {
+              mapById.delete(d.id);
+            }
           });
+
+          const merged = Array.from(mapById.values()).filter(
+            (ch) => String(ch?.league || sportLeague).toUpperCase() === sportLeague
+          );
+
+          console.log(
+            "[HOME FGC RAW]",
+            snap.docs.map((d) => ({
+              id: d.id,
+              league: d.data()?.league,
+              fgcMode: d.data()?.fgcMode,
+              gameId: d.data()?.gameId,
+              status: d.data()?.status,
+            }))
+          );
+          console.log(
+            "[HOME FGC FILTERED]",
+            sportLeague,
+            merged.map((ch) => ({
+              id: ch.id,
+              league: ch.league,
+              fgcMode: getFgcMode(ch),
+              gameId: ch.gameId,
+              status: ch.status,
+            }))
+          );
 
           chunkDocIds.set(chunkKey, nextIds);
           mergeAndSet(mapById);
@@ -331,7 +371,7 @@ export default function FirstGoalHomeSection({
         } catch {}
       });
     };
-  }, [groupIds.join("|"), currentGroupId, mergeAndSet]);
+  }, [groupIds.join("|"), currentGroupId, mergeAndSet, sportLeague]);
 
   useEffect(() => {
     const visibleChallengeIds = items
@@ -388,15 +428,6 @@ export default function FirstGoalHomeSection({
     };
   }, [items, user?.uid]);
 
-  const selectedGroupBoni = useMemo(() => {
-    const gid = String(currentGroupId || "").trim();
-
-    if (gid) return groupBoniById[gid] ?? 1;
-
-    const firstGroupId = groupIds[0] || null;
-    return firstGroupId ? groupBoniById[firstGroupId] ?? 1 : 1;
-  }, [currentGroupId, groupIds, groupBoniById]);
-
   return (
     <>
       <View style={{ marginBottom: 14 }}>
@@ -418,11 +449,7 @@ export default function FirstGoalHomeSection({
               backgroundColor: colors.card,
             }}
           >
-            <Text style={{ color: "#f97316", fontWeight: "900", fontSize: 14 }}>
-              🔥 {i18n.t("firstGoal.home.boni", { defaultValue: "Boni" })}: +{selectedGroupBoni}
-            </Text>
-
-            <Text style={{ color: colors.subtext, fontSize: 13, marginTop: 8 }}>
+            <Text style={{ color: colors.subtext, fontSize: 13 }}>
               {i18n.t("firstGoal.home.empty", {
                 defaultValue: "Aucun défi 'premier but' aujourd’hui dans tes groupes.",
               })}
@@ -433,30 +460,47 @@ export default function FirstGoalHomeSection({
             {items.slice(0, 6).map((ch) => {
               const awayAbbr = safeAbbr(ch?.awayAbbr);
               const homeAbbr = safeAbbr(ch?.homeAbbr);
+              const challengeLeague =
+                String(ch?.league || sportLeague).toUpperCase() === "MLB" ? "MLB" : "NHL";
 
               const participants =
                 Number(ch.participantsCount ?? 0) ||
                 (Array.isArray(ch.participantUids) ? ch.participantUids.length : 0);
 
-              const groupId = String(ch?.groupId || "");
-              const boni = groupBoniById[groupId] ?? 1;
-
               const deadline = getSignupDeadline(ch);
               const deadlineHM = fmtTimeShort(deadline);
               const deadlinePassed = deadline ? Date.now() >= deadline.getTime() : false;
 
-              const st = String(ch.status || "").toLowerCase();
-
-              const result =
-                st === "decided" || st === "closed"
-                  ? ch.firstGoal?.playerName
-                    ? `Premier but: ${ch.firstGoal.playerName} (${ch.firstGoal.teamAbbr || ""})`
-                    : i18n.t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" })
-                  : null;
-
               const challengeId = String(ch?.id || "").trim();
               const myPick = myPickByChallengeId?.[challengeId]?.data || null;
               const hasMyPick = !!myPickByChallengeId?.[challengeId]?.hasPick;
+
+              const st = String(ch.status || "").toLowerCase();
+              const isLocked = st !== "open";
+              const shouldShowParticipate = st === "open" && !hasMyPick && !deadlinePassed;
+              const shouldShowEdit = st === "open" && hasMyPick && !deadlinePassed;
+              const showParticipateCta = shouldShowParticipate || shouldShowEdit;
+
+              if (__DEV__) {
+                console.log("[FGC HOME DEBUG]", {
+                  currentSport: sportLeague,
+                  challengeId: ch?.id,
+                  league: ch?.league,
+                  type: ch?.type,
+                  fgcMode: getFgcMode(ch),
+                  status: ch?.status,
+                  gameId: ch?.gameId,
+                  gameStartTimeUTC: ch?.gameStartTimeUTC,
+                  hasEntry: hasMyPick,
+                  isLocked,
+                  shouldShowParticipate,
+                  shouldShowEdit,
+                });
+              }
+
+              const isDecided = st === "decided" || st === "closed";
+              const resultPlayerName = isDecided ? getFgcResultPlayerName(ch) : null;
+              const resultTeamAbbr = isDecided ? getFgcResultTeamAbbr(ch) : "";
 
               const pickedPlayerName =
                 myPick?.playerName ||
@@ -470,28 +514,15 @@ export default function FirstGoalHomeSection({
                   myPick?.selectedTeamAbbr
               );
 
-              const ctaLabel = deadlinePassed
-                ? i18n.t("firstGoal.cta.matchLive", { defaultValue: "Match Live" })
-                : hasMyPick
+              const ctaLabel = hasMyPick
                 ? i18n.t("firstGoal.cta.modifyPick", { defaultValue: "Modifier mon joueur" })
-                : i18n.t("firstGoal.cta.pickScorer", { defaultValue: "Choisir mon joueur" });
+                : i18n.t("firstGoal.live.join", { defaultValue: "Participer" });
 
-              const secondaryCtaLabel = getStatusCtaLabel(st);
+              const secondaryCtaLabel = getStatusCtaLabel();
+              const showSecondaryCta = st !== "open";
 
               const onPressCta = () => {
-                const gameId = String(ch.gameId || "").trim();
-
                 if (!challengeId) return;
-
-                if (deadlinePassed) {
-                  if (gameId) {
-                    router.push(`/(drawer)/sports/MatchLiveScreen?gameId=${gameId}&from=fgc`);
-                  } else {
-                    router.push(`/(drawer)/sports/MatchLiveScreen?from=fgc`);
-                  }
-                  return;
-                }
-
                 router.push(`/(first-goal)/pick/${challengeId}`);
               };
 
@@ -499,6 +530,7 @@ export default function FirstGoalHomeSection({
                 const gameId = String(ch?.gameId || "").trim();
                 if (!gameId) return;
                 setSelectedGameId(gameId);
+                setSelectedChallenge(ch);
                 setShowStateModal(true);
               };
 
@@ -513,22 +545,31 @@ export default function FirstGoalHomeSection({
                     backgroundColor: colors.card,
                   }}
                 >
-                  <MatchupRow awayAbbr={awayAbbr} homeAbbr={homeAbbr} colors={colors} />
+                  <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, marginBottom: 8 }}>
+                    {getFgcTitle(ch, i18n.t.bind(i18n))}
+                  </Text>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-                    <Text style={{ color: "#f97316", fontWeight: "900", fontSize: 14 }}>
-                      🔥 {i18n.t("firstGoal.home.boni", { defaultValue: "Boni" })}: +{boni}
-                    </Text>
-                  </View>
+                  <MatchupRow
+                    awayAbbr={awayAbbr}
+                    homeAbbr={homeAbbr}
+                    sport={challengeLeague}
+                    colors={colors}
+                  />
 
-                  <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
+                  <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
                     {i18n.t("firstGoal.home.signupDeadline", {
                       defaultValue: "Heure limite d'inscription",
                     })}
                     {": "}
-                    <Text style={{ color: colors.text, fontWeight: "900" }}>
-                      {deadlineHM || "—"}
-                    </Text>
+                    {deadlinePassed ? (
+                      <Text style={{ color: colors.text, fontWeight: "900" }}>
+                        {i18n.t("firstGoal.home.signupClosed", { defaultValue: "Fermé" })}
+                      </Text>
+                    ) : (
+                      <Text style={{ color: colors.text, fontWeight: "900" }}>
+                        {deadlineHM || "—"}
+                      </Text>
+                    )}
                   </Text>
 
                   <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
@@ -539,10 +580,20 @@ export default function FirstGoalHomeSection({
                     </Text>
                   </View>
 
-                  {result ? (
-                    <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
-                      {result}
-                    </Text>
+                  {isDecided ? (
+                    resultPlayerName ? (
+                      <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
+                        {getFgcResultPrefix(ch, i18n.t.bind(i18n))}{" "}
+                        <Text style={{ color: colors.text, fontWeight: "900" }}>
+                          {resultPlayerName}
+                        </Text>
+                        {resultTeamAbbr ? ` (${resultTeamAbbr})` : ""}
+                      </Text>
+                    ) : (
+                      <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
+                        {i18n.t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" })}
+                      </Text>
+                    )
                   ) : null}
 
                   {hasMyPick ? (
@@ -559,7 +610,13 @@ export default function FirstGoalHomeSection({
                         {": "}
                       </Text>
 
-                      {pickedTeamAbbr ? <TeamLogo abbr={pickedTeamAbbr} size={18} /> : null}
+                      {pickedTeamAbbr ? (
+                        <TeamLogoBadge
+                          team={lookupTeamByAbbr(challengeLeague, pickedTeamAbbr)}
+                          size={18}
+                          colors={colors}
+                        />
+                      ) : null}
 
                       <Text
                         style={{
@@ -575,37 +632,63 @@ export default function FirstGoalHomeSection({
                   ) : null}
 
                   <View style={{ marginTop: 12, gap: 10 }}>
-                    <TouchableOpacity
-                      onPress={onPressCta}
-                      activeOpacity={0.9}
-                      style={{
-                        width: "100%",
-                        paddingVertical: 10,
-                        borderRadius: 12,
-                        alignItems: "center",
-                        backgroundColor: "#b91c1c",
-                      }}
-                    >
-                      <Text style={{ color: "#fff", fontWeight: "900" }}>{ctaLabel}</Text>
-                    </TouchableOpacity>
+                    {deadlinePassed ? (
+                      <TouchableOpacity
+                        onPress={onPressStateCta}
+                        activeOpacity={0.9}
+                        style={{
+                          width: "100%",
+                          paddingVertical: 10,
+                          borderRadius: 12,
+                          alignItems: "center",
+                          backgroundColor: "#b91c1c",
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "900" }}>
+                          {i18n.t("firstGoal.home.viewResults", {
+                            defaultValue: "Voir les résultats",
+                          })}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <>
+                        {showParticipateCta ? (
+                          <TouchableOpacity
+                            onPress={onPressCta}
+                            activeOpacity={0.9}
+                            style={{
+                              width: "100%",
+                              paddingVertical: 10,
+                              borderRadius: 12,
+                              alignItems: "center",
+                              backgroundColor: "#b91c1c",
+                            }}
+                          >
+                            <Text style={{ color: "#fff", fontWeight: "900" }}>{ctaLabel}</Text>
+                          </TouchableOpacity>
+                        ) : null}
 
-                    <TouchableOpacity
-                      onPress={onPressStateCta}
-                      activeOpacity={0.9}
-                      style={{
-                        width: "100%",
-                        paddingVertical: 10,
-                        borderRadius: 12,
-                        alignItems: "center",
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Text style={{ color: colors.text, fontWeight: "900" }}>
-                        {secondaryCtaLabel}
-                      </Text>
-                    </TouchableOpacity>
+                        {showSecondaryCta ? (
+                          <TouchableOpacity
+                            onPress={onPressStateCta}
+                            activeOpacity={0.9}
+                            style={{
+                              width: "100%",
+                              paddingVertical: 10,
+                              borderRadius: 12,
+                              alignItems: "center",
+                              backgroundColor: colors.card,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                            }}
+                          >
+                            <Text style={{ color: colors.text, fontWeight: "900" }}>
+                              {secondaryCtaLabel}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </>
+                    )}
                   </View>
                 </View>
               );
@@ -618,7 +701,10 @@ export default function FirstGoalHomeSection({
         visible={showStateModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowStateModal(false)}
+        onRequestClose={() => {
+          setShowStateModal(false);
+          setSelectedChallenge(null);
+        }}
       >
         <View
           style={{
@@ -656,11 +742,16 @@ export default function FirstGoalHomeSection({
               }}
             >
               <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-                {i18n.t("firstGoal.live.title", { defaultValue: "Défi: Premier but" })}
+                {selectedChallenge
+                  ? getFgcTitle(selectedChallenge, i18n.t.bind(i18n))
+                  : i18n.t("firstGoal.live.title", { defaultValue: "Défi: Premier but" })}
               </Text>
 
               <TouchableOpacity
-                onPress={() => setShowStateModal(false)}
+                onPress={() => {
+                  setShowStateModal(false);
+                  setSelectedChallenge(null);
+                }}
                 style={{
                   width: 36,
                   height: 36,

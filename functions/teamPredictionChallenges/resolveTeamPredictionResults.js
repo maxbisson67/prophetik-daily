@@ -2,34 +2,19 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
+import {
+  extractMlbOfficialResult,
+  extractNhlOfficialResult,
+  fetchMlbLiveFeed,
+  isMlbLiveGameFinal,
+  isNhlLiveGameFinal,
+  normalizeLeague,
+} from "./tpGameSources.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const REGION = "us-central1";
-
-function safeUpper(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
-function isGameFinal(game) {
-  const s1 = safeUpper(game?.gameState);
-  const s2 = safeUpper(game?.gameStatus);
-  const s3 = safeUpper(game?.state);
-
-  return (
-    game?.isFinal === true ||
-    s1.includes("FINAL") ||
-    s2.includes("FINAL") ||
-    s3.includes("FINAL") ||
-    s1 === "OFF" ||
-    s2 === "OFF" ||
-    s3 === "OFF" ||
-    s1 === "OFFICIAL" ||
-    s2 === "OFFICIAL" ||
-    s3 === "OFFICIAL"
-  );
-}
 
 export const resolveTeamPredictionResults = onSchedule(
   {
@@ -50,63 +35,87 @@ export const resolveTeamPredictionResults = onSchedule(
 
     for (const doc of snap.docs) {
       const chRef = doc.ref;
-      const ch = doc.data();
+      const ch = doc.data() || {};
 
       const gameId = String(ch.gameId || "");
-      const gameYmd = String(ch.gameYmd || "");
+      const league = normalizeLeague(ch.league);
 
-      if (!gameId || !gameYmd) {
-        logger.info("[TP resolve] skip missing game refs", {
+      if (!gameId) {
+        logger.info("[TP resolve] skip missing gameId", {
           challengeId: doc.id,
           gameId,
-          gameYmd,
         });
         continue;
       }
 
       try {
-        const gameSnap = await db.doc(`nhl_live_games/${gameId}`).get();
+        let officialResult = null;
 
-        if (!gameSnap.exists) {
-          logger.info("[TP resolve] skip missing live game", {
+        if (league === "MLB") {
+          const liveFeed = await fetchMlbLiveFeed(gameId);
+
+          if (!isMlbLiveGameFinal(liveFeed)) {
+            logger.info("[TP resolve] skip MLB not final", {
+              challengeId: doc.id,
+              gameId,
+              abstractGameState: liveFeed?.gameData?.status?.abstractGameState ?? null,
+            });
+            continue;
+          }
+
+          officialResult = extractMlbOfficialResult(liveFeed, ch);
+        } else {
+          const gameSnap = await db.doc(`nhl_live_games/${gameId}`).get();
+
+          if (!gameSnap.exists) {
+            logger.info("[TP resolve] skip missing live game", {
+              challengeId: doc.id,
+              gameId,
+            });
+            continue;
+          }
+
+          const game = gameSnap.data() || {};
+
+          if (!isNhlLiveGameFinal(game)) {
+            logger.info("[TP resolve] skip NHL not final", {
+              challengeId: doc.id,
+              gameId,
+              isFinal: game?.isFinal ?? null,
+              state: game?.state ?? null,
+              gameState: game?.gameState ?? null,
+              gameStatus: game?.gameStatus ?? null,
+            });
+            continue;
+          }
+
+          officialResult = extractNhlOfficialResult(game, ch);
+        }
+
+        if (
+          !officialResult?.winnerAbbr ||
+          officialResult.awayScore == null ||
+          officialResult.homeScore == null ||
+          !officialResult.outcome
+        ) {
+          logger.info("[TP resolve] skip incomplete official result", {
             challengeId: doc.id,
             gameId,
+            league,
+            officialResult,
           });
           continue;
         }
-
-        const game = gameSnap.data() || {};
-
-        if (!isGameFinal(game)) {
-          logger.info("[TP resolve] skip not final", {
-            challengeId: doc.id,
-            gameId,
-            isFinal: game?.isFinal ?? null,
-            state: game?.state ?? null,
-            gameState: game?.gameState ?? null,
-            gameStatus: game?.gameStatus ?? null,
-          });
-          continue;
-        }
-
-        const awayScore = Number(game.awayScore ?? game.away?.score ?? 0);
-        const homeScore = Number(game.homeScore ?? game.home?.score ?? 0);
-
-        const winnerAbbr = awayScore > homeScore ? ch.awayAbbr : ch.homeAbbr;
-
-        let outcome = "REG";
-        if (game.periodType === "OT") outcome = "OT";
-        if (game.periodType === "SO") outcome = "TB";
 
         await chRef.set(
           {
             status: "decided",
             decidedAt: FieldValue.serverTimestamp(),
             officialResult: {
-              winnerAbbr,
-              awayScore,
-              homeScore,
-              outcome,
+              winnerAbbr: officialResult.winnerAbbr,
+              awayScore: officialResult.awayScore,
+              homeScore: officialResult.homeScore,
+              outcome: officialResult.outcome,
               confirmedAt: FieldValue.serverTimestamp(),
             },
             updatedAt: FieldValue.serverTimestamp(),
@@ -117,14 +126,16 @@ export const resolveTeamPredictionResults = onSchedule(
         logger.info("[TP resolve] decided", {
           challengeId: doc.id,
           gameId,
-          winnerAbbr,
-          awayScore,
-          homeScore,
-          outcome,
+          league,
+          winnerAbbr: officialResult.winnerAbbr,
+          awayScore: officialResult.awayScore,
+          homeScore: officialResult.homeScore,
+          outcome: officialResult.outcome,
         });
       } catch (e) {
         logger.error("[TP resolve] error", {
           challengeId: doc.id,
+          league,
           err: String(e?.message || e),
         });
       }

@@ -11,7 +11,9 @@ import {
   Alert,
 } from "react-native";
 
-import useAppUpdateCheck from "@src/hooks/useAppUpdateCheck";
+import useAppUpdateCheck, {
+  APP_UPDATE_BANNER_ENABLED,
+} from "@src/hooks/useAppUpdateCheck";
 import ProphetikUpdateBanner from "@src/home/components/ProphetikUpdateBanner";
 
 import CreateTeamPredictionModal from "@src/defis/CreateTeamPredictionModal";
@@ -437,6 +439,8 @@ const [hideUpdateBanner, setHideUpdateBanner] = useState(false);
 const [showTeamPredictionModal, setShowTeamPredictionModal] = useState(false);
 
 const [hasTeamPredictionForGroup, setHasTeamPredictionForGroup] = useState(false);
+const [canCreateTpBundle, setCanCreateTpBundle] = useState(true);
+const [tpBundleHintId, setTpBundleHintId] = useState(null);
 
 const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   
@@ -480,6 +484,22 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   const jerseyBackUrl = meDoc?.jerseyBackUrl || null;
 
   const [roleBadge, setRoleBadge] = useState(null);
+
+  // Derived
+  const combinedError = error || meError;
+  const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
+  const currentSport = String(currentGroupMeta?.sport || "NHL").toUpperCase();
+
+console.log("[HOME GROUP]", {
+
+  currentGroupId,
+
+  groupName: currentGroupMeta?.name,
+
+  sport: currentSport,
+
+});
+
 
   useEffect(() => {
     if (!authReady || !user?.uid || !currentGroupId) {
@@ -640,11 +660,11 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
               id: gid,
               name: data.name || data.title || gid,
               avatarUrl: data.avatarUrl || null,
+              favoriteTeam: data.favoriteTeam || null,
               ownerId: data.ownerId || null,
               createdBy: data.createdBy || null,
               status: data.status || null,
               sport: String(data.sport || data.league || "NHL").toUpperCase(),
-              fgcBonus: Number(data.fgcBonus ?? 1),
               tpBonus: Number(data.tpBonus ?? 0),
             },
           }));
@@ -713,7 +733,7 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
 
   // active defis
   useEffect(() => {
-    if (!authReady || !user?.uid || !currentGroupId) {
+    if (!authReady || !user?.uid || !currentGroupId || !currentGroupMeta) {
       setActiveDefis([]);
       setLoadingDefis(false);
       return;
@@ -721,38 +741,65 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
 
     setLoadingDefis(true);
 
+    console.log("[HOME DEFIS QUERY]", {
+      currentGroupId,
+      currentSport,
+    });
+
     const qActiveLive = firestore()
       .collection("defis")
       .where("groupId", "==", String(currentGroupId))
-      .where("status", "in", ["open", "live"])
       .limit(50);
 
     const un = listenRNFB(
       qActiveLive,
       (snap) => {
-        const rows = (snap?.docs ?? []).map((d) => ({ id: d.id, ...(d?.data?.() || {}) }));
+        const rowsRaw = (snap?.docs ?? []).map((d) => ({
+          id: d.id,
+          ...(d?.data?.() || {}),
+        }));
+
+        console.log(
+          "[HOME DEFIS RAW]",
+          rowsRaw.map((r) => ({
+            id: r.id,
+            groupId: r.groupId,
+            sport: r.sport,
+            status: r.status,
+            type: r.type,
+          }))
+        );
+
+        const rows = rowsRaw.filter((d) => {
+          const sport = String(d?.sport || "NHL").toUpperCase();
+          const status = String(d?.status || "").toLowerCase();
+
+          return sport === currentSport && ["open", "live"].includes(status);
+        });
+
+
         rows.sort((a, b) => {
           const va =
             (a.signupDeadline?.toDate?.() ??
               a.firstGameUTC?.toDate?.() ??
               a.createdAt?.toDate?.() ??
               0).valueOf?.() || 0;
+
           const vb =
             (b.signupDeadline?.toDate?.() ??
               b.firstGameUTC?.toDate?.() ??
               b.createdAt?.toDate?.() ??
               0).valueOf?.() || 0;
+
           return va - vb;
         });
 
         setActiveDefis(rows);
         setLoadingDefis(false);
-
-        const ascCount = rows.filter((x) => isAscensionDefi?.(x)).length;
-        //console.log(`[HOME DBG] activeDefis=${rows.length} ascDefis=${ascCount}`);
       },
-      `defis:active:${currentGroupId}`,
+      `defis:active:${currentGroupId}:${currentSport}`,
       (e) => {
+        console.log("[HOME DEFIS ERROR]", e?.code, e?.message || e);
         setLoadingDefis(false);
         setError(e);
       },
@@ -760,10 +807,25 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
     );
 
     return () => {
-      try { un?.(); } catch {}
+      try {
+        un?.();
+      } catch {}
     };
-  }, [authReady, user?.uid, currentGroupId]);
+  }, [authReady, user?.uid, currentGroupId, currentGroupMeta?.id, currentSport]);
 
+useEffect(() => {
+
+  setActiveDefis([]);
+
+  setMyParticipationsByDefiId({});
+
+  setHasFirstGoalForGroup(false);
+
+  setHasTeamPredictionForGroup(false);
+  setCanCreateTpBundle(false);
+  setTpBundleHintId(null);
+
+}, [currentGroupId, currentSport]);
 
   const normalDefisBase = useMemo(() => {
     const rows = Array.isArray(activeDefis) ? activeDefis : [];
@@ -860,10 +922,7 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
     ),
   ]);
 
-  // Derived
-  const combinedError = error || meError;
 
- const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
 
 const isCurrentGroupOwner =
   !!user?.uid &&
@@ -892,10 +951,10 @@ const avatarUrl =
           name: meta.name || gid,
           status: meta.status || null,
           avatarUrl: meta.avatarUrl || null,
+          favoriteTeam: meta.favoriteTeam || null,
           ownerId: meta.ownerId || null,
           createdBy: meta.createdBy || null,
           sport: String(meta.sport || "NHL").toUpperCase(),
-          fgcBonus: Number(meta.fgcBonus ?? 1),
           tpBonus: Number(meta.tpBonus ?? 0),
         };
       }),
@@ -962,17 +1021,23 @@ const avatarUrl =
       <CreateFirstGoalModal
         visible={showFirstGoalModal}
         onClose={() => setShowFirstGoalModal(false)}
-        groups={userGroups}
-        initialGroupId={favoriteGroupId}
+        groups={userGroups.filter((g) => String(g.sport || "NHL").toUpperCase() === currentSport)}
+        initialGroupId={currentGroupId || favoriteGroupId}
+        initialSport={currentSport}
+        league={currentSport}
         onCreated={() => setShowFirstGoalModal(false)}
       />
 
       <CreateTeamPredictionModal
         visible={showTeamPredictionModal}
         onClose={() => setShowTeamPredictionModal(false)}
-        groups={userGroups}
-        initialGroupId={favoriteGroupId}
-        onCreated={() => {
+        groups={userGroups.filter((g) => String(g.sport || "NHL").toUpperCase() === currentSport)}
+        initialGroupId={currentGroupId || favoriteGroupId}
+        initialSport={currentSport}
+        league={currentSport}
+        onCreated={(data) => {
+          const bundleId = String(data?.bundleId || "").trim();
+          if (bundleId) setTpBundleHintId(bundleId);
           setShowTeamPredictionModal(false);
           router.replace({
             pathname: "/(drawer)/(tabs)/AccueilScreen",
@@ -986,6 +1051,7 @@ const avatarUrl =
         onClose={() => setShowCreateModal(false)}
         groups={userGroups}
         initialGroupId={favoriteGroupId}
+        initialSport={currentSport}
         onCreated={() => setShowCreateModal(false)}
       />
 
@@ -1031,11 +1097,17 @@ const avatarUrl =
                 currentGroupId={currentGroupId}
                 onSelectGroup={onSelectGroup}
                 roleBadge={roleBadge}
+                stats={meDoc?.stats}
+                achievements={meDoc?.achievements}
+                onPressProgression={() => router.push("/(drawer)/progression")}
               />
               </View>
             </View>
 
-            {!loadingAppUpdate && updateAvailable && !hideUpdateBanner ? (
+            {APP_UPDATE_BANNER_ENABLED &&
+            !loadingAppUpdate &&
+            updateAvailable &&
+            !hideUpdateBanner ? (
               <ProphetikUpdateBanner
                 colors={colors}
                 visible={true}
@@ -1065,8 +1137,18 @@ const avatarUrl =
                   flat
                   colors={colors}
                   kicker={i18n.t("home.way1", { defaultValue: "Première façon de jouer" })}
-                  leftIcon={<ProphetikIcons mode="emoji" emoji="🏒" size="lg" />}
-                  title={i18n.t("firstGoal.home.title")}
+                  title={
+                    currentSport === "MLB"
+                      ? i18n.t("firstGoal.firstRbi.title", { defaultValue: "Premier point produit" })
+                      : i18n.t("firstGoal.home.title")
+                  }
+                  leftIcon={
+                    <ProphetikIcons
+                      mode="emoji"
+                      emoji={currentSport === "MLB" ? "⚾" : "🏒"}
+                      size="lg"
+                    />
+                  }
                   rightAction={
                     isCurrentGroupOwner && !hasFirstGoalForGroup ? (
                       <SectionCreateAction
@@ -1076,7 +1158,13 @@ const avatarUrl =
                     ) : null
                   }
                 />
-                <FirstGoalHomeSection groups={userGroups} currentGroupId={currentGroupId} colors={colors} onHasChallengeChange={setHasFirstGoalForGroup}/>
+               <FirstGoalHomeSection
+                  groups={userGroups}
+                  currentGroupId={currentGroupId}
+                  currentSport={currentSport}
+                  colors={colors}
+                  onHasChallengeChange={setHasFirstGoalForGroup}
+                />
               </View>
             </View>
 
@@ -1087,12 +1175,12 @@ const avatarUrl =
                   colors={colors}
                   kicker={i18n.t("home.way2", { defaultValue: "Deuxième façon de jouer" })}
                   leftIcon={<ProphetikIcons mode="emoji" emoji="🏆" size="lg" />}
-                  title={i18n.t("tp.home.title", { defaultValue: "Défi équipe gagnante" })}
+                  title={i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" })}
                   subtitle={i18n.t("tp.home.subtitleEmpty", {
                     defaultValue: "Choisis le gagnant, le score exact et le type de victoire.",
                   })}
                   rightAction={
-                    isCurrentGroupOwner && !hasTeamPredictionForGroup ? (
+                    isCurrentGroupOwner && canCreateTpBundle ? (
                       <SectionCreateAction
                         onPress={onPressCreateTeamPrediction}
                         label={i18n.t("common.create", { defaultValue: "Créer" })}
@@ -1105,7 +1193,10 @@ const avatarUrl =
                   groups={userGroups}
                   colors={colors}
                   currentGroupId={currentGroupId}
+                  currentSport={currentSport}
+                  hintBundleId={tpBundleHintId}
                   onHasChallengeChange={setHasTeamPredictionForGroup}
+                  onCanCreateBundleChange={setCanCreateTpBundle}
                 />
               </View>
             </View>
@@ -1134,6 +1225,7 @@ const avatarUrl =
                   loadingGroups={loadingGroups}
                   loadingDefis={loadingDefis}
                   groupIds={groupIds}
+                  currentSport={currentSport}
                   activeDefis={normalDefis}
                   groupsMeta={groupsMeta}
                   tierLower={tierLower}

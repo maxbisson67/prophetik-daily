@@ -52,9 +52,9 @@ export default function LeaderboardLegend({ colors }) {
       {
         key: "tp",
         icon: <EmojiIcon>🏆</EmojiIcon>,
-        label: t("leaderboard.legend.tp.label", { defaultValue: "Défi équipe gagnante" }),
+        label: t("leaderboard.legend.tp.label", { defaultValue: "Prédire l'issue des matchs" }),
         text: t("leaderboard.legend.tp.text", {
-          defaultValue: "Points cumulés des défis Équipe gagnante.",
+          defaultValue: "Points cumulés des prédictions de matchs.",
         }),
       },
       {

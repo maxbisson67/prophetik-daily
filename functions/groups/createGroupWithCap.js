@@ -1,7 +1,9 @@
 // functions/createGroupWithCap.js
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { parseAutopilotEnabled, parseFavoriteTeam } from "./groupConfigUtils.js";
 
 initializeApp();
 const db = getFirestore();
@@ -11,6 +13,11 @@ function generateCodeInvitation(length = 8) {
   let code = "";
   for (let i = 0; i < length; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
   return code;
+}
+
+function normalizeSport(value) {
+  const sport = String(value || "NHL").trim().toUpperCase();
+  return sport === "MLB" ? "MLB" : "NHL";
 }
 
 function getLimits(mode) {
@@ -34,10 +41,6 @@ async function readUserPlan(uid) {
   return { tier, active: d.active !== false, mode: tier };
 }
 
-/**
- * Compte les memberships actifs pour un role précis.
- * role: "owner" | "member"
- */
 async function countMembershipsByRole({ uid, role, limitPlusOne }) {
   const q = await db
     .collection("group_memberships")
@@ -56,12 +59,24 @@ export const createGroupWithCap = onCall(async (req) => {
 
   const name = String(req.data?.name || "").trim();
   const description = String(req.data?.description || "").trim();
+  const sport = normalizeSport(req.data?.sport);
+  const autopilotEnabled = parseAutopilotEnabled(req.data?.autopilotEnabled, {
+    defaultValue: true,
+  });
+  const favoriteTeam = parseFavoriteTeam(req.data?.favoriteTeam ?? null);
+
   if (!name) throw new HttpsError("invalid-argument", "Missing name");
+
+  logger.info("[createGroupWithCap] config", {
+    uid,
+    sport,
+    autopilotEnabled,
+    favoriteTeam,
+  });
 
   const { mode } = await readUserPlan(uid);
   const limits = getLimits(mode);
 
-  // ✅ CAP OWNER basé sur role="owner"
   const ownerCount = await countMembershipsByRole({
     uid,
     role: "owner",
@@ -76,11 +91,12 @@ export const createGroupWithCap = onCall(async (req) => {
     });
   }
 
-  // profil participant (optionnel, pour ownerName/avatar)
   const pSnap = await db.doc(`participants/${uid}`).get();
   const p = pSnap.exists ? pSnap.data() || {} : {};
+
   const displayName =
     p.displayName || (p.email ? String(p.email).split("@")[0] : "") || "Guest";
+
   const avatarUrl = p.photoURL || p.avatarUrl || null;
 
   const groupRef = db.collection("groups").doc();
@@ -94,6 +110,9 @@ export const createGroupWithCap = onCall(async (req) => {
     tx.set(groupRef, {
       name,
       description,
+      sport,
+      league: sport, // legacy/compatibilité temporaire
+
       avatarUrl: null,
       codeInvitation,
 
@@ -106,6 +125,9 @@ export const createGroupWithCap = onCall(async (req) => {
       status: "active",
       active: true,
 
+      autopilotEnabled,
+      favoriteTeam,
+
       createdAt: now,
       updatedAt: now,
     });
@@ -113,9 +135,8 @@ export const createGroupWithCap = onCall(async (req) => {
     tx.set(gmRef, {
       groupId,
       uid,
-      userId: uid, // ✅ cohérent avec tes docs existants
+      userId: uid,
       role: "owner",
-      // isOwner: true, // (optionnel) tu peux garder pour legacy, mais plus utilisé
       active: true,
       status: "active",
       displayName,
@@ -125,5 +146,5 @@ export const createGroupWithCap = onCall(async (req) => {
     });
   });
 
-  return { groupId, codeInvitation };
+  return { groupId, codeInvitation, sport, autopilotEnabled, favoriteTeam };
 });

@@ -1,5 +1,6 @@
 // src/groups/manageGroupService.js
 import functions from "@react-native-firebase/functions";
+import { normalizeGroupFavoriteTeam } from "@src/groups/normalizeGroupFavoriteTeam";
 
 /**
  * On normalise les erreurs Firebase Functions (RNFB)
@@ -74,6 +75,36 @@ export async function transferGroupOwnershipService({ groupId, newOwnerUid }) {
   return call("transferGroupOwnership", {
     groupId: String(groupId),
     newOwnerUid: String(newOwnerUid),
+  });
+}
+
+/**
+ * Met à jour la configuration du groupe (owner seulement).
+ *
+ * @param {object} params
+ * @param {string} params.groupId
+ * @param {boolean} params.autopilotEnabled
+ * @param {null | { sport: 'NHL' | 'MLB', teamId: string, abbreviation: string, name: string }} params.favoriteTeam
+ */
+export async function updateGroupConfigService({
+  groupId,
+  autopilotEnabled,
+  favoriteTeam = null,
+  sport,
+}) {
+  if (!groupId) throw new Error("groupId manquant");
+  if (typeof autopilotEnabled !== "boolean") {
+    throw new Error("autopilotEnabled must be a boolean");
+  }
+
+  const normalizedFavoriteTeam = favoriteTeam
+    ? normalizeGroupFavoriteTeam(sport || favoriteTeam.sport, favoriteTeam)
+    : null;
+
+  return call("updateGroupConfig", {
+    groupId: String(groupId),
+    autopilotEnabled,
+    favoriteTeam: normalizedFavoriteTeam,
   });
 }
 

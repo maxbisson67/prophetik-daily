@@ -33,6 +33,8 @@ import i18n from '@src/i18n/i18n';
 import CreateDefiModal from '../../defis/CreateDefiModal';
 
 import InviteQrCard from "@src/groups/InviteQrCard";
+import GroupConfigSection from "@src/groups/components/GroupConfigSection";
+import GroupAvatar from "@src/groups/components/GroupAvatar";
 
 import {
   leaveGroupService,
@@ -834,19 +836,13 @@ export default function GroupDetailScreen() {
             }}
           >
             <View style={{ alignItems: 'center' }}>
-              <Image
-                source={
-                  group?.avatarUrl
-                    ? { uri: group.avatarUrl }
-                    : require('@src/assets/group-placeholder.png')
-                }
+              <GroupAvatar
+                group={group}
+                size={120}
+                colors={colors}
                 style={{
-                  width: 120,
-                  height: 120,
-                  borderRadius: 60,
                   backgroundColor: colors.card2,
                   borderWidth: 2,
-                  borderColor: colors.border,
                 }}
               />
               <Text
@@ -903,7 +899,8 @@ export default function GroupDetailScreen() {
             </View>
           </View>
 
-      
+          <GroupConfigSection group={group} isOwner={isOwner} colors={colors} />
+
         {/* Détails */}
         <View
           style={{

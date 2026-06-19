@@ -26,7 +26,12 @@ export { cronIngestNhlDailyContext,cronRefreshNhlScheduleWindow,cronRefreshNhlSc
 
 export { precheckPhoneLogin } from "./precheckPhoneLogin.js";
 
-export { deleteGroup, leaveGroup, transferGroupOwnership } from "./groups/groupsManagement.js";
+export {
+  deleteGroup,
+  leaveGroup,
+  transferGroupOwnership,
+  updateGroupConfig,
+} from "./groups/groupsManagement.js";
 
 // Nhl Live
 export { updateNhlLiveGamesNow, updateNhlLiveGamesCron} from "./nhlLive.js"
@@ -40,6 +45,9 @@ export { purchaseCredits } from "./credits/purchaseCredits.js";
 export { revenuecatWebhook } from "./revenuecat/revenuecatWebhook.js";
 
 export { syncNhlInjuries, syncNhlInjuriesManual } from "./nhlInjuriesSync.js";
+export { syncMlbInjuries, syncMlbInjuriesManual } from "./mlb/mlbInjuriesSync.js";
+
+export { backfillParticipantProgression } from "./achievements/backfillParticipantProgression.js";
 
 
 // Prophetik IA et création de groupe
@@ -64,11 +72,17 @@ export { ascensionsNotifyOnCreate } from "./ascensions/ascensionsNotifyOnCreate.
 export { finalizeAscensionCycleWinners } from "./ascensions/finalizeAscensionCycleWinners.js";
 export { applyAscensionDailyBonus } from "./ascensions/applyAscensionDailyBonus.js";
 
-//  Team Prediction Challenge
+//  Team Prediction Challenge (legacy mono-match)
 export { createTeamPredictionChallenge } from "./teamPredictionChallenges/createTeamPredictionChallenge.js";
 export { submitTeamPredictionEntry } from "./teamPredictionChallenges/submitTeamPredictionEntry.js";
 export { resolveTeamPredictionResults } from "./teamPredictionChallenges/resolveTeamPredictionResults.js";
 export { applyTeamPredictionPayout } from "./teamPredictionChallenges/applyTeamPredictionPayout.js";
+
+//  Team Prediction Bundle (1 carte / jusqu'à 3 matchs)
+export { createTeamPredictionBundle } from "./teamPredictionBundles/createTeamPredictionBundle.js";
+export { getTeamPredictionBundleForHome } from "./teamPredictionBundles/getTeamPredictionBundleForHome.js";
+export { submitTeamPredictionBundleEntry } from "./teamPredictionBundles/submitTeamPredictionBundleEntry.js";
+export { resolveTeamPredictionBundleResults } from "./teamPredictionBundles/resolveTeamPredictionBundleResults.js";
 
 
 
@@ -82,10 +96,23 @@ export { fgcPick } from "./firstGoalChallenge/fgcPick.js";
 export { fgcCreate } from "./firstGoalChallenge/fgcCreate.js";
 export { applyFirstGoalChallengePayout } from "./firstGoalChallenge/applyFirstGoalChallengePayout.js";
 
+export {
+  detectMlbFirstRbiCandidates_mutualized,
+  confirmPendingMlbFirstRbiGames_mutualized,
+  repairConfirmedMlbFirstRbiChallenges,
+  repairMlbFirstRbiGameCallable,
+} from "./firstGoalChallenge/firstRbiResolveMutualized.js";
+
 export { repairFirstGoalGameCallable } from "./firstGoalChallenge/repairFirstGoalGameCallable.js";
 
 // Baseball
 
 export { refreshMlbStandings,refreshMlbPreviousSeasonStandingsDaily} from "./mlb/mlbStandingsIngest.js";
-export { cronIngestMlbPlayerStatsDaily } from "./mlb/mlbPlayerStatsIngest.js";
+export { cronIngestMlbPlayerStatsDaily, ingestMlbPlayerStatsForSeason } from "./mlb/mlbPlayerStatsIngest.js";
 export { refreshMlbRecentSchedule,refreshMlbScheduleWindow,updateMlbScheduleWindowNow } from "./mlb/mlbScheduleContextIngest.js";
+
+export { backfillPlayerStatsDenorm } from "./players/playerStatsDenorm.js";
+
+export { refreshMlbPlayers,refreshMlbPlayersCron } from "./mlbPlayers.js";
+
+export { createDailyFgcAutopilot } from "./autopilot/createDailyFgcAutopilot.js";

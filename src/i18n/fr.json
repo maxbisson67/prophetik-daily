@@ -295,9 +295,12 @@
         "title": "Défis premier but",
         "empty": "Aucun défi premier but aujourd'hui dans tes groupes",
         "signupDeadline": "Heure limite d'inscription",
+        "signupClosed": "Fermé",
+        "viewResults": "Voir les résultats",
+        "viewParticipants": "Voir les participants",
+        "viewPicks": "Voir les choix",
         "infoTitle":"Comment fonctionne ce défi?",
-        "boni": "Points Bonis",
-        "infoBody":"• Choisis le joueur qui marquera le premier but du match.\n• Regarde les résultats dans l'onglet Sports/MatchLive.\n• Un point sera alloué à celui qui a prédit le premier compteur.\n• Si personne n'a fait la bonne prédiction, le point sera reporté et la cagnotte augmentera."
+        "infoBody":"• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 5 points seront alloués à celui qui a prédit le bon joueur."
       },
       "create":{
         "firstGoalTitle":"Créer un défi Premier but",
@@ -329,6 +332,16 @@
         "editUntil" : "Tu peux modifier ton choix jusqu’à",
         "locked": "Le défi est verrouillé",
         "chooseOne": "Choisis le joueur qui marquera le premier but",
+        "chooseOneMlb": "Choisis le joueur qui produira le premier point",
+        "sortedByStats": "Triés par stats saison en cours",
+        "injury": {
+          "out": "Out",
+          "dayToDay": "Jour par jour",
+          "questionable": "Incertain",
+          "doubtful": "Douteux",
+          "probable": "Probable",
+          "unknown": "Blessure"
+        },
         "startsAt": "Début",
         "mySelection": "Ma sélection",
         "successBody":"Ton choix est enregistré. Bonne chance 🍀",
@@ -350,6 +363,19 @@
       "cta":{
         "matchLive": "En direct",
         "pickScorer": "Choisir mon joueur"
+      },
+      "firstRbi": {
+        "title": "Premier point produit",
+        "resultPrefix": "Premier point produit :",
+        "live": {
+          "noneYet": "Aucun point produit pour le moment.",
+          "pending": "Premier point produit : {{name}} {{team}} · en attente de confirmation",
+          "confirmed": "Premier point produit confirmé : {{name}} {{team}}"
+        }
+      },
+      "result": {
+        "prefix": "Premier but:",
+        "none": "Aucun gagnant"
       }
     },
     "ascensions": {
@@ -383,7 +409,7 @@
         "inProgress": "En cours"
       },
       "summit":{
-        "title": "Mes défis Ascension",
+        "title": "Mes défis Ascension"
       },
       "labels": {
         "cycle": "Cycle",
@@ -482,6 +508,23 @@
           "transferRequiredMessage": "Il reste d'autres membres. Tu dois transférer la propriété avant de quitter."
 
       },
+      "config": {
+          "sectionTitle": "Configuration",
+          "autopilotLabel": "Création automatique des défis",
+          "autopilotHint": "Les défis sont créés automatiquement pour le groupe.",
+          "favoriteTeamLabel": "Équipe favorite",
+          "noFavoriteTeam": "Aucune équipe",
+          "clearFavoriteTeam": "Retirer l'équipe",
+          "save": "Enregistrer",
+          "saveErrorTitle": "Erreur",
+          "pickFavoriteTeam": "Choisir une équipe",
+          "noTeamsAvailable": "Aucune équipe disponible pour le moment.",
+          "loadingTeams": "Chargement des équipes…",
+          "teamsLoadError": "Impossible de charger les équipes. Vérifie ta connexion.",
+          "fallbackTeamsHint": "Liste locale — les classements seront synchronisés plus tard.",
+          "teamsCount": "équipes",
+          "searchTeam": "Rechercher une équipe…"
+      },
       "title": "Mes groupes",
       "detailTitle": "Détail du groupe",
       "loginToSeeGroups": "Connecte-toi pour voir tes groupes.",
@@ -562,7 +605,7 @@
         "copied": "Copié",
         "share": "Partager",
         "shareMessage": "Joins mon groupe {{name}} sur Prophetik avec ce code: {{code}}"
-      },
+      }
     },
       "challenges": {
           "activeTitle": "Défis actifs",
@@ -1165,6 +1208,86 @@
       "footer": "Prophetik évolue : certaines options peuvent varier selon le groupe ou les événements spéciaux."
     },
 
+    "progression": {
+      "title": "Progression",
+      "badgesTitle": "Badges",
+      "badgesCount": "{{unlocked}}/{{total}} badges",
+      "streakCurrent": "Série actuelle",
+      "streakBest": "Meilleure série",
+      "streakOnFire": "SÉRIE EN FEU",
+      "streakBestShort": "À BATTRE",
+      "daysLabel": "JOURS",
+      "days": "{{count}} j",
+      "seeAll": "Voir tous les badges",
+      "locked": "Verrouillé",
+      "unlockedAt": "Débloqué le {{date}}",
+      "progress": "{{current}}/{{threshold}}",
+      "statsTitle": "Statistiques",
+      "stats": {
+        "participations": "Participations",
+        "correctPredictions": "Bonnes prédictions",
+        "exactScores": "Scores exacts",
+        "fgcWins": "FGC gagnés",
+        "tsFivePointNights": "Soirées 5+ pts"
+      },
+      "categories": {
+        "participation": "Participation",
+        "prediction": "Prédictions",
+        "streak": "Séries",
+        "milestone": "Jalons"
+      },
+      "badges": {
+        "FIRST_CHALLENGE": {
+          "name": "Premier défi",
+          "description": "Participer à ton premier défi Prophetik."
+        },
+        "TEN_CHALLENGES": {
+          "name": "10 défis",
+          "description": "Participer à 10 défis."
+        },
+        "FIFTY_CHALLENGES": {
+          "name": "50 défis",
+          "description": "Participer à 50 défis."
+        },
+        "FIRST_CORRECT_PREDICTION": {
+          "name": "Première bonne prédiction",
+          "description": "Réussir ta première prédiction."
+        },
+        "TEN_CORRECT_PREDICTIONS": {
+          "name": "10 bonnes prédictions",
+          "description": "Réussir 10 prédictions."
+        },
+        "FIFTY_CORRECT_PREDICTIONS": {
+          "name": "50 bonnes prédictions",
+          "description": "Réussir 50 prédictions."
+        },
+        "STREAK_3": {
+          "name": "Série de 3 jours",
+          "description": "Participer 3 jours de suite."
+        },
+        "STREAK_7": {
+          "name": "Série de 7 jours",
+          "description": "Participer 7 jours de suite."
+        },
+        "STREAK_30": {
+          "name": "Série de 30 jours",
+          "description": "Participer 30 jours de suite."
+        },
+        "FIRST_EXACT_SCORE": {
+          "name": "Premier score exact",
+          "description": "Obtenir ton premier score exact en prédiction d'équipe."
+        },
+        "FIRST_FGC_WIN": {
+          "name": "Premier FGC gagné",
+          "description": "Gagner ton premier défi premier but / point produit."
+        },
+        "FIRST_TS_FIVE_POINTS": {
+          "name": "Première soirée à 5 points",
+          "description": "Marquer 5 points ou plus en une soirée Team Scorer."
+        }
+      }
+    },
+
     "drawer": {
       "guest": "Invité",
       "online": "Connecté",
@@ -1185,6 +1308,7 @@
       "shop": "Boutique",
       "tokens": "Tokens",
       "profile": "Profil",
+      "progression": "Progression & badges",
       "settings": "Paramètres",
       "howItWorks": "Comment ça marche",
 
@@ -1413,6 +1537,27 @@
       "final": "Final",
       "finalOt": "Final • Prol.",
       "finalSo": "Final • TDB"
+    }
+  },
+  "tp": {
+    "home": {
+      "title": "Prédire l'issue des matchs"
+    },
+    "live": {
+      "title": "Prédire l'issue des matchs"
+    },
+    "create": {
+      "title": "Prédire l'issue des matchs",
+      "noGames": "Aucun match {{sport}} disponible aujourd'hui.",
+      "noGroupsForSport": "Aucun groupe {{sport}} disponible.",
+      "startAt": "Début: {{time}}",
+      "youWillPredict": "Tu devras prédire :",
+      "ruleWinner": "Équipe gagnante",
+      "ruleScore": "Score exact",
+      "ruleOutcome": "Régulier / OT / TB",
+      "scoringWinner": "Bonne équipe gagnante = 3 points",
+      "scoringExact": "Score exact en plus = +3 points (total 6)",
+      "creating": "Création…"
     }
   },
   "ascension": {

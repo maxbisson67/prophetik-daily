@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  ScrollView,
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,16 +16,26 @@ import firestore from "@react-native-firebase/firestore";
 import i18n from "@src/i18n/i18n";
 
 import { useAuth } from "@src/auth/SafeAuthProvider";
+import { useTheme } from "@src/theme/ThemeProvider";
 import { createGroupService } from "@src/groups/createGroupService";
+import { updateGroupConfigService } from "@src/groups/manageGroupService";
+import { normalizeGroupFavoriteTeam } from "@src/groups/normalizeGroupFavoriteTeam";
+import GroupConfigFields from "@src/groups/components/GroupConfigFields";
+import FormSectionSeparator from "@src/groups/components/FormSectionSeparator";
+import Analytics from "@src/services/analytics";
 
 export default function CreateGroupScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
   const router = useRouter();
-  const { from } = useLocalSearchParams(); // ?from=onboarding
+  const { from } = useLocalSearchParams();
   const fromOnboarding = String(from || "") === "onboarding";
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [sport, setSport] = useState("NHL");
+  const [autopilotEnabled, setAutopilotEnabled] = useState(true);
+  const [favoriteTeam, setFavoriteTeam] = useState(null);
   const [creating, setCreating] = useState(false);
 
   const safeBack = useCallback(async () => {
@@ -77,12 +88,45 @@ export default function CreateGroupScreen() {
     try {
       setCreating(true);
 
+      const normalizedFavoriteTeam = normalizeGroupFavoriteTeam(sport, favoriteTeam);
+
+      if (__DEV__) {
+        console.log("[CreateGroup] submit", {
+          sport,
+          autopilotEnabled,
+          favoriteTeam: normalizedFavoriteTeam,
+        });
+      }
+
       const { groupId } = await createGroupService({
         name: name.trim(),
         description: description.trim(),
-        uid: user.uid,
-        displayName: user.displayName || null,
-        avatarUrl: user.photoURL || null,
+        sport,
+        autopilotEnabled,
+        favoriteTeam: normalizedFavoriteTeam,
+      });
+
+      try {
+        await updateGroupConfigService({
+          groupId,
+          autopilotEnabled: autopilotEnabled !== false,
+          favoriteTeam: normalizedFavoriteTeam,
+        });
+      } catch (configErr) {
+        console.warn("[CreateGroup] updateGroupConfig failed", configErr?.message || configErr);
+        Alert.alert(
+          i18n.t("groups.config.saveErrorTitle", { defaultValue: "Configuration" }),
+          i18n.t("groups.config.saveAfterCreateError", {
+            defaultValue:
+              "Le groupe a été créé, mais la configuration (autopilot / équipe favorite) n'a pas pu être enregistrée. Tu peux la modifier depuis l'écran du groupe.",
+          })
+        );
+      }
+
+      Analytics.createGroup({
+        groupType: "private",
+        source: "create_screen",
+        groupId,
       });
 
       router.replace({
@@ -106,37 +150,36 @@ export default function CreateGroupScreen() {
           title: i18n.t("groups.modalTitle", { defaultValue: "Nouveau groupe" }),
           headerLeft: () => (
             <TouchableOpacity onPress={safeBack} style={{ paddingHorizontal: 10 }}>
-              <Ionicons name="arrow-back" size={24} color="#111827" />
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
           ),
         }}
       />
 
-      <View style={{ flex: 1, padding: 20, backgroundColor: "#f9fafb" }}>
-        {/* Hero */}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
+        keyboardShouldPersistTaps="always"
+        nestedScrollEnabled
+      >
         <View
           style={{
-            backgroundColor: "#fff",
+            backgroundColor: colors.card,
             borderRadius: 14,
             padding: 20,
             marginBottom: 18,
-            shadowColor: "#000",
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 3 },
-            elevation: 3,
+            borderWidth: 1,
+            borderColor: colors.border,
           }}
         >
-          <Text style={{ fontSize: 22, fontWeight: "900", textAlign: "center", color: "#111827" }}>
+          <Text style={{ fontSize: 22, fontWeight: "900", textAlign: "center", color: colors.text }}>
             {i18n.t("groups.modalSubtitle", { defaultValue: "Rassemble ton crew et dominez les défis." })}
           </Text>
-
-          {/* Optionnel: si tu veux garder un petit texte secondaire, ajoute une clé dédiée plus tard */}
           <Text
             style={{
               marginTop: 8,
               textAlign: "center",
-              color: "#374151",
+              color: colors.subtext,
               fontSize: 15,
               lineHeight: 22,
             }}
@@ -147,58 +190,106 @@ export default function CreateGroupScreen() {
           </Text>
         </View>
 
-        {/* Form */}
         <View
           style={{
-            backgroundColor: "#fff",
+            backgroundColor: colors.card,
             borderRadius: 12,
             padding: 16,
-            shadowColor: "#000",
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
-            elevation: 2,
+            borderWidth: 1,
+            borderColor: colors.border,
+            gap: 14,
           }}
         >
-          <Text style={{ fontWeight: "700", fontSize: 16, marginBottom: 6 }}>
-            {i18n.t("groups.fieldNameLabel", { defaultValue: "Nom du groupe" })}
-          </Text>
+          <View>
+            <Text style={{ fontWeight: "700", fontSize: 16, marginBottom: 6, color: colors.text }}>
+              {i18n.t("groups.fieldNameLabel", { defaultValue: "Nom du groupe" })}
+            </Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder={i18n.t("groups.fieldNamePlaceholder", { defaultValue: "Ex. Les Snipers du Nord" })}
+              placeholderTextColor={colors.subtext}
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 10,
+                padding: 12,
+                backgroundColor: colors.background,
+                color: colors.text,
+              }}
+            />
+          </View>
 
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder={i18n.t("groups.fieldNamePlaceholder", { defaultValue: "Ex. Les Snipers du Nord" })}
-            style={{
-              borderWidth: 1,
-              borderColor: "#ddd",
-              borderRadius: 10,
-              padding: 12,
-              marginBottom: 14,
-              backgroundColor: "#fafafa",
-            }}
+          <View>
+            <Text style={{ fontWeight: "700", fontSize: 16, marginBottom: 6, color: colors.text }}>
+              {i18n.t("groups.fieldDescriptionLabel", { defaultValue: "Description (optionnel)" })}
+            </Text>
+            <TextInput
+              value={description}
+              onChangeText={setDescription}
+              placeholder={i18n.t("groups.fieldDescriptionPlaceholder", {
+                defaultValue: "Ex. Notre pool du samedi entre amis",
+              })}
+              placeholderTextColor={colors.subtext}
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 10,
+                padding: 12,
+                backgroundColor: colors.background,
+                color: colors.text,
+              }}
+              multiline
+            />
+          </View>
+
+          <FormSectionSeparator colors={colors} marginVertical={6} />
+
+          <View>
+            <Text style={{ fontWeight: "700", fontSize: 16, marginBottom: 6, color: colors.text }}>
+              {i18n.t("groups.fieldSportLabel", { defaultValue: "Sport" })}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {["NHL", "MLB"].map((value) => {
+                const active = sport === value;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => setSport(value)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 12,
+                      borderRadius: 10,
+                      alignItems: "center",
+                      borderWidth: 1,
+                      borderColor: active ? colors.primary : colors.border,
+                      backgroundColor: active ? colors.primary : colors.background,
+                    }}
+                  >
+                    <Text style={{ color: active ? "#fff" : colors.text, fontWeight: "800" }}>
+                      {value === "NHL" ? "🏒 NHL" : "⚾ MLB"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <FormSectionSeparator colors={colors} marginVertical={6} />
+
+          <GroupConfigFields
+            colors={colors}
+            autopilotEnabled={autopilotEnabled}
+            onAutopilotEnabledChange={setAutopilotEnabled}
+            favoriteTeam={favoriteTeam}
+            onFavoriteTeamChange={setFavoriteTeam}
+            sport={sport}
+            disabled={creating}
           />
 
-          <Text style={{ fontWeight: "700", fontSize: 16, marginBottom: 6 }}>
-            {i18n.t("groups.fieldDescriptionLabel", { defaultValue: "Description (optionnel)" })}
-          </Text>
+          <FormSectionSeparator colors={colors} marginVertical={6} />
 
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder={i18n.t("groups.fieldDescriptionPlaceholder", {
-              defaultValue: "Ex. Notre pool du samedi entre amis",
-            })}
-            style={{
-              borderWidth: 1,
-              borderColor: "#ddd",
-              borderRadius: 10,
-              padding: 12,
-              marginBottom: 14,
-              backgroundColor: "#fafafa",
-            }}
-            multiline
-          />
-
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
             <TouchableOpacity
               onPress={safeBack}
               style={{
@@ -206,13 +297,13 @@ export default function CreateGroupScreen() {
                 padding: 14,
                 borderRadius: 10,
                 borderWidth: 1,
-                borderColor: "#111827",
+                borderColor: colors.border,
                 alignItems: "center",
-                backgroundColor: "#fff",
+                backgroundColor: colors.background,
               }}
               disabled={creating}
             >
-              <Text style={{ color: "#111827", fontWeight: "700" }}>
+              <Text style={{ color: colors.text, fontWeight: "700" }}>
                 {i18n.t("groups.cancel", { defaultValue: "Annuler" })}
               </Text>
             </TouchableOpacity>
@@ -224,7 +315,8 @@ export default function CreateGroupScreen() {
                 padding: 14,
                 borderRadius: 10,
                 alignItems: "center",
-                backgroundColor: "#ef4444",
+                backgroundColor: colors.primary,
+                opacity: creating ? 0.6 : 1,
               }}
               disabled={creating}
             >
@@ -239,13 +331,20 @@ export default function CreateGroupScreen() {
           </View>
         </View>
 
-        {/* Footer (optionnel: tu as déjà emptyHint) */}
-        <View style={{ marginTop: 24, alignItems: "center" }}>
-          <Text style={{ color: "#6b7280", fontSize: 13, textAlign: "center", lineHeight: 20 }}>
-            {i18n.t("groups.emptyHint", { defaultValue: "Astuce : tu peux définir un groupe favori avec l’icône ★" })}
-          </Text>
-        </View>
-      </View>
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 13,
+            textAlign: "center",
+            lineHeight: 20,
+            marginTop: 24,
+          }}
+        >
+          {i18n.t("groups.emptyHint", {
+            defaultValue: "Astuce : tu peux définir un groupe favori avec l’icône ★",
+          })}
+        </Text>
+      </ScrollView>
     </>
   );
 }

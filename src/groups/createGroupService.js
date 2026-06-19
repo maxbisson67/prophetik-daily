@@ -1,51 +1,71 @@
 // src/groups/createGroupService.js
 import functions from "@react-native-firebase/functions";
+import { normalizeGroupFavoriteTeam } from "@src/groups/normalizeGroupFavoriteTeam";
 
 /**
- * ✅ Crée un groupe via Cloud Function (cap + création group + membership owner).
- * Cloud function attend:
- *  - data.name (string)
- *  - data.description (string)
- * Retour:
- *  - { groupId, codeInvitation }
+ * ✅ Crée un groupe via Cloud Function.
  *
- * IMPORTANT:
- * - Le uid est pris depuis req.auth.uid (donc l'utilisateur doit être connecté)
- * - On ne génère plus codeInvitation côté client
+ * Cloud function attend:
+ *  - data.name
+ *  - data.description
+ *  - data.sport: "NHL" | "MLB"
+ *  - data.autopilotEnabled: boolean (optionnel, default true)
+ *  - data.favoriteTeam: null | { sport, teamId, abbreviation, name }
  */
-export async function createGroupService({ name, description = "" }) {
+export async function createGroupService({
+  name,
+  description = "",
+  sport = "NHL",
+  autopilotEnabled = true,
+  favoriteTeam = null,
+}) {
   const cleanName = String(name || "").trim();
   const cleanDesc = String(description || "").trim();
+
+  const cleanSport = String(sport || "NHL").trim().toUpperCase();
+  const normalizedSport = cleanSport === "MLB" ? "MLB" : "NHL";
 
   if (!cleanName) {
     throw new Error("Nom requis");
   }
 
+  const normalizedFavoriteTeam = normalizeGroupFavoriteTeam(normalizedSport, favoriteTeam);
+
+  const payload = {
+    name: cleanName,
+    description: cleanDesc,
+    sport: normalizedSport,
+    autopilotEnabled: autopilotEnabled !== false,
+    favoriteTeam: normalizedFavoriteTeam,
+  };
+
+  if (__DEV__) {
+    console.log("[createGroupService] payload", payload);
+  }
+
   try {
-    // Optionnel: si tu utilises plusieurs régions, ajuste ici.
-    // ex: functions().httpsCallable("createGroupWithCap") si même région par défaut
     const callable = functions().httpsCallable("createGroupWithCap");
 
-    const res = await callable({
-      name: cleanName,
-      description: cleanDesc,
-    });
+    const res = await callable(payload);
 
     const data = res?.data || {};
     const groupId = String(data.groupId || "");
     const codeInvitation = String(data.codeInvitation || "");
 
-    if (!groupId) throw new Error("createGroupWithCap: groupId manquant");
+    if (!groupId) {
+      throw new Error("createGroupWithCap: groupId manquant");
+    }
 
-    return { groupId, codeInvitation };
+    return {
+      groupId,
+      codeInvitation,
+      sport: String(data.sport || normalizedSport).toUpperCase(),
+    };
   } catch (e) {
-    // Firebase callable errors
     const code = e?.code || "";
     const message = e?.message || String(e);
 
-    // Tu peux spécialiser les messages selon tes HttpsError
     if (code === "functions/failed-precondition") {
-      // ex: OWNER_GROUP_LIMIT_REACHED
       throw new Error(message);
     }
 

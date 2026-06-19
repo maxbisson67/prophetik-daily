@@ -2,6 +2,17 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
+import {
+  TP_DEFAULT_SCORING,
+  pickString,
+  normalizeLeague,
+  ymdFromDate,
+  findExistingTeamPredictionChallenge,
+  isActiveChallengeStatus,
+  loadNhlScheduleGame,
+  loadMlbScheduleGame,
+} from "./tpGameSources.js";
+import { buildEmptyMlbPitcher } from "../mlb/mlbProbablePitchers.js";
 
 if (!getApps().length) initializeApp();
 
@@ -10,21 +21,6 @@ const db = getFirestore();
 const TP_STAKE_POINTS = 2;
 const TP_LOCK_BEFORE_MINUTES = 5;
 const TP_EXPIRES_AFTER_DAYS = 2;
-
-function pickString(v) {
-  return typeof v === "string" && v.trim() ? v.trim() : null;
-}
-
-function safeUpper(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
-function ymdFromDate(d) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}${mm}${dd}`;
-}
 
 function addDays(date, days) {
   const d = new Date(date);
@@ -47,6 +43,7 @@ export const createTeamPredictionChallenge = onCall(
 
     const groupId = pickString(req.data?.groupId);
     const gameId = pickString(req.data?.gameId);
+    const league = normalizeLeague(req.data?.league);
 
     if (!groupId) {
       throw new HttpsError("invalid-argument", "groupId requis.");
@@ -56,7 +53,7 @@ export const createTeamPredictionChallenge = onCall(
       throw new HttpsError("invalid-argument", "gameId requis.");
     }
 
-    logger.info("[createTeamPredictionChallenge] start", { uid, groupId, gameId });
+    logger.info("[createTeamPredictionChallenge] start", { uid, groupId, gameId, league });
 
     const membershipRef = db.doc(`group_memberships/${groupId}_${uid}`);
     const membershipSnap = await membershipRef.get();
@@ -72,45 +69,40 @@ export const createTeamPredictionChallenge = onCall(
 
     const todayYmd = ymdFromDate(new Date());
 
-    const gameRef = db.doc(`nhl_schedule_daily/${todayYmd}/games/${gameId}`);
-    const gameSnap = await gameRef.get();
+    let gameData = null;
 
-    if (!gameSnap.exists) {
-      throw new HttpsError(
-        "not-found",
-        `Match introuvable dans nhl_schedule_daily/${todayYmd}/games/${gameId}.`
-      );
+    if (league === "MLB") {
+      gameData = await loadMlbScheduleGame(db, { gameId, todayYmd });
+    } else {
+      gameData = await loadNhlScheduleGame(db, { gameId, todayYmd });
     }
 
-    const game = gameSnap.data() || {};
+    if (!gameData?.ok) {
+      if (gameData?.reason === "not-found") {
+        const collection =
+          league === "MLB" ? "mlb_schedule_daily" : "nhl_schedule_daily";
+        throw new HttpsError(
+          "not-found",
+          `Match introuvable dans ${collection}/${todayYmd}/games/${gameId}.`
+        );
+      }
 
-    const awayAbbr = safeUpper(game.away?.abbr);
-    const homeAbbr = safeUpper(game.home?.abbr);
-    const startTimeUTC = pickString(game.startTimeUTC);
-    const gameState = safeUpper(game.gameState);
+      if (gameData?.reason === "game-finished") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Impossible de créer un TP sur un match déjà terminé."
+        );
+      }
 
-    if (!awayAbbr || !homeAbbr || !startTimeUTC) {
       throw new HttpsError(
         "failed-precondition",
         "Les données du match sont incomplètes (away/home/startTimeUTC)."
       );
     }
 
-    if (gameState === "OFF") {
-      throw new HttpsError(
-        "failed-precondition",
-        "Impossible de créer un TP sur un match déjà terminé."
-      );
-    }
+    const { awayAbbr, homeAbbr, startDate, gameYmd } = gameData;
 
-    const startDate = new Date(startTimeUTC);
-    if (Number.isNaN(startDate.getTime())) {
-      throw new HttpsError("failed-precondition", "startTimeUTC invalide.");
-    }
-
-    const lockedAtDate = new Date(
-      startDate.getTime() - TP_LOCK_BEFORE_MINUTES * 60 * 1000
-    );
+    const lockedAtDate = new Date(startDate.getTime() - TP_LOCK_BEFORE_MINUTES * 60 * 1000);
     const expiresAtDate = addDays(new Date(), TP_EXPIRES_AFTER_DAYS);
 
     if (Date.now() >= lockedAtDate.getTime()) {
@@ -120,28 +112,20 @@ export const createTeamPredictionChallenge = onCall(
       );
     }
 
-    const challengeId = `tp_${groupId}_${gameId}`;
-    const challengeRef = db.doc(`team_prediction_challenges/${challengeId}`);
-    const challengeSnap = await challengeRef.get();
+    const { challengeRef, challengeSnap, challengeId } =
+      await findExistingTeamPredictionChallenge(db, { league, groupId, gameId });
 
     if (challengeSnap.exists) {
       const existing = challengeSnap.data() || {};
       const status = String(existing.status || "").toLowerCase();
 
-      if (["open", "locked", "decided"].includes(status)) {
+      if (isActiveChallengeStatus(status)) {
         throw new HttpsError(
           "already-exists",
           "Un défi TP existe déjà pour ce match dans ce groupe."
         );
       }
     }
-
-    // Jackpot carry-in lu depuis le groupe (aligné avec applyTeamPredictionPayout)
-    const groupRef = db.doc(`groups/${groupId}`);
-    const groupSnap = await groupRef.get();
-    const groupData = groupSnap.exists ? groupSnap.data() || {} : {};
-
-    const tpCarryPot = Math.max(0, Number(groupData?.tpBonus ?? 0) || 0);
 
     const payload = {
       type: "team_prediction",
@@ -151,10 +135,10 @@ export const createTeamPredictionChallenge = onCall(
       updatedAt: FieldValue.serverTimestamp(),
 
       groupId,
-      league: "NHL",
+      league,
 
       gameId,
-      gameYmd: todayYmd,
+      gameYmd,
       gameStartTimeUTC: Timestamp.fromDate(startDate),
       expiresAt: Timestamp.fromDate(expiresAtDate),
       lockedAt: Timestamp.fromDate(lockedAtDate),
@@ -162,33 +146,35 @@ export const createTeamPredictionChallenge = onCall(
       awayAbbr,
       homeAbbr,
 
+      ...(league === "MLB"
+        ? {
+            homeProbablePitcher: gameData.homeProbablePitcher || buildEmptyMlbPitcher(),
+            awayProbablePitcher: gameData.awayProbablePitcher || buildEmptyMlbPitcher(),
+          }
+        : {}),
+
       stakePoints: TP_STAKE_POINTS,
       participantsCount: 0,
 
       status: "open",
 
-      jackpotCarryIn: tpCarryPot,
-      jackpotBumpApplied: false,
-      jackpotBumpAppliedAt: null,
-      jackpotBumpReason: null,
+      scoring: { ...TP_DEFAULT_SCORING },
 
       payoutApplied: false,
       payoutAppliedAt: null,
       payoutAppliedReason: null,
       payoutTotal: 0,
-      bonusUsed: 0,
 
       decidedAt: null,
 
       winnersCount: 0,
       winnersPreviewUids: [],
-      winnerShares: {},
 
       officialResult: {
         winnerAbbr: null,
         awayScore: null,
         homeScore: null,
-        outcome: null, // REG | OT | TB
+        outcome: null,
         confirmedAt: null,
       },
 
@@ -201,9 +187,9 @@ export const createTeamPredictionChallenge = onCall(
       challengeId,
       groupId,
       gameId,
+      league,
       awayAbbr,
       homeAbbr,
-      tpCarryPot,
     });
 
     return {
@@ -211,12 +197,12 @@ export const createTeamPredictionChallenge = onCall(
       challengeId,
       groupId,
       gameId,
-      gameYmd: todayYmd,
+      league,
+      gameYmd,
       awayAbbr,
       homeAbbr,
       lockedAtISO: lockedAtDate.toISOString(),
       stakePoints: TP_STAKE_POINTS,
-      jackpotCarryIn: tpCarryPot,
     };
   }
 );

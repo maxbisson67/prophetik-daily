@@ -8,18 +8,24 @@ import {
   TextInput,
   Alert,
   StyleSheet,
-  Image,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import { Ionicons } from "@expo/vector-icons";
-import { SvgUri } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import i18n from "@src/i18n/i18n";
 import { useTheme } from "@src/theme/ThemeProvider";
 import { useAuth } from "@src/auth/SafeAuthProvider";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import {
+  formatMlbPitcherFallbackLabel,
+  formatMlbPitcherEraLine,
+  formatMlbPitcherNameAndRecord,
+} from "@src/mlb/mlbPitcherDisplayHelpers";
+import TeamPredictionBundlePickScreen from "@src/defis/TeamPredictionBundlePickScreen";
 
 const RED = "#b91c1c";
 
@@ -82,51 +88,56 @@ function InfoRow({ label, value, colors }) {
   );
 }
 
-function isSvg(uri) {
-  return String(uri || "").toLowerCase().includes(".svg");
-}
+function PitcherBlock({ pitcher, colors, align = "left" }) {
+  const nameLine = formatMlbPitcherNameAndRecord(pitcher);
+  const eraLine = formatMlbPitcherEraLine(pitcher);
+  const textAlign = align;
+  const alignItems =
+    align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
 
-function buildNhlLogoUri(abbr, variant = "dark") {
-  const code = String(abbr || "").trim().toUpperCase();
-  if (!code) return null;
-  return `https://assets.nhle.com/logos/nhl/svg/${code}_${variant}.svg`;
-}
-
-function TeamLogo({ uri, abbr, size = 34 }) {
-  const resolvedUri =
-    uri || buildNhlLogoUri(abbr, "dark") || buildNhlLogoUri(abbr, "light");
-
-  if (!resolvedUri) {
+  if (!nameLine) {
     return (
-      <View
+      <Text
         style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: "rgba(255,255,255,0.08)",
-          alignItems: "center",
-          justifyContent: "center",
+          color: colors.subtext,
+          fontSize: 12,
+          fontWeight: "700",
+          marginTop: 2,
+          textAlign,
         }}
+        numberOfLines={2}
       >
-        <Ionicons name="shield-outline" size={size * 0.62} color="#9ca3af" />
-      </View>
-    );
-  }
-
-  if (isSvg(resolvedUri)) {
-    return (
-      <View style={{ width: size, height: size }}>
-        <SvgUri uri={resolvedUri} width="100%" height="100%" />
-      </View>
+        {formatMlbPitcherFallbackLabel(i18n.t.bind(i18n))}
+      </Text>
     );
   }
 
   return (
-    <Image
-      source={{ uri: resolvedUri }}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-    />
+    <View style={{ alignItems, marginTop: 2, gap: 2 }}>
+      <Text
+        style={{
+          color: colors.subtext,
+          fontSize: 12,
+          fontWeight: "700",
+          textAlign,
+        }}
+        numberOfLines={2}
+      >
+        {nameLine}
+      </Text>
+      {eraLine ? (
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 12,
+            fontWeight: "700",
+            textAlign,
+          }}
+        >
+          {eraLine}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -189,6 +200,15 @@ function getDerivedWinnerAbbr({ awayAbbr, homeAbbr, awayScore, homeScore }) {
 
 export default function TeamPredictionPickScreen() {
   const { challengeId } = useLocalSearchParams();
+
+  if (String(challengeId || "").startsWith("tpb_")) {
+    return <TeamPredictionBundlePickScreen bundleId={String(challengeId)} />;
+  }
+
+  return <TeamPredictionLegacyPickScreen challengeId={String(challengeId)} />;
+}
+
+function TeamPredictionLegacyPickScreen({ challengeId }) {
   const router = useRouter();
   const { colors } = useTheme();
   const { user, authReady } = useAuth();
@@ -203,6 +223,7 @@ export default function TeamPredictionPickScreen() {
   const [predictedAwayScore, setPredictedAwayScore] = useState("");
   const [predictedHomeScore, setPredictedHomeScore] = useState("");
   const [predictedOutcome, setPredictedOutcome] = useState("REG");
+  const [schedulePitchers, setSchedulePitchers] = useState(null);
 
   const [nowTick, setNowTick] = useState(Date.now());
 
@@ -277,25 +298,77 @@ const unsubEntry = entryRef.onSnapshot(
     return () => {
       cancelled = true;
       try { unsubChallenge?.(); } catch {}
+      try { unsubEntry?.(); } catch {}
     };
   }, [authReady, user?.uid, challengeId]);
+
+  const league = String(
+    challenge?.league ||
+      (String(challengeId || "").startsWith("tp_mlb_") ? "MLB" : "NHL")
+  ).toUpperCase();
+  const isMlb = league === "MLB";
+
+  useEffect(() => {
+    if (!challenge || !isMlb) {
+      setSchedulePitchers(null);
+      return;
+    }
+
+    const challengeHasPitcherNames =
+      !!challenge?.awayProbablePitcher?.name || !!challenge?.homeProbablePitcher?.name;
+
+    if (challengeHasPitcherNames) {
+      setSchedulePitchers(null);
+      return;
+    }
+
+    const gameId = String(challenge.gameId || "");
+    const gameYmd = String(challenge.gameYmd || "");
+    if (!gameId || !gameYmd) return;
+
+    let cancelled = false;
+
+    firestore()
+      .doc(`mlb_schedule_daily/${gameYmd}/games/${gameId}`)
+      .get()
+      .then((snap) => {
+        if (cancelled || !snap.exists) return;
+        const data = snap.data() || {};
+        setSchedulePitchers({
+          away: data.awayProbablePitcher || null,
+          home: data.homeProbablePitcher || null,
+        });
+      })
+      .catch((err) => {
+        console.log("[TP pick] schedule pitchers fallback error", err?.message || err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [challenge, isMlb]);
+
+  const awayProbablePitcher = useMemo(() => {
+    if (challenge?.awayProbablePitcher?.name) return challenge.awayProbablePitcher;
+    return schedulePitchers?.away || challenge?.awayProbablePitcher || null;
+  }, [challenge?.awayProbablePitcher, schedulePitchers?.away]);
+
+  const homeProbablePitcher = useMemo(() => {
+    if (challenge?.homeProbablePitcher?.name) return challenge.homeProbablePitcher;
+    return schedulePitchers?.home || challenge?.homeProbablePitcher || null;
+  }, [challenge?.homeProbablePitcher, schedulePitchers?.home]);
 
   const awayAbbr = challenge?.awayAbbr || null;
   const homeAbbr = challenge?.homeAbbr || null;
 
-  const awayLogo =
-    challenge?.awayDarkLogo ||
-    challenge?.awayLogo ||
-    challenge?.away?.darkLogo ||
-    challenge?.away?.logo ||
-    buildNhlLogoUri(awayAbbr, "dark");
-
-  const homeLogo =
-    challenge?.homeDarkLogo ||
-    challenge?.homeLogo ||
-    challenge?.home?.darkLogo ||
-    challenge?.home?.logo ||
-    buildNhlLogoUri(homeAbbr, "dark");
+  const awayTeam = useMemo(
+    () => lookupTeamByAbbr(league, awayAbbr),
+    [league, awayAbbr]
+  );
+  const homeTeam = useMemo(
+    () => lookupTeamByAbbr(league, homeAbbr),
+    [league, homeAbbr]
+  );
 
   const startTimeUTC =
     challenge?.gameStartTimeUTC || challenge?.startTimeUTC || null;
@@ -341,22 +414,16 @@ const unsubEntry = entryRef.onSnapshot(
     return formatCountdown(deadline.getTime() - nowTick);
   }, [deadline, nowTick]);
 
-  const potValue = useMemo(() => {
-    const participantsCount = Number(challenge?.participantsCount ?? 0);
-    const stakePoints = Number(challenge?.stakePoints ?? 2);
-    const carry = Number(challenge?.jackpotCarryIn ?? 0);
-    return participantsCount * stakePoints + carry;
-  }, [challenge?.participantsCount, challenge?.stakePoints, challenge?.jackpotCarryIn]);
-
   const canSubmit = useMemo(() => {
     if (isLocked || saving) return false;
     if (predictedAwayScore === "" || predictedHomeScore === "") return false;
-    if (!predictedOutcome) return false;
+    if (!isMlb && !predictedOutcome) return false;
     if (!derivedWinnerAbbr) return false;
     return true;
   }, [
     isLocked,
     saving,
+    isMlb,
     predictedAwayScore,
     predictedHomeScore,
     predictedOutcome,
@@ -444,7 +511,9 @@ const unsubEntry = entryRef.onSnapshot(
                     fontWeight: "900",
                   }}
                 >
-                  {i18n.t("tp.pick.screenTitle", { defaultValue: "Défi TP" })}
+                  {i18n.t("tp.pick.screenTitle", {
+                    defaultValue: "Défi - Prédire l'issue du match",
+                  })}
                 </Text>
 
                 <TouchableOpacity
@@ -492,7 +561,13 @@ const unsubEntry = entryRef.onSnapshot(
                         {i18n.t("tp.pick.title", { defaultValue: "Prédire le résultat" })}
                       </Text>
                       <Text style={{ color: colors.subtext, marginTop: 2 }}>
-                        {awayAbbr} @ {homeAbbr}
+                        {isMlb ? (
+                          i18n.t("tp.pick.mlbMatchup", {
+                            defaultValue: "Match MLB",
+                          })
+                        ) : (
+                          `${awayAbbr} @ ${homeAbbr}`
+                        )}
                       </Text>
                     </View>
 
@@ -526,20 +601,13 @@ const unsubEntry = entryRef.onSnapshot(
                       value={formatDateTime(startTimeUTC)}
                       colors={colors}
                     />
-                    <InfoRow
-                      label={i18n.t("tp.pick.deadlineLabel", { defaultValue: "Verrouille dans" })}
-                      value={
-                        isLocked
-                          ? i18n.t("tp.pick.locked", { defaultValue: "Verrouillé" })
-                          : countdownText
-                      }
-                      colors={colors}
-                    />
-                    <InfoRow
-                      label={i18n.t("tp.pick.potLabel", { defaultValue: "Cagnotte" })}
-                      value={String(potValue)}
-                      colors={colors}
-                    />
+                    {!isLocked ? (
+                      <InfoRow
+                        label={i18n.t("tp.pick.deadlineLabel", { defaultValue: "Verrouille dans" })}
+                        value={countdownText}
+                        colors={colors}
+                      />
+                    ) : null}
                   </View>
                 </View>
 
@@ -567,10 +635,17 @@ const unsubEntry = entryRef.onSnapshot(
                     }}
                   >
                     <View style={{ flex: 1, alignItems: "center", gap: 8 }}>
-                      <TeamLogo uri={awayLogo} abbr={awayAbbr} size={40} />
+                      <TeamLogoBadge team={awayTeam} size={40} colors={colors} />
                       <Text style={{ color: colors.text, fontWeight: "900" }}>
                         {awayAbbr}
                       </Text>
+                      {isMlb ? (
+                        <PitcherBlock
+                          pitcher={awayProbablePitcher}
+                          colors={colors}
+                          align="center"
+                        />
+                      ) : null}
                       <TextInput
                         value={predictedAwayScore}
                         onChangeText={(txt) => setPredictedAwayScore(normalizeScoreInput(txt))}
@@ -595,10 +670,17 @@ const unsubEntry = entryRef.onSnapshot(
                     </Text>
 
                     <View style={{ flex: 1, alignItems: "center", gap: 8 }}>
-                      <TeamLogo uri={homeLogo} abbr={homeAbbr} size={40} />
+                      <TeamLogoBadge team={homeTeam} size={40} colors={colors} />
                       <Text style={{ color: colors.text, fontWeight: "900" }}>
                         {homeAbbr}
                       </Text>
+                      {isMlb ? (
+                        <PitcherBlock
+                          pitcher={homeProbablePitcher}
+                          colors={colors}
+                          align="center"
+                        />
+                      ) : null}
                       <TextInput
                         value={predictedHomeScore}
                         onChangeText={(txt) => setPredictedHomeScore(normalizeScoreInput(txt))}
@@ -636,7 +718,8 @@ const unsubEntry = entryRef.onSnapshot(
                   ) : null}
                 </View>
 
-                {/* Outcome */}
+                {/* Outcome — NHL seulement */}
+                {!isMlb ? (
                 <View
                   style={[
                     styles.card,
@@ -691,8 +774,9 @@ const unsubEntry = entryRef.onSnapshot(
                     </Text>
                   ) : null}
                 </View>
+                ) : null}
 
-                {/* Summary compact */}
+                {/* Points */}
                 <View
                   style={[
                     styles.card,
@@ -702,33 +786,9 @@ const unsubEntry = entryRef.onSnapshot(
                     },
                   ]}
                 >
-                  <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-                    {i18n.t("tp.pick.summaryTitle", { defaultValue: "Résumé" })}
-                  </Text>
-
-                  <View style={{ gap: 7, marginTop: 10 }}>
-                    <Text style={{ color: colors.text }}>
-                      {i18n.t("tp.pick.summaryWinner", { defaultValue: "Gagnant" })}:{" "}
-                      <Text style={{ fontWeight: "900" }}>{derivedWinnerAbbr || "—"}</Text>
-                    </Text>
-
-                    <Text style={{ color: colors.text }}>
-                      {i18n.t("tp.pick.summaryScore", { defaultValue: "Score" })}:{" "}
-                      <Text style={{ fontWeight: "900" }}>
-                        {predictedAwayScore === "" ? "—" : predictedAwayScore} -{" "}
-                        {predictedHomeScore === "" ? "—" : predictedHomeScore}
-                      </Text>
-                    </Text>
-
-                    <Text style={{ color: colors.text }}>
-                      {i18n.t("tp.pick.summaryOutcome", { defaultValue: "Fin de match" })}:{" "}
-                      <Text style={{ fontWeight: "900" }}>{predictedOutcome || "—"}</Text>
-                    </Text>
-                  </View>
-
-                  <Text style={{ color: colors.subtext, marginTop: 10 }}>
-                    {i18n.t("tp.pick.summaryHint", {
-                      defaultValue: "Les gagnants exacts se partagent la cagnotte.",
+                  <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+                    {i18n.t("tp.pick.summaryHintMvp", {
+                      defaultValue: "3 pts pour le bon gagnant, +3 pts pour le score exact.",
                     })}
                   </Text>
                 </View>

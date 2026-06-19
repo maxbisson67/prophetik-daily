@@ -1,6 +1,63 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isGroupMember(groupId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/group_memberships/$(groupId + '_' + request.auth.uid));
+    }
+
+    // mlb_first_rbi_games: serveur seulement (détection FGC MLB mutualisée)
+    match /mlb_first_rbi_games/{gamePk} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // nhl_first_goal_games: serveur seulement (détection FGC NHL mutualisée)
+    match /nhl_first_goal_games/{gameId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // team_prediction_bundles: lecture membres du groupe, écriture serveur
+    // IMPORTANT: resource == null autorise get sur doc inexistant (sinon permission-denied)
+    match /team_prediction_bundles/{bundleId} {
+      allow get: if isSignedIn()
+        && (resource == null || isGroupMember(resource.data.groupId));
+      allow list: if isSignedIn()
+        && isGroupMember(resource.data.groupId);
+      allow write: if false;
+
+      match /entries/{uid} {
+        allow read: if isSignedIn()
+          && isGroupMember(
+            get(/databases/$(database)/documents/team_prediction_bundles/$(bundleId)).data.groupId
+          );
+        allow write: if false;
+      }
+    }
+
+    // team_prediction_challenges (legacy): lecture membres du groupe, écriture serveur
+    match /team_prediction_challenges/{challengeId} {
+      allow get: if isSignedIn()
+        && (resource == null || isGroupMember(resource.data.groupId));
+      allow list: if isSignedIn()
+        && isGroupMember(resource.data.groupId);
+      allow write: if false;
+
+      match /entries/{uid} {
+        allow read: if isSignedIn()
+          && isGroupMember(
+            get(/databases/$(database)/documents/team_prediction_challenges/$(challengeId)).data.groupId
+          );
+        allow write: if false;
+      }
+    }
+
     // Lecture/écriture ouvertes (DEV) — juste pour valider que la CLI lit le fichier
     match /{document=**} {
       allow read, write: if true;

@@ -101,7 +101,7 @@ function cardTypeTitle(kind) {
     return i18n.t("firstGoal.home.title", { defaultValue: "Premier but" });
   }
   if (kind === "tp") {
-    return i18n.t("tp.home.title", { defaultValue: "Défi équipe gagnante" });
+    return i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" });
   }
   return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
 }

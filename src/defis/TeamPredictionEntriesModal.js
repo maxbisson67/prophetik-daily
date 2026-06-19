@@ -180,7 +180,7 @@ function StatusChip({ status, colors }) {
   );
 }
 
-function EntryRow({ row, colors, awayAbbr, homeAbbr, showResult = false }) {
+function EntryRow({ row, colors, awayAbbr, homeAbbr, league = "NHL", showResult = false }) {
   const predictedAwayScore =
     row?.predictedAwayScore !== undefined && row?.predictedAwayScore !== null
       ? String(row.predictedAwayScore)
@@ -191,7 +191,14 @@ function EntryRow({ row, colors, awayAbbr, homeAbbr, showResult = false }) {
       ? String(row.predictedHomeScore)
       : "—";
 
-  const predictedOutcome = safeUpper(row?.predictedOutcome || "—");
+  const rawOutcome = safeUpper(row?.predictedOutcome || "");
+  const lg = String(league || "NHL").toUpperCase();
+  const outcomeSuffix =
+    lg === "MLB" || rawOutcome === "FINAL"
+      ? ""
+      : rawOutcome
+      ? ` • ${rawOutcome}`
+      : "";
   const displayName =
     row?.displayName ||
     row?.name ||
@@ -234,7 +241,8 @@ function EntryRow({ row, colors, awayAbbr, homeAbbr, showResult = false }) {
               fontWeight: "700",
             }}
           >
-            {awayAbbr} {predictedAwayScore} - {predictedHomeScore} {homeAbbr} • {predictedOutcome}
+            {awayAbbr} {predictedAwayScore} - {predictedHomeScore} {homeAbbr}
+            {outcomeSuffix}
           </Text>
         </View>
 
@@ -383,6 +391,8 @@ export default function TeamPredictionEntriesModal({
 
   const awayAbbr = challenge?.awayAbbr || "AWAY";
   const homeAbbr = challenge?.homeAbbr || "HOME";
+  const challengeLeague =
+    String(challenge?.league || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
 
   const awayLogo =
     challenge?.awayDarkLogo ||
@@ -623,6 +633,7 @@ export default function TeamPredictionEntriesModal({
                         colors={colors}
                         awayAbbr={awayAbbr}
                         homeAbbr={homeAbbr}
+                        league={challengeLeague}
                         showResult={showResult}
                       />
                     ))}

@@ -2,26 +2,19 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
+import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { getDateValue, normalizeLeague, safeUpper } from "./tpGameSources.js";
 
 if (!getApps().length) initializeApp();
 
 const db = getFirestore();
 
+const MAX_SCORE = 30;
+
 function toNumber(v, def = null) {
   if (typeof v === "number") return v;
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
-}
-
-function safeUpper(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
-function getDateValue(v) {
-  if (!v) return null;
-  if (typeof v?.toDate === "function") return v.toDate();
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function isActiveMembership(data = {}) {
@@ -77,7 +70,7 @@ export const submitTeamPredictionEntry = onCall(
     const challengeId = String(req.data?.challengeId || "").trim();
     const predictedAwayScore = toNumber(req.data?.predictedAwayScore, null);
     const predictedHomeScore = toNumber(req.data?.predictedHomeScore, null);
-    const predictedOutcome = safeUpper(req.data?.predictedOutcome);
+    let predictedOutcome = safeUpper(req.data?.predictedOutcome);
 
     if (!challengeId) {
       throw new HttpsError("invalid-argument", "challengeId requis.");
@@ -91,20 +84,12 @@ export const submitTeamPredictionEntry = onCall(
       throw new HttpsError("invalid-argument", "Les scores doivent être positifs.");
     }
 
-    if (!["REG", "OT", "TB"].includes(predictedOutcome)) {
-      throw new HttpsError("invalid-argument", "predictedOutcome invalide.");
+    if (predictedAwayScore > MAX_SCORE || predictedHomeScore > MAX_SCORE) {
+      throw new HttpsError("invalid-argument", `Les scores doivent être inférieurs ou égaux à ${MAX_SCORE}.`);
     }
 
     if (predictedAwayScore === predictedHomeScore) {
       throw new HttpsError("invalid-argument", "Le score ne peut pas être égal.");
-    }
-
-    const diff = Math.abs(predictedAwayScore - predictedHomeScore);
-    if (diff > 1 && (predictedOutcome === "OT" || predictedOutcome === "TB")) {
-      throw new HttpsError(
-        "invalid-argument",
-        "OT et TB sont permis seulement si l’écart est de 1 but."
-      );
     }
 
     const challengeRef = db.doc(`team_prediction_challenges/${challengeId}`);
@@ -115,7 +100,24 @@ export const submitTeamPredictionEntry = onCall(
     }
 
     const challenge = challengeSnap.data() || {};
+    const league = normalizeLeague(challenge.league);
     const groupId = String(challenge.groupId || "").trim();
+
+    if (league === "MLB") {
+      predictedOutcome = "FINAL";
+    } else if (!["REG", "OT", "TB"].includes(predictedOutcome)) {
+      throw new HttpsError("invalid-argument", "predictedOutcome invalide.");
+    }
+
+    if (league === "NHL") {
+      const diff = Math.abs(predictedAwayScore - predictedHomeScore);
+      if (diff > 1 && (predictedOutcome === "OT" || predictedOutcome === "TB")) {
+        throw new HttpsError(
+          "invalid-argument",
+          "OT et TB sont permis seulement si l'écart est de 1 but."
+        );
+      }
+    }
 
     if (!groupId) {
       throw new HttpsError("failed-precondition", "groupId manquant sur le défi TP.");
@@ -125,12 +127,12 @@ export const submitTeamPredictionEntry = onCall(
     const membershipSnap = await membershipRef.get();
 
     if (!membershipSnap.exists || !isActiveMembership(membershipSnap.data() || {})) {
-      throw new HttpsError("permission-denied", "Tu n’es pas membre actif de ce groupe.");
+      throw new HttpsError("permission-denied", "Tu n'es pas membre actif de ce groupe.");
     }
 
     const status = String(challenge.status || "").toLowerCase();
     if (status !== "open") {
-      throw new HttpsError("failed-precondition", "Le défi TP n’est plus ouvert.");
+      throw new HttpsError("failed-precondition", "Le défi TP n'est plus ouvert.");
     }
 
     const lockedAt = getDateValue(challenge.lockedAt);
@@ -215,10 +217,18 @@ export const submitTeamPredictionEntry = onCall(
       };
     });
 
+    if (result.created) {
+      await recordParticipantProgressionSafe(uid, {
+        challengeType: "TP",
+        countParticipation: true,
+      });
+    }
+
     logger.info("[submitTeamPredictionEntry] success", {
       uid,
       challengeId,
       groupId,
+      league,
       created: result.created,
       displayName,
       hasAvatarUrl: !!avatarUrl,

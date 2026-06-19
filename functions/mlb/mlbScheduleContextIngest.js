@@ -4,6 +4,12 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getMlbCurrentSeason } from "../players/seasonHelpers.js";
+import {
+  buildEmptyMlbPitcher,
+  enrichRawMlbGamePitchers,
+  logMlbPitchersForGame,
+} from "./mlbProbablePitchers.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -138,6 +144,9 @@ function normalizeGame(game, forcedYmd = null) {
 
     updatedAt: FieldValue.serverTimestamp(),
     source: "statsapi.mlb.com/api/v1/schedule",
+
+    homeProbablePitcher: buildEmptyMlbPitcher(),
+    awayProbablePitcher: buildEmptyMlbPitcher(),
   };
 }
 
@@ -148,7 +157,7 @@ function buildScheduleUrl({ startDate, endDate, gameType = MLB_REGULAR_GAME_TYPE
 
   url.searchParams.set("sportId", String(MLB_SPORT_ID));
   url.searchParams.set("gameType", String(gameType));
-  url.searchParams.set("hydrate", "team,linescore,venue");
+  url.searchParams.set("hydrate", "team,linescore,venue,probablePitcher");
   url.searchParams.set("startDate", String(startDate));
   url.searchParams.set("endDate", String(endDate));
 
@@ -176,17 +185,44 @@ async function fetchScheduleWindow({ startDate, endDate, gameType = MLB_REGULAR_
   return res.json();
 }
 
-function extractGames(payload) {
+async function buildEnrichedGames(payload) {
   const dates = Array.isArray(payload?.dates) ? payload.dates : [];
   const out = [];
+  const cache = new Map();
+  const season = getMlbCurrentSeason();
 
   for (const dateBlock of dates) {
     const ymd = toStr(dateBlock?.date, "");
     const games = Array.isArray(dateBlock?.games) ? dateBlock.games : [];
 
-    for (const game of games) {
-      const row = normalizeGame(game, ymd);
-      if (row.gamePk) out.push(row);
+    for (const rawGame of games) {
+      const row = normalizeGame(rawGame, ymd);
+      if (!row.gamePk) continue;
+
+      try {
+        const { awayProbablePitcher, homeProbablePitcher } = await enrichRawMlbGamePitchers(
+          rawGame,
+          season,
+          cache
+        );
+        row.awayProbablePitcher = awayProbablePitcher;
+        row.homeProbablePitcher = homeProbablePitcher;
+        logMlbPitchersForGame({
+          awayAbbr: row.awayTeam?.abbreviation,
+          homeAbbr: row.homeTeam?.abbreviation,
+          awayProbablePitcher,
+          homeProbablePitcher,
+        });
+      } catch (e) {
+        logger.warn("[mlbScheduleWindow] pitcher enrich failed", {
+          gamePk: row.gamePk,
+          err: String(e?.message || e),
+        });
+        row.awayProbablePitcher = buildEmptyMlbPitcher();
+        row.homeProbablePitcher = buildEmptyMlbPitcher();
+      }
+
+      out.push(row);
     }
   }
 
@@ -262,7 +298,7 @@ async function ingestMlbScheduleWindow({ startYmd, endYmd }) {
     gameType: MLB_REGULAR_GAME_TYPE,
   });
 
-  const games = extractGames(payload);
+  const games = await buildEnrichedGames(payload);
   const daysWritten = await writeDailyScheduleDocs(games);
 
   logger.info("[mlbScheduleWindow] ingest done", {
@@ -307,13 +343,13 @@ export const updateMlbScheduleWindowNow = onCall(
 export const refreshMlbScheduleWindow = onSchedule(
   {
     schedule: "10 3 * * *",
-    //schedule: "every 15 minutes",
+    //schedule: "every 2 minutes",
     timeZone: "America/Toronto",
     region: "us-central1",
   },
   async () => {
     try {
-      return;  // arrêter l'exécution pour le moment
+     
       const today = ymdToronto(new Date());
       const startYmd = addDaysToYmd(today, -7);
       const endYmd = addDaysToYmd(today, 60);
@@ -337,7 +373,6 @@ export const refreshMlbRecentSchedule = onSchedule(
   },
   async () => {
     try {
-      return;  
       const today = ymdToronto(new Date());
       const startYmd = addDaysToYmd(today, -1);
       const endYmd = addDaysToYmd(today, 1);

@@ -302,9 +302,12 @@
       "title": "Challenges First goal",
       "empty": "No first-goal challenge in your groups today",
       "signupDeadline": "Registration deadline",
+      "signupClosed": "Closed",
+      "viewResults": "View results",
+      "viewParticipants": "View participants",
+      "viewPicks": "View picks",
       "infoTitle":"How does this challenge work?",
-       "boni": "Bonus points",
-      "infoBody":"• Choose the player who will score the first goal of the game.\n• Watch the results in the Sports / MatchLive tab.\n• One point is awarded to the participant who correctly predicts the first goal scorer.\n• If no one makes the correct prediction, the point carries over and the jackpot increases."
+      "infoBody":"• Choose the player who will score the first goal or first run batted in of the game.\n• 5 points are awarded to the participant who correctly predicts the scorer."
     },
     "create":{
       "firstGoalTitle":"Create a First goal challenge",
@@ -337,6 +340,16 @@
         "editUntil": "You can change your pick until", 
         "locked": "The challenge is locked",
         "chooseOne": "Choose the player who will score the first goal",
+        "chooseOneMlb": "Choose the player who will produce the first run",
+        "sortedByStats": "Sorted by current season stats",
+        "injury": {
+          "out": "Out",
+          "dayToDay": "Day-to-day",
+          "questionable": "Questionable",
+          "doubtful": "Doubtful",
+          "probable": "Probable",
+          "unknown": "Injured"
+        },
         "startsAt": "Start",
         "mySelection": "My pick",
         "successBody": "Your pick has been saved. Good luck 🍀",
@@ -358,7 +371,20 @@
     "cta":{
         "matchLive": "Match Live",
         "pickScorer": "Choose my player"
-     }
+     },
+    "firstRbi": {
+      "title": "First run batted in",
+      "resultPrefix": "First run batted in:",
+      "live": {
+        "noneYet": "No run batted in yet.",
+        "pending": "First run batted in: {{name}} {{team}} · pending confirmation",
+        "confirmed": "First run batted in confirmed: {{name}} {{team}}"
+      }
+    },
+    "result": {
+      "prefix": "First goal:",
+      "none": "No winner"
+    }
   },
   "ascensions": {
     "home": {
@@ -391,7 +417,7 @@
       "inProgress": "In progress"
     },
     "summit":{
-       "title": "My Summit challenge",
+       "title": "My Summit challenge"
     },
     "labels": {
       "cycle": "Cycle",
@@ -486,6 +512,23 @@
 
         "transferRequiredTitle": "Transfer required",
         "transferRequiredMessage": "Other members still exist. You must transfer ownership before leaving."
+    },
+    "config": {
+        "sectionTitle": "Configuration",
+        "autopilotLabel": "Automatic challenge creation",
+        "autopilotHint": "Challenges are created automatically for the group.",
+        "favoriteTeamLabel": "Favorite team",
+        "noFavoriteTeam": "No team selected",
+        "clearFavoriteTeam": "Remove team",
+        "save": "Save",
+        "saveErrorTitle": "Save failed",
+        "pickFavoriteTeam": "Choose a team",
+        "noTeamsAvailable": "No teams available right now.",
+        "loadingTeams": "Loading teams…",
+        "teamsLoadError": "Could not load teams. Check your connection.",
+        "fallbackTeamsHint": "Local list — standings will sync later.",
+        "teamsCount": "teams",
+        "searchTeam": "Search for a team…"
     },
         "title": "Groups",
         "detailTitle": "Group details",
@@ -1181,6 +1224,86 @@
     "footer": "Prophetik evolves: some options may vary depending on the group or special events."
   },
 
+  "progression": {
+    "title": "Progress",
+    "badgesTitle": "Badges",
+    "badgesCount": "{{unlocked}}/{{total}} badges",
+    "streakCurrent": "Current streak",
+    "streakBest": "Best streak",
+    "streakOnFire": "STREAK ON FIRE",
+    "streakBestShort": "TO BEAT",
+    "daysLabel": "DAYS",
+    "days": "{{count}} d",
+    "seeAll": "See all badges",
+    "locked": "Locked",
+    "unlockedAt": "Unlocked on {{date}}",
+    "progress": "{{current}}/{{threshold}}",
+    "statsTitle": "Statistics",
+    "stats": {
+      "participations": "Participations",
+      "correctPredictions": "Correct predictions",
+      "exactScores": "Exact scores",
+      "fgcWins": "FGC wins",
+      "tsFivePointNights": "5+ pt nights"
+    },
+    "categories": {
+      "participation": "Participation",
+      "prediction": "Predictions",
+      "streak": "Streaks",
+      "milestone": "Milestones"
+    },
+    "badges": {
+      "FIRST_CHALLENGE": {
+        "name": "First challenge",
+        "description": "Join your first Prophetik challenge."
+      },
+      "TEN_CHALLENGES": {
+        "name": "10 challenges",
+        "description": "Join 10 challenges."
+      },
+      "FIFTY_CHALLENGES": {
+        "name": "50 challenges",
+        "description": "Join 50 challenges."
+      },
+      "FIRST_CORRECT_PREDICTION": {
+        "name": "First correct prediction",
+        "description": "Make your first correct prediction."
+      },
+      "TEN_CORRECT_PREDICTIONS": {
+        "name": "10 correct predictions",
+        "description": "Make 10 correct predictions."
+      },
+      "FIFTY_CORRECT_PREDICTIONS": {
+        "name": "50 correct predictions",
+        "description": "Make 50 correct predictions."
+      },
+      "STREAK_3": {
+        "name": "3-day streak",
+        "description": "Participate 3 days in a row."
+      },
+      "STREAK_7": {
+        "name": "7-day streak",
+        "description": "Participate 7 days in a row."
+      },
+      "STREAK_30": {
+        "name": "30-day streak",
+        "description": "Participate 30 days in a row."
+      },
+      "FIRST_EXACT_SCORE": {
+        "name": "First exact score",
+        "description": "Get your first exact score in a team prediction."
+      },
+      "FIRST_FGC_WIN": {
+        "name": "First FGC win",
+        "description": "Win your first first-goal / first-RBI challenge."
+      },
+      "FIRST_TS_FIVE_POINTS": {
+        "name": "First 5-point night",
+        "description": "Score 5 points or more in one Team Scorer night."
+      }
+    }
+  },
+
   "drawer": {
     "guest": "Guest",
     "online": "Signed in",
@@ -1201,6 +1324,7 @@
     "shop": "Shop",
     "tokens": "Tokens",
     "profile": "Profile",
+    "progression": "Progress & badges",
     "settings": "Settings",
     "howItWorks": "How it works",
 
@@ -1430,6 +1554,27 @@
       "final": "Final",
       "finalOt": "Final • OT",
       "finalSo": "Final • SO"
+    }
+  },
+  "tp": {
+    "home": {
+      "title": "Predict match outcomes"
+    },
+    "live": {
+      "title": "Predict match outcomes"
+    },
+    "create": {
+      "title": "Predict match outcomes",
+      "noGames": "No {{sport}} games available today.",
+      "noGroupsForSport": "No {{sport}} group available.",
+      "startAt": "Start: {{time}}",
+      "youWillPredict": "You will predict:",
+      "ruleWinner": "Winning team",
+      "ruleScore": "Exact score",
+      "ruleOutcome": "Regulation / OT / SO",
+      "scoringWinner": "Correct winner = 3 points",
+      "scoringExact": "Exact score bonus = +3 points (6 total)",
+      "creating": "Creating…"
     }
   },
   "ascension": {
