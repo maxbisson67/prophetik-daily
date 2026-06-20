@@ -10,6 +10,7 @@ import { runIngestStatsForDate } from "./ingest.js";
 
 // 🔁 Date/fuseau centralisés
 import { APP_TZ, appYmd, addDaysToYmd, formatDebug } from "./ProphetikDate.js";
+import { recordParticipantProgressionSafe } from "./achievements/achievementService.js";
 
 /* ------------------------- Admin init ------------------------- */
 if (getApps().length === 0) initializeApp();
@@ -635,8 +636,39 @@ export const finalizeDefiWinners = onSchedule(
           { merge: true }
         );
 
-        return { applied: true, finalized: !alreadyCompleted, groupId };
+        return {
+          applied: true,
+          finalized: !alreadyCompleted,
+          groupId,
+          progressionContext: {
+            winners,
+            parts: humanParts.map((p) => ({
+              uid: String(p.uid),
+              livePoints: Number(p.livePoints ?? 0),
+            })),
+          },
+        };
       });
+
+      if (
+        txResult?.applied &&
+        !txResult?.cancelled &&
+        txResult?.progressionContext?.parts?.length
+      ) {
+        const winnerSet = new Set(
+          (txResult.progressionContext.winners || []).map((uid) => String(uid))
+        );
+
+        for (const p of txResult.progressionContext.parts) {
+          const uid = String(p.uid);
+          await recordParticipantProgressionSafe(uid, {
+            challengeType: "TS",
+            countParticipation: false,
+            isCorrectPrediction: winnerSet.has(uid),
+            tsPoints: p.livePoints,
+          });
+        }
+      }
 
       processed++;
       if (txResult?.skippedAlreadyApplied) skippedAlreadyApplied++;

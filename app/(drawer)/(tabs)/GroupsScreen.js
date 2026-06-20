@@ -1,17 +1,15 @@
 // app/(tabs)/GroupsScreen.js
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, ActivityIndicator, Modal, TextInput,
-  Alert, Image, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard
+  View, Text, FlatList, TouchableOpacity, ActivityIndicator,
+  Alert, Image, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@src/auth/SafeAuthProvider';
-import { createGroupService } from '@src/groups/createGroupService';
 import { useTheme } from '@src/theme/ThemeProvider';
 import i18n from '@src/i18n/i18n'; // 👈 i18n
-import Analytics from '@src/services/analytics';
+import GroupAvatar from '@src/groups/components/GroupAvatar';
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)
@@ -154,11 +152,10 @@ export default function GroupsScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
 
-  // Création
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [creating, setCreating] = useState(false);
+  // Création → écran dédié (évite Modal iOS + picker d'équipe)
+  function openCreateGroup() {
+    router.push('/(drawer)/groups/create');
+  }
 
   // Favori
   const [favoriteGroupId, setFavoriteGroupId] = useState(null);
@@ -323,63 +320,6 @@ export default function GroupsScreen() {
     router.push({ pathname: `/(drawer)/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) } });
   }
 
-  async function onCreateGroup() {
-    if (!name.trim()) {
-      return Alert.alert(
-        i18n.t('groups.alertNameRequiredTitle'),
-        i18n.t('groups.alertNameRequiredMessage')
-      );
-    }
-    if (!user?.uid) {
-      return Alert.alert(
-        i18n.t('groups.alertNotConnectedTitle'),
-        i18n.t('groups.alertNotConnectedMessage')
-      );
-    }
-
-    try {
-      setCreating(true);
-
-      // ✅ Appel Cloud Function via createGroupService()
-      const { groupId } = await createGroupService({
-        name: name.trim(),
-        description: description.trim(),
-      });
-
-      await Analytics.createGroup({
-        groupType: "private",
-        source: "groups_screen",
-        groupId,
-      });
-
-      setCreating(false);
-      setCreateOpen(false);
-      setName('');
-      setDescription('');
-
-      router.push({ pathname: '/(drawer)/groups/[groupId]', params: { groupId } });
-    } catch (e) {
-      setCreating(false);
-
-      const msg = String(e?.message || "");
-      const details = e?.details || {};
-
-      if (msg.includes("OWNER_GROUP_LIMIT_REACHED")) {
-        const max = details?.max ?? 5;
-        Alert.alert(
-          i18n.t("groups.cap.ownerTitle", { defaultValue: "Limite atteinte" }),
-          i18n.t("groups.cap.ownerBody", {
-            max,
-            defaultValue: `Tu as atteint la limite de ${max} groupes (Propriétaire) pour ton forfait.`,
-          })
-        );
-        return;
-      }
-
-      Alert.alert(i18n.t("groups.alertErrorTitle"), String(e?.message || e));
-    }
-  }
-
   async function toggleFavorite(gid) {
     if (!user?.uid) return;
     const w = fw();
@@ -491,7 +431,7 @@ export default function GroupsScreen() {
 
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
-            onPress={() => setCreateOpen(true)}
+            onPress={openCreateGroup}
             style={{
               backgroundColor: colors.primary,
               paddingHorizontal: 14,
@@ -622,21 +562,11 @@ export default function GroupsScreen() {
                 <View
                   style={{ flexDirection: 'row', alignItems: 'center', paddingRight: 28 }}
                 >
-                  <Image
-                    source={
-                      item.avatarUrl
-                        ? { uri: item.avatarUrl }
-                        : require('@src/assets/group-placeholder.png')
-                    }
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: colors.background,
-                      marginRight: 10,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                    }}
+                  <GroupAvatar
+                    group={item}
+                    size={40}
+                    colors={colors}
+                    style={{ marginRight: 10 }}
                   />
                   <View style={{ flex: 1 }}>
                     <Text
@@ -656,8 +586,14 @@ export default function GroupsScreen() {
                         {item.description}
                       </Text>
                     )}
+
+                    <Text style={{ marginTop: 4, color: colors.subtext, fontSize: 12, fontWeight: '800' }}>
+                      {(item.sport || 'NHL').toUpperCase() === 'MLB' ? '⚾ MLB' : '🏒 NHL'}
+                    </Text>
                   </View>
                 </View>
+
+
 
                 <View
                   style={{
@@ -720,7 +656,7 @@ export default function GroupsScreen() {
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                 <TouchableOpacity
-                  onPress={() => setCreateOpen(true)}
+                  onPress={openCreateGroup}
                   style={{
                     backgroundColor: colors.primary,
                     paddingHorizontal: 16,
@@ -766,200 +702,6 @@ export default function GroupsScreen() {
         />
       )}
 
-      {/* Modal création */}
-      <Modal
-        visible={createOpen}
-        animationType="fade"
-        onRequestClose={() => setCreateOpen(false)}
-        transparent
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View
-            style={{
-              flex: 1,
-              paddingTop: 60,
-              backgroundColor: 'rgba(0,0,0,0.25)',
-              justifyContent: 'flex-start',
-            }}
-          >
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-            >
-              <SafeAreaView
-                style={{
-                  backgroundColor: colors.card,
-                  borderBottomLeftRadius: 18,
-                  borderBottomRightRadius: 18,
-                  paddingBottom: 16,
-                  maxHeight: '92%',
-                  marginBottom: 12,
-                }}
-              >
-                <View
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingTop: 12,
-                    paddingBottom: 8,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      marginBottom: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="rocket-launch-outline"
-                      size={22}
-                      color={colors.text}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 20,
-                        fontWeight: '900',
-                        color: colors.text,
-                      }}
-                    >
-                      {i18n.t('groups.modalTitle')}
-                    </Text>
-                  </View>
-                  <Text style={{ color: colors.subtext }}>
-                    {i18n.t('groups.modalSubtitle')}
-                  </Text>
-                </View>
-
-                <View
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingTop: 12,
-                    gap: 12,
-                  }}
-                >
-                  <View>
-                    <Text
-                      style={{
-                        fontWeight: '700',
-                        marginBottom: 6,
-                        color: colors.text,
-                      }}
-                    >
-                      {i18n.t('groups.fieldNameLabel')}
-                    </Text>
-                    <TextInput
-                      placeholder={i18n.t('groups.fieldNamePlaceholder')}
-                      placeholderTextColor={colors.subtext}
-                      value={name}
-                      onChangeText={setName}
-                      autoCorrect={false}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        borderRadius: 12,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                        backgroundColor: colors.background,
-                        color: colors.text,
-                      }}
-                    />
-                    <Text
-                      style={{
-                        marginTop: 4,
-                        fontSize: 12,
-                        color: colors.subtext,
-                      }}
-                    >
-                      {name.length}/40
-                    </Text>
-                  </View>
-
-                  <View>
-                    <Text
-                      style={{
-                        fontWeight: '700',
-                        marginBottom: 6,
-                        color: colors.text,
-                      }}
-                    >
-                      {i18n.t('groups.fieldDescriptionLabel')}
-                    </Text>
-                    <TextInput
-                      placeholder={i18n.t('groups.fieldDescriptionPlaceholder')}
-                      placeholderTextColor={colors.subtext}
-                      value={description}
-                      onChangeText={setDescription}
-                      multiline
-                      style={{
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        borderRadius: 12,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                        minHeight: 70,
-                        backgroundColor: colors.background,
-                        color: colors.text,
-                      }}
-                    />
-                  </View>
-                </View>
-
-                <View
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 16,
-                    flexDirection: 'row',
-                    gap: 10,
-                  }}
-                >
-                  <TouchableOpacity
-                    onPress={() => setCreateOpen(false)}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 14,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      alignItems: 'center',
-                    }}
-                    disabled={creating}
-                  >
-                    <Text
-                      style={{ fontWeight: '700', color: colors.text }}
-                    >
-                      {i18n.t('groups.cancel')}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={onCreateGroup}
-                    disabled={creating || !name.trim()}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 14,
-                      borderRadius: 12,
-                      alignItems: 'center',
-                      backgroundColor:
-                        !name.trim() || creating ? colors.subtext : colors.primary,
-                    }}
-                  >
-                    {creating ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text
-                        style={{ color: '#fff', fontWeight: '700' }}
-                      >
-                        {i18n.t('groups.create')}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </SafeAreaView>
-            </KeyboardAvoidingView>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
     </View>
   );
 }

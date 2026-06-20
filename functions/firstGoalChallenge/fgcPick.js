@@ -3,6 +3,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
+import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -158,6 +159,13 @@ export const fgcPick = onCall(
           participantsCountDelta: isFirstParticipation ? 1 : 0,
         };
       });
+
+      if (res?.isFirstParticipation) {
+        await recordParticipantProgressionSafe(uid, {
+          challengeType: "FGC",
+          countParticipation: true,
+        });
+      }
 
       return res;
     } catch (e) {

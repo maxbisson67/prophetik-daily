@@ -2,6 +2,7 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
+import { buildMlbDefiPlayerPool } from "./mlbDefiPlayerPool.js";
 
 // ✅ pool figé du défi
 const POOL_SIZE = 150;
@@ -275,6 +276,42 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
       { merge: true }
     );
     return;
+  }
+
+  let groupSport = "NHL";
+  if (defi.groupId) {
+    try {
+      const groupSnap = await db.doc(`groups/${defi.groupId}`).get();
+      if (groupSnap.exists) {
+        groupSport = String(groupSnap.data()?.sport || "NHL").toUpperCase();
+      }
+    } catch (e) {
+      logger.warn("[onDefiCreated] group sport lookup failed", {
+        defiId,
+        err: String(e?.message || e),
+      });
+    }
+  }
+
+  if (groupSport === "MLB") {
+    try {
+      await buildMlbDefiPlayerPool({ defiId, defiRef, gameDateYmd });
+      return;
+    } catch (e) {
+      logger.error("[onDefiCreated] MLB pool failed", {
+        defiId,
+        err: String(e?.message || e),
+      });
+      await defiRef.set(
+        {
+          poolStatus: "error",
+          poolError: String(e?.message || e),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return;
+    }
   }
 
   const seasonId = seasonIdFromGameDateYmd(gameDateYmd);

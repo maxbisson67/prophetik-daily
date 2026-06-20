@@ -1,4 +1,4 @@
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
 import { safeUpper } from "../teamPredictionChallenges/tpGameSources.js";
@@ -47,7 +47,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
       games[slotIndex] = {
         ...slot,
         payoutApplied: false,
-        payoutAppliedAt: FieldValue.serverTimestamp(),
+        payoutAppliedAt: Timestamp.now(),
         payoutAppliedReason: "missing-official-result",
       };
 
@@ -108,7 +108,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
     games[slotIndex] = {
       ...slot,
       payoutApplied: true,
-      payoutAppliedAt: FieldValue.serverTimestamp(),
+      payoutAppliedAt: Timestamp.now(),
       payoutAppliedReason: "scoring-applied",
       slotPayoutTotal,
     };
@@ -125,7 +125,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
         ...(allSlotsPaid && bundleDecided
           ? {
               payoutApplied: true,
-              payoutAppliedAt: FieldValue.serverTimestamp(),
+              payoutAppliedAt: Timestamp.now(),
               payoutAppliedReason: "all-slots-scored",
             }
           : {}),

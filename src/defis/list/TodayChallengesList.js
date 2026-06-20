@@ -2,6 +2,8 @@ import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
+import { tpEntryHasParticipation } from "@src/defis/results/challengeResultsModel";
+import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 
 function normalizeStatus(st) {
   return String(st || "").toLowerCase().trim();
@@ -27,11 +29,11 @@ function fmtHM(v) {
   return `${hh}:${mm}`;
 }
 
-function titleForKind(kind) {
-  if (kind === "fgc") {
-    return i18n.t("firstGoal.home.title", { defaultValue: "Premier but" });
+function titleForItem(item) {
+  if (item.kind === "fgc") {
+    return getFgcTitle(item?.raw || {}, i18n.t.bind(i18n));
   }
-  if (kind === "tp") {
+  if (item.kind === "tp") {
     return i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" });
   }
   return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
@@ -68,7 +70,7 @@ function isParticipating(item, maps) {
     return !!maps?.fgc?.[item.id]?.hasPick;
   }
   if (item.kind === "tp") {
-    return !!maps?.tp?.[item.id];
+    return tpEntryHasParticipation(maps?.tp?.[item.id]);
   }
   if (item.kind === "ts") {
     return !!maps?.ts?.[item.id];
@@ -91,7 +93,7 @@ function challengeSortValue(item) {
   return d ? d.getTime() : 0;
 }
 
-function Row({ item, participating, colors, showDivider }) {
+function Row({ item, participating, participationMaps, colors, showDivider }) {
   const status = statusUi(item.status);
 
   return (
@@ -109,7 +111,7 @@ function Row({ item, participating, colors, showDivider }) {
             style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}
             numberOfLines={1}
           >
-            {titleForKind(item.kind)}
+            {titleForItem(item)}
           </Text>
 
           <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -151,16 +153,31 @@ function Row({ item, participating, colors, showDivider }) {
               }}
             >
               {participating
-                ? i18n.t("challenges.joined", { defaultValue: "Inscrit" })
+                ? item.kind === "tp" && item.subtype === "bundle"
+                  ? i18n.t("challenges.tpBundleJoined", {
+                      defaultValue: "{{done}}/{{total}} matchs prédits",
+                      done: Number(participationMaps?.tp?.[item.id]?.picksCompletedCount ?? 0),
+                      total: Number(item.raw?.gameCount || item.raw?.games?.length || 0),
+                    })
+                  : i18n.t("challenges.joined", { defaultValue: "Inscrit" })
                 : i18n.t("challenges.notJoined", { defaultValue: "Non inscrit" })}
             </Text>
           </View>
 
           <Text style={{ color: colors.subtext, fontSize: 13 }}>
-            {i18n.t("challenges.signupDeadlineShort", { defaultValue: "Limite" })}:{" "}
-            <Text style={{ color: colors.text, fontWeight: "900" }}>
-              {fmtHM(item.signupDeadline)}
-            </Text>
+            {item.kind === "tp" && item.subtype === "bundle"
+              ? i18n.t("challenges.matchCountShort", {
+                  defaultValue: "{{count}} match(s)",
+                  count: Number(item.raw?.gameCount || item.raw?.games?.length || 0),
+                })
+              : (
+                <>
+                  {i18n.t("challenges.signupDeadlineShort", { defaultValue: "Limite" })}:{" "}
+                  <Text style={{ color: colors.text, fontWeight: "900" }}>
+                    {fmtHM(item.signupDeadline)}
+                  </Text>
+                </>
+              )}
           </Text>
         </View>
       </View>
@@ -234,6 +251,7 @@ export default function TodayChallengesList({
             key={`${item.kind}-${item.id}`}
             item={item}
             participating={isParticipating(item, participationMaps)}
+            participationMaps={participationMaps}
             colors={colors}
             showDivider={index < sorted.length - 1}
           />

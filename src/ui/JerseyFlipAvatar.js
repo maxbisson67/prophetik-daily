@@ -1,16 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Image, View, Easing, Text } from "react-native";
+import { Animated, Image, View, Easing } from "react-native";
 
 export default function JerseyFlipAvatar({
   frontUrl,
   backUrl,
-  roleBadge = null, // "C" | "A" | null
   size = 110,
   holdMs = 1600,
   fadeDurationMs = 500,
   backgroundColor = "#f3f4f6",
-  badgeColor = "#ffffff",
-  badgeShadowColor = "#111111",
 }) {
   const progress = useRef(new Animated.Value(0)).current;
   const [showFront, setShowFront] = useState(true);
@@ -58,8 +55,6 @@ export default function JerseyFlipAvatar({
     outputRange: [0, 1],
   });
 
-  const badgeFontSize = Math.round(size * 0.15);
-
   return (
     <View
       style={{
@@ -70,7 +65,6 @@ export default function JerseyFlipAvatar({
         backgroundColor,
       }}
     >
-      {/* FRONT */}
       <Animated.View
         style={{
           position: "absolute",
@@ -85,35 +79,8 @@ export default function JerseyFlipAvatar({
           resizeMode="contain"
           fadeDuration={0}
         />
-
-        {!!roleBadge && (
-          <View
-            style={{
-              position: "absolute",
-              right: Math.round(size * 0.28),
-              top: Math.round(size * 0.22),
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            pointerEvents="none"
-          >
-            <Text
-              style={{
-                fontSize: badgeFontSize,
-                fontWeight: "900",
-                color: badgeColor,
-                textShadowColor: badgeShadowColor,
-                textShadowOffset: { width: 1, height: 1 },
-                textShadowRadius: 2,
-              }}
-            >
-              {roleBadge}
-            </Text>
-          </View>
-        )}
       </Animated.View>
 
-      {/* BACK */}
       <Animated.View
         style={{
           position: "absolute",

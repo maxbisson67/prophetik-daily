@@ -30,21 +30,33 @@ function listBusinessYmdWindow(daysBefore = 2, daysAfter = 7, now = new Date()) 
   return [...new Set(out)];
 }
 
-function shouldKeepVisibleBundle(bundle, businessYmdCompact) {
-  const status = String(bundle?.status || "open").toLowerCase();
-  if (["decided", "closed"].includes(status)) return false;
-  if (String(bundle?.gameYmd || "").trim() === businessYmdCompact) return true;
-  if (["open", "partial", "locked", "pending"].includes(status)) return true;
-  return false;
+function isTodayTpBundleForHome(bundle, businessYmdCompact) {
+  return String(bundle?.gameYmd || "").trim() === String(businessYmdCompact || "").trim();
 }
 
-function pickBestBundle(candidates, businessYmdCompact, league) {
+function compareTpBundles(a, b) {
+  const statusPriority = {
+    open: 0,
+    partial: 1,
+    locked: 2,
+    pending: 3,
+    decided: 4,
+    closed: 5,
+  };
+
+  const aPri = statusPriority[String(a?.status || "").toLowerCase()] ?? 9;
+  const bPri = statusPriority[String(b?.status || "").toLowerCase()] ?? 9;
+  if (aPri !== bPri) return aPri - bPri;
+
+  return String(b?.gameYmd || "").localeCompare(String(a?.gameYmd || ""));
+}
+
+function pickTodayHomeBundle(candidates, businessYmdCompact, league) {
   return (
     candidates
-      .filter((b) => shouldKeepVisibleBundle(b, businessYmdCompact))
       .filter((b) => normalizeLeague(b?.league || league) === normalizeLeague(league))
-      .sort((a, b) => String(b?.gameYmd || "").localeCompare(String(a?.gameYmd || "")))[0] ||
-    null
+      .filter((b) => isTodayTpBundleForHome(b, businessYmdCompact))
+      .sort((a, b) => compareTpBundles(a, b))[0] || null
   );
 }
 
@@ -100,7 +112,7 @@ export const getTeamPredictionBundleForHome = onCall(
       byId.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
     });
 
-    const bundle = pickBestBundle(Array.from(byId.values()), businessToday, league);
+    const bundle = pickTodayHomeBundle(Array.from(byId.values()), businessToday, league);
 
     let entry = null;
     if (bundle?.id) {

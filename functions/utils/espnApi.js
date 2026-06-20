@@ -1,20 +1,10 @@
 // functions/utils/espnApi.js
 import { logger } from "../utils.js";
 
-const ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl";
+const ESPN_NHL_BASE = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl";
+const ESPN_MLB_BASE = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb";
 
-const ESPN_TEAM_MAPPING = {
-  "1": "NJD", "2": "NYI", "3": "NYR", "4": "PHI", "5": "PIT",
-  "6": "BOS", "7": "BUF", "8": "MTL", "9": "OTT", "10": "TOR",
-  "12": "CAR", "13": "FLA", "14": "TBL", "15": "WSH", "16": "CHI",
-  "17": "DET", "18": "NSH", "19": "STL", "20": "CGY", "21": "COL",
-  "22": "EDM", "23": "VAN", "24": "ANA", "25": "DAL", "26": "LAK",
-  "28": "SJS", "29": "CBJ", "30": "MIN", "52": "WPG", "53": "UTA",
-  "54": "VGK", "55": "SEA",
-};
-
-// Mapping inverse: ESPN team ID -> code
-const ESPN_ID_TO_CODE = {
+const ESPN_NHL_ID_TO_CODE = {
   "25": "ANA", "53": "UTA", "6": "BOS", "7": "BUF", "12": "CAR",
   "29": "CBJ", "20": "CGY", "16": "CHI", "21": "COL", "25": "DAL",
   "17": "DET", "22": "EDM", "13": "FLA", "26": "LAK", "30": "MIN",
@@ -24,22 +14,57 @@ const ESPN_ID_TO_CODE = {
   "52": "WPG", "15": "WSH",
 };
 
-export async function fetchAllNHLInjuriesFromESPN() {
+/** ESPN team id → abbr statsapi (mlb_players.teamAbbr) */
+const ESPN_MLB_ID_TO_CODE = {
+  "1": "BAL",
+  "2": "BOS",
+  "3": "LAA",
+  "4": "CWS",
+  "5": "CLE",
+  "6": "DET",
+  "7": "KC",
+  "8": "MIL",
+  "9": "MIN",
+  "10": "NYY",
+  "11": "ATH",
+  "12": "SEA",
+  "13": "TEX",
+  "14": "TOR",
+  "15": "ATL",
+  "16": "CHC",
+  "17": "CIN",
+  "18": "HOU",
+  "19": "LAD",
+  "20": "WSH",
+  "21": "NYM",
+  "22": "PHI",
+  "23": "PIT",
+  "24": "STL",
+  "25": "SD",
+  "26": "SF",
+  "27": "COL",
+  "28": "MIA",
+  "29": "AZ",
+  "30": "TB",
+};
+
+async function fetchAllInjuriesFromESPN({ baseUrl, teamIdToAbbr, sportLabel }) {
   try {
-    const url = `${ESPN_BASE_URL}/injuries`;
-    
-    logger.info(`[ESPN] Fetching all NHL injuries`);
-    
+    const url = `${baseUrl}/injuries`;
+
+    logger.info(`[ESPN] Fetching all ${sportLabel} injuries`);
+
     const response = await fetch(url, {
-      headers: { 
+      headers: {
         accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; NHLApp/1.0)"
+        "User-Agent": "Mozilla/5.0 (compatible; Prophetik/1.0)",
       },
     });
 
     if (!response.ok) {
       const txt = await response.text().catch(() => "");
       logger.error(`[ESPN] HTTP ${response.status}`, {
+        sport: sportLabel,
         status: response.status,
         body: txt?.slice?.(0, 500),
       });
@@ -47,102 +72,102 @@ export async function fetchAllNHLInjuriesFromESPN() {
     }
 
     const data = await response.json();
-    
-    // ✅ La structure correcte: data.injuries (pas data.teams!)
     const teams = Array.isArray(data?.injuries) ? data.injuries : [];
-    
+
     if (teams.length === 0) {
-      logger.warn(`[ESPN] No injuries array found in response`);
+      logger.warn(`[ESPN] No injuries array found in response`, { sport: sportLabel });
       return [];
     }
-    
-    logger.info(`[ESPN] Found teams with injury data`, { count: teams.length });
-    
+
+    logger.info(`[ESPN] Found teams with injury data`, { sport: sportLabel, count: teams.length });
+
     const allInjuries = [];
     let teamsWithInjuries = 0;
-    
+
     for (const teamData of teams) {
-      // teamData contient: { id, displayName, injuries: [...] }
       const teamId = String(teamData.id || "");
       const teamName = teamData.displayName || "";
-      const teamAbbrev = ESPN_ID_TO_CODE[teamId] || null;
-      
+      const teamAbbrev = teamIdToAbbr[teamId] || null;
       const injuries = Array.isArray(teamData.injuries) ? teamData.injuries : [];
-      
+
       if (injuries.length === 0) continue;
-      
+
       teamsWithInjuries++;
-      
-      logger.info(`[ESPN] Processing team`, {
-        teamName,
-        teamAbbrev,
-        injuriesCount: injuries.length
-      });
-      
+
       for (const injury of injuries) {
         const athlete = injury.athlete || {};
-        
         const fullName = athlete.displayName || athlete.fullName || "";
         const firstName = athlete.firstName || "";
         const lastName = athlete.lastName || "";
-        
+
         allInjuries.push({
-          // Info joueur
           playerName: fullName,
-          firstName: firstName,
-          lastName: lastName,
+          firstName,
+          lastName,
           espnPlayerId: String(athlete.id || ""),
-          
-          // Info équipe
           teamAbbrev,
           teamName,
           teamId,
-          
-          // Info blessure (format compatible avec votre code)
           strStatus: injury.status || "Unknown",
           strInjury: injury.longComment || injury.shortComment || "Undisclosed",
           strPlayer: fullName,
           strTeam: teamName,
-          
-          // Détails supplémentaires
           description: injury.longComment || injury.shortComment || null,
           dateUpdated: injury.date || null,
-          
-          // Données brutes pour debug
           rawInjury: injury,
-          
-          // Source
           source: "espn",
         });
       }
     }
-    
-    logger.info(`[ESPN] Injuries fetched successfully`, { 
+
+    logger.info(`[ESPN] Injuries fetched successfully`, {
+      sport: sportLabel,
       totalInjuries: allInjuries.length,
       teamsWithInjuries,
       totalTeams: teams.length,
       apiRequestsUsed: 1,
     });
-    
+
     return allInjuries;
   } catch (error) {
-    logger.error(`[ESPN] Fetch error`, { 
+    logger.error(`[ESPN] Fetch error`, {
+      sport: sportLabel,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
     return [];
   }
 }
 
+export async function fetchAllNHLInjuriesFromESPN() {
+  return fetchAllInjuriesFromESPN({
+    baseUrl: ESPN_NHL_BASE,
+    teamIdToAbbr: ESPN_NHL_ID_TO_CODE,
+    sportLabel: "NHL",
+  });
+}
+
+export async function fetchAllMLBInjuriesFromESPN() {
+  return fetchAllInjuriesFromESPN({
+    baseUrl: ESPN_MLB_BASE,
+    teamIdToAbbr: ESPN_MLB_ID_TO_CODE,
+    sportLabel: "MLB",
+  });
+}
+
 export function normalizeESPNStatus(espnStatus) {
   const s = String(espnStatus || "").trim().toLowerCase();
-  
-  if (s.includes("injured reserve") || s.includes("ir")) return "Out";
+
+  if (s.includes("injured reserve") || s.includes("-il") || s.includes(" il")) return "Out";
+  if (s.includes("developmental")) return "Out";
+  if (s.includes("bereavement")) return "Out";
+  if (s.includes("suspension")) return "Out";
+  if (s.includes("ir")) return "Out";
   if (s.includes("out")) return "Out";
   if (s.includes("day")) return "DayToDay";
   if (s.includes("question")) return "Questionable";
   if (s.includes("doubtful")) return "Doubtful";
   if (s.includes("probable")) return "Probable";
-  
+
   return "Unknown";
 }

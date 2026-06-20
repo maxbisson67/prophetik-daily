@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import { formatMlbOpponentPitcherLine } from "@src/mlb/mlbPitcherDisplayHelpers";
 
 import TeamMetaBadge from "./TeamMetaBadge"; // ✅ Rank: 2ième, +/-: 28
 
@@ -412,6 +413,20 @@ export default function PlayerSelectModal({
                             goalDifferential={oppGoalDifferential}
                           />
                         </View>
+                      ) : null}
+
+                      {item?.opponentProbablePitcher ? (
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            color: colors.subtext,
+                            fontWeight: "700",
+                            fontSize: 12,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {formatMlbOpponentPitcherLine(item.opponentProbablePitcher, i18n.t.bind(i18n))}
+                        </Text>
                       ) : null}
                     </View>
 

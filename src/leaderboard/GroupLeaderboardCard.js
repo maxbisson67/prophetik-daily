@@ -1,8 +1,8 @@
 import React from "react";
-import { View, Text, Image } from "react-native";
+import { View, Text } from "react-native";
 import LeaderboardTable from "./LeaderboardTable";
+import GroupAvatar from "@src/groups/components/GroupAvatar";
 
-const GROUP_PLACEHOLDER = require("@src/assets/group-placeholder.png");
 const RED = "#b91c1c";
 
 function cardShadow() {
@@ -139,18 +139,7 @@ export default function GroupLeaderboardCard({
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 8 }}>
-          <Image
-            source={group?.avatarUrl ? { uri: group.avatarUrl } : GROUP_PLACEHOLDER}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              marginRight: 8,
-              backgroundColor: colors.border,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          />
+          <GroupAvatar group={group} size={32} colors={colors} style={{ marginRight: 8 }} />
           <Text style={{ fontWeight: "900", color: colors.text }} numberOfLines={1}>
             {group?.name || group?.title || group?.id || "—"}
           </Text>

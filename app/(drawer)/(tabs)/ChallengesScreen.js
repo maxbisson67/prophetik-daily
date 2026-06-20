@@ -18,6 +18,14 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import ChallengeDayCard from "@src/defis/list/ChallengeDayCard";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
 import TodayChallengesList from "@src/defis/list/TodayChallengesList";
+import useMeDoc from "@src/home/hooks/useMeDoc";
+import {
+  getTpBundleFirstDeadline,
+  isHistoryResultItem,
+  mergeTpItemsByDate,
+  tpEntryHasParticipation,
+} from "@src/defis/results/challengeResultsModel";
+import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 
 const GROUP_PLACEHOLDER = require("@src/assets/group-placeholder.png");
 
@@ -178,7 +186,7 @@ function normalizeFgcDoc(doc) {
     kind: "fgc",
     groupId: String(d?.groupId || ""),
     dateKey: normalizeYmdString(d?.gameYmd),
-    title: i18n.t("firstGoal.home.title", { defaultValue: "Premier but" }),
+    title: getFgcTitle(d, i18n.t.bind(i18n)),
     status: normalizeStatus(d?.status),
     createdAt: d?.createdAt || null,
     signupDeadline: computedDeadline,
@@ -187,11 +195,12 @@ function normalizeFgcDoc(doc) {
   };
 }
 
-function normalizeTpDoc(doc) {
+function normalizeTpLegacyDoc(doc) {
   const d = doc.data() || {};
   return {
     id: doc.id,
     kind: "tp",
+    subtype: "legacy",
     groupId: String(d?.groupId || ""),
     dateKey: normalizeYmdString(d?.gameYmd),
     title: i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" }),
@@ -210,15 +219,35 @@ function normalizeTpDoc(doc) {
   };
 }
 
+function normalizeTpBundleDoc(doc) {
+  const d = doc.data() || {};
+  const bundle = { id: doc.id, ...d };
+
+  return {
+    id: doc.id,
+    kind: "tp",
+    subtype: "bundle",
+    groupId: String(d?.groupId || ""),
+    dateKey: normalizeYmdString(d?.gameYmd),
+    title: i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" }),
+    status: normalizeStatus(d?.status),
+    createdAt: d?.createdAt || null,
+    signupDeadline: getTpBundleFirstDeadline(bundle),
+    firstGameUTC: d?.games?.[0]?.gameStartTimeUTC || null,
+    raw: bundle,
+  };
+}
+
 /* ------------------------------- UI bits --------------------------------- */
 
 
 /* -------------------------------- Screen --------------------------------- */
 
 export default function ChallengesScreen() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
+  const { meDoc } = useMeDoc({ authReady, uid: user?.uid });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -229,7 +258,13 @@ export default function ChallengesScreen() {
 
   const [tsItems, setTsItems] = useState([]);
   const [fgcItems, setFgcItems] = useState([]);
-  const [tpItems, setTpItems] = useState([]);
+  const [tpBundleItems, setTpBundleItems] = useState([]);
+  const [tpLegacyItems, setTpLegacyItems] = useState([]);
+
+  const tpItems = useMemo(
+    () => mergeTpItemsByDate(tpBundleItems, tpLegacyItems),
+    [tpBundleItems, tpLegacyItems]
+  );
 
   const [winnerInfoMap, setWinnerInfoMap] = useState({});
 
@@ -245,6 +280,7 @@ export default function ChallengesScreen() {
     ts: [],
     fgc: [],
     tp: [],
+    tpBundle: [],
   });
   const winnerUnsubsRef = useRef(new Map());
 
@@ -420,13 +456,13 @@ export default function ChallengesScreen() {
           id: gid,
           name: g.name || gid,
           avatarUrl: g.avatarUrl || null,
-          isFavorite: !!g.isFavorite,
-          sport:  "NHL",
-          
+          sport: String(g.sport || g.league || "NHL").toUpperCase(),
         };
       }),
     [groupIds, groupsMap]
   );
+
+  const favoriteGroupId = meDoc?.favoriteGroupId || null;
 
   useEffect(() => {
     if (!groupIds.length) {
@@ -436,19 +472,24 @@ export default function ChallengesScreen() {
 
     if (currentGroupId && groupIds.includes(currentGroupId)) return;
 
-    const favorite = userGroups.find((g) => g.isFavorite);
-    setCurrentGroupId(favorite?.id || groupIds[0]);
-  }, [groupIds, currentGroupId, userGroups]);
+    const fav =
+      favoriteGroupId && groupIds.includes(String(favoriteGroupId))
+        ? String(favoriteGroupId)
+        : null;
+
+    setCurrentGroupId(fav || groupIds[0]);
+  }, [groupIds, currentGroupId, favoriteGroupId]);
 
   /* ---------------- 4) current group challenge listeners ---------------- */
 
   useEffect(() => {
     setTsItems([]);
     setFgcItems([]);
-    setTpItems([]);
+    setTpBundleItems([]);
+    setTpLegacyItems([]);
 
     const cleanup = () => {
-      ["ts", "fgc", "tp"].forEach((k) => {
+      ["ts", "fgc", "tp", "tpBundle"].forEach((k) => {
         const arr = currentGroupUnsubsRef.current[k] || [];
         arr.forEach((u) => {
           try {
@@ -464,6 +505,11 @@ export default function ChallengesScreen() {
     if (!currentGroupId) return;
 
     const gid = String(currentGroupId);
+    const groupMeta = groupsMap[gid] || {};
+    const groupLeague =
+      String(groupMeta.sport || groupMeta.league || "NHL").toUpperCase() === "MLB"
+        ? "MLB"
+        : "NHL";
 
     const tsUn = firestore()
       .collection("defis")
@@ -488,7 +534,7 @@ export default function ChallengesScreen() {
         .collection("first_goal_challenges")
         .where("groupId", "==", gid)
         .where("gameYmd", "==", day.ymd)
-        .where("league", "==", "NHL")
+        .where("league", "==", groupLeague)
         .where("type", "==", "first_goal")
         .onSnapshot(
           (snap) => {
@@ -521,9 +567,9 @@ export default function ChallengesScreen() {
         .where("gameYmd", "==", day.compact)
         .onSnapshot(
           (snap) => {
-            const rows = snap.docs.map(normalizeTpDoc);
+            const rows = snap.docs.map(normalizeTpLegacyDoc);
 
-            setTpItems((prev) => {
+            setTpLegacyItems((prev) => {
               const keep = prev.filter(
                 (x) =>
                   !(
@@ -540,8 +586,29 @@ export default function ChallengesScreen() {
       currentGroupUnsubsRef.current.tp.push(un);
     });
 
+    const tpBundleUn = firestore()
+      .collection("team_prediction_bundles")
+      .where("groupId", "==", gid)
+      .onSnapshot(
+        (snap) => {
+          const rows = snap.docs
+            .map(normalizeTpBundleDoc)
+            .filter((x) => dayYmdSet.has(x.dateKey))
+            .filter(
+              (x) =>
+                String(x?.raw?.league || groupLeague).toUpperCase() === groupLeague
+            )
+            .sort((a, b) => challengeSortValue(a) - challengeSortValue(b));
+
+          setTpBundleItems(rows);
+        },
+        (e) => setError(e)
+      );
+
+    currentGroupUnsubsRef.current.tpBundle.push(tpBundleUn);
+
     return cleanup;
-  }, [currentGroupId, dayKeys, dayYmdSet]);
+  }, [currentGroupId, dayKeys, dayYmdSet, groupsMap]);
 
   /* ---------------- 5) winners info listeners ---------------- */
 
@@ -609,6 +676,8 @@ export default function ChallengesScreen() {
 
     [...fgcItems, ...tpItems, ...tsItems].forEach((item) => {
       if (!item?.dateKey || !byDay[item.dateKey]) return;
+      if (item.dateKey === todayKey) return;
+      if (!isHistoryResultItem(item)) return;
       byDay[item.dateKey].data.push(item);
     });
 
@@ -630,115 +699,115 @@ export default function ChallengesScreen() {
         };
       })
       .filter((s) => s.data[0].data.length > 0);
-  }, [dayKeys, fgcItems, tpItems, tsItems]);
+  }, [dayKeys, fgcItems, tpItems, tsItems, todayKey]);
 
   const historySections = useMemo(() => {
     return sections.filter((s) => s.key !== todayKey);
   }, [sections, todayKey]);
 
   useEffect(() => {
-  if (!user?.uid) {
-    setFgcParticipationMap({});
-    setTpParticipationMap({});
-    setTsParticipationMap({});
-    return;
-  }
+    if (!user?.uid) {
+      setFgcParticipationMap({});
+      setTpParticipationMap({});
+      setTsParticipationMap({});
+      return;
+    }
 
-  const todayFgc = todayItems.filter((x) => x.kind === "fgc");
-  const todayTp = todayItems.filter((x) => x.kind === "tp");
-  const todayTs = todayItems.filter((x) => x.kind === "ts");
+    const allFgc = fgcItems;
+    const allTp = tpItems;
+    const allTs = tsItems;
 
-  const unsubs = [];
+    const unsubs = [];
 
-  // FGC
-  todayFgc.forEach((item) => {
-    const un = firestore()
-      .collection("first_goal_challenges")
-      .doc(String(item.id))
-      .collection("entries")
-      .doc(String(user.uid))
-      .onSnapshot(
-        (snap) => {
-          const data = snap?.exists ? snap.data() || null : null;
-          setFgcParticipationMap((prev) => ({
-            ...prev,
-            [item.id]: {
-              hasPick: !!data?.playerId,
-              data,
-            },
-          }));
-        },
-        () => {
-          setFgcParticipationMap((prev) => ({
-            ...prev,
-            [item.id]: { hasPick: false, data: null },
-          }));
-        }
-      );
+    allFgc.forEach((item) => {
+      const un = firestore()
+        .collection("first_goal_challenges")
+        .doc(String(item.id))
+        .collection("entries")
+        .doc(String(user.uid))
+        .onSnapshot(
+          (snap) => {
+            const data = snap?.exists ? snap.data() || null : null;
+            setFgcParticipationMap((prev) => ({
+              ...prev,
+              [item.id]: {
+                hasPick: !!data?.playerId,
+                data,
+              },
+            }));
+          },
+          () => {
+            setFgcParticipationMap((prev) => ({
+              ...prev,
+              [item.id]: { hasPick: false, data: null },
+            }));
+          }
+        );
 
-    unsubs.push(un);
-  });
-
-  // TP
-  todayTp.forEach((item) => {
-    const un = firestore()
-      .collection("team_prediction_challenges")
-      .doc(String(item.id))
-      .collection("entries")
-      .doc(String(user.uid))
-      .onSnapshot(
-        (snap) => {
-          const data = snap?.exists ? snap.data() || null : null;
-          setTpParticipationMap((prev) => ({
-            ...prev,
-            [item.id]: data,
-          }));
-        },
-        () => {
-          setTpParticipationMap((prev) => ({
-            ...prev,
-            [item.id]: null,
-          }));
-        }
-      );
-
-    unsubs.push(un);
-  });
-
-  // TS
-  todayTs.forEach((item) => {
-    const un = firestore()
-      .collection("defis")
-      .doc(String(item.id))
-      .collection("participations")
-      .doc(String(user.uid))
-      .onSnapshot(
-        (snap) => {
-          const data = snap?.exists ? snap.data() || null : null;
-          setTsParticipationMap((prev) => ({
-            ...prev,
-            [item.id]: data,
-          }));
-        },
-        () => {
-          setTsParticipationMap((prev) => ({
-            ...prev,
-            [item.id]: null,
-          }));
-        }
-      );
-
-    unsubs.push(un);
-  });
-
-  return () => {
-    unsubs.forEach((u) => {
-      try {
-        u?.();
-      } catch {}
+      unsubs.push(un);
     });
-  };
-}, [todayItems, user?.uid]);
+
+    allTp.forEach((item) => {
+      const collectionName =
+        item.subtype === "bundle" ? "team_prediction_bundles" : "team_prediction_challenges";
+
+      const un = firestore()
+        .collection(collectionName)
+        .doc(String(item.id))
+        .collection("entries")
+        .doc(String(user.uid))
+        .onSnapshot(
+          (snap) => {
+            const data = snap?.exists ? snap.data() || null : null;
+            setTpParticipationMap((prev) => ({
+              ...prev,
+              [item.id]: data,
+            }));
+          },
+          () => {
+            setTpParticipationMap((prev) => ({
+              ...prev,
+              [item.id]: null,
+            }));
+          }
+        );
+
+      unsubs.push(un);
+    });
+
+    allTs.forEach((item) => {
+      const un = firestore()
+        .collection("defis")
+        .doc(String(item.id))
+        .collection("participations")
+        .doc(String(user.uid))
+        .onSnapshot(
+          (snap) => {
+            const data = snap?.exists ? snap.data() || null : null;
+            setTsParticipationMap((prev) => ({
+              ...prev,
+              [item.id]: data,
+            }));
+          },
+          () => {
+            setTsParticipationMap((prev) => ({
+              ...prev,
+              [item.id]: null,
+            }));
+          }
+        );
+
+      unsubs.push(un);
+    });
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u?.();
+        } catch {}
+      });
+    };
+  }, [fgcItems, tpItems, tsItems, user?.uid]);
 
   /* ---------------- 7) cleanup global ---------------- */
 
@@ -757,7 +826,7 @@ export default function ChallengesScreen() {
       }
       groupsUnsubsRef.current.clear();
 
-      ["ts", "fgc", "tp"].forEach((k) => {
+      ["ts", "fgc", "tp", "tpBundle"].forEach((k) => {
         const arr = currentGroupUnsubsRef.current[k] || [];
         arr.forEach((u) => {
           try {
@@ -781,7 +850,7 @@ export default function ChallengesScreen() {
   const openChallenge = useCallback(
     (item, isToday) => {
       if (item.kind === "ts") {
-        if (isToday) {
+        if (isToday && !isHistoryResultItem(item)) {
           router.push(`/(drawer)/defis/${item.id}`);
         } else {
           router.push(`/(drawer)/defis/${item.id}/results`);
@@ -795,7 +864,8 @@ export default function ChallengesScreen() {
           params: {
             focus: "fgc",
             challengeId: item.id,
-            openState: "1",
+            openState: isHistoryResultItem(item) ? "1" : isToday ? "1" : "1",
+            groupId: item.groupId,
           },
         });
         return;
@@ -803,8 +873,8 @@ export default function ChallengesScreen() {
 
       if (item.kind === "tp") {
         router.push({
-          pathname: "/(drawer)/(tabs)/AccueilScreen",
-          params: { focus: "tp", challengeId: item.id },
+          pathname: "/(drawer)/(team-prediction)/pick/[challengeId]",
+          params: { challengeId: item.id },
         });
       }
     },
@@ -817,11 +887,12 @@ export default function ChallengesScreen() {
         section={item}
         colors={colors}
         winnerInfoMap={winnerInfoMap}
+        participationMaps={participationMaps}
         onOpen={openChallenge}
         getTodayKey={prophetikBusinessYmd}
       />
     ),
-    [colors, winnerInfoMap, openChallenge]
+    [colors, winnerInfoMap, participationMaps, openChallenge]
   );
 
   /* ---------------- UI states ---------------- */

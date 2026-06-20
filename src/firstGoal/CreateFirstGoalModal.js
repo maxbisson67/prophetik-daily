@@ -120,6 +120,22 @@ function ymdLocalToday() {
   return `${y}-${m}-${day}`;
 }
 
+function toJsDate(v) {
+  if (!v) return null;
+  if (v?.toDate && typeof v.toDate === "function") return v.toDate();
+  if (v instanceof Date) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function ymdCompactToday() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
 }
@@ -155,11 +171,13 @@ export default function CreateFirstGoalModal({
   onClose,
   groups = [],
   initialGroupId = null,
+  league = "NHL",
   onCreated,
 }) {
   const { user } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const sportLeague = String(league || "NHL").toUpperCase();
 
   const [step, setStep] = useState(1);
 
@@ -301,62 +319,99 @@ export default function CreateFirstGoalModal({
   }, [visible, ownedGroups, initialGroupId]);
 
   // load games when step 2 visible
-  useEffect(() => {
-    if (!visible) return;
-    if (step !== 2) return;
+useEffect(() => {
+  if (!visible) return;
+  if (step !== 2) return;
 
-    setLoadingGames(true);
+  setLoadingGames(true);
+  setSelectedGameId(null);
 
-    const ref = firestore().collection("nhl_live_games");
+  const league = sportLeague;
 
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  let ref;
 
-        const nowMs = Date.now();
-        const today = ymdLocalToday();
+  if (league === "MLB") {
+    ref = firestore()
+      .collection("mlb_schedule_daily")
+      .doc(ymdCompactToday())
+      .collection("games");
+  } else {
+    ref = firestore().collection("nhl_live_games");
+  }
 
-        const todays = all.filter((g) => {
-          const t = g.startTimeUTC;
-          if (!t) return false;
+  const unsub = ref.onSnapshot(
+    (snap) => {
+      const nowMs = Date.now();
+      const today = ymdLocalToday();
 
-          const dt = t?.toDate?.() ? t.toDate() : new Date(t);
-          if (!dt || isNaN(dt.getTime())) return false;
+      const all = snap.docs.map((d) => {
+        const data = d.data() || {};
 
-          // keep only games that haven't started
-          if (dt.getTime() <= nowMs) return false;
+        if (league === "MLB") {
+          return {
+            id: String(data.gamePk || d.id),
+            league: "MLB",
+            gamePk: String(data.gamePk || d.id),
 
-          const y = dt.getFullYear();
-          const m = String(dt.getMonth() + 1).padStart(2, "0");
-          const day = String(dt.getDate()).padStart(2, "0");
-          return `${y}-${m}-${day}` === today;
-        });
+            homeAbbr: safeAbbr(data?.homeTeam?.abbreviation),
+            awayAbbr: safeAbbr(data?.awayTeam?.abbreviation),
 
-        todays.sort((a, b) => {
-          const ta = a.startTimeUTC?.toDate?.()
-            ? a.startTimeUTC.toDate().getTime()
-            : new Date(a.startTimeUTC).getTime();
-          const tb = b.startTimeUTC?.toDate?.()
-            ? b.startTimeUTC.toDate().getTime()
-            : new Date(b.startTimeUTC).getTime();
-          return ta - tb;
-        });
+            homeTeam: data.homeTeam || null,
+            awayTeam: data.awayTeam || null,
 
-        setGames(todays);
-        setLoadingGames(false);
-      },
-      (err) => {
-        console.log("[CreateFirstGoal] nhl_live_games error", err?.message || err);
-        setLoadingGames(false);
-      }
-    );
+            startTimeUTC: data.startTimeUTC || data.gameDateRaw || null,
+            status: data.status || null,
+            raw: data,
+          };
+        }
 
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, [visible, step]);
+        return {
+          id: String(d.id),
+          league: "NHL",
+          ...data,
+        };
+      });
+
+      const upcomingToday = all.filter((g) => {
+        const dt = toJsDate(g.startTimeUTC);
+        if (!dt) return false;
+
+        // Exclure les matchs déjà commencés
+        if (dt.getTime() <= nowMs) return false;
+
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, "0");
+        const day = String(dt.getDate()).padStart(2, "0");
+
+        return `${y}-${m}-${day}` === today;
+      });
+
+      upcomingToday.sort((a, b) => {
+        const ta = toJsDate(a.startTimeUTC)?.getTime() || 0;
+        const tb = toJsDate(b.startTimeUTC)?.getTime() || 0;
+
+        return ta - tb;
+      });
+
+      setGames(upcomingToday);
+      setLoadingGames(false);
+    },
+    (err) => {
+      console.log("[CreateFirstGoal] games error", {
+        league,
+        message: err?.message || String(err),
+      });
+      setGames([]);
+      setLoadingGames(false);
+    }
+  );
+
+  return () => {
+    try {
+      unsub();
+    } catch {}
+  };
+}, [visible, step, sportLeague]);
 
   // load players when step 3 visible
   useEffect(() => {
@@ -386,12 +441,20 @@ export default function CreateFirstGoalModal({
         setLoadingPlayers(true);
 
         const snap = await firestore()
-          .collection("nhl_players")
+          .collection(sportLeague === "MLB" ? "mlb_players" : "nhl_players")
           .where("teamAbbr", "in", [home, away])
           .where("active", "==", true)
           .get();
 
         if (cancelled) return;
+
+        console.log("[CreateFirstGoal] players query", {
+  league: sportLeague,
+  collection: sportLeague === "MLB" ? "mlb_players" : "nhl_players",
+  home,
+  away,
+  size: snap.size,
+});
 
         const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -425,7 +488,8 @@ export default function CreateFirstGoalModal({
               });
 
         setPlayersError(msg);
-        console.log("[CreateFirstGoal] nhl_players error", e?.message || e);
+        console.log("[CreateFirstGoal] players error", {league: sportLeague,message: e?.message || String(e),});
+
       } finally {
         if (!cancelled) setLoadingPlayers(false);
       }
@@ -434,7 +498,7 @@ export default function CreateFirstGoalModal({
     return () => {
       cancelled = true;
     };
-  }, [visible, step, selectedGameId]); // selectedGameId suffit
+  }, [visible, step, selectedGameId,sportLeague]); // selectedGameId suffit
 
   const canGoNext1 = !!selectedGroupId && ownedGroups.length > 0 && !loadingMemberships;
   const canGoNext2 = !!selectedGameId;
@@ -473,9 +537,9 @@ export default function CreateFirstGoalModal({
 
       const res = await call({
         groupId: String(selectedGroupId),
+        league: sportLeague,
         gameId: String(selectedGameId),
 
-        // on envoie le match tel que vu dans nhl_live_games
         gameStartTimeUTC: selectedGame?.startTimeUTC?.toDate?.()
           ? selectedGame.startTimeUTC.toDate().toISOString()
           : selectedGame?.startTimeUTC
@@ -484,9 +548,6 @@ export default function CreateFirstGoalModal({
 
         homeAbbr: selectedGame?.homeAbbr ?? null,
         awayAbbr: selectedGame?.awayAbbr ?? null,
-
-        // optionnel: si tu veux forcer “expiresAt” côté serveur
-        // expiresInDays: 2,
       });
 
       const challengeId = res?.data?.challengeId || null;

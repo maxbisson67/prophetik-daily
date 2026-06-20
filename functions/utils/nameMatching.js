@@ -141,7 +141,12 @@ export function calculateNameSimilarity(name1, name2) {
  * @returns {Object|null} { match, score, confidence } ou null
  */
 export function findBestMatch(nhlPlayer, sportsDbInjuries, minScore = 80) {
-  const nhlFullName = `${nhlPlayer.firstName || ""} ${nhlPlayer.lastName || ""}`.trim();
+  const nhlFullName =
+    `${nhlPlayer.firstName || ""} ${nhlPlayer.lastName || ""}`.trim() ||
+    nhlPlayer.fullName ||
+    nhlPlayer.skaterFullName ||
+    nhlPlayer.name ||
+    "";
   const nhlTeam = nhlPlayer.teamAbbr || nhlPlayer.teamAbbrev;
   
   if (!nhlFullName) {

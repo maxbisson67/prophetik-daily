@@ -2,6 +2,14 @@ import React from "react";
 import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
+import FgcResultDetailBlock from "@src/defis/results/FgcResultDetailBlock";
+import TpResultDetailBlock from "@src/defis/results/TpResultDetailBlock";
+import {
+  formatTpBundleMatchupSummary,
+  isHistoryResultItem,
+  tpEntryHasParticipation,
+} from "@src/defis/results/challengeResultsModel";
+import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 
 function initialsFrom(nameOrEmail = "") {
   const s = String(nameOrEmail).trim();
@@ -96,11 +104,11 @@ function cardAccent(kind) {
   return "🎯";
 }
 
-function cardTypeTitle(kind) {
-  if (kind === "fgc") {
-    return i18n.t("firstGoal.home.title", { defaultValue: "Premier but" });
+function cardTypeTitle(item) {
+  if (item?.kind === "fgc") {
+    return getFgcTitle(item?.raw || {}, i18n.t.bind(i18n));
   }
-  if (kind === "tp") {
+  if (item?.kind === "tp") {
     return i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" });
   }
   return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
@@ -152,14 +160,39 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
   isToday,
   colors,
   winnerInfoMap,
+  participationMaps,
   onOpen,
 }) {
   const ui = statusUi(item.status);
   const payout = getTotalPayout(item.raw);
+  const tpEntry = item.kind === "tp" ? participationMaps?.tp?.[item.id] : null;
+  const tpTotalPoints = Number(tpEntry?.totalPoints ?? 0);
 
   const showPastSummary =
     !isToday &&
     ["closed", "decided", "completed", "cancelled_ghost"].includes(item.status);
+
+  const showCta = !(
+    showPastSummary &&
+    (item.kind === "fgc" || (item.kind === "tp" && item.subtype === "bundle"))
+  );
+
+  const openCtaLabel = (() => {
+    if (item.kind === "tp") {
+      return isHistoryResultItem(item)
+        ? i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" })
+        : i18n.t("challenges.openChallenge", { defaultValue: "Ouvrir" });
+    }
+    if (item.kind === "fgc") {
+      return isToday
+        ? i18n.t("challenges.viewParticipants", { defaultValue: "Voir les participants" })
+        : i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
+    }
+    if (isToday) {
+      return i18n.t("challenges.openChallenge", { defaultValue: "Ouvrir" });
+    }
+    return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
+  })();
 
   const renderWinnersBlock = () => {
     const winnerUids = getWinnerUids(item.raw);
@@ -247,7 +280,7 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
             }}
             numberOfLines={1}
           >
-            {cardTypeTitle(item.kind)}
+            {cardTypeTitle(item)}
           </Text>
         </View>
 
@@ -269,7 +302,35 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
       </View>
 
         <View style={{ marginTop: 10 }}>
-        {(item.kind === "fgc" || item.kind === "tp") ? (
+        {item.kind === "fgc" && showPastSummary ? (
+          <FgcResultDetailBlock item={item} colors={colors} />
+        ) : item.kind === "tp" && item.subtype === "bundle" && showPastSummary ? (
+          <TpResultDetailBlock
+            item={item}
+            colors={colors}
+            myEntry={tpEntry}
+          />
+        ) : item.kind === "tp" && item.subtype === "bundle" ? (
+          <>
+            <Text style={{ color: colors.text, fontWeight: "800", fontSize: 13 }}>
+              {i18n.t("tp.home.bundleTitle", {
+                defaultValue: "{{count}} match(s) à prédire",
+                count: Number(item.raw?.gameCount || item.raw?.games?.length || 0),
+              })}
+            </Text>
+            <Text style={{ color: colors.subtext, marginTop: 4, fontSize: 12, lineHeight: 18 }}>
+              {formatTpBundleMatchupSummary(item.raw) || "—"}
+            </Text>
+            {tpEntryHasParticipation(tpEntry) ? (
+              <Text style={{ color: colors.text, marginTop: 6, fontSize: 13, fontWeight: "800" }}>
+                {i18n.t("tp.home.myTotalPoints", {
+                  defaultValue: "Ton total : {{points}} pt(s)",
+                  points: tpTotalPoints,
+                })}
+              </Text>
+            ) : null}
+          </>
+        ) : item.kind === "tp" ? (
             <Text style={{ color: colors.text, fontWeight: "900" }}>
             {safeText(item.raw?.awayAbbr)} @ {safeText(item.raw?.homeAbbr)}
             </Text>
@@ -287,7 +348,7 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
         </View>
       ) : null}
 
-        {showPastSummary ? (
+        {showPastSummary && item.kind !== "tp" && item.kind !== "fgc" ? (
         <>
             {!hasNoWinner(item) ? (
             <View
@@ -311,8 +372,7 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
         </>
         ) : null}
 
-        {/* CTA seulement pour TS OU pour aujourd’hui */}
-        {(item.kind === "ts" || isToday) ? (
+        {showCta ? (
         <View style={{ marginTop: 12 }}>
             <TouchableOpacity
             onPress={() => onOpen(item, isToday)}
@@ -332,17 +392,7 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
                 fontWeight: "900",
                 }}
             >
-            {isToday
-            ? item.kind === "fgc"
-                ? i18n.t("challenges.viewParticipants", {
-                    defaultValue: "Voir les participants",
-                })
-                : item.kind === "tp"
-                ? i18n.t("challenges.viewParticipants", {
-                    defaultValue: "Voir les participants",
-                })
-                : i18n.t("challenges.openChallenge", { defaultValue: "Ouvrir" })
-            : i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" })}
+              {openCtaLabel}
             </Text>
             </TouchableOpacity>
         </View>
@@ -355,6 +405,7 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
   section,
   colors,
   winnerInfoMap,
+  participationMaps,
   onOpen,
   getTodayKey,
 }) {
@@ -406,6 +457,7 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
               isToday={isToday}
               colors={colors}
               winnerInfoMap={winnerInfoMap}
+              participationMaps={participationMaps}
               onOpen={onOpen}
             />
 

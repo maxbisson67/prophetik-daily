@@ -153,6 +153,15 @@ function NotificationsMount() {
             pathname: `/(drawer)/defis/${data.defiId}`,
             params: { groupId: data.groupId },
           });
+          return;
+        }
+
+        const groupId = data.groupId ? String(data.groupId) : "";
+        if (groupId && (data.action === "OPEN_GROUP_HOME" || data.action === "OPEN_FGC")) {
+          router.push({
+            pathname: "/(drawer)/(tabs)/AccueilScreen",
+            params: { groupId },
+          });
         }
       } catch (e) {
         console.log("notif response error:", e?.message || String(e));

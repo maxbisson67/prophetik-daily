@@ -4,6 +4,7 @@ import { logger } from "firebase-functions";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { APP_TZ, weekAnchorDate } from "../ProphetikDate.js";
+import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -351,6 +352,13 @@ export const defisJoin = onCall({ region: "us-central1" }, async (req) => {
         newPot: isFirstJoin ? oldPot + potJoinIncrement : oldPot,
       };
     });
+
+    if (!result.alreadyJoined) {
+      await recordParticipantProgressionSafe(uid, {
+        challengeType: "TS",
+        countParticipation: true,
+      });
+    }
 
     logger.info("[defisJoin] success", { uid, defiId, weekKey, tier });
     return { ok: true, defiId, ...result };

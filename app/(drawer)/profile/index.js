@@ -18,6 +18,7 @@ import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import ProgressionSummaryCard from "@src/achievements/components/ProgressionSummaryCard";
 
 export default function ProfileScreen() {
   const { user, authReady, signOut } = useAuth();
@@ -412,6 +413,15 @@ useEffect(() => {
             />
           </View>
         </View>
+
+        {user ? (
+          <ProgressionSummaryCard
+            colors={colors}
+            stats={participant?.stats}
+            achievements={participant?.achievements}
+            onPress={() => router.push("/(drawer)/progression")}
+          />
+        ) : null}
 
         {busy ? <ActivityIndicator color={colors.primary} /> : null}
 

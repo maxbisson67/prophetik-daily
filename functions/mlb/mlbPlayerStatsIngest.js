@@ -4,16 +4,16 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import {
+  getMlbSeasonPair,
+} from "../players/seasonHelpers.js";
+import { denormMlbStatsSeason } from "../players/playerStatsDenorm.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1/stats";
 const PAGE_SIZE = 1000; // MVP: assez grand pour couvrir les batters saisonniers
-
-function getCurrentSeason(date = new Date()) {
-  return String(date.getUTCFullYear());
-}
 
 function toNum(v, def = 0) {
   const n = Number(v);
@@ -225,14 +225,27 @@ async function ingestSeason(seasonId) {
   });
 
   const written = await upsertStatsToFirestore(rows, seasonId);
+  const denorm = await denormMlbStatsSeason(rows, seasonId);
 
   logger.info("[mlbPlayerStats] ingest done", {
     seasonId,
     written,
+    denormWritten: denorm.written,
     ms: Date.now() - t0,
   });
 
-  return { ok: true, seasonId, written };
+  return { ok: true, seasonId, written, denorm };
+}
+
+async function ingestSeasons(seasonIds = []) {
+  const unique = [...new Set(seasonIds.map((s) => String(s).trim()).filter(Boolean))];
+  const results = [];
+
+  for (const seasonId of unique) {
+    results.push(await ingestSeason(seasonId));
+  }
+
+  return { ok: true, seasons: unique, results };
 }
 
 /* ===================== EXPORTED FUNCTIONS ===================== */
@@ -241,7 +254,14 @@ export const ingestMlbPlayerStatsForSeason = onCall(
   { region: "us-central1", timeoutSeconds: 540 },
   async (req) => {
     try {
-      const seasonId = String(req.data?.seasonId || getCurrentSeason());
+      const includePrevious = req.data?.includePrevious !== false;
+      const pair = getMlbSeasonPair();
+
+      if (includePrevious) {
+        return await ingestSeasons([pair.current, pair.previous]);
+      }
+
+      const seasonId = String(req.data?.seasonId || pair.current);
       return await ingestSeason(seasonId);
     } catch (e) {
       logger.error("[ingestMlbPlayerStatsForSeason]", {
@@ -262,10 +282,9 @@ export const cronIngestMlbPlayerStatsDaily = onSchedule(
   },
   async () => {
     try {
-      return;  // arrêter l'exécution pour le moment
-      const seasonId = getCurrentSeason();
-      logger.info("[cronIngestMlbPlayerStatsDaily] running", { seasonId });
-      return await ingestSeason(seasonId);
+      const pair = getMlbSeasonPair();
+      logger.info("[cronIngestMlbPlayerStatsDaily] running", pair);
+      return await ingestSeasons([pair.current, pair.previous]);
     } catch (e) {
       logger.error("[cronIngestMlbPlayerStatsDaily]", {
         message: String(e?.message || e),

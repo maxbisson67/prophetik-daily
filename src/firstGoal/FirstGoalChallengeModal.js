@@ -14,6 +14,12 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import i18n from "@src/i18n/i18n";
+import {
+  getFgcResultPlayerId,
+  getFgcResultPlayerName,
+  getFgcTitle,
+  getFgcResultPrefix,
+} from "@src/firstGoal/fgcChallengeUtils";
 
 function isDecidedStatus(status) {
   const st = String(status || "").toLowerCase();
@@ -120,30 +126,30 @@ export default function FirstGoalChallengeModal({ visible, onClose, challenge, c
     const preview = Array.isArray(challenge?.winnersPreviewUids) ? challenge.winnersPreviewUids : [];
     if (preview.length) return preview.map(String);
 
-    const firstGoalPlayerId = challenge?.firstGoal?.playerId ? String(challenge.firstGoal.playerId) : "";
+    const firstGoalPlayerId = getFgcResultPlayerId(challenge) || "";
     if (!firstGoalPlayerId) return [];
 
     return entries
       .filter((e) => String(e.playerId || "") === firstGoalPlayerId)
       .map((e) => String(e.uid));
-  }, [decided, challenge?.winnersPreviewUids, challenge?.firstGoal?.playerId, entries]);
+  }, [decided, challenge, entries]);
 
   const title = useMemo(() => {
     const n = Number(challenge?.participantsCount || entries.length || 0);
-    return `🎯 ${i18n.t("firstGoal.label", { defaultValue: "Premier but" })} • ${n}`;
+    return `🎯 ${getFgcTitle(challenge, i18n.t.bind(i18n))} • ${n}`;
   }, [challenge?.participantsCount, entries.length]);
 
   const sub = useMemo(() => {
     if (decided) {
-      const p = challenge?.firstGoal?.playerName;
+      const p = getFgcResultPlayerName(challenge);
       return p
-        ? `✅ ${i18n.t("firstGoal.result.prefix", { defaultValue: "Premier but:" })} ${p}`
+        ? `✅ ${getFgcResultPrefix(challenge, i18n.t.bind(i18n))} ${p}`
         : `✅ ${i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })}`;
     }
     if (status === "pending") return `⏳ ${i18n.t("firstGoal.status.pending", { defaultValue: "En vérification" })}`;
     if (status === "locked" || status === "live") return `🔒 ${i18n.t("firstGoal.status.locked", { defaultValue: "Verrouillé" })}`;
     return `ℹ️ ${status || "—"}`;
-  }, [decided, status, challenge?.firstGoal?.playerName]);
+  }, [decided, status, challenge]);
 
   const canClose = () => onClose?.();
 

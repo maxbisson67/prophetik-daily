@@ -47,6 +47,8 @@ import CreateAscensionModal from "@src/ascensions/CreateAscensionModal";
 
 import useEntitlement from "../subscriptions/useEntitlement";
 import useCurrentSeason from "@src/hooks/useCurrentSeason";
+import useGroupLeaderboardSummary from "@src/leaderboard/useGroupLeaderboardSummary";
+import SportGlyph from "@src/sports/SportGlyph";
 
 import { listenRNFB } from "@src/dev/fsListen";
 
@@ -406,13 +408,27 @@ export default function AccueilScreen() {
 
   const [currentGroupId, setCurrentGroupId] = useState(null);
 
-  const [defaultGroupPoints, setDefaultGroupPoints] = useState(0);
-  const [loadingDefaultGroupPoints, setLoadingDefaultGroupPoints] = useState(true);
-
   const groupsAttachedForUidRef = useRef(null);
 
   const { season } = useCurrentSeason();
   const seasonId = season?.seasonId;
+
+  const groupLeaderboardSummary = useGroupLeaderboardSummary({
+    groupId: currentGroupId,
+    seasonId,
+    uid: user?.uid,
+  });
+
+  const streakGroupSummary = useMemo(
+    () => ({
+      show: !!(currentGroupId && seasonId && user?.uid),
+      loading: groupLeaderboardSummary.loading,
+      myPoints: groupLeaderboardSummary.myPoints,
+      myRank: groupLeaderboardSummary.myRank,
+      totalMembers: groupLeaderboardSummary.totalMembers,
+    }),
+    [currentGroupId, seasonId, user?.uid, groupLeaderboardSummary]
+  );
   
 
   const [showFirstGoalModal, setShowFirstGoalModal] = useState(false);
@@ -461,8 +477,6 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
     setLoadingDefis(!!(authReady && user?.uid));
     setGroupsMeta({});
     setCurrentGroupId(null);
-    setDefaultGroupPoints(0);
-    setLoadingDefaultGroupPoints(true);
     setMyParticipationsByDefiId({});
 
     for (const [, un] of groupMetaUnsubs.current) {
@@ -483,8 +497,6 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   const jerseyFrontUrl = meDoc?.jerseyFrontUrl || null;
   const jerseyBackUrl = meDoc?.jerseyBackUrl || null;
 
-  const [roleBadge, setRoleBadge] = useState(null);
-
   // Derived
   const combinedError = error || meError;
   const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
@@ -500,32 +512,6 @@ console.log("[HOME GROUP]", {
 
 });
 
-
-  useEffect(() => {
-    if (!authReady || !user?.uid || !currentGroupId) {
-      setRoleBadge(null);
-      return;
-    }
-
-    const ref = firestore().doc(`group_memberships/${currentGroupId}_${user.uid}`);
-
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        const data = snap?.data?.() || {};
-        setRoleBadge(data.roleBadge || null);
-      },
-      (err) => {
-        console.log("[HOME] roleBadge error", err?.message || err);
-        setRoleBadge(null);
-      }
-    );
-
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, [authReady, user?.uid, currentGroupId]);
 
   // Groups list
   useEffect(() => {
@@ -692,44 +678,6 @@ console.log("[HOME GROUP]", {
 
     setCurrentGroupId(next);
   }, [authReady, user?.uid, meDoc?.favoriteGroupId, readableGroupIds, currentGroupId]);
-
-  // points
-  useEffect(() => {
-    setDefaultGroupPoints(0);
-    setLoadingDefaultGroupPoints(true);
-
-    if (!authReady || !user?.uid || !currentGroupId || !seasonId) {
-      setLoadingDefaultGroupPoints(false);
-      return;
-    }
-
-    const ref = firestore()
-      .collection("groups")
-      .doc(String(currentGroupId))
-      .collection("leaderboards")
-      .doc(String(seasonId))
-      .collection("members")
-      .doc(String(user.uid));
-
-    const un = listenRNFB(
-      ref,
-      (snap) => {
-        const data = snap?.data?.() || {};
-        setDefaultGroupPoints(Number(data.pointsTotal || 0));
-        setLoadingDefaultGroupPoints(false);
-      },
-      `leaderboards:mePoints:${currentGroupId}:${seasonId}:${user.uid}`,
-      (e) => {
-        setLoadingDefaultGroupPoints(false);
-        setError(e);
-      },
-      { logAttach: true }
-    );
-
-    return () => {
-      try { un?.(); } catch {}
-    };
-  }, [authReady, user?.uid, currentGroupId, seasonId, dayTick]);
 
   // active defis
   useEffect(() => {
@@ -1009,6 +957,14 @@ const avatarUrl =
     setCurrentGroupId(String(gid));
   }
 
+  useEffect(() => {
+    const raw = params?.groupId;
+    const gid = Array.isArray(raw) ? raw[0] : raw;
+    if (!gid) return;
+    if (!readableGroupIds.includes(String(gid))) return;
+    setCurrentGroupId(String(gid));
+  }, [params?.groupId, readableGroupIds.join("|")]);
+
   const onPressCreateTeamPrediction = () => {
   requireGroupOrExplain({ onOk: () => setShowTeamPredictionModal(true) });
 };
@@ -1088,18 +1044,16 @@ const avatarUrl =
                 jerseyFrontUrl={jerseyFrontUrl}
                 jerseyBackUrl={jerseyBackUrl}
                 displayName={meDoc?.displayName || meDoc?.name}
-                points={defaultGroupPoints}
                 onEditAvatar={() => router.push("/avatars/JerseysScreen")}
-                onPressPoints={() => router.push("/(drawer)/credits")}
                 onCreateDefi={onPressCreateDefi}
                 onCreateFirstGoal={onPressCreateFirstGoal}
                 groups={userGroups}
                 currentGroupId={currentGroupId}
                 onSelectGroup={onSelectGroup}
-                roleBadge={roleBadge}
                 stats={meDoc?.stats}
                 achievements={meDoc?.achievements}
                 onPressProgression={() => router.push("/(drawer)/progression")}
+                groupSummary={streakGroupSummary}
               />
               </View>
             </View>
@@ -1142,13 +1096,7 @@ const avatarUrl =
                       ? i18n.t("firstGoal.firstRbi.title", { defaultValue: "Premier point produit" })
                       : i18n.t("firstGoal.home.title")
                   }
-                  leftIcon={
-                    <ProphetikIcons
-                      mode="emoji"
-                      emoji={currentSport === "MLB" ? "⚾" : "🏒"}
-                      size="lg"
-                    />
-                  }
+                  leftIcon={<SportGlyph sport={currentSport} colors={colors} size={28} />}
                   rightAction={
                     isCurrentGroupOwner && !hasFirstGoalForGroup ? (
                       <SectionCreateAction
@@ -1174,10 +1122,10 @@ const avatarUrl =
                   flat
                   colors={colors}
                   kicker={i18n.t("home.way2", { defaultValue: "Deuxième façon de jouer" })}
-                  leftIcon={<ProphetikIcons mode="emoji" emoji="🏆" size="lg" />}
+                  leftIcon={<SportGlyph sport={currentSport} colors={colors} size={28} />}
                   title={i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" })}
                   subtitle={i18n.t("tp.home.subtitleEmpty", {
-                    defaultValue: "Choisis le gagnant, le score exact et le type de victoire.",
+                    defaultValue: "Choisis le gagnant et le pointage exact.",
                   })}
                   rightAction={
                     isCurrentGroupOwner && canCreateTpBundle ? (
@@ -1208,7 +1156,7 @@ const avatarUrl =
                   flat
                   colors={colors}
                   kicker={i18n.t("home.way3", { defaultValue: "Troisième façon de jouer" })}
-                  leftIcon={<ProphetikIcons mode="emoji" emoji="🎯" size="lg" />}
+                  leftIcon={<SportGlyph sport={currentSport} colors={colors} size={28} />}
                   title={i18n.t("home.todayChallenge", { defaultValue: "Mes défis du jour" })}
                   rightAction={
                     isCurrentGroupOwner && !hasTsForGroup ? (

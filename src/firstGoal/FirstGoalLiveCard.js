@@ -11,7 +11,16 @@ import firestore from "@react-native-firebase/firestore";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import i18n from "@src/i18n/i18n";
-import { TeamLogo } from "@src/nhl/nhlAssets";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import {
+  getFgcResultPlayerId,
+  getFgcResultPlayerName,
+  getFgcResultTeamAbbr,
+  getFgcLiveNoneText,
+  getFgcLivePendingText,
+  getFgcLiveConfirmedText,
+} from "@src/firstGoal/fgcChallengeUtils";
 
 function shouldShowParticipants(status) {
   const st = String(status || "").toLowerCase();
@@ -130,30 +139,27 @@ function ResultBanner({ status, challenge, colors }) {
   const pending = st === "pending";
   const locked = st === "locked" || st === "live";
 
-  const firstGoalName = challenge?.firstGoal?.playerName || null;
-  const firstGoalTeam = challenge?.firstGoal?.teamAbbr || "";
+  const firstGoalName = getFgcResultPlayerName(challenge);
+  const firstGoalTeam = getFgcResultTeamAbbr(challenge);
+  const teamSuffix = firstGoalTeam ? `(${firstGoalTeam})` : "";
 
-  let text = i18n.t("firstGoal.live.noGoalYet", {
-    defaultValue: "Aucun but pour le moment.",
-  });
+  let text = getFgcLiveNoneText(challenge, i18n.t.bind(i18n));
   let fg = colors.text;
   let bg = colors.card;
   let icon = "flash-outline";
 
   if (pending && firstGoalName) {
-    text = i18n.t("firstGoal.live.goalPending", {
-      defaultValue: "Premier but: {{name}} {{team}} · en attente de confirmation",
+    text = getFgcLivePendingText(challenge, i18n.t.bind(i18n), {
       name: firstGoalName,
-      team: firstGoalTeam ? `(${firstGoalTeam})` : "",
+      team: teamSuffix,
     });
     fg = "#d97706";
     bg = "rgba(245,158,11,0.10)";
     icon = "hourglass-outline";
   } else if (decided && firstGoalName) {
-    text = i18n.t("firstGoal.live.goalConfirmed", {
-      defaultValue: "Premier but confirmé: {{name}} {{team}}",
+    text = getFgcLiveConfirmedText(challenge, i18n.t.bind(i18n), {
       name: firstGoalName,
-      team: firstGoalTeam ? `(${firstGoalTeam})` : "",
+      team: teamSuffix,
     });
     fg = "#2563eb";
     bg = "rgba(59,130,246,0.10)";
@@ -166,9 +172,7 @@ function ResultBanner({ status, challenge, colors }) {
     bg = colors.card;
     icon = "close-circle-outline";
   } else if (locked) {
-    text = i18n.t("firstGoal.live.noGoalYet", {
-      defaultValue: "Aucun but pour le moment.",
-    });
+    text = getFgcLiveNoneText(challenge, i18n.t.bind(i18n));
     fg = "#dc2626";
     bg = "rgba(239,68,68,0.08)";
     icon = "play-outline";
@@ -200,7 +204,7 @@ function ResultBanner({ status, challenge, colors }) {
   );
 }
 
-function EntryRow({ entry, revealPick, isWinner, isMe, colors }) {
+function EntryRow({ entry, revealPick, isWinner, isMe, sport = "NHL", colors }) {
   const who =
     entry?.displayName ||
     entry?.name ||
@@ -211,6 +215,8 @@ function EntryRow({ entry, revealPick, isWinner, isMe, colors }) {
   const pick = entry?.playerName || "—";
 
   const shouldShowThisPick = revealPick || isMe;
+  const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
+  const pickTeam = entry?.teamAbbr ? lookupTeamByAbbr(league, entry.teamAbbr) : null;
 
   return (
     <View
@@ -254,15 +260,15 @@ function EntryRow({ entry, revealPick, isWinner, isMe, colors }) {
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
           {shouldShowThisPick ? (
             <>
-              {entry?.teamAbbr ? (
-                <TeamLogo abbr={entry.teamAbbr} size={16} />
+              {pickTeam ? (
+                <TeamLogoBadge team={pickTeam} size={16} colors={colors} />
               ) : null}
 
               <Text
                 style={{
                   color: colors.subtext,
                   fontSize: 12,
-                  marginLeft: entry?.teamAbbr ? 6 : 0,
+                  marginLeft: pickTeam ? 6 : 0,
                   fontWeight: "700",
                 }}
                 numberOfLines={1}
@@ -638,7 +644,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
         const showParticipants = shouldShowParticipants(st);
         const revealPicks = shouldRevealPicks(st);
 
-        const firstGoalPlayerId = ch?.firstGoal?.playerId || null;
+        const firstGoalPlayerId = getFgcResultPlayerId(ch);
         const winnerUids =
           Array.isArray(ch?.winnersPreviewUids) && ch.winnersPreviewUids.length
             ? ch.winnersPreviewUids.map(String)
@@ -658,8 +664,8 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                 })
                 .join(", ");
 
-        const firstGoalName = ch?.firstGoal?.playerName || null;
-        const firstGoalTeam = ch?.firstGoal?.teamAbbr || "";
+        const firstGoalName = getFgcResultPlayerName(ch);
+        const firstGoalTeam = getFgcResultTeamAbbr(ch);
 
         return (
           <View
@@ -748,6 +754,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                           revealPick={revealPicks}
                           isWinner={isWinner}
                           isMe={String(e.uid) === String(user?.uid || "")}
+                          sport={ch?.league}
                           colors={colors}
                         />
                       );

@@ -1,21 +1,13 @@
 /**
- * Phase 3 — Autopilot TP bundle (non déployé en v1)
+ * TP bundle autopilot is implemented in:
+ *   functions/autopilot/createDailyFgcAutopilot.js
  *
- * Job planifié le matin (ex. 6h Toronto) :
- * 1. Query groups where autopilotEnabled === true
- * 2. Pour chaque groupe, ligue = group.sport
- * 3. Si bundle tpb_{league}_{groupId}_{gameYmd} absent :
- *    - selectGamesForTpBundle + buildBundleGamesFromSelection
- *    - écrire team_prediction_bundles avec autopilotCreated: true, createdBy: "system"
+ * The daily group autopilot job creates FGC + TP bundles (and future challenge types)
+ * in one pass, then sends a single combined push notification per group.
  *
- * Réutilise :
- * - loadEligibleScheduleGames
- * - selectGamesForTpBundle
- * - buildBundleGamesFromSelection
- * - defaultBundlePayload
- * - buildTeamPredictionBundleId
- *
- * Voir createDailyFgcAutopilot.js pour le pattern scheduler + notifications.
+ * Helpers:
+ *   - functions/autopilot/createTpBundleForGroup.js
+ *   - functions/autopilot/autopilotNotification.js
  */
 
-export const TP_BUNDLE_AUTOPILOT_SCHEDULE = "0 6 * * *";
+export const TP_BUNDLE_AUTOPILOT_SCHEDULE = "30 6 * * *";

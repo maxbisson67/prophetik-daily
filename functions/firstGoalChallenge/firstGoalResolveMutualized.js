@@ -62,43 +62,6 @@ function looksFinal(live) {
 }
 
 /**
- * ✅ +1 au jackpot/boni si aucun gagnant
- * - Idempotent via champ "jackpotBumpApplied" sur le challenge.
- * - Ecrit sur groups/{groupId}.fgcBonus (adapte si ton champ est ailleurs).
- */
-async function bumpGroupJackpotIfNoWinnersTx({ tx, chRef, chData, groupId, reason }) {
-  if (!groupId) return { did: false, reason: "missing-groupId" };
-
-  // idempotence: déjà bump ?
-  if (chData?.jackpotBumpApplied === true) return { did: false, reason: "already-applied" };
-
-  const groupRef = db.doc(`groups/${String(groupId)}`);
-
-  tx.set(
-    groupRef,
-    {
-      fgcBonus: FieldValue.increment(1),
-      fgcBonusUpdatedAt: FieldValue.serverTimestamp(),
-      fgcBonusLastReason: reason || "no_winner",
-    },
-    { merge: true }
-  );
-
-  tx.set(
-    chRef,
-    {
-      jackpotBumpApplied: true,
-      jackpotBumpAppliedAt: FieldValue.serverTimestamp(),
-      jackpotBumpReason: reason || "no_winner",
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  return { did: true };
-}
-
-/**
  * Calcule le premier but "valide" à partir de la sous-collection goals.
  * Exclut shootout. Trie par période + timeInPeriod.
  */
@@ -568,6 +531,10 @@ export const applyFirstGoalResultToChallenges_mutualized = onDocumentWritten(
       const chRef = doc.ref;
       const ch = doc.data() || {};
 
+      if (String(ch?.league || "NHL").toUpperCase() === "MLB" || ch?.fgcMode === "first_rbi") {
+        continue;
+      }
+
       // déjà résolu ?
       if (
         ch?.firstGoal?.playerId ||
@@ -577,16 +544,12 @@ export const applyFirstGoalResultToChallenges_mutualized = onDocumentWritten(
         continue;
       }
 
-      // ✅ no_winner => close + bump +1
+      // ✅ no_winner => close
       if (afterStatus === "no_winner") {
         await db.runTransaction(async (tx) => {
           const fresh = await tx.get(chRef);
           if (!fresh.exists) return;
 
-          const ch2 = fresh.data() || {};
-          const groupId = ch2.groupId;
-
-          // 1) close (idempotent via merge)
           tx.set(
             chRef,
             {
@@ -612,15 +575,6 @@ export const applyFirstGoalResultToChallenges_mutualized = onDocumentWritten(
             },
             { merge: true }
           );
-
-          // 2) bump +1 (idempotent)
-          await bumpGroupJackpotIfNoWinnersTx({
-            tx,
-            chRef,
-            chData: ch2,
-            groupId,
-            reason: "no_winner_game",
-          });
         });
 
         continue;
@@ -642,10 +596,7 @@ export const applyFirstGoalResultToChallenges_mutualized = onDocumentWritten(
         const fresh = await tx.get(chRef);
         if (!fresh.exists) return;
 
-        const ch2 = fresh.data() || {};
-        const groupId = ch2.groupId;
-
-        // 1) decided
+        // decided
         tx.set(
           chRef,
           {
@@ -670,21 +621,10 @@ export const applyFirstGoalResultToChallenges_mutualized = onDocumentWritten(
           },
           { merge: true }
         );
-
-        // 2) si personne n'a trouvé => bump +1 (idempotent)
-        if (Number(winnersCount || 0) === 0) {
-          await bumpGroupJackpotIfNoWinnersTx({
-            tx,
-            chRef,
-            chData: ch2,
-            groupId,
-            reason: "no_entries_matched",
-          });
-        }
       });
     }
 
-    logger.info("[FG-M] applied to challenges (+jackpot bump if needed)", {
+    logger.info("[FG-M] applied to challenges", {
       gameId,
       afterStatus,
       count: challengesSnap.size,

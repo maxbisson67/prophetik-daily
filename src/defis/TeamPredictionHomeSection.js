@@ -18,6 +18,7 @@ import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import TeamPredictionLiveCard from "@src/defis/TeamPredictionLiveCard";
 import TeamPredictionBundleHomeCard from "@src/defis/TeamPredictionBundleHomeCard";
+import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
 import { listenRNFB } from "@src/home/firestoreListen";
 
 /* ---------------- Helpers ---------------- */
@@ -57,12 +58,6 @@ function getPreviousBusinessYmdCompact(now = new Date()) {
   const d = new Date(getBusinessDate(now));
   d.setDate(d.getDate() - 1);
   return toYmdCompact(d);
-}
-
-function fmtTimeShort(ts) {
-  const d = toDateAny(ts);
-  if (!d || Number.isNaN(d.getTime?.())) return null;
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function getDeadline(ch) {
@@ -173,7 +168,7 @@ function InfoBubbleTP({ colors }) {
           />
           <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8, flex: 1 }}>
             {i18n.t("tp.home.infoTitle", {
-              defaultValue: "C’est quoi ce défi?",
+              defaultValue: "Comment fonctionne ce défi?",
             })}
           </Text>
         </View>
@@ -197,7 +192,13 @@ function InfoBubbleTP({ colors }) {
           <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
             {i18n.t("tp.home.infoBody", {
               defaultValue:
-                "Choisis l’équipe gagnante, le score exact et le type de victoire. Pour gagner, ta prédiction doit être parfaite. Si personne ne trouve, la cagnotte est reportée au prochain défi.",
+                "Choisis le pointage des confrontations proposées et cumule des points pour chaque bonne prédiction. Avec la bonne prédiction du pointage, cumule encore plus de points.",
+            })}
+          </Text>
+          <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
+            {i18n.t("tp.home.infoLockHint", {
+              defaultValue:
+                "Chaque match se verrouille 5 minutes avant le début. Tu peux compléter tes prédictions progressivement.",
             })}
           </Text>
         </View>
@@ -232,30 +233,33 @@ function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors }) {
   );
 }
 
-function shouldKeepVisibleBundle(bundle, businessYmdCompact) {
-  const status = String(bundle?.status || "open").toLowerCase();
-  if (["decided", "closed"].includes(status)) {
-    const ts = bundle?.decidedAt ?? bundle?.updatedAt ?? null;
-    const d = toDateAny(ts);
-    return !!(d && Date.now() - d.getTime() <= 4 * 60 * 60 * 1000);
-  }
+function isTodayTpBundleForHome(bundle, businessYmdCompact) {
+  return String(bundle?.gameYmd || "").trim() === String(businessYmdCompact || "").trim();
+}
 
-  const bundleYmd = String(bundle?.gameYmd || "").trim();
-  if (bundleYmd === businessYmdCompact) return true;
-  if (["open", "partial", "locked", "pending"].includes(status)) return true;
+function compareTpBundles(a, b) {
+  const statusPriority = {
+    open: 0,
+    partial: 1,
+    locked: 2,
+    pending: 3,
+    decided: 4,
+    closed: 5,
+  };
 
-  const games = Array.isArray(bundle?.games) ? bundle.games : [];
-  const hasOpenSlot = games.some((slot) => {
-    const slotStatus = String(slot?.status || "open").toLowerCase();
-    if (slotStatus !== "open") return false;
-    const lockedAt = toDateAny(slot?.lockedAt);
-    return !lockedAt || Date.now() < lockedAt.getTime();
-  });
-  if (hasOpenSlot) return true;
+  const aPri = statusPriority[String(a?.status || "").toLowerCase()] ?? 9;
+  const bPri = statusPriority[String(b?.status || "").toLowerCase()] ?? 9;
+  if (aPri !== bPri) return aPri - bPri;
 
-  const ts = bundle?.decidedAt ?? bundle?.updatedAt ?? null;
-  const d = toDateAny(ts);
-  return !!(d && Date.now() - d.getTime() <= 4 * 60 * 60 * 1000);
+  return String(b?.gameYmd || "").localeCompare(String(a?.gameYmd || ""));
+}
+
+function pickTodayHomeBundle(rows, businessYmdCompact) {
+  return (
+    rows
+      .filter((b) => isTodayTpBundleForHome(b, businessYmdCompact))
+      .sort((a, b) => compareTpBundles(a, b))[0] || null
+  );
 }
 
 function isLegacyChallenge(ch) {
@@ -343,9 +347,13 @@ export default function TeamPredictionHomeSection({
         if (cancelled) return;
 
         const nextBundle = res?.data?.bundle || null;
-        if (nextBundle) {
+        const businessToday = getBusinessYmdCompact();
+        if (nextBundle && isTodayTpBundleForHome(nextBundle, businessToday)) {
           setBundle(nextBundle);
           setBundleEntry(res?.data?.entry ?? null);
+        } else {
+          setBundle(null);
+          setBundleEntry(null);
         }
 
         console.log("[TeamPredictionHomeSection] callable bundle", {
@@ -362,45 +370,53 @@ export default function TeamPredictionHomeSection({
 
     const unsubs = [];
     const businessToday = getBusinessYmdCompact();
-    const businessYesterday = getPreviousBusinessYmdCompact();
 
     const applyBundleDoc = (bundleId, snap) => {
       if (cancelled) return;
 
       const exists =
         typeof snap?.exists === "function" ? snap.exists() : !!snap?.exists;
-      if (!exists) return;
 
-      const data = { id: bundleId, ...(snap?.data?.() || snap?.data || {}) };
-      const status = String(data?.status || "open").toLowerCase();
-      if (["decided", "closed"].includes(status)) return;
-
-      setBundle(data);
-      console.log("[TeamPredictionHomeSection] firestore bundle", {
-        groupId: gid,
-        selectedId: bundleId,
+      setBundle((prev) => {
+        const candidates = [];
+        if (exists) {
+          const data = { id: bundleId, ...(snap?.data?.() || snap?.data || {}) };
+          if (isTodayTpBundleForHome(data, businessToday)) candidates.push(data);
+        }
+        if (prev?.id && prev.id !== bundleId && isTodayTpBundleForHome(prev, businessToday)) {
+          candidates.push(prev);
+        }
+        return pickTodayHomeBundle(candidates, businessToday);
       });
+
+      if (exists) {
+        const data = { id: bundleId, ...(snap?.data?.() || snap?.data || {}) };
+        if (isTodayTpBundleForHome(data, businessToday)) {
+          console.log("[TeamPredictionHomeSection] firestore bundle", {
+            groupId: gid,
+            selectedId: bundleId,
+          });
+        }
+      }
     };
 
-    [businessToday, businessYesterday].forEach((gameYmd) => {
-      const bundleId = buildTpBundleDocId({
-        league: sportLeague,
-        groupId: gid,
-        gameYmd,
-      });
-
-      const ref = firestore().doc(`team_prediction_bundles/${bundleId}`);
-      const unsub = listenRNFB(
-        ref,
-        (snap) => applyBundleDoc(bundleId, snap),
-        `tpb:live:${bundleId}`,
-        (err) => {
-          console.log("[TeamPredictionHomeSection] bundle live error", bundleId, err?.message || err);
-        }
-      );
-
-      unsubs.push(unsub);
+    const todayBundleId = buildTpBundleDocId({
+      league: sportLeague,
+      groupId: gid,
+      gameYmd: businessToday,
     });
+
+    const ref = firestore().doc(`team_prediction_bundles/${todayBundleId}`);
+    const unsub = listenRNFB(
+      ref,
+      (snap) => applyBundleDoc(todayBundleId, snap),
+      `tpb:live:${todayBundleId}`,
+      (err) => {
+        console.log("[TeamPredictionHomeSection] bundle live error", todayBundleId, err?.message || err);
+      }
+    );
+
+    unsubs.push(unsub);
 
     const hintId = String(hintBundleId || "").trim();
     if (hintId.startsWith("tpb_")) {
@@ -427,18 +443,14 @@ export default function TeamPredictionHomeSection({
 
         const rows = (snap?.docs || [])
           .map((d) => ({ id: d.id, ...(d?.data?.() || d?.data || {}) }))
-          .filter((b) => String(b?.league || sportLeague).toUpperCase() === sportLeague)
-          .filter((b) => {
-            const status = String(b?.status || "open").toLowerCase();
-            return !["decided", "closed"].includes(status);
-          })
-          .sort((a, b) => String(b?.gameYmd || "").localeCompare(String(a?.gameYmd || "")));
+          .filter((b) => String(b?.league || sportLeague).toUpperCase() === sportLeague);
 
-        if (rows[0]) {
-          setBundle(rows[0]);
+        const best = pickTodayHomeBundle(rows, businessToday);
+        setBundle(best);
+        if (best) {
           console.log("[TeamPredictionHomeSection] query bundle", {
             groupId: gid,
-            selectedId: rows[0].id,
+            selectedId: best.id,
           });
         }
       },
@@ -689,7 +701,6 @@ export default function TeamPredictionHomeSection({
             const hasEntry = !!entry;
 
             const deadline = getDeadline(ch);
-            const deadlineHM = fmtTimeShort(deadline);
 
             const participants =
               Number(ch?.participantsCount ?? 0) ||
@@ -747,21 +758,7 @@ export default function TeamPredictionHomeSection({
                   colors={colors}
                 />
 
-                <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
-                  {i18n.t("tp.home.signupDeadline", {
-                    defaultValue: "Heure limite d'inscription",
-                  })}
-                  {": "}
-                  {locked ? (
-                    <Text style={{ color: colors.text, fontWeight: "900" }}>
-                      {i18n.t("tp.home.signupClosed", { defaultValue: "Fermé" })}
-                    </Text>
-                  ) : (
-                    <Text style={{ color: colors.text, fontWeight: "900" }}>
-                      {deadlineHM || "—"}
-                    </Text>
-                  )}
-                </Text>
+                <TpHomeDeadlineBlock locked={locked} deadline={deadline} colors={colors} />
 
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
                   <MaterialCommunityIcons name="account-group" size={16} color={colors.subtext} />

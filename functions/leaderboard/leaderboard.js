@@ -56,6 +56,115 @@ function ymd10(v) {
   return typeof v === "string" ? v.slice(0, 10) : "";
 }
 
+function compactYmdFromIso(ymd) {
+  return String(ymd || "").slice(0, 10).replace(/-/g, "");
+}
+
+function gameDateFromAnyYmd(v) {
+  const compact = String(v || "").replace(/\D/g, "");
+  if (compact.length === 8) {
+    return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+  }
+  return ymd10(v);
+}
+
+function bundleHasScoredSlots(bundle = {}) {
+  if (bundle.payoutApplied === true) return true;
+  const status = String(bundle.status || "").toLowerCase();
+  if (["decided", "partial", "closed"].includes(status)) return true;
+  const games = Array.isArray(bundle.games) ? bundle.games : [];
+  return games.some((g) => g?.payoutApplied === true);
+}
+
+function parseTpScoredEntry(entry = {}) {
+  const points = toNumber(entry.points ?? entry.payout ?? entry.totalPoints, 0);
+  const won =
+    entry.won === true || entry.winnerCorrect === true || points > 0;
+
+  return {
+    points,
+    won,
+    displayName: entry.displayName || null,
+    avatarUrl: pickString(entry.avatarUrl),
+  };
+}
+
+function parseTpBundleEntry(entry = {}) {
+  const pickResults = entry.pickResults || {};
+  let pointsFromResults = 0;
+  let won = false;
+
+  for (const result of Object.values(pickResults)) {
+    if (!result || typeof result !== "object") continue;
+    pointsFromResults += toNumber(result.points, 0);
+    if (result.won === true || result.winnerCorrect === true) won = true;
+  }
+
+  const points = toNumber(entry.totalPoints, pointsFromResults);
+
+  return {
+    points,
+    won,
+    displayName: entry.displayName || null,
+    avatarUrl: pickString(entry.avatarUrl),
+  };
+}
+
+function addTpLeaderboardEntry({
+  totals,
+  summary,
+  uid,
+  points,
+  won,
+  displayName,
+  avatarUrl,
+  gameDate,
+  seasonId,
+  fromYmd,
+}) {
+  const cur = ensureAgg(totals, uid);
+  const weekKey = weekKeyFromGameDate({ seasonId, fromYmd, gameDate });
+  const monthKey = monthKeyFromGameDate(gameDate);
+
+  cur.participations += 1;
+  if (won) cur.wins += 1;
+
+  cur.pointsTotal += toNumber(points, 0);
+  incMap(cur.pointsByWeek, weekKey, points);
+  incMap(cur.pointsByMonth, monthKey, points);
+
+  if (won) {
+    incMap(cur.winsByWeek, weekKey, 1);
+    incMap(cur.winsByMonth, monthKey, 1);
+  }
+
+  cur.families.tp.plays += 1;
+  cur.families.tp.points += toNumber(points, 0);
+  if (won) cur.families.tp.wins += 1;
+
+  summary.totals.tp.plays += 1;
+  summary.totals.tp.points += toNumber(points, 0);
+  if (won) summary.totals.tp.wins += 1;
+
+  const tpTypeKey = "TP";
+  if (!cur.winsByType[tpTypeKey]) {
+    cur.winsByType[tpTypeKey] = {
+      plays: 0,
+      wins: 0,
+      pointsTotal: 0,
+      nhlPointsTotal: 0,
+      nhlGamesTotal: 0,
+    };
+  }
+
+  cur.winsByType[tpTypeKey].plays += 1;
+  if (won) cur.winsByType[tpTypeKey].wins += 1;
+  cur.winsByType[tpTypeKey].pointsTotal += toNumber(points, 0);
+
+  if (!cur.displayName && displayName) cur.displayName = displayName;
+  if (!cur.avatarUrl && avatarUrl) cur.avatarUrl = avatarUrl;
+}
+
 /**
  * Parse YYYY-MM-DD en date "UTC midnight" (stable pour calculer diffDays)
  */
@@ -261,6 +370,8 @@ const summary = {
   membersCount: 0,
   defisCount: defisSnap.size,
   fgcCount: 0,
+  tpChallengeCount: 0,
+  tpBundleCount: 0,
   totals: {
     fgc: emptyFamilyStats(),
     tp: emptyFamilyStats(),
@@ -427,10 +538,104 @@ const summary = {
     }
   }
 
+  /* -------------------- 3) TP challenges (legacy single-match) -------------------- */
+  const fromCompact = compactYmdFromIso(from);
+  const toCompact = compactYmdFromIso(to);
+
+  const tpChSnap = await db
+    .collection("team_prediction_challenges")
+    .where("groupId", "==", groupId)
+    .get();
+
+  const tpChDocs = tpChSnap.docs.filter((d) => {
+    const ch = d.data() || {};
+    if (String(ch.status || "").toLowerCase() !== "decided") return false;
+    const gameYmd = String(ch.gameYmd || "");
+    return gameYmd >= fromCompact && gameYmd <= toCompact;
+  });
+
+  summary.tpChallengeCount = tpChDocs.length;
+
+  for (const chDoc of tpChDocs) {
+    const ch = chDoc.data() || {};
+    const gameDate = gameDateFromAnyYmd(ch?.gameYmd);
+    const entriesSnap = await db
+      .collection(`team_prediction_challenges/${chDoc.id}/entries`)
+      .get();
+
+    for (const e of entriesSnap.docs) {
+      const entry = e.data() || {};
+      const uid = String(entry?.uid || e.id);
+      if (!uid) continue;
+
+      const { points, won, displayName, avatarUrl } = parseTpScoredEntry(entry);
+
+      addTpLeaderboardEntry({
+        totals,
+        summary,
+        uid,
+        points,
+        won,
+        displayName,
+        avatarUrl,
+        gameDate,
+        seasonId,
+        fromYmd: from,
+      });
+    }
+  }
+
+  /* -------------------- 4) TP bundles (multi-match) -------------------- */
+  const tpBundleSnap = await db
+    .collection("team_prediction_bundles")
+    .where("groupId", "==", groupId)
+    .get();
+
+  const tpBundleDocs = tpBundleSnap.docs.filter((d) => {
+    const bundle = d.data() || {};
+    const gameYmd = String(bundle.gameYmd || "");
+    return gameYmd >= fromCompact && gameYmd <= toCompact;
+  });
+
+  summary.tpBundleCount = tpBundleDocs.filter((d) =>
+    bundleHasScoredSlots(d.data() || {})
+  ).length;
+
+  for (const bundleDoc of tpBundleDocs) {
+    const bundle = bundleDoc.data() || {};
+    if (!bundleHasScoredSlots(bundle)) continue;
+
+    const gameDate = gameDateFromAnyYmd(bundle?.gameYmd);
+    const entriesSnap = await db
+      .collection(`team_prediction_bundles/${bundleDoc.id}/entries`)
+      .get();
+
+    for (const e of entriesSnap.docs) {
+      const entry = e.data() || {};
+      const uid = String(entry?.uid || e.id);
+      if (!uid) continue;
+
+      const { points, won, displayName, avatarUrl } = parseTpBundleEntry(entry);
+
+      addTpLeaderboardEntry({
+        totals,
+        summary,
+        uid,
+        points,
+        won,
+        displayName,
+        avatarUrl,
+        gameDate,
+        seasonId,
+        fromYmd: from,
+      });
+    }
+  }
+
   const allUids = [...totals.keys()];
   summary.membersCount = totals.size;
 
-  /* -------------------- 3) Enrichissement noms / avatars -------------------- */
+  /* -------------------- 5) Enrichissement noms / avatars -------------------- */
 
   // 1) Complète displayName manquant depuis participants/{uid}
   const uidsNeedingName = [...totals.entries()]
@@ -489,7 +694,7 @@ const summary = {
     }
   }
 
-  /* -------------------- 4) summary averages -------------------- */
+  /* -------------------- 6) summary averages -------------------- */
 
   const count = summary.membersCount || 0;
   const averages = {
@@ -510,7 +715,7 @@ const summary = {
     },
   };
 
-  /* -------------------- 5) Écriture metadata + summary -------------------- */
+  /* -------------------- 7) Écriture metadata + summary -------------------- */
 
   await db.doc(`groups/${groupId}/leaderboards/${seasonId}`).set(
     {
@@ -521,6 +726,8 @@ const summary = {
       membersCount: totals.size,
       defisCount: defisSnap.size,
       fgcCount: fgcSnap.size,
+      tpChallengeCount: summary.tpChallengeCount,
+      tpBundleCount: summary.tpBundleCount,
       rebuiltAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     },
@@ -537,6 +744,8 @@ const summary = {
       membersCount: summary.membersCount,
       defisCount: summary.defisCount,
       fgcCount: summary.fgcCount,
+      tpChallengeCount: summary.tpChallengeCount,
+      tpBundleCount: summary.tpBundleCount,
 
       totals: summary.totals,
       averages,
@@ -547,7 +756,7 @@ const summary = {
     { merge: true }
   );
 
-  /* -------------------- 6) Écriture members -------------------- */
+  /* -------------------- 8) Écriture members -------------------- */
 
   const base = `groups/${groupId}/leaderboards/${seasonId}/members`;
   const entries = [...totals.entries()];
@@ -649,7 +858,7 @@ const summary = {
     await batch.commit();
   }
 
-  /* -------------------- 7) Clear dirty flag -------------------- */
+  /* -------------------- 9) Clear dirty flag -------------------- */
 
   if (clearDirty) {
     await db.doc(`groups/${groupId}`).set(
@@ -663,93 +872,14 @@ const summary = {
     );
   }
 
-  /* -------------------- 8) Assign C / A -------------------- */
-
-  // 1) Lire tous les memberships du groupe pour pouvoir nettoyer correctement
-  const membershipsSnap = await db
-    .collection("group_memberships")
-    .where("groupId", "==", groupId)
-    .get();
-
-  const memberUids = membershipsSnap.docs
-    .map((d) => String(d.data()?.uid || ""))
-    .filter(Boolean);
-
-  // fallback si jamais certains memberships n'ont pas uid bien rempli
-  const memberDocMap = new Map();
-  for (const d of membershipsSnap.docs) {
-    const data = d.data() || {};
-    const uid = String(data.uid || "").trim();
-    if (uid) memberDocMap.set(uid, d.ref);
-  }
-
-  // 2) Construire le ranking avec tie-break stable
-  const leaderboardArray = memberUids
-    .map((uid) => {
-      const agg = totals.get(uid) || makeEmptyAgg(uid);
-
-      const fgc = agg.families?.fgc || emptyFamilyStats();
-      const tp = agg.families?.tp || emptyFamilyStats();
-      const ts = agg.families?.ts || emptyFamilyStats();
-
-      const cleanPointsTotal =
-        toNumber(fgc.points, 0) +
-        toNumber(tp.points, 0) +
-        toNumber(ts.points, 0);
-
-      return {
-        uid,
-        points: cleanPointsTotal,
-        wins: toNumber(agg.wins, 0),
-        displayName: String(agg.displayName || ""),
-      };
-    })
-    .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      if (a.displayName !== b.displayName) return a.displayName.localeCompare(b.displayName);
-      return a.uid.localeCompare(b.uid);
-    });
-
-  // 3) Assigner les badges
-  const roleUpdates = leaderboardArray.map((row, index) => {
-    let role = null;
-
-    if (row.points > 0) {
-      if (index === 0) role = "C";
-      else if (index === 1) role = "A";
-    }
-
-    return { uid: row.uid, role };
-  });
-
-  // 4) Batch write sur tous les membres du groupe
-  for (const batchItems of chunk(roleUpdates, 450)) {
-    const batch = db.batch();
-
-    for (const { uid, role } of batchItems) {
-      const ref =
-        memberDocMap.get(uid) || db.doc(`group_memberships/${groupId}_${uid}`);
-
-      batch.set(
-        ref,
-        {
-          roleBadge: role,
-          roleUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    }
-
-    await batch.commit();
-  }
-
   return {
     groupId,
     seasonId,
     users: totals.size,
     defis: defisSnap.size,
     fgc: fgcSnap.size,
+    tpChallenges: summary.tpChallengeCount,
+    tpBundles: summary.tpBundleCount,
     fromYmd: from,
     toYmd: to,
     clearedDirty: !!clearDirty,

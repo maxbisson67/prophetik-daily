@@ -1,0 +1,167 @@
+export function isSlotDecided(slot) {
+  return String(slot?.status || "").toLowerCase() === "decided";
+}
+
+export function isBundleDecided(bundle) {
+  const status = String(bundle?.status || "").toLowerCase();
+  return status === "decided" || status === "closed";
+}
+
+function safeAbbr(v) {
+  return String(v || "").trim().toUpperCase();
+}
+
+function toNumber(v, def = 0) {
+  if (typeof v === "number") return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+
+const TP_DEFAULT_SCORING = {
+  winnerBasePoints: 3,
+  exactScoreBonusPoints: 3,
+};
+
+export function readTpScoringConfig(bundle = {}) {
+  const scoring = bundle?.scoring || {};
+  return {
+    winnerBasePoints: toNumber(scoring.winnerBasePoints, TP_DEFAULT_SCORING.winnerBasePoints),
+    exactScoreBonusPoints: toNumber(
+      scoring.exactScoreBonusPoints,
+      TP_DEFAULT_SCORING.exactScoreBonusPoints
+    ),
+  };
+}
+
+export function lookupPickByGameId(map, gameId) {
+  if (!map || gameId == null) return null;
+  const key = String(gameId);
+  if (map[key] != null) return map[key];
+  const foundKey = Object.keys(map).find((k) => String(k) === key);
+  return foundKey != null ? map[foundKey] : null;
+}
+
+function getPredictedWinnerAbbr(pick, awayAbbr, homeAbbr) {
+  const away = Number(pick?.predictedAwayScore);
+  const home = Number(pick?.predictedHomeScore);
+
+  if (Number.isFinite(away) && Number.isFinite(home)) {
+    if (away > home) return safeAbbr(awayAbbr);
+    if (home > away) return safeAbbr(homeAbbr);
+  }
+
+  return safeAbbr(pick?.winnerAbbr);
+}
+
+export function scoreTpPick(pick, slot, bundle) {
+  if (!pick || !isSlotDecided(slot)) return null;
+
+  const official = slot?.officialResult || {};
+  const officialWinner = safeAbbr(official.winnerAbbr);
+  const awayAbbr = safeAbbr(slot?.awayAbbr);
+  const homeAbbr = safeAbbr(slot?.homeAbbr);
+  const predictedWinner = getPredictedWinnerAbbr(pick, awayAbbr, homeAbbr);
+
+  const winnerCorrect = !!predictedWinner && predictedWinner === officialWinner;
+
+  const predictedAway = toNumber(pick?.predictedAwayScore, null);
+  const predictedHome = toNumber(pick?.predictedHomeScore, null);
+  const officialAway = toNumber(official?.awayScore, null);
+  const officialHome = toNumber(official?.homeScore, null);
+
+  const exactScoreCorrect =
+    winnerCorrect &&
+    predictedAway === officialAway &&
+    predictedHome === officialHome;
+
+  const scoring = readTpScoringConfig(bundle);
+  let points = 0;
+  if (winnerCorrect) points += scoring.winnerBasePoints;
+  if (exactScoreCorrect) points += scoring.exactScoreBonusPoints;
+
+  return {
+    winnerCorrect,
+    exactScoreCorrect,
+    points,
+    payout: points,
+  };
+}
+
+export function resolveTpPickResult({ pick, slot, pickResult, bundle }) {
+  const computed = pick && slot ? scoreTpPick(pick, slot, bundle) : null;
+  if (computed) return computed;
+
+  if (pickResult && typeof pickResult.winnerCorrect === "boolean") {
+    return pickResult;
+  }
+
+  return null;
+}
+
+export function countTpPickStatsForEntry(entry, bundle) {
+  const games = Array.isArray(bundle?.games) ? bundle.games : [];
+  const picks = entry?.picks || {};
+  const pickResults = entry?.pickResults || {};
+  let winnersCorrect = 0;
+  let exactScores = 0;
+
+  for (const slot of games) {
+    if (!isSlotDecided(slot)) continue;
+
+    const gameId = String(slot.gameId || "");
+    const pick = lookupPickByGameId(picks, gameId);
+    const stored = lookupPickByGameId(pickResults, gameId);
+    const result = resolveTpPickResult({ pick, slot, pickResult: stored, bundle });
+
+    if (!result) continue;
+    if (result.winnerCorrect) winnersCorrect += 1;
+    if (result.exactScoreCorrect) exactScores += 1;
+  }
+
+  return { winnersCorrect, exactScores };
+}
+
+export function formatTpPickLine(pick, league = "NHL") {
+  if (!pick) return null;
+  const away = pick.predictedAwayScore;
+  const home = pick.predictedHomeScore;
+  if (away == null || home == null) return null;
+  const score = `${away}-${home}`;
+  const outcome = safeAbbr(pick.predictedOutcome);
+  const lg = String(league || "NHL").toUpperCase();
+
+  if (lg === "MLB" || outcome === "FINAL") return score;
+  if (outcome === "REG" || outcome === "OT" || outcome === "TB") {
+    return `${score} (${outcome})`;
+  }
+  return score;
+}
+
+export function formatOfficialScoreLine(slot) {
+  const official = slot?.officialResult || {};
+  const away = official.awayScore;
+  const home = official.homeScore;
+  if (away == null || home == null) return null;
+  return `${away}-${home}`;
+}
+
+export function formatPickPoints(pickResult) {
+  const pts = Number(pickResult?.points ?? pickResult?.payout ?? 0);
+  if (!Number.isFinite(pts) || pts <= 0) return null;
+  return `+${pts} pt${pts > 1 ? "s" : ""}`;
+}
+
+export function formatResultWinnerLine(slot, league = "NHL") {
+  const official = slot?.officialResult || {};
+  const winner = String(official.winnerAbbr || "").trim().toUpperCase();
+  const score = formatOfficialScoreLine(slot);
+  if (!winner || !score) return null;
+
+  const lg = String(league || "NHL").toUpperCase();
+  if (lg === "MLB" || String(official.outcome || "").toUpperCase() === "FINAL") {
+    return `${winner} ${score}`;
+  }
+
+  const outcome = String(official.outcome || "REG").toUpperCase();
+  return `${winner} ${score} (${outcome})`;
+}

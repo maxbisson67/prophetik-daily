@@ -1,15 +1,13 @@
 // src/home/components/GroupsToggleRow.js
 import React, { useMemo, useState } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { withCacheBust } from "@src/home/homeUtils";
+import GroupAvatar from "@src/groups/components/GroupAvatar";
 import i18n from "@src/i18n/i18n";
-
-const AVATAR_PLACEHOLDER = require("../../../assets/avatar-placeholder.png");
 
 export default function GroupsToggleRow({
   colors,
-  groups = [], // [{ id, name, avatarUrl }]
+  groups = [], // [{ id, name, avatarUrl, favoriteTeam }]
   value,       // currentGroupId
   onChange,    // (groupId) => void
 }) {
@@ -41,14 +39,7 @@ export default function GroupsToggleRow({
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, paddingRight: 10 }}>
-          <Image
-            source={
-              selected?.avatarUrl
-                ? { uri: withCacheBust(selected.avatarUrl) }
-                : AVATAR_PLACEHOLDER
-            }
-            style={{ width: 26, height: 26, borderRadius: 999, backgroundColor: colors.card }}
-          />
+          <GroupAvatar group={selected} size={26} colors={colors} />
           <View style={{ flex: 1 }}>
           <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
             {i18n.t("home.selectGroupLabel", {
@@ -103,10 +94,7 @@ export default function GroupsToggleRow({
                   backgroundColor: active ? colors.card2 : colors.card,
                 }}
               >
-                <Image
-                  source={g.avatarUrl ? { uri: withCacheBust(g.avatarUrl) } : AVATAR_PLACEHOLDER}
-                  style={{ width: 28, height: 28, borderRadius: 999, backgroundColor: colors.card2 }}
-                />
+                <GroupAvatar group={g} size={28} colors={colors} />
 
                 <Text
                   numberOfLines={1}

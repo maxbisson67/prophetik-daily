@@ -545,10 +545,6 @@ export default function FirstGoalHomeSection({
                     backgroundColor: colors.card,
                   }}
                 >
-                  <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, marginBottom: 8 }}>
-                    {getFgcTitle(ch, i18n.t.bind(i18n))}
-                  </Text>
-
                   <MatchupRow
                     awayAbbr={awayAbbr}
                     homeAbbr={homeAbbr}

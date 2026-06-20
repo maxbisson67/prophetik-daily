@@ -44,6 +44,9 @@ function getHeaderTitle(route) {
     case "profile/index":
       return i18n.t("drawer.profile", { defaultValue: "Mon profil" });
 
+    case "progression/index":
+      return i18n.t("progression.title", { defaultValue: "Progression" });
+
     case "settings/index":
       return i18n.t("drawer.settings", { defaultValue: "Paramètres" });
 
@@ -279,6 +282,15 @@ function CustomDrawerContent(props) {
         onPress={() => closeAndPush("/(drawer)/profile")}
         icon={({ size }) => (
           <Ionicons name="person-circle-outline" size={size} color={colors.text} />
+        )}
+      />
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t("drawer.progression", { defaultValue: "Progression & badges" })}
+        onPress={() => closeAndPush("/(drawer)/progression")}
+        icon={({ size }) => (
+          <MaterialCommunityIcons name="medal-outline" size={size} color={colors.text} />
         )}
       />
 

@@ -1,5 +1,5 @@
-// app/(first-goal)/pick/[challengeId].js
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+// app/(drawer)/(first-goal)/pick/[challengeId].js
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -16,17 +16,24 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { TeamLogo } from "@src/nhl/nhlAssets";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import functions from "@react-native-firebase/functions";
 import { useLanguage } from "@src/i18n/LanguageProvider";
 import Analytics from "@src/services/analytics";
+import { getFgcLeague } from "@src/firstGoal/fgcChallengeUtils";
+import { loadFgcPlayersWithSeasonStats } from "@src/players/loadFgcPlayersWithSeasonStats";
+import {
+  getPlayerSeasonStatLines,
+  getPlayerSortValue,
+} from "@src/players/seasonStatsHelpers";
+import { getInjuryDisplay, isPlayerUnavailable } from "@src/players/injuryDisplayHelpers";
 
 /* ---------------- helpers ---------------- */
 
-// Accepte: Firestore Timestamp (RNFirebase), Date, string ISO, number(ms)
 function toDateSafe(v) {
   if (!v) return null;
-  if (v?.toDate && typeof v.toDate === "function") return v.toDate(); // Timestamp
+  if (v?.toDate && typeof v.toDate === "function") return v.toDate();
   if (v instanceof Date) return v;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -34,11 +41,6 @@ function toDateSafe(v) {
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
-}
-
-function strOrNull(v) {
-  const s = String(v ?? "").trim();
-  return s ? s : null;
 }
 
 function initials(name) {
@@ -64,28 +66,6 @@ function byFullName(a, b) {
 }
 
 /* ---------------- small UI ---------------- */
-
-function TeamTogglePill({ abbr, selected, onPress, colors }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: selected ? colors.primary : colors.border,
-        backgroundColor: selected ? colors.card : colors.background,
-      }}
-    >
-      <TeamLogo abbr={abbr} size={20} />
-      {/* ✅ PAS de Text abbr ici si tu veux éviter le doublon */}
-    </TouchableOpacity>
-  );
-}
 
 function TopBar({ title, subtitle, onBack, onClose, colors }) {
   return (
@@ -149,7 +129,10 @@ function TopBar({ title, subtitle, onBack, onClose, colors }) {
   );
 }
 
-function TeamBadge({ abbr, colors }) {
+function TeamBadge({ abbr, sport = "NHL", colors }) {
+  const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
+  const team = lookupTeamByAbbr(league, abbr);
+
   return (
     <View
       style={{
@@ -164,12 +147,12 @@ function TeamBadge({ abbr, colors }) {
         overflow: "hidden",
       }}
     >
-      <TeamLogo abbr={abbr} size={32} />
+      <TeamLogoBadge team={team} size={32} colors={colors} />
     </View>
   );
 }
 
-const TeamToggle = React.memo(function TeamToggle({ away, home, value, onChange, colors }) {
+const TeamToggle = React.memo(function TeamToggle({ away, home, sport = "NHL", value, onChange, colors }) {
   return (
     <View
       style={{
@@ -202,7 +185,7 @@ const TeamToggle = React.memo(function TeamToggle({ away, home, value, onChange,
               backgroundColor: selected ? colors.card : colors.card2,
             }}
           >
-            <TeamBadge abbr={t} colors={colors} />
+            <TeamBadge abbr={t} sport={sport} colors={colors} />
           </TouchableOpacity>
         );
       })}
@@ -217,14 +200,19 @@ const PlayerRow = React.memo(function PlayerRow({
   onPick,
   colors,
   selectedPlayerId,
+  league,
+  seasonPair,
 }) {
   const uri = item.headshotUrl || item.headshot || null;
   const name = item.fullName || item.name || item.id;
 
-  const injuryStatus = String(item?.injury?.status || "").toLowerCase();
-  const injurySource = String(item?.injury?.source || "").toLowerCase();
-  const isOut = injuryStatus === "out" && injurySource === "espn";
-  const isPicked = !!(selectedPlayerId && String(selectedPlayerId) === String(item?.id));
+  const injuryInfo = getInjuryDisplay(item?.injury);
+  const isPicked = !!(
+    selectedPlayerId &&
+    (String(selectedPlayerId) === String(item?.id) ||
+      String(selectedPlayerId) === String(item?.playerId))
+  );
+  const statLines = getPlayerSeasonStatLines(item, league, seasonPair);
 
   return (
     <TouchableOpacity
@@ -239,7 +227,7 @@ const PlayerRow = React.memo(function PlayerRow({
         backgroundColor: isPicked ? colors.card2 : colors.card,
         opacity: disabled ? 0.55 : 1,
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "flex-start",
         gap: 12,
       }}
     >
@@ -269,14 +257,26 @@ const PlayerRow = React.memo(function PlayerRow({
             {name}
           </Text>
 
-          {isOut ? (
-            <Ionicons name="medkit" size={14} color={colors.danger || "#E53935"} />
+          {injuryInfo?.showIcon ? (
+            <Ionicons
+              name="medkit"
+              size={14}
+              color={
+                injuryInfo.tone === "danger"
+                  ? colors.danger || "#E53935"
+                  : colors.warning || "#FB8C00"
+              }
+            />
           ) : null}
 
           {isPicked ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
         </View>
 
-        {isPicked ? (
+        {item?.positionCode ? (
+          <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2, fontWeight: "700" }}>
+            {item.positionCode}
+          </Text>
+        ) : isPicked ? (
           <Text
             style={{
               color: colors.danger || "#E53935",
@@ -287,13 +287,38 @@ const PlayerRow = React.memo(function PlayerRow({
           >
             {i18n.t("firstGoal.pick.mySelection", { defaultValue: "Ma sélection" })}
           </Text>
-        ) : (
-          <View style={{ height: 16, marginTop: 2 }} />
-        )}
+        ) : null}
+
+        {injuryInfo ? (
+          <Text
+            style={{
+              color:
+                injuryInfo.tone === "danger"
+                  ? colors.danger || "#E53935"
+                  : colors.warning || "#FB8C00",
+              fontSize: 11,
+              marginTop: 3,
+              fontWeight: "700",
+            }}
+            numberOfLines={2}
+          >
+            {injuryInfo.label}
+            {injuryInfo.short ? ` · ${injuryInfo.short}` : ""}
+          </Text>
+        ) : null}
+
+        {statLines.map((s) => (
+          <View key={s.seasonId} style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 4 }}>
+            <Text style={{ color: colors.text, fontSize: 12, fontWeight: "800" }}>{s.label}</Text>
+            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "600" }}> · {s.line}</Text>
+          </View>
+        ))}
       </View>
 
       {locked ? null : isPicked ? null : (
-        <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+        <View style={{ paddingTop: 4 }}>
+          <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+        </View>
       )}
     </TouchableOpacity>
   );
@@ -345,22 +370,25 @@ export default function FirstGoalPickScreen() {
   const [challenge, setChallenge] = useState(null);
   const [players, setPlayers] = useState([]);
   const [entry, setEntry] = useState(null);
+  const [seasonPair, setSeasonPair] = useState(null);
 
   const [loadingChallenge, setLoadingChallenge] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const cid = String(challengeId || "");
-  const [selectedTeam, setSelectedTeam] = useState(""); // toggle
-
-  /* ---------------- load challenge ---------------- */
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const initialTeamSetRef = useRef(false);
 
   useEffect(() => {
-    // reset quand on change de défi
     setChallenge(null);
     setPlayers([]);
     setEntry(null);
+    setSeasonPair(null);
     setSelectedTeam("");
+    initialTeamSetRef.current = false;
+    setLoadingChallenge(true);
+    setLoadingPlayers(true);
   }, [cid]);
 
   useEffect(() => {
@@ -390,8 +418,6 @@ export default function FirstGoalPickScreen() {
     };
   }, [cid]);
 
-  /* ---------------- load entry ---------------- */
-
   useEffect(() => {
     if (!cid || !user?.uid) return;
 
@@ -407,7 +433,6 @@ export default function FirstGoalPickScreen() {
       },
       (err) => {
         console.warn("[FirstGoalPick] entry snapshot error", err?.code, err?.message);
-        // important: si permission denied, on évite de “bloquer” le pick
         setEntry(null);
       }
     );
@@ -419,42 +444,51 @@ export default function FirstGoalPickScreen() {
     };
   }, [cid, user?.uid]);
 
-  /* ---------------- load players ---------------- */
-
   useEffect(() => {
-
     const home = safeAbbr(challenge?.homeAbbr);
     const away = safeAbbr(challenge?.awayAbbr);
+    const league = getFgcLeague(challenge);
+
     if (!home || !away) return;
 
+    let cancelled = false;
     setLoadingPlayers(true);
 
-    firestore()
-      .collection("nhl_players")
-      .where("teamAbbr", "in", [home, away])
-      .where("active", "==", true)
-      .get()
-      .then((snap) => {
-        const rows = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
+    loadFgcPlayersWithSeasonStats({ league, homeAbbr: home, awayAbbr: away })
+      .then(({ players: rows, seasonPair: pair }) => {
+        if (cancelled) return;
         rows.sort(byFullName);
+        setSeasonPair(pair);
         setPlayers(rows);
       })
       .catch((e) => {
-        console.log("[FirstGoalPick] players error", e?.code, e?.message || e);
+        if (cancelled) return;
+        console.log("[FirstGoalPick] players error", {
+          league,
+          code: e?.code,
+          message: e?.message || String(e),
+        });
+        setPlayers([]);
+        setSeasonPair(null);
       })
-      .finally(() => setLoadingPlayers(false));
-  }, [challenge?.homeAbbr, challenge?.awayAbbr]);
+      .finally(() => {
+        if (!cancelled) setLoadingPlayers(false);
+      });
 
-  /* ---------------- derived ---------------- */
+    return () => {
+      cancelled = true;
+    };
+  }, [challenge?.homeAbbr, challenge?.awayAbbr, challenge?.league, challenge?.fgcMode]);
 
   const derived = useMemo(() => {
     const st = String(challenge?.status || "").toLowerCase();
+    const league = getFgcLeague(challenge);
+
     const statusBlocksPick = ["decided", "closed"].includes(st) || st === "pending";
 
     const startDate = toDateSafe(challenge?.gameStartTimeUTC);
     const startMs = startDate ? startDate.getTime() : null;
 
-    // ✅ Cutoff: 5 minutes before puck drop
     const cutoffMs = startMs != null ? startMs - 5 * 60 * 1000 : null;
     const nowMs = Date.now();
 
@@ -462,9 +496,7 @@ export default function FirstGoalPickScreen() {
     const pastCutoff = cutoffMs != null ? nowMs >= cutoffMs : false;
 
     const hasPicked = !!(entry?.playerId && String(entry.playerId).trim().length > 0);
-
     const locked = statusBlocksPick || pastCutoff || started;
-
     const canEditPick = hasPicked && !locked;
 
     const cutoffDate = cutoffMs != null ? new Date(cutoffMs) : null;
@@ -476,17 +508,31 @@ export default function FirstGoalPickScreen() {
     const headerLine = away && home ? `${away} @ ${home}` : "—";
     const startHm = fmtHmLocal(startDate);
 
+    const chooseOneText =
+      league === "MLB"
+        ? i18n.t("firstGoal.pick.chooseOneMlb", {
+            defaultValue: "Choisis le joueur qui produira le premier point",
+          })
+        : i18n.t("firstGoal.pick.chooseOne", {
+            defaultValue: "Choisis le joueur qui marquera le premier but",
+          });
+
     const subtitle = hasPicked
       ? locked
-        ? `🎯 ${i18n.t("firstGoal.pick.alreadyPicked", { defaultValue: "Ton choix est verrouillé" })}`
-        : `✏️ ${i18n.t("firstGoal.pick.editUntil", { defaultValue: "Tu peux modifier ton choix jusqu’à" })} ${
-            cutoffHm || "" 
-          }`
+        ? `🎯 ${i18n.t("firstGoal.pick.alreadyPicked", {
+            defaultValue: "Ton choix est verrouillé",
+          })}`
+        : `✏️ ${i18n.t("firstGoal.pick.editUntil", {
+            defaultValue: "Tu peux modifier ton choix jusqu’à",
+          })} ${cutoffHm || ""}`
       : locked
-      ? `⏱️ ${i18n.t("firstGoal.pick.locked", { defaultValue: "Le défi est verrouillé" })}`
-      : i18n.t("firstGoal.pick.chooseOne", { defaultValue: "Choisis le joueur qui marquera le premier but" });
+      ? `⏱️ ${i18n.t("firstGoal.pick.locked", {
+          defaultValue: "Le défi est verrouillé",
+        })}`
+      : chooseOneText;
 
     return {
+      league,
       status: st,
       started,
       locked,
@@ -504,66 +550,69 @@ export default function FirstGoalPickScreen() {
     };
   }, [challenge, entry, lang]);
 
-  // init toggle (une seule fois quand on a away/home)
   useEffect(() => {
-    if (selectedTeam) return;
-    if (derived.away) setSelectedTeam(derived.away);
-    else if (derived.home) setSelectedTeam(derived.home);
-  }, [selectedTeam, derived.away, derived.home]);
+    if (!players.length || initialTeamSetRef.current) return;
+
+    const pickedId = entry?.playerId ? String(entry.playerId) : "";
+    if (pickedId) {
+      const picked = players.find(
+        (p) => String(p?.id) === pickedId || String(p?.playerId) === pickedId
+      );
+      const pickedTeam = safeAbbr(picked?.teamAbbr);
+      if (pickedTeam) {
+        setSelectedTeam(pickedTeam);
+        initialTeamSetRef.current = true;
+        return;
+      }
+    }
+
+    if (derived.away) {
+      setSelectedTeam(derived.away);
+      initialTeamSetRef.current = true;
+    } else if (derived.home) {
+      setSelectedTeam(derived.home);
+      initialTeamSetRef.current = true;
+    }
+  }, [players, entry?.playerId, derived.away, derived.home]);
 
   const loading = loadingChallenge || loadingPlayers;
+
+  const activeSeasonPair = seasonPair || { current: "", previous: "" };
 
   const filteredPlayers = useMemo(() => {
     const t = safeAbbr(selectedTeam);
     const pickedId = entry?.playerId ? String(entry.playerId) : "";
+    const league = derived.league;
 
     const base = t ? players.filter((p) => safeAbbr(p?.teamAbbr) === t) : [...players];
 
     base.sort((a, b) => {
-      const aPicked = pickedId && String(a?.id) === pickedId;
-      const bPicked = pickedId && String(b?.id) === pickedId;
+      const aPicked =
+        pickedId && (String(a?.id) === pickedId || String(a?.playerId) === pickedId);
+      const bPicked =
+        pickedId && (String(b?.id) === pickedId || String(b?.playerId) === pickedId);
       if (aPicked && !bPicked) return -1;
       if (!aPicked && bPicked) return 1;
+
+      const statDiff =
+        getPlayerSortValue(b, league, activeSeasonPair) -
+        getPlayerSortValue(a, league, activeSeasonPair);
+      if (statDiff !== 0) return statDiff;
+
+      const aUnavailable = isPlayerUnavailable(a?.injury) ? 1 : 0;
+      const bUnavailable = isPlayerUnavailable(b?.injury) ? 1 : 0;
+      if (aUnavailable !== bUnavailable) return aUnavailable - bUnavailable;
+
       return byFullName(a, b);
     });
 
     return base;
-  }, [players, selectedTeam, entry?.playerId]);
-
-  /* ---------------- actions ---------------- */
+  }, [players, selectedTeam, entry?.playerId, derived.league, activeSeasonPair]);
 
   const goBackOrHome = useCallback(() => {
     if (router.canGoBack?.()) router.back();
     else router.replace("/(drawer)/(tabs)/AccueilScreen");
   }, [router]);
-
-  function deepStripUndefined(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map(deepStripUndefined)
-      .filter((v) => v !== undefined);
-  }
-
-  if (value && typeof value === "object") {
-    // Firestore Timestamp / FieldValue / Date: on retourne tel quel
-    if (typeof value.toDate === "function") return value;
-    if (value instanceof Date) return value;
-
-    const out = {};
-    Object.keys(value).forEach((k) => {
-      const v = deepStripUndefined(value[k]);
-      if (v !== undefined) out[k] = v;
-    });
-    return out;
-  }
-
-  return value === undefined ? undefined : value;
-}
-
-function strOrNull(v) {
-  const s = String(v ?? "").trim();
-  return s ? s : null;
-}
 
   const pickPlayer = useCallback(
     async (p) => {
@@ -576,6 +625,7 @@ function strOrNull(v) {
       const teamAbbr = p?.teamAbbr ? safeAbbr(p.teamAbbr) : null;
       const positionCode = String(p?.positionCode ?? "").trim() || null;
       const headshotUrl = String(p?.headshotUrl ?? p?.headshot ?? "").trim() || null;
+      const league = getFgcLeague(challenge);
 
       if (!playerId) {
         Alert.alert(i18n.t("common.error", { defaultValue: "Erreur" }), "playerId invalide.");
@@ -604,6 +654,7 @@ function strOrNull(v) {
 
         Analytics.submitPick({
           challengeType: "fgc",
+          league,
           challengeId: String(cid),
           playerId: String(playerId),
           teamAbbr: teamAbbr || undefined,
@@ -613,26 +664,24 @@ function strOrNull(v) {
         Alert.alert(
           i18n.t("firstGoal.pick.successTitle", { defaultValue: "Choix enregistré" }),
           isFirst
-            ? i18n.t("firstGoal.pick.successBody", { defaultValue: "Ton choix est enregistré. Bonne chance 🍀" })
-            : i18n.t("firstGoal.pick.updatedBody", { defaultValue: "Ton choix a été mis à jour." })
+            ? i18n.t("firstGoal.pick.successBody", {
+                defaultValue: "Ton choix est enregistré. Bonne chance 🍀",
+              })
+            : i18n.t("firstGoal.pick.updatedBody", {
+                defaultValue: "Ton choix a été mis à jour.",
+              })
         );
       } catch (e) {
-        // RNFirebase callable errors: e.code / e.message
         console.log("[fgcPick] ERROR", e?.code, e?.message || e);
 
-        // messages serveur (HttpsError) remontent souvent en e.message
-        Alert.alert(
-          i18n.t("common.error", { defaultValue: "Erreur" }),
-          String(e?.message || e)
-        );
+        Alert.alert(i18n.t("common.error", { defaultValue: "Erreur" }), String(e?.message || e));
       } finally {
         setSaving(false);
       }
     },
-    [cid, user?.uid] // ✅ dépendances minimales
+    [cid, user?.uid, challenge?.league]
   );
 
-  // ✅ callbacks (TOUJOURS déclarés, avant tout return conditionnel)
   const renderItem = useCallback(
     ({ item }) => (
       <PlayerRow
@@ -642,9 +691,11 @@ function strOrNull(v) {
         onPick={pickPlayer}
         colors={colors}
         selectedPlayerId={entry?.playerId}
+        league={derived.league}
+        seasonPair={activeSeasonPair}
       />
     ),
-    [derived.locked, saving, pickPlayer, colors, entry?.playerId,lang]
+    [derived.locked, derived.league, saving, pickPlayer, colors, entry?.playerId, activeSeasonPair, lang]
   );
 
   const ItemSeparator = useCallback(() => <View style={{ height: 10 }} />, []);
@@ -683,18 +734,32 @@ function strOrNull(v) {
           ) : null}
         </View>
 
+        <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "600", marginTop: 6 }}>
+          {i18n.t("firstGoal.pick.sortedByStats", {
+            defaultValue: "Triés par stats saison en cours",
+          })}
+        </Text>
+
         <TeamToggle
           away={derived.away}
           home={derived.home}
+          sport={derived.league}
           value={selectedTeam}
           onChange={setSelectedTeam}
           colors={colors}
         />
       </View>
     );
-  }, [colors, derived.away, derived.home, derived.startHm, selectedTeam, challenge?.participantsCount,lang]);
-
-  /* ---------------- render ---------------- */
+  }, [
+    colors,
+    derived.away,
+    derived.home,
+    derived.startHm,
+    derived.league,
+    selectedTeam,
+    challenge?.participantsCount,
+    lang,
+  ]);
 
   if (loading || !challenge) {
     return (
@@ -731,6 +796,7 @@ function strOrNull(v) {
 
         <FlatList
           data={filteredPlayers}
+          extraData={`${entry?.playerId || ""}:${selectedTeam}:${derived.league}:${activeSeasonPair.current}`}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
           ItemSeparatorComponent={ItemSeparator}

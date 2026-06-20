@@ -27,8 +27,19 @@ import {
   formatMlbPitcherEraLine,
   formatMlbPitcherNameAndRecord,
 } from "@src/mlb/mlbPitcherDisplayHelpers";
-import { isSlotLocked } from "@src/defis/TeamPredictionBundleHomeCard";
 import { useTpBundleTeamRecords } from "@src/sports/useTeamStandingsLookup";
+import {
+  formatCountdown,
+  fmtTimeShort,
+  getSlotLockedAt,
+  isSlotLocked,
+} from "@src/defis/tpDeadlineHelpers";
+import {
+  formatPickPoints,
+  formatResultWinnerLine,
+  isBundleDecided,
+  isSlotDecided,
+} from "@src/defis/tpBundleDisplayHelpers";
 
 const RED = "#b91c1c";
 
@@ -178,19 +189,111 @@ function canSaveDraft(draft, isMlb) {
   return true;
 }
 
+function MatchLockInfo({ slot, locked, nowTick, colors }) {
+  const lockedAt = getSlotLockedAt(slot);
+  const lockHM = fmtTimeShort(lockedAt);
+
+  if (locked) {
+    return (
+      <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 8 }}>
+        {i18n.t("tp.home.predictionsClosed", {
+          defaultValue: "Prédictions fermées",
+        })}
+      </Text>
+    );
+  }
+
+  if (!lockedAt) return null;
+
+  const countdown = formatCountdown(lockedAt.getTime() - nowTick);
+
+  return (
+    <View style={{ marginBottom: 8, gap: 2 }}>
+      <Text style={{ color: colors.subtext, fontSize: 12 }}>
+        {i18n.t("tp.pick.lockAt", {
+          defaultValue: "Verrouillage : {{time}}",
+          time: lockHM || "—",
+        })}
+      </Text>
+      <Text style={{ color: colors.text, fontSize: 12, fontWeight: "800" }}>
+        {i18n.t("tp.pick.lockCountdown", {
+          defaultValue: "Il te reste {{time}} pour enregistrer ce match",
+          time: countdown,
+        })}
+      </Text>
+    </View>
+  );
+}
+
+function MatchResultBanner({ slot, league, colors }) {
+  const line = formatResultWinnerLine(slot, league);
+  if (!line) return null;
+
+  return (
+    <View
+      style={{
+        marginBottom: 10,
+        padding: 10,
+        borderRadius: 12,
+        backgroundColor: "rgba(59,130,246,0.10)",
+        borderWidth: 1,
+        borderColor: colors.border,
+      }}
+    >
+      <Text style={{ color: "#2563eb", fontWeight: "900", fontSize: 13 }}>
+        {i18n.t("tp.pick.resultConfirmed", {
+          defaultValue: "Résultat : {{line}}",
+          line,
+        })}
+      </Text>
+    </View>
+  );
+}
+
+function MatchPointsLine({ pickResult, colors }) {
+  const pointsLine = formatPickPoints(pickResult);
+  const winnerCorrect = !!pickResult?.winnerCorrect;
+  const exactScoreCorrect = !!pickResult?.exactScoreCorrect;
+
+  if (!pickResult) {
+    return (
+      <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8 }}>
+        {i18n.t("tp.pick.noPickForMatch", { defaultValue: "Tu n'as pas participé à ce match." })}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={{ marginTop: 10, gap: 4 }}>
+      <Text style={{ color: colors.text, fontSize: 13, fontWeight: "800" }}>
+        {winnerCorrect
+          ? exactScoreCorrect
+            ? i18n.t("tp.pick.perfectPick", { defaultValue: "Score exact!" })
+            : i18n.t("tp.pick.winnerCorrect", { defaultValue: "Bon gagnant" })
+          : i18n.t("tp.pick.winnerWrong", { defaultValue: "Mauvais gagnant" })}
+        {pointsLine ? ` · ${pointsLine}` : ""}
+      </Text>
+    </View>
+  );
+}
+
 function BundleMatchPickSection({
   slot,
   league,
   draft,
+  savedPick,
+  pickResult,
   onChangeDraft,
   onSave,
   saving,
   colors,
   formatTeamLine,
+  nowTick,
 }) {
   const isMlb = league === "MLB";
   const gameId = String(slot?.gameId || "");
-  const locked = isSlotLocked(slot);
+  const decided = isSlotDecided(slot);
+  const locked = decided || isSlotLocked(slot);
   const awayAbbr = String(slot?.awayAbbr || "");
   const homeAbbr = String(slot?.homeAbbr || "");
   const awayTeam = lookupTeamByAbbr(league, awayAbbr);
@@ -220,12 +323,66 @@ function BundleMatchPickSection({
             n: slot?.slot || "—",
           })}
         </Text>
-        {locked ? (
+        {decided ? (
+          <Text style={{ color: "#2563eb", fontWeight: "900", fontSize: 12 }}>
+            {i18n.t("tp.pick.decided", { defaultValue: "Terminé" })}
+          </Text>
+        ) : locked ? (
           <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
             {i18n.t("tp.pick.locked", { defaultValue: "Verrouillé" })}
           </Text>
         ) : null}
       </View>
+
+      {decided ? (
+        <>
+          <MatchResultBanner slot={slot} league={league} colors={colors} />
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <View style={{ flex: 1, alignItems: "center", gap: 8 }}>
+              <TeamLogoBadge team={awayTeam} size={40} colors={colors} />
+              <Text style={{ color: colors.text, fontWeight: "900" }}>{awayAbbr}</Text>
+              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 28 }}>
+                {slot?.officialResult?.awayScore ?? "—"}
+              </Text>
+              {savedPick ? (
+                <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                  {i18n.t("tp.pick.yourPick", { defaultValue: "Toi" })}: {draft.away || "—"}
+                </Text>
+              ) : null}
+            </View>
+
+            <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 20 }}>-</Text>
+
+            <View style={{ flex: 1, alignItems: "center", gap: 8 }}>
+              <TeamLogoBadge team={homeTeam} size={40} colors={colors} />
+              <Text style={{ color: colors.text, fontWeight: "900" }}>{homeAbbr}</Text>
+              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 28 }}>
+                {slot?.officialResult?.homeScore ?? "—"}
+              </Text>
+              {savedPick ? (
+                <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                  {i18n.t("tp.pick.yourPick", { defaultValue: "Toi" })}: {draft.home || "—"}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <MatchPointsLine pickResult={pickResult} colors={colors} />
+        </>
+      ) : (
+        <>
+      <MatchLockInfo
+        slot={slot}
+        locked={locked}
+        nowTick={nowTick}
+        colors={colors}
+      />
 
       <View
         style={{
@@ -324,6 +481,8 @@ function BundleMatchPickSection({
           )}
         </TouchableOpacity>
       ) : null}
+        </>
+      )}
     </View>
   );
 }
@@ -339,6 +498,12 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
   const [entry, setEntry] = useState(null);
   const [draftByGameId, setDraftByGameId] = useState({});
   const [savingGameId, setSavingGameId] = useState(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const league = useMemo(() => {
     if (!bundle?.league) return null;
@@ -454,6 +619,9 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
 
   const picksCompletedCount = Number(entry?.picksCompletedCount || 0);
   const gameCount = Number(bundle?.gameCount || games.length || 0);
+  const totalPoints = Number(entry?.totalPoints ?? 0);
+  const showResults = isBundleDecided(bundle);
+  const pickResults = entry?.pickResults || {};
 
   return (
     <>
@@ -481,9 +649,11 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
             >
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Text style={{ flex: 1, color: colors.text, fontSize: 20, fontWeight: "900" }}>
-                  {i18n.t("tp.pick.screenTitle", {
-                    defaultValue: "Défi - Prédire l'issue du match",
-                  })}
+                  {showResults
+                    ? i18n.t("tp.pick.resultsTitle", { defaultValue: "Résultats du défi" })
+                    : i18n.t("tp.pick.screenTitle", {
+                        defaultValue: "Défi - Prédire l'issue du match",
+                      })}
                 </Text>
                 <TouchableOpacity
                   onPress={() => router.back()}
@@ -503,11 +673,16 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
               </View>
 
               <Text style={{ color: colors.subtext, marginTop: 6 }}>
-                {i18n.t("tp.pick.bundleProgress", {
-                  defaultValue: "{{done}}/{{total}} matchs complétés",
-                  done: picksCompletedCount,
-                  total: gameCount,
-                })}
+                {showResults
+                  ? i18n.t("tp.pick.myTotalPoints", {
+                      defaultValue: "Ton total : {{points}} pt(s)",
+                      points: totalPoints,
+                    })
+                  : i18n.t("tp.pick.bundleProgress", {
+                      defaultValue: "{{done}}/{{total}} matchs complétés",
+                      done: picksCompletedCount,
+                      total: gameCount,
+                    })}
               </Text>
             </View>
 
@@ -521,6 +696,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
               {games.map((slot) => {
                 const gameId = String(slot.gameId);
                 const draft = draftByGameId[gameId] || emptyDraftPick();
+                const savedPick = entry?.picks?.[gameId] || null;
 
                 return (
                   <BundleMatchPickSection
@@ -528,7 +704,10 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                     slot={slot}
                     league={league}
                     draft={draft}
+                    savedPick={savedPick}
+                    pickResult={pickResults[gameId]}
                     formatTeamLine={formatTeamLine}
+                    nowTick={nowTick}
                     onChangeDraft={(nextDraft) =>
                       setDraftByGameId((prev) => ({ ...prev, [gameId]: nextDraft }))
                     }

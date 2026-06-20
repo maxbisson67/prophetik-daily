@@ -13,6 +13,10 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import FirstGoalChallengeModal from "@src/firstGoal/FirstGoalChallengeModal";
+import {
+  getFgcResultPlayerName,
+  getFgcResultPrefix,
+} from "@src/firstGoal/fgcChallengeUtils";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
@@ -355,8 +359,8 @@ function GameRow({ game, onPress, colors, challenges = [], onPressChallenge, gro
 
             const chResult =
               chStatus === "decided" || chStatus === "closed"
-                ? ch?.firstGoal?.playerName
-                  ? `${i18n.t("firstGoal.result.prefix", { defaultValue: "Premier but:" })} ${ch.firstGoal.playerName}`
+                ? getFgcResultPlayerName(ch)
+                  ? `${getFgcResultPrefix(ch, i18n.t.bind(i18n))} ${getFgcResultPlayerName(ch)}`
                   : i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })
                 : null;
 

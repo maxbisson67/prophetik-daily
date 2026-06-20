@@ -83,6 +83,7 @@ export { createTeamPredictionBundle } from "./teamPredictionBundles/createTeamPr
 export { getTeamPredictionBundleForHome } from "./teamPredictionBundles/getTeamPredictionBundleForHome.js";
 export { submitTeamPredictionBundleEntry } from "./teamPredictionBundles/submitTeamPredictionBundleEntry.js";
 export { resolveTeamPredictionBundleResults } from "./teamPredictionBundles/resolveTeamPredictionBundleResults.js";
+export { resolveTeamPredictionBundleNow } from "./teamPredictionBundles/resolveTeamPredictionBundleNow.js";
 
 
 

@@ -5,6 +5,11 @@ import { onCall } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import {
+  getNhlCurrentSeasonId,
+  getNhlSeasonPair,
+} from "./players/seasonHelpers.js";
+import { denormNhlStatsSeason } from "./players/playerStatsDenorm.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -16,11 +21,7 @@ const PAGE_SIZE = 100;
  *  Règle: à partir de juillet => saison (YYYY)(YYYY+1), avant juillet => (YYYY-1)(YYYY)
  */
 function getCurrentSeasonId(date = new Date()) {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + 1; // jan=1
-  const startYear = month >= 7 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `${startYear}${endYear}`;
+  return getNhlCurrentSeasonId(date);
 }
 
 /** 🧰 Construit l’URL pour une page donnée */
@@ -336,8 +337,25 @@ async function ingestSeason(seasonId) {
   const rows = await fetchAllSkatersForSeason(seasonId);
   logger.info("NHL ingest fetched", { seasonId, count: rows.length });
   const written = await upsertStatsToFirestore(rows, seasonId);
-  logger.info("NHL ingest done", { seasonId, written, ms: Date.now() - t0 });
-  return { seasonId, written };
+  const denorm = await denormNhlStatsSeason(rows, seasonId);
+  logger.info("NHL ingest done", {
+    seasonId,
+    written,
+    denormWritten: denorm.written,
+    ms: Date.now() - t0,
+  });
+  return { seasonId, written, denorm };
+}
+
+async function ingestSeasons(seasonIds = []) {
+  const unique = [...new Set(seasonIds.map((s) => String(s).trim()).filter(Boolean))];
+  const results = [];
+
+  for (const seasonId of unique) {
+    results.push(await ingestSeason(seasonId));
+  }
+
+  return { ok: true, seasons: unique, results };
 }
 
 /* ===================== EXPORTED FUNCTIONS ===================== */
@@ -346,21 +364,25 @@ async function ingestSeason(seasonId) {
 export const ingestSkaterStatsForSeason = onCall(
   { region: "us-central1", timeoutSeconds: 540 },
   async (req) => {
-    // Tu peux passer { seasonId } ou laisser auto-détection
-    const seasonId = String(req.data?.seasonId || getCurrentSeasonId());
+    const includePrevious = req.data?.includePrevious !== false;
+    const pair = getNhlSeasonPair();
+
+    if (includePrevious) {
+      return ingestSeasons([pair.current, pair.previous]);
+    }
+
+    const seasonId = String(req.data?.seasonId || pair.current);
     return ingestSeason(seasonId);
   }
 );
 
-/** 🕗 Cron quotidienne 8h (America/Toronto) sur la saison courante détectée */
+/** 🕗 Cron quotidienne 8h (America/Toronto) — saison courante + précédente */
 export const cronIngestSkaterStatsDaily = onSchedule(
   { schedule: "0 8 * * *", timeZone: "America/Toronto", region: "us-central1" },
-  // every 5 minutes
-  //  0 8 * * * 
   async () => {
-    const seasonId = getCurrentSeasonId();
-    logger.info("cronIngestSkaterStatsDaily running", { seasonId });
-    return ingestSeason(seasonId);
+    const pair = getNhlSeasonPair();
+    logger.info("cronIngestSkaterStatsDaily running", pair);
+    return ingestSeasons([pair.current, pair.previous]);
   }
 );
 

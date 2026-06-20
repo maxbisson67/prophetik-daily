@@ -21,7 +21,11 @@
       "dot": "▫️ ",
       "tomorrow":"Demain",
       "today":"Aujourd'hui",
-      "confirm":"Confirmer"
+      "confirm":"Confirmer",
+      "participate": "Participer",
+      "participants": "participant(s)",
+      "participant": "Participant",
+      "me": "Toi"
     },
     "errors": {
       "firestorePermission": "Accès refusé par les règles Firestore."
@@ -292,13 +296,14 @@
     },
     "firstGoal": {
       "home": {
-        "title": "Défis premier but",
+        "title": "Premier but",
         "empty": "Aucun défi premier but aujourd'hui dans tes groupes",
         "signupDeadline": "Heure limite d'inscription",
         "signupClosed": "Fermé",
         "viewResults": "Voir les résultats",
         "viewParticipants": "Voir les participants",
         "viewPicks": "Voir les choix",
+        "noWinner": "Aucun gagnant",
         "infoTitle":"Comment fonctionne ce défi?",
         "infoBody":"• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 5 points seront alloués à celui qui a prédit le bon joueur."
       },
@@ -356,13 +361,16 @@
         "viewPick": "Voir mon choix",
         "join": "Participer",
         "noWinner": "Aucun gagnant",
+        "noEntriesYet": "Aucune participation encore.",
+        "picksTitle": "Participants & choix",
         "pending": "Provisoire / en révision NHL…",
         "locked": "Verrouillé (avant-match)",
         "open": "Ouvert"
       },
       "cta":{
         "matchLive": "En direct",
-        "pickScorer": "Choisir mon joueur"
+        "pickScorer": "Choisir mon joueur",
+        "modifyPick": "Modifier mon joueur"
       },
       "firstRbi": {
         "title": "Premier point produit",
@@ -1217,6 +1225,19 @@
       "streakOnFire": "SÉRIE EN FEU",
       "streakBestShort": "À BATTRE",
       "daysLabel": "JOURS",
+      "myPoints": "Mes points: {{points}}",
+      "myRank": "Ma position: {{rank}}",
+      "statsStreakTitle": "SÉRIE",
+      "statsStreakSubtitle": "EN FEU",
+      "statsPointsTitle": "POINTS",
+      "statsPointsSubtitle": "MES POINTS",
+      "statsRankTitle": "RANG",
+      "statsRankSubtitle": "MA POSITION",
+      "statsDayPill": "JOUR",
+      "statsPointsPill": "POINTS",
+      "statsPositionPill": "POSITION",
+      "statsFooterPrefix": "Continue comme ça !",
+      "statsFooterEmphasis": "Bats ta meilleure série !",
       "days": "{{count}} j",
       "seeAll": "Voir tous les badges",
       "locked": "Verrouillé",
@@ -1539,12 +1560,75 @@
       "finalSo": "Final • TDB"
     }
   },
+  "challenges": {
+    "todayTitle": "Aujourd'hui",
+    "yesterdayTitle": "Hier",
+    "todayDaySummary": "Défis disponibles aujourd'hui",
+    "pastDaySummary": "Résultats des défis de cette journée",
+    "todayCompactSummary": "{{joined}} / {{total}} défis rejoints aujourd'hui",
+    "goToAccueil": "Participer aux défis du jour",
+    "loginToSee": "Connecte-toi pour voir les défis.",
+    "loadingChallenges": "Chargement des défis…",
+    "noChallenges": "Aucun défi à afficher.",
+    "seeResults": "Voir les résultats",
+    "openChallenge": "Ouvrir",
+    "viewParticipants": "Voir les participants",
+    "noWinner": "Aucun gagnant",
+    "winnersTitleSingular": "Gagnant",
+    "winnersTitlePlural": "Gagnants",
+    "signupDeadlineLabel": "Heure limite",
+    "potWon": "Cagnotte gagnée",
+    "myPick": "Mon choix",
+    "myPickShort": "Moi",
+    "myPointsEarned": "Mes points",
+    "notJoined": "Non inscrit",
+    "viewOtherParticipantsPicks": "Voir les choix des autres participants",
+    "youSuffix": "(toi)",
+    "tpBundleJoined": "{{done}}/{{total}} matchs prédits",
+    "joined": "Inscrit",
+    "matchCountShort": "{{count}} match(s)",
+    "signupDeadlineShort": "Limite",
+    "noPickForMatch": "Aucune prédiction",
+    "pointsShort": "pt(s)",
+    "status": {
+      "active": "Actif",
+      "awaiting": "En attente",
+      "cancelledGhost": "Annulé",
+      "completed": "Terminé"
+    }
+  },
   "tp": {
     "home": {
-      "title": "Prédire l'issue des matchs"
+      "title": "Prédire l'issue des matchs",
+      "subtitleEmpty": "Choisis le gagnant et le pointage exact.",
+      "infoTitle": "Comment fonctionne ce défi?",
+      "infoBody": "Choisis le pointage des confrontations proposées et cumule des points pour chaque bonne prédiction. Avec la bonne prédiction du pointage, cumule encore plus de points.",
+      "infoLockHint": "Chaque match se verrouille 5 minutes avant le début. Tu peux compléter tes prédictions progressivement.",
+      "participateBeforePrefix": "Participer avant",
+      "nextLockMatch": "Prochain verrouillage : Match {{n}}",
+      "nextLockMatchWithMatchup": "Prochain verrouillage : Match {{n}} · {{matchup}}",
+      "predictionsClosed": "Prédictions fermées",
+      "bundleTitle": "{{count}} match(s) à prédire",
+      "myTotalPoints": "Ton total : {{points}} pt(s)",
+      "myPickShort": "Toi",
+      "seeResults": "Voir le résultat",
+      "modifyTeams": "Modifier mes équipes",
+      "resultsAvailable": "Résultats disponibles",
+      "bundleProgress": "{{done}}/{{total}} prédictions complétées",
+      "viewPredictions": "Voir les prédictions"
+    },
+    "pick": {
+      "lockAt": "Verrouillage : {{time}}",
+      "lockCountdown": "Il te reste {{time}} pour enregistrer ce match"
     },
     "live": {
       "title": "Prédire l'issue des matchs"
+    },
+    "results": {
+      "officialScore": "Résultat",
+      "myTotalPoints": "Mon total : {{points}} pt(s)",
+      "participantsModalSubtitle": "{{count}} match(s) · classement par points",
+      "participantStats": "{{winners}} bon(s) choix(s) · {{exact}} pointage(s) exact(s)"
     },
     "create": {
       "title": "Prédire l'issue des matchs",

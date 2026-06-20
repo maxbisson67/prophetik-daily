@@ -4,6 +4,9 @@ import firestore from "@react-native-firebase/firestore";
 import * as Application from "expo-application";
 import i18n from "@src/i18n/i18n";
 
+/** Désactivé temporairement — remettre à true quand la section sera retravaillée */
+export const APP_UPDATE_BANNER_ENABLED = false;
+
 function normalizeVersion(v) {
   return String(v || "")
     .trim()
@@ -30,6 +33,12 @@ export default function useAppUpdateCheck() {
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
+    if (!APP_UPDATE_BANNER_ENABLED) {
+      setLoading(false);
+      setConfig(null);
+      return;
+    }
+
     const ref = firestore().doc("app_config/mobile");
 
     const unsub = ref.onSnapshot(
@@ -61,11 +70,13 @@ export default function useAppUpdateCheck() {
   const minVersion = String(config?.minVersion || "");
 
   const updateAvailable = useMemo(() => {
+    if (!APP_UPDATE_BANNER_ENABLED) return false;
     if (!latestVersion) return false;
     return compareVersions(currentBuildVersion, latestVersion) < 0;
   }, [currentBuildVersion, latestVersion]);
 
   const forceUpdate = useMemo(() => {
+    if (!APP_UPDATE_BANNER_ENABLED) return false;
     if (!minVersion) return false;
     return config?.forceUpdate === true || compareVersions(currentBuildVersion, minVersion) < 0;
   }, [config?.forceUpdate, currentBuildVersion, minVersion]);

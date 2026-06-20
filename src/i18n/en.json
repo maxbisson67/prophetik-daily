@@ -22,7 +22,11 @@
     "dot": "▫️ ",
     "tomorrow":"Tomorrow",
     "today":"Today",
-    "confirm":"Confirm"
+    "confirm":"Confirm",
+    "participate": "Join",
+    "participants": "participant(s)",
+    "participant": "Participant",
+    "me": "You"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -299,13 +303,14 @@
   },
   "firstGoal": {
     "home": {
-      "title": "Challenges First goal",
+      "title": "First goal",
       "empty": "No first-goal challenge in your groups today",
       "signupDeadline": "Registration deadline",
       "signupClosed": "Closed",
       "viewResults": "View results",
       "viewParticipants": "View participants",
       "viewPicks": "View picks",
+      "noWinner": "No winner",
       "infoTitle":"How does this challenge work?",
       "infoBody":"• Choose the player who will score the first goal or first run batted in of the game.\n• 5 points are awarded to the participant who correctly predicts the scorer."
     },
@@ -364,13 +369,16 @@
       "viewPick": "View my pick",
       "join": "Join",
       "noWinner": "No winner",
+      "noEntriesYet": "No entries yet.",
+      "picksTitle": "Participants & picks",
       "pending": "Provisional / under NHL review…",
       "locked": "Locked (pre-game)",
       "open": "Open"
     },
     "cta":{
         "matchLive": "Match Live",
-        "pickScorer": "Choose my player"
+        "pickScorer": "Choose my player",
+        "modifyPick": "Change my pick"
      },
     "firstRbi": {
       "title": "First run batted in",
@@ -1233,6 +1241,19 @@
     "streakOnFire": "STREAK ON FIRE",
     "streakBestShort": "TO BEAT",
     "daysLabel": "DAYS",
+    "myPoints": "My points: {{points}}",
+    "myRank": "My rank: {{rank}}",
+    "statsStreakTitle": "STREAK",
+    "statsStreakSubtitle": "ON FIRE",
+    "statsPointsTitle": "POINTS",
+    "statsPointsSubtitle": "MY POINTS",
+    "statsRankTitle": "RANK",
+    "statsRankSubtitle": "MY POSITION",
+    "statsDayPill": "DAY",
+    "statsPointsPill": "POINTS",
+    "statsPositionPill": "POSITION",
+    "statsFooterPrefix": "Keep it up!",
+    "statsFooterEmphasis": "Beat your best streak!",
     "days": "{{count}} d",
     "seeAll": "See all badges",
     "locked": "Locked",
@@ -1333,7 +1354,7 @@
   "tabs": {
     "today": "Today",
     "groups": "Groups",
-    "challenges": "My Challenges",
+    "challenges": "My results",
     "leaderboard": "Leaderboard",
     "matchLive": "Live game",
     "help":"Help"
@@ -1556,12 +1577,75 @@
       "finalSo": "Final • SO"
     }
   },
+  "challenges": {
+    "todayTitle": "Today",
+    "yesterdayTitle": "Yesterday",
+    "todayDaySummary": "Challenges available today",
+    "pastDaySummary": "Results for this day",
+    "todayCompactSummary": "{{joined}} / {{total}} challenges joined today",
+    "goToAccueil": "Join today's challenges",
+    "loginToSee": "Log in to see your challenges.",
+    "loadingChallenges": "Loading challenges…",
+    "noChallenges": "No challenges to display.",
+    "seeResults": "See results",
+    "openChallenge": "Open",
+    "viewParticipants": "View participants",
+    "noWinner": "No winner",
+    "winnersTitleSingular": "Winner",
+    "winnersTitlePlural": "Winners",
+    "signupDeadlineLabel": "Deadline",
+    "potWon": "Pot won",
+    "myPick": "My pick",
+    "myPickShort": "Me",
+    "myPointsEarned": "My points",
+    "notJoined": "Not joined",
+    "viewOtherParticipantsPicks": "See other participants' picks",
+    "youSuffix": "(you)",
+    "tpBundleJoined": "{{done}}/{{total}} games predicted",
+    "joined": "Joined",
+    "matchCountShort": "{{count}} game(s)",
+    "signupDeadlineShort": "Deadline",
+    "noPickForMatch": "No prediction",
+    "pointsShort": "pt(s)",
+    "status": {
+      "active": "Active",
+      "awaiting": "Pending",
+      "cancelledGhost": "Cancelled",
+      "completed": "Completed"
+    }
+  },
   "tp": {
     "home": {
-      "title": "Predict match outcomes"
+      "title": "Predict match outcomes",
+      "subtitleEmpty": "Pick the winner and exact score.",
+      "infoTitle": "How does this challenge work?",
+      "infoBody": "Pick the scores for the matchups offered and earn points for each correct prediction. Predict the exact score correctly to earn even more points.",
+      "infoLockHint": "Each match locks 5 minutes before puck/ball drop. You can complete your predictions one match at a time.",
+      "participateBeforePrefix": "Participate before",
+      "nextLockMatch": "Next lock: Match {{n}}",
+      "nextLockMatchWithMatchup": "Next lock: Match {{n}} · {{matchup}}",
+      "predictionsClosed": "Predictions closed",
+      "bundleTitle": "{{count}} game(s) to predict",
+      "myTotalPoints": "Your total: {{points}} pt(s)",
+      "myPickShort": "You",
+      "seeResults": "See results",
+      "modifyTeams": "Edit my picks",
+      "resultsAvailable": "Results available",
+      "bundleProgress": "{{done}}/{{total}} predictions completed",
+      "viewPredictions": "View predictions"
+    },
+    "pick": {
+      "lockAt": "Locks at {{time}}",
+      "lockCountdown": "{{time}} left to save this match"
     },
     "live": {
       "title": "Predict match outcomes"
+    },
+    "results": {
+      "officialScore": "Result",
+      "myTotalPoints": "My total: {{points}} pt(s)",
+      "participantsModalSubtitle": "{{count}} game(s) · ranked by points",
+      "participantStats": "{{winners}} correct pick(s) · {{exact}} exact score(s)"
     },
     "create": {
       "title": "Predict match outcomes",

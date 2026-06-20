@@ -6,6 +6,8 @@ import i18n from "@src/i18n/i18n";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
 import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
+import { useTheme } from "@src/theme/ThemeProvider";
+import StreakHeroCard from "@src/achievements/components/StreakHeroCard";
 
 const ASC4_ICON = require("@src/assets/asc4.png");
 
@@ -16,9 +18,7 @@ export default function ProfileHeaderCard({
   jerseyFrontUrl,
   jerseyBackUrl,
   displayName,
-  points,
   onEditAvatar,
-  onPressPoints,
   onCreateDefi,
   onCreateAscension,
   onCreateFirstGoal,
@@ -26,9 +26,16 @@ export default function ProfileHeaderCard({
   groups = [],
   currentGroupId,
   onSelectGroup,
-  roleBadge,
+  stats,
+  achievements,
+  onPressProgression,
+  groupSummary = null,
 }) {
+  const { isDark } = useTheme();
   const RED = "#b91c1c";
+
+  const avatarFrameBg = isDark ? colors.background : "#f3f4f6";
+  const avatarFrameBorder = isDark ? colors.border : "#eee";
 
   const baseBtn = {
     paddingVertical: 10,
@@ -81,8 +88,8 @@ export default function ProfileHeaderCard({
                 height: 120,
                 borderRadius: 20,
                 borderWidth: 3,
-                borderColor: "#eee",
-                backgroundColor: "#f3f4f6",
+                borderColor: avatarFrameBorder,
+                backgroundColor: avatarFrameBg,
                 overflow: "hidden",
                 alignItems: "center",
                 justifyContent: "center",
@@ -91,11 +98,10 @@ export default function ProfileHeaderCard({
             <JerseyFlipAvatar
               frontUrl={jerseyFrontUrl}
               backUrl={jerseyBackUrl}
-              roleBadge={roleBadge}
               size={140}
               pauseMs={2800}
               flipDurationMs={1100}
-              backgroundColor="transparent"
+              backgroundColor={avatarFrameBg}
             />
             </View>
           ) : (
@@ -110,8 +116,8 @@ export default function ProfileHeaderCard({
                 height: AVATAR_SIZE,
                 borderRadius: 60,
                 borderWidth: 3,
-                borderColor: "#eee",
-                backgroundColor: "#f3f4f6",
+                borderColor: avatarFrameBorder,
+                backgroundColor: avatarFrameBg,
               }}
             />
           )}
@@ -141,6 +147,17 @@ export default function ProfileHeaderCard({
         >
           {i18n.t("home.hello")} {displayName || "—"}
         </Text>
+      </View>
+
+      <View style={{ marginTop: 10, marginBottom: 4, alignSelf: "stretch" }}>
+        <StreakHeroCard
+          stats={stats}
+          achievements={achievements}
+          onPress={onPressProgression}
+          embedded
+          showBadgesHint={false}
+          groupSummary={groupSummary}
+        />
       </View>
 
       {/* Sélecteur de groupe */}

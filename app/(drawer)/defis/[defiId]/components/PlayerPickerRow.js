@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import { formatMlbOpponentPitcherLine } from "@src/mlb/mlbPitcherDisplayHelpers";
 
 function num(v) {
   const n = Number(v);
@@ -172,6 +173,12 @@ export default function PlayerPickerRow({
               {g}-{a}-{p}
               {!isFree && ppg ? ` • PPG ${ppg}` : ""}
             </Text>
+
+            {value?.opponentProbablePitcher ? (
+              <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 12 }}>
+                {formatMlbOpponentPitcherLine(value.opponentProbablePitcher, i18n.t.bind(i18n))}
+              </Text>
+            ) : null}
 
             {/* Ligne 3: matchup (✅ PRO/VIP seulement) */}
             {canShowMatchup ? (

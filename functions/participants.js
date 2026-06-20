@@ -4,6 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { APP_TZ, toYmdInTz, addDaysToYmd } from "./ProphetikDate.js";
 
 import { db, FieldValue, logger, readAnyBalance } from "./utils.js";
+import { ensureParticipantProgressionFields } from "./achievements/achievementService.js";
 import { grantCreditsTx } from "./credits/grantCredits.js";
 
 const TZ = "America/Toronto";
@@ -113,6 +114,8 @@ export const onParticipantCreate = onDocumentCreated(
         );
       }
     });
+
+    await ensureParticipantProgressionFields(uid);
 
     logger.info("onParticipantCreate:done", {
       uid,

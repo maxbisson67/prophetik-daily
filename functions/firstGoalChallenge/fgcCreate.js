@@ -57,7 +57,8 @@ export const fgcCreate = onCall(
 
     const data = req.data || {};
     const groupId = str(data.groupId);
-    const league = str(data.league || "NHL") || "NHL";
+    const league = str(data.league || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
+    const fgcMode = league === "MLB" ? "first_rbi" : "first_goal";
 
     const gameId = str(data.gameId);
     const homeAbbr = safeAbbr(data.homeAbbr);
@@ -95,9 +96,11 @@ export const fgcCreate = onCall(
         tx.set(chRef, {
           type: "first_goal",
           league,
+          fgcMode,
 
           groupId,
           gameId,
+          ...(league === "MLB" ? { gamePk: String(gameId) } : {}),
           gameYmd,
 
           homeAbbr,
@@ -120,8 +123,12 @@ export const fgcCreate = onCall(
       });
 
       if (!out.alreadyExisted) {
-        const title = "Premier but — Nouveau défi";
-        const body = `${awayAbbr} vs ${homeAbbr} • Fais ton choix avant le début du match.`;
+        const title =
+          league === "MLB" ? "Premier point produit — Nouveau défi" : "Premier but — Nouveau défi";
+        const body =
+          league === "MLB"
+            ? `${awayAbbr} vs ${homeAbbr} • Fais ton choix avant le début du match.`
+            : `${awayAbbr} vs ${homeAbbr} • Fais ton choix avant le début du match.`;
 
         const pushData = {
           action: "OPEN_FGC",

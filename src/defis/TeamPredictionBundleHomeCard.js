@@ -1,94 +1,37 @@
 // src/defis/TeamPredictionBundleHomeCard.js
 
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
-
-function toDateAny(ts) {
-  if (!ts) return null;
-  try {
-    if (typeof ts?.toDate === "function") return ts.toDate();
-    if (ts instanceof Date) return ts;
-    const d = new Date(ts);
-    if (!d || Number.isNaN(d.getTime())) return null;
-    return d;
-  } catch {
-    return null;
-  }
-}
-
-function fmtTimeShort(ts) {
-  const d = toDateAny(ts);
-  if (!d || Number.isNaN(d.getTime?.())) return null;
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
+import { getEarliestOpenSlot, isSlotLocked } from "@src/defis/tpDeadlineHelpers";
+import {
+  formatPickPoints,
+  formatResultWinnerLine,
+  formatTpPickLine,
+  isBundleDecided,
+  isSlotDecided,
+} from "@src/defis/tpBundleDisplayHelpers";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function formatTpPickLine(pick, league = "NHL") {
-  if (!pick) return null;
-  const away = pick.predictedAwayScore;
-  const home = pick.predictedHomeScore;
-  const score = `${away}-${home}`;
-  const outcome = safeAbbr(pick.predictedOutcome);
-  const lg = String(league || "NHL").toUpperCase();
-
-  if (lg === "MLB" || outcome === "FINAL") return score;
-  if (outcome === "REG" || outcome === "OT" || outcome === "TB") {
-    return `${score} (${outcome})`;
-  }
-  return score;
-}
-
-function isSlotLocked(slot) {
-  const status = String(slot?.status || "open").toLowerCase();
-  if (status !== "open") return true;
-
-  const lockedAt = toDateAny(slot?.lockedAt);
-  if (lockedAt && Date.now() >= lockedAt.getTime()) return true;
-
-  return false;
-}
-
-function isBundleLocked(bundle) {
-  const status = String(bundle?.status || "open").toLowerCase();
-  if (["decided", "closed"].includes(status)) return true;
-
-  const games = Array.isArray(bundle?.games) ? bundle.games : [];
-  if (!games.length) return status === "locked";
-
-  return games.every((g) => isSlotLocked(g));
-}
-
-function getEarliestOpenDeadline(bundle) {
-  const games = Array.isArray(bundle?.games) ? bundle.games : [];
-  let earliest = null;
-
-  for (const slot of games) {
-    if (isSlotLocked(slot)) continue;
-    const lockedAt = toDateAny(slot?.lockedAt);
-    if (!lockedAt) continue;
-    if (!earliest || lockedAt.getTime() < earliest.getTime()) {
-      earliest = lockedAt;
-    }
-  }
-
-  return earliest;
-}
-
-function BundleMatchRow({ slot, league, pick, colors }) {
+function BundleMatchRow({ slot, slotIndex, league, pick, pickResult, colors }) {
   const awayAbbr = safeAbbr(slot?.awayAbbr);
   const homeAbbr = safeAbbr(slot?.homeAbbr);
   const awayTeam = lookupTeamByAbbr(league, awayAbbr);
   const homeTeam = lookupTeamByAbbr(league, homeAbbr);
   const pickLine = formatTpPickLine(pick, league);
-  const slotLocked = isSlotLocked(slot);
+  const slotDecided = isSlotDecided(slot);
+  const slotLocked = !slotDecided && isSlotLocked(slot);
+  const officialLine = slotDecided ? formatResultWinnerLine(slot, league) : null;
+  const pointsLine = slotDecided ? formatPickPoints(pickResult) : null;
+  const slotLabel = Number(slot?.slot) > 0 ? Number(slot.slot) : slotIndex;
 
   return (
     <View
@@ -99,13 +42,18 @@ function BundleMatchRow({ slot, league, pick, colors }) {
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center" }}>
-        {slot?.isFavoriteGame ? (
-          <Text style={{ marginRight: 6, fontSize: 12 }}>★</Text>
-        ) : (
-          <Text style={{ marginRight: 6, color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
-            {slot?.slot || "·"}
-          </Text>
-        )}
+        <Text
+          style={{
+            marginRight: 6,
+            color: colors.subtext,
+            fontWeight: "900",
+            fontSize: 12,
+            width: 14,
+            textAlign: "center",
+          }}
+        >
+          {slotLabel}
+        </Text>
 
         <TeamLogoBadge team={awayTeam} size={18} colors={colors} />
         <Text style={{ color: colors.text, fontWeight: "900", marginHorizontal: 6, fontSize: 13 }}>
@@ -119,18 +67,38 @@ function BundleMatchRow({ slot, league, pick, colors }) {
 
         <View style={{ flex: 1 }} />
 
-        {pickLine ? (
+        {slotDecided && officialLine ? (
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{officialLine}</Text>
+            {pickLine ? (
+              <Text style={{ color: colors.subtext, fontSize: 11, marginTop: 2 }}>
+                {i18n.t("tp.home.myPickShort", { defaultValue: "Toi" })}: {pickLine}
+                {pointsLine ? ` · ${pointsLine}` : ""}
+              </Text>
+            ) : null}
+          </View>
+        ) : pickLine ? (
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{pickLine}</Text>
         ) : (
           <Text style={{ color: colors.subtext, fontSize: 12 }}>
             {slotLocked
-              ? i18n.t("tp.home.signupClosed", { defaultValue: "Fermé" })
+              ? i18n.t("tp.home.predictionsClosed", { defaultValue: "Prédictions fermées" })
               : "—"}
           </Text>
         )}
       </View>
     </View>
   );
+}
+
+function isBundleLocked(bundle, games, isSlotLocked) {
+  const status = String(bundle?.status || "open").toLowerCase();
+  if (["decided", "closed"].includes(status)) return true;
+
+  const slots = Array.isArray(games) ? games : [];
+  if (!slots.length) return status === "locked";
+
+  return slots.every((g) => isSlotLocked(g));
 }
 
 export default function TeamPredictionBundleHomeCard({
@@ -144,22 +112,32 @@ export default function TeamPredictionBundleHomeCard({
   const games = Array.isArray(bundle?.games) ? bundle.games : [];
   const gameCount = Number(bundle?.gameCount || games.length || 0);
   const picks = entry?.picks || {};
+  const pickResults = entry?.pickResults || {};
   const picksCompletedCount = Number(entry?.picksCompletedCount || 0);
+  const totalPoints = Number(entry?.totalPoints ?? 0);
   const participants = Number(bundle?.participantsCount ?? 0);
-  const locked = isBundleLocked(bundle);
-  const deadline = getEarliestOpenDeadline(bundle);
-  const deadlineHM = fmtTimeShort(deadline);
+  const bundleDecided = isBundleDecided(bundle);
+
+  const locked = useMemo(
+    () => isBundleLocked(bundle, games, isSlotLocked),
+    [bundle, games]
+  );
+
+  const { lockedAt: deadline, slot: nextSlot } = useMemo(
+    () => getEarliestOpenSlot(games),
+    [games]
+  );
 
   const allPicksComplete = gameCount > 0 && picksCompletedCount >= gameCount;
 
-  const ctaLabel = locked
+  const ctaLabel = bundleDecided || locked
     ? i18n.t("tp.home.seeResults", { defaultValue: "Voir le résultat" })
     : allPicksComplete
     ? i18n.t("tp.home.modifyTeams", { defaultValue: "Modifier mes équipes" })
     : i18n.t("common.participate", { defaultValue: "Participer" });
 
   const statusLower = String(bundle?.status || "open").toLowerCase();
-  const showSecondaryCta = statusLower !== "open";
+  const showSecondaryCta = !bundleDecided && statusLower !== "open";
   const secondaryCtaLabel = i18n.t("tp.home.viewPredictions", {
     defaultValue: "Voir les prédictions",
   });
@@ -181,31 +159,37 @@ export default function TeamPredictionBundleHomeCard({
         })}
       </Text>
 
-      {games.map((slot) => (
+      {games.map((slot, index) => (
         <BundleMatchRow
           key={String(slot.gameId)}
           slot={slot}
+          slotIndex={index + 1}
           league={league}
           pick={picks[String(slot.gameId)]}
+          pickResult={pickResults[String(slot.gameId)]}
           colors={colors}
         />
       ))}
 
-      <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
-        {i18n.t("tp.home.signupDeadline", {
-          defaultValue: "Heure limite d'inscription",
-        })}
-        {": "}
-        {locked ? (
-          <Text style={{ color: colors.text, fontWeight: "900" }}>
-            {i18n.t("tp.home.signupClosed", { defaultValue: "Fermé" })}
-          </Text>
-        ) : (
-          <Text style={{ color: colors.text, fontWeight: "900" }}>
-            {deadlineHM || "—"}
-          </Text>
-        )}
-      </Text>
+      {bundleDecided ? (
+        <Text style={{ color: colors.text, marginTop: 10, fontSize: 13, fontWeight: "900" }}>
+          {entry
+            ? i18n.t("tp.home.myTotalPoints", {
+                defaultValue: "Ton total : {{points}} pt(s)",
+                points: totalPoints,
+              })
+            : i18n.t("tp.home.resultsAvailable", {
+                defaultValue: "Résultats disponibles",
+              })}
+        </Text>
+      ) : (
+        <TpHomeDeadlineBlock
+          locked={locked}
+          deadline={deadline}
+          nextSlot={nextSlot}
+          colors={colors}
+        />
+      )}
 
       {picksCompletedCount > 0 ? (
         <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
