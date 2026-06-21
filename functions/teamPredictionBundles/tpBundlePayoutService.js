@@ -1,11 +1,22 @@
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { incrementLeaderboardTpSlotPoints } from "../leaderboard/incrementLeaderboardPoints.js";
 import { safeUpper } from "../teamPredictionChallenges/tpGameSources.js";
 import { readScoringConfig, scorePick } from "./tpBundleScoring.js";
 import { computeBundleStatus } from "./tpBundleUtils.js";
 
 const db = getFirestore();
+
+function readPickResults(entry = {}) {
+  const map = { ...(entry.pickResults || {}) };
+  for (const [key, value] of Object.entries(entry)) {
+    if (!key.startsWith("pickResults.")) continue;
+    if (!value || typeof value !== "object") continue;
+    map[key.slice("pickResults.".length)] = value;
+  }
+  return map;
+}
 
 export async function applySlotPayoutForBundle({ bundleId, gameId }) {
   const result = await db.runTransaction(async (tx) => {
@@ -68,6 +79,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
     );
 
     const winnerProgression = [];
+    const leaderboardUpdates = [];
     let slotPayoutTotal = 0;
 
     for (const entryDoc of entriesSnap.docs) {
@@ -79,6 +91,9 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
       const scored = scorePick(pick, official, scoring);
       slotPayoutTotal += scored.points;
 
+      const priorPickResults = readPickResults(entry);
+      const recordPlay = Object.keys(priorPickResults).length === 0;
+
       if (scored.winnerCorrect) {
         winnerProgression.push({
           uid: String(entryDoc.id),
@@ -86,18 +101,30 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
         });
       }
 
+      leaderboardUpdates.push({
+        uid: String(entryDoc.id),
+        points: scored.points,
+        won: scored.winnerCorrect,
+        recordPlay,
+      });
+
+      const nextPickResults = {
+        ...priorPickResults,
+        [String(gameId)]: {
+          winnerCorrect: scored.winnerCorrect,
+          exactScoreCorrect: scored.exactScoreCorrect,
+          points: scored.points,
+          won: scored.won,
+          isPerfectPick: scored.isPerfectPick,
+          payout: scored.payout,
+          finalizedAt: FieldValue.serverTimestamp(),
+        },
+      };
+
       tx.set(
         entryDoc.ref,
         {
-          [`pickResults.${gameId}`]: {
-            winnerCorrect: scored.winnerCorrect,
-            exactScoreCorrect: scored.exactScoreCorrect,
-            points: scored.points,
-            won: scored.won,
-            isPerfectPick: scored.isPerfectPick,
-            payout: scored.payout,
-            finalizedAt: FieldValue.serverTimestamp(),
-          },
+          pickResults: nextPickResults,
           totalPoints: FieldValue.increment(scored.points),
           updatedAt: FieldValue.serverTimestamp(),
         },
@@ -149,6 +176,9 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
       skipped: false,
       slotPayoutTotal,
       winnerProgression,
+      leaderboardUpdates,
+      groupId,
+      gameYmd: bundle.gameYmd,
     };
   });
 
@@ -160,6 +190,33 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
         isCorrectPrediction: true,
         isExactScore: winner.isExactScore,
       });
+    }
+  }
+
+  if (
+    result?.ok &&
+    !result?.skipped &&
+    result.groupId &&
+    Array.isArray(result.leaderboardUpdates)
+  ) {
+    for (const row of result.leaderboardUpdates) {
+      try {
+        await incrementLeaderboardTpSlotPoints({
+          groupId: result.groupId,
+          uid: row.uid,
+          points: row.points,
+          won: row.won,
+          gameYmd: result.gameYmd,
+          recordPlay: row.recordPlay,
+        });
+      } catch (e) {
+        logger.error("[TP bundle payout] live leaderboard increment failed", {
+          bundleId,
+          gameId,
+          uid: row.uid,
+          err: String(e?.message || e),
+        });
+      }
     }
   }
 

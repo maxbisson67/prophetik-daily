@@ -6,7 +6,6 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Modal,
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
@@ -16,10 +15,10 @@ import i18n from "@src/i18n/i18n";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
-import TeamPredictionLiveCard from "@src/defis/TeamPredictionLiveCard";
 import TeamPredictionBundleHomeCard from "@src/defis/TeamPredictionBundleHomeCard";
 import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
 import { listenRNFB } from "@src/home/firestoreListen";
+import ResultsTabHint from "@src/home/components/ResultsTabHint";
 
 /* ---------------- Helpers ---------------- */
 
@@ -95,12 +94,6 @@ function formatTpPickLine(entry, league = "NHL") {
   }
 
   return score;
-}
-
-function getSecondaryCtaLabel() {
-  return i18n.t("tp.home.viewPredictions", {
-    defaultValue: "Voir les prédictions",
-  });
 }
 
 function isChallengeStillActive(status) {
@@ -292,8 +285,6 @@ export default function TeamPredictionHomeSection({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [myEntries, setMyEntries] = useState({});
-  const [showStateModal, setShowStateModal] = useState(false);
-  const [selectedChallengeId, setSelectedChallengeId] = useState(null);
 
   const legacyItems = useMemo(
     () =>
@@ -682,12 +673,7 @@ export default function TeamPredictionHomeSection({
               entry={bundleEntry}
               league={sportLeague}
               colors={colors}
-              onPressSecondary={() => {
-                router.push({
-                  pathname: "/(drawer)/(team-prediction)/pick/[challengeId]",
-                  params: { challengeId: bundle.id },
-                });
-              }}
+              groupId={currentGroupId}
             />
           ) : null}
 
@@ -716,17 +702,9 @@ export default function TeamPredictionHomeSection({
               statusLower === "closed" ||
               (deadline ? Date.now() >= deadline.getTime() : false);
 
-            const ctaLabel = locked
-              ? i18n.t("tp.home.seeResults", { defaultValue: "Voir le résultat" })
-              : hasEntry
+            const ctaLabel = hasEntry
               ? i18n.t("tp.home.modifyTeam", { defaultValue: "Modifier mon équipe" })
               : i18n.t("common.participate", { defaultValue: "Participer" });
-
-            const secondaryCtaLabel = getSecondaryCtaLabel();
-            const showSecondaryCta = statusLower !== "open";
-
-            const awayTeam = lookupTeamByAbbr(challengeLeague, awayAbbr);
-            const homeTeam = lookupTeamByAbbr(challengeLeague, homeAbbr);
 
             const onPressPrimary = () => {
               router.push({
@@ -735,10 +713,8 @@ export default function TeamPredictionHomeSection({
               });
             };
 
-            const onPressSecondary = () => {
-              setSelectedChallengeId(String(ch.id));
-              setShowStateModal(true);
-            };
+            const awayTeam = lookupTeamByAbbr(challengeLeague, awayAbbr);
+            const homeTeam = lookupTeamByAbbr(challengeLeague, homeAbbr);
 
             return (
               <View
@@ -800,118 +776,31 @@ export default function TeamPredictionHomeSection({
                 ) : null}
 
                 <View style={{ marginTop: 12, gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={onPressPrimary}
-                    activeOpacity={0.9}
-                    style={{
-                      width: "100%",
-                      paddingVertical: 10,
-                      borderRadius: 12,
-                      alignItems: "center",
-                      backgroundColor: "#b91c1c",
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontWeight: "900" }}>
-                      {ctaLabel}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {showSecondaryCta ? (
+                  {locked ? (
+                    <ResultsTabHint colors={colors} />
+                  ) : (
                     <TouchableOpacity
-                      onPress={onPressSecondary}
+                      onPress={onPressPrimary}
                       activeOpacity={0.9}
                       style={{
                         width: "100%",
                         paddingVertical: 10,
                         borderRadius: 12,
                         alignItems: "center",
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.border,
+                        backgroundColor: "#b91c1c",
                       }}
                     >
-                      <Text style={{ color: colors.text, fontWeight: "900" }}>
-                        {secondaryCtaLabel}
+                      <Text style={{ color: "#fff", fontWeight: "900" }}>
+                        {ctaLabel}
                       </Text>
                     </TouchableOpacity>
-                  ) : null}
+                  )}
                 </View>
               </View>
             );
           })}
         </View>
       </View>
-
-      <Modal
-        visible={showStateModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowStateModal(false)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.4)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.background,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              padding: 16,
-              maxHeight: "85%",
-            }}
-          >
-            <View style={{ alignItems: "center", marginBottom: 8 }}>
-              <View
-                style={{
-                  width: 48,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: colors.border,
-                }}
-              />
-            </View>
-
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 10,
-              }}
-            >
-              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-                {i18n.t("tp.live.title", { defaultValue: "Prédire l'issue des matchs" })}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => setShowStateModal(false)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <MaterialCommunityIcons name="close" size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <TeamPredictionLiveCard
-              visible={showStateModal}
-              challengeId={selectedChallengeId}
-              colors={colors}
-            />
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }

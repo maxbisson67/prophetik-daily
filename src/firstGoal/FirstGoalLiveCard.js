@@ -21,6 +21,10 @@ import {
   getFgcLivePendingText,
   getFgcLiveConfirmedText,
 } from "@src/firstGoal/fgcChallengeUtils";
+import useParticipantProfilesFor, {
+  resolveParticipantIdentity,
+} from "@src/firstGoal/useParticipantProfilesFor";
+import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
 
 function shouldShowParticipants(status) {
   const st = String(status || "").toLowerCase();
@@ -204,14 +208,68 @@ function ResultBanner({ status, challenge, colors }) {
   );
 }
 
-function EntryRow({ entry, revealPick, isWinner, isMe, sport = "NHL", colors }) {
-  const who =
-    entry?.displayName ||
-    entry?.name ||
-    entry?.playerOwnerName ||
-    String(entry?.uid || "").slice(0, 6);
+function ParticipantAvatar({ entry, profile, colors, size = 34 }) {
+  const { who, avatarUrl, jerseyFrontUrl, jerseyBackUrl, useJersey } = resolveParticipantIdentity(
+    entry,
+    profile
+  );
 
-  const avatar = entry?.photoURL || entry?.avatarUrl || null;
+  if (useJersey && jerseyFrontUrl && jerseyBackUrl) {
+    return (
+      <View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 8,
+          overflow: "hidden",
+          backgroundColor: colors.card2,
+          borderWidth: 1,
+          borderColor: colors.border,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <JerseyFlipAvatar
+          frontUrl={jerseyFrontUrl}
+          backUrl={jerseyBackUrl}
+          size={size - 4}
+          holdMs={2200}
+          fadeDurationMs={450}
+          backgroundColor={colors.card2}
+        />
+      </View>
+    );
+  }
+
+  if (useJersey && jerseyFrontUrl) {
+    return (
+      <View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 8,
+          overflow: "hidden",
+          backgroundColor: colors.card2,
+          borderWidth: 1,
+          borderColor: colors.border,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Image
+          source={{ uri: jerseyFrontUrl }}
+          style={{ width: size - 4, height: size - 4 }}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  }
+
+  return <AvatarBubble uri={avatarUrl} name={who} colors={colors} size={size} />;
+}
+
+function EntryRow({ entry, profile, revealPick, isWinner, isMe, sport = "NHL", colors }) {
+  const { who } = resolveParticipantIdentity(entry, profile);
   const pick = entry?.playerName || "—";
 
   const shouldShowThisPick = revealPick || isMe;
@@ -231,7 +289,7 @@ function EntryRow({ entry, revealPick, isWinner, isMe, sport = "NHL", colors }) 
         backgroundColor: isWinner ? colors.card : colors.background,
       }}
     >
-      <AvatarBubble uri={avatar} name={who} colors={colors} size={34} />
+      <ParticipantAvatar entry={entry} profile={profile} colors={colors} size={34} />
 
       <View style={{ flex: 1, marginLeft: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}>
@@ -305,7 +363,7 @@ function EntryRow({ entry, revealPick, isWinner, isMe, sport = "NHL", colors }) 
   );
 }
 
-export default function FirstGoalLiveCard({ visible, gameId, colors }) {
+export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors }) {
   const router = useRouter();
   const { user } = useAuth();
 
@@ -454,7 +512,10 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
   }, [allowedGroupIds.join("|"), Object.keys(groupNameById).join("|")]);
 
   useEffect(() => {
-    if (!visible || !gameId) {
+    const scopedChallengeId = String(challengeId || "").trim();
+    const scopedGameId = String(gameId || "").trim();
+
+    if (!visible || (!scopedChallengeId && !scopedGameId)) {
       setFirstGoalChallenges([]);
       setEntriesByChallengeId({});
       setAllEntriesByChallengeId({});
@@ -476,9 +537,119 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
 
     const allowed = new Set(allowedGroupIds.map(String));
 
+    const applyChallengeList = async (list) => {
+      setFirstGoalChallenges(list);
+
+      if (!user?.uid || list.length === 0) {
+        setEntriesByChallengeId({});
+      } else {
+        try {
+          const results = await Promise.all(
+            list.map(async (ch) => {
+              const entrySnap = await firestore()
+                .collection("first_goal_challenges")
+                .doc(String(ch.id))
+                .collection("entries")
+                .doc(String(user.uid))
+                .get();
+
+              return [String(ch.id), entrySnap.exists ? entrySnap.data() : null];
+            })
+          );
+
+          const map = {};
+          results.forEach(([cid, data]) => {
+            map[cid] = data;
+          });
+          setEntriesByChallengeId(map);
+        } catch (e) {
+          console.log("[FirstGoalLiveCard] entry check error", e?.message || e);
+        }
+      }
+
+      const wantIds = new Set(
+        list.filter((ch) => shouldShowParticipants(ch.status)).map((ch) => String(ch.id))
+      );
+
+      Object.keys(entriesUnsubsRef.current || {}).forEach((cid) => {
+        if (!wantIds.has(cid)) {
+          try {
+            entriesUnsubsRef.current[cid]?.();
+          } catch {}
+          delete entriesUnsubsRef.current[cid];
+          setAllEntriesByChallengeId((prev) => {
+            const next = { ...prev };
+            delete next[cid];
+            return next;
+          });
+        }
+      });
+
+      wantIds.forEach((cid) => {
+        if (entriesUnsubsRef.current[cid]) return;
+
+        const entriesRef = firestore()
+          .collection("first_goal_challenges")
+          .doc(cid)
+          .collection("entries");
+
+        const unsubEntries = entriesRef.onSnapshot(
+          (esnap) => {
+            const rows = esnap.docs.map((d) => ({
+              uid: d.id,
+              ...d.data(),
+            }));
+            setAllEntriesByChallengeId((prev) => ({ ...prev, [cid]: rows }));
+          },
+          (err) => {
+            console.log("[FirstGoalLiveCard] entries error", cid, err?.message || err);
+          }
+        );
+
+        entriesUnsubsRef.current[cid] = unsubEntries;
+      });
+
+      setLoadingFirstGoal(false);
+    };
+
+    if (scopedChallengeId) {
+      const unsub = firestore()
+        .collection("first_goal_challenges")
+        .doc(scopedChallengeId)
+        .onSnapshot(
+          async (snap) => {
+            if (!snap.exists) {
+              await applyChallengeList([]);
+              return;
+            }
+
+            const ch = { id: snap.id, ...snap.data() };
+            const groupId = String(ch.groupId || "");
+
+            if (!allowed.has(groupId)) {
+              await applyChallengeList([]);
+              return;
+            }
+
+            await applyChallengeList([ch]);
+          },
+          (err) => {
+            console.log("[FirstGoalLiveCard] challenge doc error", err?.message || err);
+            setLoadingFirstGoal(false);
+          }
+        );
+
+      return () => {
+        try {
+          unsub();
+        } catch {}
+        cleanupEntryListeners();
+      };
+    }
+
     const q = firestore()
       .collection("first_goal_challenges")
-      .where("gameId", "==", String(gameId))
+      .where("gameId", "==", scopedGameId)
       .orderBy("createdAt", "desc")
       .limit(20);
 
@@ -497,80 +668,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
             return ga.localeCompare(gb);
           });
 
-        setFirstGoalChallenges(list);
-
-        if (!user?.uid || list.length === 0) {
-          setEntriesByChallengeId({});
-        } else {
-          try {
-            const results = await Promise.all(
-              list.map(async (ch) => {
-                const entrySnap = await firestore()
-                  .collection("first_goal_challenges")
-                  .doc(String(ch.id))
-                  .collection("entries")
-                  .doc(String(user.uid))
-                  .get();
-
-                return [String(ch.id), entrySnap.exists ? entrySnap.data() : null];
-              })
-            );
-
-            const map = {};
-            results.forEach(([cid, data]) => {
-              map[cid] = data;
-            });
-            setEntriesByChallengeId(map);
-          } catch (e) {
-            console.log("[FirstGoalLiveCard] entry check error", e?.message || e);
-          }
-        }
-
-        const wantIds = new Set(
-          list
-            .filter((ch) => shouldShowParticipants(ch.status))
-            .map((ch) => String(ch.id))
-        );
-
-        Object.keys(entriesUnsubsRef.current || {}).forEach((cid) => {
-          if (!wantIds.has(cid)) {
-            try {
-              entriesUnsubsRef.current[cid]?.();
-            } catch {}
-            delete entriesUnsubsRef.current[cid];
-            setAllEntriesByChallengeId((prev) => {
-              const next = { ...prev };
-              delete next[cid];
-              return next;
-            });
-          }
-        });
-
-        wantIds.forEach((cid) => {
-          if (entriesUnsubsRef.current[cid]) return;
-
-          const entriesRef = firestore()
-            .collection("first_goal_challenges")
-            .doc(cid)
-            .collection("entries");
-
-          const unsubEntries = entriesRef.onSnapshot(
-            (esnap) => {
-              const rows = esnap.docs.map((d) => ({
-                uid: d.id,
-                ...d.data(),
-              }));
-              setAllEntriesByChallengeId((prev) => ({ ...prev, [cid]: rows }));
-            },
-            (err) => {
-              console.log("[FirstGoalLiveCard] entries error", cid, err?.message || err);
-            }
-          );
-
-          entriesUnsubsRef.current[cid] = unsubEntries;
-        });
-
-        setLoadingFirstGoal(false);
+        await applyChallengeList(list);
       },
       (err) => {
         console.log("[FirstGoalLiveCard] first_goal_challenges error", err?.message || err);
@@ -584,7 +682,26 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
       } catch {}
       cleanupEntryListeners();
     };
-  }, [visible, gameId, user?.uid, allowedGroupIds.join("|"), Object.keys(groupNameById).join("|")]);
+  }, [
+    visible,
+    gameId,
+    challengeId,
+    user?.uid,
+    allowedGroupIds.join("|"),
+    Object.keys(groupNameById).join("|"),
+  ]);
+
+  const entryUids = useMemo(() => {
+    const ids = new Set();
+    Object.values(allEntriesByChallengeId || {}).forEach((rows) => {
+      (rows || []).forEach((e) => {
+        if (e?.uid) ids.add(String(e.uid));
+      });
+    });
+    return Array.from(ids);
+  }, [allEntriesByChallengeId]);
+
+  const participantProfiles = useParticipantProfilesFor(entryUids);
 
   if (loadingFirstGoal) {
     return (
@@ -751,6 +868,7 @@ export default function FirstGoalLiveCard({ visible, gameId, colors }) {
                         <EntryRow
                           key={String(e.uid)}
                           entry={e}
+                          profile={participantProfiles[String(e.uid)]}
                           revealPick={revealPicks}
                           isWinner={isWinner}
                           isMe={String(e.uid) === String(user?.uid || "")}

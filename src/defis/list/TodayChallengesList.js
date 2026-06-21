@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
-import { tpEntryHasParticipation } from "@src/defis/results/challengeResultsModel";
+import { tpEntryHasParticipation, resolveChallengeDisplayStatus } from "@src/defis/results/challengeResultsModel";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 
 function normalizeStatus(st) {
@@ -50,9 +50,9 @@ function statusUi(status) {
     };
   }
 
-  if (st === "awaiting_result" || st === "pending" || st === "locked") {
+  if (st === "awaiting_result" || st === "pending" || st === "locked" || st === "partial") {
     return {
-      label: i18n.t("challenges.status.awaiting", { defaultValue: "En attente" }),
+      label: i18n.t("challenges.status.awaiting", { defaultValue: "En cours" }),
       color: "#ea580c",
       icon: "time-outline",
     };
@@ -93,8 +93,12 @@ function challengeSortValue(item) {
   return d ? d.getTime() : 0;
 }
 
-function Row({ item, participating, participationMaps, colors, showDivider }) {
-  const status = statusUi(item.status);
+function resultsCtaLabel() {
+  return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
+}
+
+function Row({ item, participating, participationMaps, colors, showDivider, onPress }) {
+  const status = statusUi(resolveChallengeDisplayStatus(item));
 
   return (
     <View>
@@ -180,6 +184,23 @@ function Row({ item, participating, participationMaps, colors, showDivider }) {
               )}
           </Text>
         </View>
+
+        {onPress ? (
+          <TouchableOpacity
+            onPress={() => onPress(item)}
+            activeOpacity={0.9}
+            style={{
+              marginTop: 12,
+              width: "100%",
+              paddingVertical: 10,
+              borderRadius: 12,
+              alignItems: "center",
+              backgroundColor: "#b91c1c",
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "900" }}>{resultsCtaLabel()}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {showDivider ? (
@@ -199,7 +220,7 @@ export default function TodayChallengesList({
   items = [],
   colors,
   participationMaps = { fgc: {}, tp: {}, ts: {} },
-  onPressGoToAccueil,
+  onPressItem,
 }) {
   const sorted = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -245,7 +266,7 @@ export default function TodayChallengesList({
         </Text>
       </View>
 
-      <View style={{ paddingHorizontal: 12 }}>
+      <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
         {sorted.map((item, index) => (
           <Row
             key={`${item.kind}-${item.id}`}
@@ -254,28 +275,9 @@ export default function TodayChallengesList({
             participationMaps={participationMaps}
             colors={colors}
             showDivider={index < sorted.length - 1}
+            onPress={onPressItem}
           />
         ))}
-      </View>
-
-      <View style={{ padding: 12 }}>
-        <TouchableOpacity
-          onPress={onPressGoToAccueil}
-          activeOpacity={0.9}
-          style={{
-            width: "100%",
-            paddingVertical: 11,
-            borderRadius: 12,
-            alignItems: "center",
-            backgroundColor: "#b91c1c",
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "900" }}>
-            {i18n.t("challenges.goToAccueil", {
-              defaultValue: "Participer aux défis du jour",
-            })}
-          </Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

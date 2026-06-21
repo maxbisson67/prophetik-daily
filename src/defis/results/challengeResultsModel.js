@@ -2,6 +2,27 @@ export function normalizeStatus(st) {
   return String(st || "").toLowerCase().trim();
 }
 
+/** Statut UI d'un défi — pour les bundles TP, dérivé des matchs (évite « Terminé » trop tôt). */
+export function resolveChallengeDisplayStatus(item) {
+  const top = normalizeStatus(item?.status);
+
+  if (item?.kind === "tp" && item?.subtype === "bundle") {
+    const games = Array.isArray(item?.raw?.games) ? item.raw.games : [];
+    if (!games.length) return top;
+
+    const statuses = games.map((g) => normalizeStatus(g?.status || "open"));
+
+    if (statuses.every((s) => s === "decided")) return "decided";
+    if (statuses.every((s) => ["locked", "live", "decided"].includes(s))) {
+      return statuses.some((s) => s === "decided") ? "partial" : "locked";
+    }
+    if (statuses.some((s) => ["locked", "live", "decided"].includes(s))) return "partial";
+    return "open";
+  }
+
+  return top;
+}
+
 export const HISTORY_RESULT_STATUSES = new Set([
   "decided",
   "closed",
@@ -10,7 +31,7 @@ export const HISTORY_RESULT_STATUSES = new Set([
 ]);
 
 export function isHistoryResultItem(item) {
-  return HISTORY_RESULT_STATUSES.has(normalizeStatus(item?.status));
+  return HISTORY_RESULT_STATUSES.has(resolveChallengeDisplayStatus(item));
 }
 
 export function formatTpBundleMatchupSummary(bundle = {}) {

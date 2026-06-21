@@ -90,7 +90,13 @@ function parseTpScoredEntry(entry = {}) {
 }
 
 function parseTpBundleEntry(entry = {}) {
-  const pickResults = entry.pickResults || {};
+  const pickResults = { ...(entry.pickResults || {}) };
+  for (const [key, value] of Object.entries(entry)) {
+    if (!key.startsWith("pickResults.")) continue;
+    if (!value || typeof value !== "object") continue;
+    pickResults[key.slice("pickResults.".length)] = value;
+  }
+
   let pointsFromResults = 0;
   let won = false;
 
@@ -100,7 +106,9 @@ function parseTpBundleEntry(entry = {}) {
     if (result.won === true || result.winnerCorrect === true) won = true;
   }
 
-  const points = toNumber(entry.totalPoints, pointsFromResults);
+  const totalFromField = toNumber(entry.totalPoints, 0);
+  const points =
+    pointsFromResults > 0 ? Math.max(totalFromField, pointsFromResults) : totalFromField;
 
   return {
     points,
@@ -108,6 +116,12 @@ function parseTpBundleEntry(entry = {}) {
     displayName: entry.displayName || null,
     avatarUrl: pickString(entry.avatarUrl),
   };
+}
+
+function tpEntryHasParticipation(entry = {}) {
+  if (Number(entry?.picksCompletedCount ?? 0) > 0) return true;
+  const picks = entry?.picks;
+  return picks && typeof picks === "object" && Object.keys(picks).length > 0;
 }
 
 function addTpLeaderboardEntry({
@@ -614,6 +628,7 @@ const summary = {
       const entry = e.data() || {};
       const uid = String(entry?.uid || e.id);
       if (!uid) continue;
+      if (!tpEntryHasParticipation(entry)) continue;
 
       const { points, won, displayName, avatarUrl } = parseTpBundleEntry(entry);
 

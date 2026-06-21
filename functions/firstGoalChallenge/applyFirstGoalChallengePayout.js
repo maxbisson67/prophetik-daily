@@ -4,6 +4,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { applyFgcChallengeLiveLeaderboard } from "../leaderboard/incrementLeaderboardPoints.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -139,6 +140,8 @@ export const applyFirstGoalChallengePayout = onDocumentWritten(
           winners: winnerUids.length,
           winnerUids,
           payoutTotal: 0,
+          groupId,
+          challengeId,
         };
       });
 
@@ -148,6 +151,26 @@ export const applyFirstGoalChallengePayout = onDocumentWritten(
             challengeType: "FGC",
             countParticipation: false,
             isFGCWin: true,
+          });
+        }
+      }
+
+      if (result?.ok && !result?.skipped && result.groupId && result.challengeId) {
+        try {
+          const chSnap = await db.doc(`first_goal_challenges/${result.challengeId}`).get();
+          const liveResult = await applyFgcChallengeLiveLeaderboard({
+            groupId: result.groupId,
+            challengeId: result.challengeId,
+            challenge: chSnap.data() || {},
+          });
+          logger.info("[FGC payout] live leaderboard", {
+            challengeId: result.challengeId,
+            ...liveResult,
+          });
+        } catch (e) {
+          logger.error("[FGC payout] live leaderboard failed", {
+            challengeId: result.challengeId,
+            err: String(e?.message || e),
           });
         }
       }

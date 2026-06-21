@@ -9,7 +9,7 @@ import {
   Image,
   ScrollView,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
 
 import i18n from "@src/i18n/i18n";
@@ -17,14 +17,17 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import ChallengeDayCard from "@src/defis/list/ChallengeDayCard";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
-import TodayChallengesList from "@src/defis/list/TodayChallengesList";
 import useMeDoc from "@src/home/hooks/useMeDoc";
 import {
   getTpBundleFirstDeadline,
   isHistoryResultItem,
+  resolveChallengeDisplayStatus,
   mergeTpItemsByDate,
   tpEntryHasParticipation,
 } from "@src/defis/results/challengeResultsModel";
+import { isTpResultsViewStatus } from "@src/defis/results/navigateToMesResultats";
+import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
+import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 
 const GROUP_PLACEHOLDER = require("@src/assets/group-placeholder.png");
@@ -246,8 +249,17 @@ function normalizeTpBundleDoc(doc) {
 export default function ChallengesScreen() {
   const { user, authReady } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { colors } = useTheme();
   const { meDoc } = useMeDoc({ authReady, uid: user?.uid });
+
+  const paramGroupId = String(params?.groupId || "").trim();
+  const paramOpenChallengeId = String(params?.openChallengeId || "").trim();
+  const paramKind = String(params?.kind || "").trim().toLowerCase();
+
+  const [fgcModalItem, setFgcModalItem] = useState(null);
+  const [tpModalItem, setTpModalItem] = useState(null);
+  const handledOpenRef = useRef("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -289,9 +301,10 @@ export default function ChallengesScreen() {
 
   const todayKey = prophetikBusinessYmd();
 
-  const todayItems = useMemo(() => {
-    return [...fgcItems, ...tpItems, ...tsItems].filter((item) => item.dateKey === todayKey);
-  }, [fgcItems, tpItems, tsItems, todayKey]);
+  const allItems = useMemo(
+    () => [...fgcItems, ...tpItems, ...tsItems],
+    [fgcItems, tpItems, tsItems]
+  );
 
   const [fgcParticipationMap, setFgcParticipationMap] = useState({});
   const [tpParticipationMap, setTpParticipationMap] = useState({});
@@ -470,6 +483,15 @@ export default function ChallengesScreen() {
       return;
     }
 
+    if (
+      paramGroupId &&
+      groupIds.includes(paramGroupId) &&
+      currentGroupId !== paramGroupId
+    ) {
+      setCurrentGroupId(paramGroupId);
+      return;
+    }
+
     if (currentGroupId && groupIds.includes(currentGroupId)) return;
 
     const fav =
@@ -478,7 +500,27 @@ export default function ChallengesScreen() {
         : null;
 
     setCurrentGroupId(fav || groupIds[0]);
-  }, [groupIds, currentGroupId, favoriteGroupId]);
+  }, [groupIds, currentGroupId, favoriteGroupId, paramGroupId]);
+
+  useEffect(() => {
+    if (!paramOpenChallengeId || loading) return;
+    if (handledOpenRef.current === paramOpenChallengeId) return;
+
+    const item = allItems.find((row) => String(row.id) === paramOpenChallengeId);
+    if (!item) return;
+    if (paramKind && String(item.kind || "").toLowerCase() !== paramKind) return;
+
+    handledOpenRef.current = paramOpenChallengeId;
+
+    if (item.kind === "fgc") {
+      setFgcModalItem(item);
+      return;
+    }
+
+    if (item.kind === "tp" && item.subtype === "bundle") {
+      setTpModalItem(item);
+    }
+  }, [paramOpenChallengeId, paramKind, allItems, loading]);
 
   /* ---------------- 4) current group challenge listeners ---------------- */
 
@@ -676,7 +718,10 @@ export default function ChallengesScreen() {
 
     [...fgcItems, ...tpItems, ...tsItems].forEach((item) => {
       if (!item?.dateKey || !byDay[item.dateKey]) return;
-      if (item.dateKey === todayKey) return;
+      if (item.dateKey === todayKey) {
+        byDay[item.dateKey].data.push(item);
+        return;
+      }
       if (!isHistoryResultItem(item)) return;
       byDay[item.dateKey].data.push(item);
     });
@@ -701,9 +746,7 @@ export default function ChallengesScreen() {
       .filter((s) => s.data[0].data.length > 0);
   }, [dayKeys, fgcItems, tpItems, tsItems, todayKey]);
 
-  const historySections = useMemo(() => {
-    return sections.filter((s) => s.key !== todayKey);
-  }, [sections, todayKey]);
+  /* ---------------- 6b) participation listeners ---------------- */
 
   useEffect(() => {
     if (!user?.uid) {
@@ -859,19 +902,16 @@ export default function ChallengesScreen() {
       }
 
       if (item.kind === "fgc") {
-        router.push({
-          pathname: "/(drawer)/(tabs)/AccueilScreen",
-          params: {
-            focus: "fgc",
-            challengeId: item.id,
-            openState: isHistoryResultItem(item) ? "1" : isToday ? "1" : "1",
-            groupId: item.groupId,
-          },
-        });
+        setFgcModalItem(item);
         return;
       }
 
       if (item.kind === "tp") {
+        if (item.subtype === "bundle" && isTpResultsViewStatus(resolveChallengeDisplayStatus(item))) {
+          setTpModalItem(item);
+          return;
+        }
+
         router.push({
           pathname: "/(drawer)/(team-prediction)/pick/[challengeId]",
           params: { challengeId: item.id },
@@ -953,6 +993,20 @@ export default function ChallengesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <FgcChallengeModal
+        visible={!!fgcModalItem}
+        item={fgcModalItem}
+        colors={colors}
+        onClose={() => setFgcModalItem(null)}
+      />
+
+      <TpMyPicksModal
+        visible={!!tpModalItem}
+        item={tpModalItem}
+        myEntry={tpModalItem ? tpParticipationMap[String(tpModalItem.id)] : null}
+        colors={colors}
+        onClose={() => setTpModalItem(null)}
+      />
 
       <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
         <GroupsToggleRow
@@ -964,7 +1018,7 @@ export default function ChallengesScreen() {
       </View>
 
       <SectionList
-        sections={historySections}
+        sections={sections}
         keyExtractor={(item) => item.key}
         stickySectionHeadersEnabled={false}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
@@ -974,31 +1028,23 @@ export default function ChallengesScreen() {
         maxToRenderPerBatch={6}
         windowSize={7}
         removeClippedSubviews={true}
-        ListHeaderComponent={
-          <View style={{ paddingTop: 4, paddingBottom: 8 }}>
-            <TodayChallengesList
-              items={todayItems}
-              colors={colors}
-              participationMaps={participationMaps}
-              onPressGoToAccueil={() =>
-                router.push("/(drawer)/(tabs)/AccueilScreen")
-              }
-            />
-          </View>
+        ListEmptyComponent={
+          sections.length === 0
+            ? () => (
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    marginTop: 24,
+                    textAlign: "center",
+                  }}
+                >
+                  {i18n.t("challenges.noChallenges", {
+                    defaultValue: "Aucun défi à afficher.",
+                  })}
+                </Text>
+              )
+            : null
         }
-        ListEmptyComponent={() => (
-          <Text
-            style={{
-              color: colors.subtext,
-              marginTop: 24,
-              textAlign: "center",
-            }}
-          >
-            {i18n.t("challenges.noChallenges", {
-              defaultValue: "Aucun défi à afficher.",
-            })}
-          </Text>
-        )}
       />
     </View>
   );

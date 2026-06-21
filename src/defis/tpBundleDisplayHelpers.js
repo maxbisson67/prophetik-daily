@@ -1,5 +1,20 @@
+import { isSlotLocked } from "@src/defis/tpDeadlineHelpers";
+
 export function isSlotDecided(slot) {
   return String(slot?.status || "").toLowerCase() === "decided";
+}
+
+/** Statut UI d'un match TP dans Mes résultats : registered | in_progress | completed */
+export function resolveTpSlotResultsStatus(slot) {
+  const st = String(slot?.status || "open").toLowerCase();
+  if (isSlotDecided(slot) || st === "closed") return "completed";
+  if (["live", "locked", "pending"].includes(st)) return "in_progress";
+
+  if (st === "open") {
+    return isSlotLocked(slot) ? "in_progress" : "registered";
+  }
+
+  return "in_progress";
 }
 
 export function isBundleDecided(bundle) {
@@ -151,6 +166,40 @@ export function formatPickPoints(pickResult) {
   return `+${pts} pt${pts > 1 ? "s" : ""}`;
 }
 
+export function getSlotOfficialScores(slot) {
+  const official = slot?.officialResult || {};
+  return {
+    away: official.awayScore != null ? Number(official.awayScore) : null,
+    home: official.homeScore != null ? Number(official.homeScore) : null,
+  };
+}
+
+export function getPickScores(pick) {
+  if (!pick) return { away: null, home: null };
+  return {
+    away: pick.predictedAwayScore != null ? Number(pick.predictedAwayScore) : null,
+    home: pick.predictedHomeScore != null ? Number(pick.predictedHomeScore) : null,
+  };
+}
+
+export function getLiveScores(liveGame) {
+  if (!liveGame) return { away: null, home: null };
+  return {
+    away: liveGame.awayScore != null ? Number(liveGame.awayScore) : null,
+    home: liveGame.homeScore != null ? Number(liveGame.homeScore) : null,
+  };
+}
+
+export function formatOfficialPeriodSuffix(slot, league = "NHL") {
+  const lg = String(league || "NHL").toUpperCase();
+  if (lg === "MLB") return null;
+
+  const outcome = String(slot?.officialResult?.outcome || "REG").toUpperCase();
+  if (outcome === "OT") return "Prolongation";
+  if (outcome === "TB" || outcome === "SO") return "TB";
+  return null;
+}
+
 export function formatResultWinnerLine(slot, league = "NHL") {
   const official = slot?.officialResult || {};
   const winner = String(official.winnerAbbr || "").trim().toUpperCase();
@@ -164,4 +213,48 @@ export function formatResultWinnerLine(slot, league = "NHL") {
 
   const outcome = String(official.outcome || "REG").toUpperCase();
   return `${winner} ${score} (${outcome})`;
+}
+
+export function formatLiveScoreLine(liveGame) {
+  if (!liveGame) return null;
+  const away = liveGame.awayScore;
+  const home = liveGame.homeScore;
+  if (away == null || home == null) return null;
+  return `${away}-${home}`;
+}
+
+export function scoreTpPickAgainstLive(pick, slot, liveGame, bundle) {
+  if (!pick || !liveGame) return null;
+
+  const awayScore = Number(liveGame.awayScore);
+  const homeScore = Number(liveGame.homeScore);
+  if (!Number.isFinite(awayScore) || !Number.isFinite(homeScore)) return null;
+
+  const awayAbbr = safeAbbr(slot?.awayAbbr);
+  const homeAbbr = safeAbbr(slot?.homeAbbr);
+  const predictedWinner = getPredictedWinnerAbbr(pick, awayAbbr, homeAbbr);
+
+  let liveWinner = null;
+  if (awayScore > homeScore) liveWinner = awayAbbr;
+  else if (homeScore > awayScore) liveWinner = homeAbbr;
+
+  const winnerCorrect = !!predictedWinner && !!liveWinner && predictedWinner === liveWinner;
+
+  const predictedAway = toNumber(pick?.predictedAwayScore, null);
+  const predictedHome = toNumber(pick?.predictedHomeScore, null);
+  const exactScoreCorrect =
+    winnerCorrect && predictedAway === awayScore && predictedHome === homeScore;
+
+  const scoring = readTpScoringConfig(bundle);
+  let points = 0;
+  if (winnerCorrect) points += scoring.winnerBasePoints;
+  if (exactScoreCorrect) points += scoring.exactScoreBonusPoints;
+
+  return {
+    winnerCorrect,
+    exactScoreCorrect,
+    points,
+    payout: points,
+    provisional: true,
+  };
 }

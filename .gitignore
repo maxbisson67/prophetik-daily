@@ -95,3 +95,4 @@ yarn-error.*
 *.tsbuildinfo
 
 # @end expo-clifunctions/scripts/serviceAccountKey.json
+functions/scripts/serviceAccountKey.json

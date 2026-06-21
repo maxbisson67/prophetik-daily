@@ -16,13 +16,13 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import TeamLogoBadge from "@src/sports/TeamLogoBadge";
-import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import functions from "@react-native-firebase/functions";
 import { useLanguage } from "@src/i18n/LanguageProvider";
 import Analytics from "@src/services/analytics";
 import { getFgcLeague } from "@src/firstGoal/fgcChallengeUtils";
-import { loadFgcPlayersWithSeasonStats } from "@src/players/loadFgcPlayersWithSeasonStats";
+import FgcMatchupHeader from "@src/firstGoal/FgcMatchupHeader";
+import useFgcProbablePitchers from "@src/firstGoal/useFgcProbablePitchers";
+import { loadFgcPlayersProgressive } from "@src/players/loadFgcPlayersWithSeasonStats";
 import {
   getPlayerSeasonStatLines,
   getPlayerSortValue,
@@ -128,70 +128,6 @@ function TopBar({ title, subtitle, onBack, onClose, colors }) {
     </View>
   );
 }
-
-function TeamBadge({ abbr, sport = "NHL", colors }) {
-  const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
-  const team = lookupTeamByAbbr(league, abbr);
-
-  return (
-    <View
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-      }}
-    >
-      <TeamLogoBadge team={team} size={32} colors={colors} />
-    </View>
-  );
-}
-
-const TeamToggle = React.memo(function TeamToggle({ away, home, sport = "NHL", value, onChange, colors }) {
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        gap: 6,
-        paddingHorizontal: 12,
-        paddingTop: 12,
-        paddingBottom: 10,
-        backgroundColor: colors.background,
-      }}
-    >
-      {[away, home].filter(Boolean).map((t) => {
-        const selected = value === t;
-
-        return (
-          <TouchableOpacity
-            key={t}
-            onPress={() => onChange(t)}
-            activeOpacity={0.9}
-            style={{
-              flex: 1,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              paddingVertical: 10,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: selected ? colors.primary : colors.border,
-              backgroundColor: selected ? colors.card : colors.card2,
-            }}
-          >
-            <TeamBadge abbr={t} sport={sport} colors={colors} />
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-});
 
 const PlayerRow = React.memo(function PlayerRow({
   item,
@@ -340,6 +276,7 @@ async function buildIdentityForEntry(user) {
       "Invité";
 
     const avatarUrl =
+      p.jerseyFrontUrl ||
       p.avatarUrl ||
       p.photoURL ||
       p.photoUrl ||
@@ -453,8 +390,21 @@ export default function FirstGoalPickScreen() {
 
     let cancelled = false;
     setLoadingPlayers(true);
+    setPlayers([]);
+    setSeasonPair(null);
 
-    loadFgcPlayersWithSeasonStats({ league, homeAbbr: home, awayAbbr: away })
+    loadFgcPlayersProgressive({
+      league,
+      homeAbbr: home,
+      awayAbbr: away,
+      onRosterReady: (rows, pair) => {
+        if (cancelled) return;
+        rows.sort(byFullName);
+        setSeasonPair(pair);
+        setPlayers(rows);
+        setLoadingPlayers(false);
+      },
+    })
       .then(({ players: rows, seasonPair: pair }) => {
         if (cancelled) return;
         rows.sort(byFullName);
@@ -479,6 +429,8 @@ export default function FirstGoalPickScreen() {
       cancelled = true;
     };
   }, [challenge?.homeAbbr, challenge?.awayAbbr, challenge?.league, challenge?.fgcMode]);
+
+  const probablePitchers = useFgcProbablePitchers(challenge);
 
   const derived = useMemo(() => {
     const st = String(challenge?.status || "").toLowerCase();
@@ -575,7 +527,7 @@ export default function FirstGoalPickScreen() {
     }
   }, [players, entry?.playerId, derived.away, derived.home]);
 
-  const loading = loadingChallenge || loadingPlayers;
+  const loading = loadingChallenge && !challenge;
 
   const activeSeasonPair = seasonPair || { current: "", previous: "" };
 
@@ -739,29 +691,16 @@ export default function FirstGoalPickScreen() {
             defaultValue: "Triés par stats saison en cours",
           })}
         </Text>
-
-        <TeamToggle
-          away={derived.away}
-          home={derived.home}
-          sport={derived.league}
-          value={selectedTeam}
-          onChange={setSelectedTeam}
-          colors={colors}
-        />
       </View>
     );
   }, [
     colors,
-    derived.away,
-    derived.home,
     derived.startHm,
-    derived.league,
-    selectedTeam,
     challenge?.participantsCount,
     lang,
   ]);
 
-  if (loading || !challenge) {
+  if (loading) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
@@ -781,6 +720,30 @@ export default function FirstGoalPickScreen() {
     );
   }
 
+  if (!challenge) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+          <TopBar
+            title={i18n.t("firstGoal.pick.title", { defaultValue: "First goal" })}
+            subtitle={i18n.t("common.error", { defaultValue: "Erreur" })}
+            colors={colors}
+            onBack={goBackOrHome}
+            onClose={goBackOrHome}
+          />
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24 }}>
+            <Text style={{ color: colors.subtext, textAlign: "center" }}>
+              {i18n.t("firstGoal.pick.challengeMissing", {
+                defaultValue: "Ce défi est introuvable.",
+              })}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -794,6 +757,14 @@ export default function FirstGoalPickScreen() {
           onClose={goBackOrHome}
         />
 
+        <FgcMatchupHeader
+          challenge={challenge}
+          probablePitchers={probablePitchers}
+          selectedTeam={selectedTeam}
+          onSelectTeam={setSelectedTeam}
+          colors={colors}
+        />
+
         <FlatList
           data={filteredPlayers}
           extraData={`${entry?.playerId || ""}:${selectedTeam}:${derived.league}:${activeSeasonPair.current}`}
@@ -805,16 +776,27 @@ export default function FirstGoalPickScreen() {
             paddingHorizontal: 12,
             paddingBottom: 12 + insets.bottom,
           }}
-          initialNumToRender={20}
-          maxToRenderPerBatch={20}
-          windowSize={10}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
           removeClippedSubviews
           ListEmptyComponent={
-            <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-              <Text style={{ color: colors.subtext }}>
-                {i18n.t("firstGoal.pick.noResults", { defaultValue: "Aucun joueur trouvé." })}
-              </Text>
-            </View>
+            loadingPlayers ? (
+              <View style={{ paddingTop: 24, alignItems: "center" }}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
+                  {i18n.t("firstGoal.pick.loadingPlayers", {
+                    defaultValue: "Chargement des joueurs…",
+                  })}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
+                <Text style={{ color: colors.subtext }}>
+                  {i18n.t("firstGoal.pick.noResults", { defaultValue: "Aucun joueur trouvé." })}
+                </Text>
+              </View>
+            )
           }
         />
       </SafeAreaView>

@@ -5,6 +5,7 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { logger } from "firebase-functions";
 
 import { db, rebuildLeaderboardSeasonForGroupLogic } from "./leaderboard.js";
+import { getCurrentSeasonConfig } from "./currentSeason.js";
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10, timeoutSeconds: 540 });
 
@@ -62,10 +63,10 @@ export const rebuildAllLeaderboardsSeason = onSchedule(
     region: "us-central1",
   },
   async () => {
-    // TODO: remplace par la saison réelle quand tu veux
-    const seasonId = "20252026";
-    const fromYmd = "2025-10-01";
-    const toYmd = "2026-06-30";
+    const season = await getCurrentSeasonConfig(db);
+    const seasonId = season.seasonId;
+    const fromYmd = season.fromYmd;
+    const toYmd = season.toYmd;
 
     const LIMIT_GROUPS_PER_RUN = 200; // ajuste selon budget/volume
 

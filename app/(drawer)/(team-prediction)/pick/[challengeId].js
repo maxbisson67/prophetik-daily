@@ -25,6 +25,7 @@ import {
   formatMlbPitcherEraLine,
   formatMlbPitcherNameAndRecord,
 } from "@src/mlb/mlbPitcherDisplayHelpers";
+import { mlbScheduleGameDocPath } from "@src/mlb/mlbScheduleClient";
 import TeamPredictionBundlePickScreen from "@src/defis/TeamPredictionBundlePickScreen";
 
 const RED = "#b91c1c";
@@ -322,14 +323,13 @@ const unsubEntry = entryRef.onSnapshot(
       return;
     }
 
-    const gameId = String(challenge.gameId || "");
-    const gameYmd = String(challenge.gameYmd || "");
-    if (!gameId || !gameYmd) return;
+    const schedulePath = mlbScheduleGameDocPath(challenge?.gameYmd, challenge?.gameId);
+    if (!schedulePath) return;
 
     let cancelled = false;
 
     firestore()
-      .doc(`mlb_schedule_daily/${gameYmd}/games/${gameId}`)
+      .doc(schedulePath)
       .get()
       .then((snap) => {
         if (cancelled || !snap.exists) return;

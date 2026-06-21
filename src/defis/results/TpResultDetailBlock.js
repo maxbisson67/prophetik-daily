@@ -11,100 +11,241 @@ import TpParticipantsModal from "@src/defis/results/TpParticipantsModal";
 import { tpEntryHasParticipation } from "@src/defis/results/challengeResultsModel";
 import {
   formatPickPoints,
-  formatResultWinnerLine,
-  formatTpPickLine,
+  getLiveScores,
+  getPickScores,
+  getSlotOfficialScores,
+  formatOfficialPeriodSuffix,
   isSlotDecided,
   lookupPickByGameId,
   resolveTpPickResult,
+  resolveTpSlotResultsStatus,
+  scoreTpPickAgainstLive,
 } from "@src/defis/tpBundleDisplayHelpers";
+import useLiveGameScores from "@src/defis/results/useLiveGameScores";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors }) {
-  const awayAbbr = safeAbbr(slot?.awayAbbr);
-  const homeAbbr = safeAbbr(slot?.homeAbbr);
-  const awayTeam = lookupTeamByAbbr(league, awayAbbr);
-  const homeTeam = lookupTeamByAbbr(league, homeAbbr);
-  const pickLine = formatTpPickLine(pick, league);
-  const slotDecided = isSlotDecided(slot);
-  const officialLine = slotDecided ? formatResultWinnerLine(slot, league) : null;
-  const resolved = resolveTpPickResult({ pick, slot, pickResult, bundle });
-  const pointsLine = formatPickPoints(pickResult || resolved);
-  const showPickIcon = !!pickLine && slotDecided && resolved != null;
+function formatScoreValue(v) {
+  return v != null && Number.isFinite(Number(v)) ? String(v) : "—";
+}
+
+function TpScoreboardRow({ label, awayTeam, homeTeam, awayAbbr, homeAbbr, awayScore, homeScore, suffix, colors }) {
+  return (
+    <View style={{ marginTop: 8 }}>
+      <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800", marginBottom: 4 }}>
+        {label}
+      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+        <TeamLogoBadge team={awayTeam} size={16} colors={colors} />
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>{awayAbbr}</Text>
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
+          ({formatScoreValue(awayScore)})
+        </Text>
+        <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 13, marginHorizontal: 2 }}>
+          -
+        </Text>
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
+          ({formatScoreValue(homeScore)})
+        </Text>
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>{homeAbbr}</Text>
+        <TeamLogoBadge team={homeTeam} size={16} colors={colors} />
+        {suffix ? (
+          <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>
+            {suffix}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function MatchDivider() {
+  return (
+    <View
+      style={{
+        height: 1,
+        backgroundColor: "rgba(239,68,68,0.24)",
+        marginVertical: 12,
+      }}
+    />
+  );
+}
+
+function TpSlotStatusChip({ status, colors }) {
+  const ui = (() => {
+    if (status === "registered") {
+      return {
+        label: i18n.t("challenges.joined", { defaultValue: "Inscrit" }),
+        color: "#16a34a",
+        icon: "checkmark-circle-outline",
+        bg: "rgba(22,163,74,0.10)",
+      };
+    }
+    if (status === "completed") {
+      return {
+        label: i18n.t("challenges.status.completed", { defaultValue: "Terminé" }),
+        color: "#6b7280",
+        icon: "checkmark-circle",
+        bg: "rgba(107,114,128,0.10)",
+      };
+    }
+    return {
+      label: i18n.t("challenges.status.awaiting", { defaultValue: "En cours" }),
+      color: "#ea580c",
+      icon: "timer-outline",
+      bg: "rgba(234,88,12,0.10)",
+    };
+  })();
 
   return (
     <View
       style={{
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: ui.bg,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        {slot?.isFavoriteGame ? (
-          <Text style={{ marginRight: 6, fontSize: 12 }}>★</Text>
-        ) : (
-          <Text style={{ marginRight: 6, color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
-            {slot?.slot || "·"}
-          </Text>
-        )}
+      <Ionicons name={ui.icon} size={12} color={ui.color} />
+      <Text style={{ marginLeft: 5, color: ui.color, fontWeight: "800", fontSize: 11 }}>
+        {ui.label}
+      </Text>
+    </View>
+  );
+}
 
-        <TeamLogoBadge team={awayTeam} size={18} colors={colors} />
-        <Text style={{ color: colors.text, fontWeight: "900", marginHorizontal: 6, fontSize: 13 }}>
-          {awayAbbr}
+function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors, liveGame }) {
+  const awayAbbr = safeAbbr(slot?.awayAbbr);
+  const homeAbbr = safeAbbr(slot?.homeAbbr);
+  const awayTeam = lookupTeamByAbbr(league, awayAbbr);
+  const homeTeam = lookupTeamByAbbr(league, homeAbbr);
+
+  const slotDecided = isSlotDecided(slot);
+  const slotStatus = String(slot?.status || "").toLowerCase();
+  const liveScores = getLiveScores(liveGame);
+  const hasLiveScores = liveScores.away != null && liveScores.home != null;
+  const showLive = !slotDecided && hasLiveScores && ["live", "locked"].includes(slotStatus);
+
+  const officialScores = getSlotOfficialScores(slot);
+  const pickScores = getPickScores(pick);
+  const hasPick = pickScores.away != null && pickScores.home != null;
+
+  const resolved = slotDecided
+    ? resolveTpPickResult({ pick, slot, pickResult, bundle })
+    : showLive
+    ? scoreTpPickAgainstLive(pick, slot, liveGame, bundle)
+    : null;
+
+  const pointsLine = formatPickPoints(pickResult || resolved);
+  const isProvisional = showLive && resolved?.provisional;
+
+  const liveSuffix = showLive
+    ? String(liveGame?.statusText || "").trim() || null
+    : slotDecided
+    ? formatOfficialPeriodSuffix(slot, league)
+    : null;
+
+  const scoreboardProps = {
+    awayTeam,
+    homeTeam,
+    awayAbbr,
+    homeAbbr,
+    colors,
+  };
+
+  const slotResultsStatus = resolveTpSlotResultsStatus(slot);
+
+  return (
+    <View style={{ paddingVertical: 4 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 4,
+        }}
+      >
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
+          {awayAbbr} @ {homeAbbr}
         </Text>
-        <Text style={{ color: colors.subtext, fontWeight: "900" }}>@</Text>
-        <Text style={{ color: colors.text, fontWeight: "900", marginHorizontal: 6, fontSize: 13 }}>
-          {homeAbbr}
-        </Text>
-        <TeamLogoBadge team={homeTeam} size={18} colors={colors} />
+        <TpSlotStatusChip status={slotResultsStatus} colors={colors} />
       </View>
 
-      {officialLine ? (
-        <View style={{ marginTop: 6, paddingLeft: 22 }}>
-          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>
-            {i18n.t("tp.results.officialScore", { defaultValue: "Résultat" })}
-            {": "}
-            {officialLine}
+      {slotDecided ? (
+        <TpScoreboardRow
+          {...scoreboardProps}
+          label={i18n.t("tp.results.officialScore", { defaultValue: "Résultat" })}
+          awayScore={officialScores.away}
+          homeScore={officialScores.home}
+          suffix={liveSuffix}
+        />
+      ) : showLive ? (
+        <TpScoreboardRow
+          {...scoreboardProps}
+          label={i18n.t("tp.results.liveScore", { defaultValue: "Live" })}
+          awayScore={liveScores.away}
+          homeScore={liveScores.home}
+          suffix={liveSuffix}
+        />
+      ) : null}
+
+      {hasPick ? (
+        <TpScoreboardRow
+          {...scoreboardProps}
+          label={i18n.t("tp.results.predictionLine", { defaultValue: "Prédiction" })}
+          awayScore={pickScores.away}
+          homeScore={pickScores.home}
+        />
+      ) : (
+        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8 }}>
+          {i18n.t("challenges.noPickForMatch", { defaultValue: "Aucune prédiction" })}
+        </Text>
+      )}
+
+      {resolved != null && (isProvisional || slotDecided) ? (
+        <View
+          style={{
+            marginTop: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text
+            style={{
+              color: isProvisional ? colors.subtext : colors.text,
+              fontSize: 12,
+              fontWeight: isProvisional ? "700" : "900",
+              flex: 1,
+            }}
+          >
+            {isProvisional
+              ? i18n.t("tp.results.unconfirmedPoints", {
+                  defaultValue: "{{points}} pt(s) non confirmés",
+                  points: Number(resolved?.points ?? 0),
+                })
+              : pointsLine ||
+                i18n.t("tp.results.noPoints", { defaultValue: "0 pt" })}
           </Text>
-          {pickLine ? (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginTop: 2,
-              }}
-            >
-              <Text style={{ color: colors.subtext, fontSize: 12, flex: 1 }}>
-                {i18n.t("challenges.myPickShort", { defaultValue: "Moi" })}
-                {": "}
-                {pickLine}
-                {pointsLine ? ` · ${pointsLine}` : ""}
-              </Text>
-              {showPickIcon ? (
-                <Ionicons
-                  name={resolved.winnerCorrect ? "checkmark-circle" : "close-circle"}
-                  size={18}
-                  color={resolved.winnerCorrect ? "#16a34a" : "#dc2626"}
-                  style={{ marginLeft: 8 }}
-                />
-              ) : null}
-            </View>
-          ) : (
-            <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>
-              {i18n.t("challenges.noPickForMatch", { defaultValue: "Aucune prédiction" })}
-            </Text>
-          )}
+          {hasPick ? (
+            <Ionicons
+              name={resolved.winnerCorrect ? "checkmark-circle" : "close-circle"}
+              size={18}
+              color={resolved.winnerCorrect ? "#16a34a" : "#dc2626"}
+              style={{ marginLeft: 8 }}
+            />
+          ) : null}
         </View>
       ) : null}
     </View>
   );
 }
 
-export default function TpResultDetailBlock({ item, colors, myEntry = null }) {
+export default function TpResultDetailBlock({ item, colors, myEntry = null, showLiveScores = false }) {
   const { user } = useAuth();
   const uid = String(user?.uid || "");
 
@@ -127,6 +268,19 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null }) {
   const pickResults = myEntryEffective?.pickResults || {};
   const totalPoints = Number(myEntryEffective?.totalPoints ?? 0);
   const hasParticipation = tpEntryHasParticipation(myEntryEffective);
+
+  const liveGameIds = useMemo(() => {
+    if (!showLiveScores) return [];
+    return games
+      .filter((slot) => {
+        const st = String(slot?.status || "").toLowerCase();
+        return !isSlotDecided(slot) && ["live", "locked"].includes(st);
+      })
+      .map((slot) => String(slot.gameId || ""))
+      .filter(Boolean);
+  }, [games, showLiveScores]);
+
+  const liveScores = useLiveGameScores(liveGameIds, league, bundle?.gameYmd);
 
   useEffect(() => {
     if (!bundleId) {
@@ -163,7 +317,7 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null }) {
 
     return () => {
       try {
-        unsub();
+        unsub?.();
       } catch {}
     };
   }, [bundleId]);
@@ -177,25 +331,28 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null }) {
         })}
       </Text>
 
-      {games.map((slot) => {
+      {games.map((slot, index) => {
         const gameId = String(slot.gameId || "");
         return (
-          <TpMatchResultRow
-            key={gameId}
-            slot={slot}
-            league={league}
-            bundle={bundle}
-            pick={lookupPickByGameId(picks, gameId)}
-            pickResult={lookupPickByGameId(pickResults, gameId)}
-            colors={colors}
-          />
+          <View key={gameId}>
+            <TpMatchResultRow
+              slot={slot}
+              league={league}
+              bundle={bundle}
+              pick={lookupPickByGameId(picks, gameId)}
+              pickResult={lookupPickByGameId(pickResults, gameId)}
+              colors={colors}
+              liveGame={liveScores[gameId] || null}
+            />
+            {index < games.length - 1 ? <MatchDivider /> : null}
+          </View>
         );
       })}
 
       {hasParticipation ? (
         <Text style={{ color: colors.text, marginTop: 10, fontSize: 13, fontWeight: "900" }}>
           {i18n.t("tp.results.myTotalPoints", {
-            defaultValue: "Mon total : {{points}} pt(s)",
+            defaultValue: "Mes points : {{points}} pt(s)",
             points: totalPoints,
           })}
         </Text>

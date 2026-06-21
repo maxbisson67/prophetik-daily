@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
+import ResultsTabHint from "@src/home/components/ResultsTabHint";
 
 import { TeamLogo } from "@src/nhl/nhlAssets";
 
@@ -490,38 +491,7 @@ export default function DefiListItem({
     </>
   ) : showResultsCta ? (
     <>
-      <TouchableOpacity
-        onPress={onPressResults}
-        activeOpacity={0.85}
-        style={{
-          marginTop: 12,
-          paddingVertical: 10,
-          borderRadius: 12,
-          alignItems: "center",
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.border,
-          width: "100%",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <MaterialCommunityIcons
-            name="clipboard-text-outline"
-            size={16}
-            color={RED_DARK}
-          />
-          <Text
-            style={{
-              color: RED_DARK,
-              fontWeight: "900",
-              fontSize: 13,
-              marginLeft: 6,
-            }}
-          >
-            {ctaLabel}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      <ResultsTabHint colors={colors} style={{ marginTop: 12 }} />
 
       <SecondaryTsCta
         colors={colors}
@@ -644,26 +614,7 @@ export default function DefiListItem({
               </TouchableOpacity>
             </View>
           ) : showResultsCta ? (
-            <TouchableOpacity
-              onPress={onPressResults}
-              activeOpacity={0.85}
-              style={{
-                backgroundColor: colors.card,
-                borderWidth: 1,
-                borderColor: colors.border,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 10,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <Text style={{ color: RED_DARK, fontWeight: "900", fontSize: 13 }}>
-                {i18n.t("home.viewResults", { defaultValue: "Voir les résultats" })}
-              </Text>
-              <MaterialCommunityIcons name="chevron-right" size={16} color={RED_DARK} />
-            </TouchableOpacity>
+            <ResultsTabHint colors={colors} />
           ) : (
             <TouchableOpacity
               disabled={!canJoin}

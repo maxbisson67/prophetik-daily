@@ -79,41 +79,10 @@ function CornerBracket({ corner, color, scale }) {
   );
 }
 
-function formatRankOrdinal(rank) {
-  const x = Number(rank);
-  if (!Number.isFinite(x) || x <= 0) return "—";
-
-  const lang = String(i18n.language || "fr").slice(0, 2).toLowerCase();
-  if (lang === "en") {
-    const mod100 = x % 100;
-    if (mod100 >= 11 && mod100 <= 13) return `${x}th`;
-    switch (x % 10) {
-      case 1:
-        return `${x}st`;
-      case 2:
-        return `${x}nd`;
-      case 3:
-        return `${x}rd`;
-      default:
-        return `${x}th`;
-    }
-  }
-
-  return x === 1 ? "1er" : `${x}e`;
-}
-
-function formatRankParts(rank, totalMembers) {
+function formatRankDisplay(rank) {
   const r = Number(rank);
-  const total = Number(totalMembers);
-  if (!Number.isFinite(r) || r <= 0 || !Number.isFinite(total) || total <= 0) {
-    return { main: "—", suffix: "" };
-  }
-
-  const ordinal = formatRankOrdinal(r);
-  const main = String(r);
-  const suffix = `${ordinal.slice(main.length)}/${total}`;
-
-  return { main, suffix };
+  if (!Number.isFinite(r) || r <= 0) return "—";
+  return String(r);
 }
 
 function getDashboardTheme(isDark) {
@@ -209,11 +178,12 @@ function DashboardPill({ label, bg, color }) {
       }}
     >
       <Text
+        numberOfLines={1}
         style={{
           color,
           fontWeight: "800",
-          fontSize: 10,
-          letterSpacing: 1.1,
+          fontSize: 9,
+          letterSpacing: 0.6,
         }}
       >
         {label}
@@ -255,12 +225,13 @@ function DashboardColumn({
         {title}
       </Text>
       <Text
+        numberOfLines={1}
         style={{
           marginTop: 2,
           color: ui.subtitle,
           fontWeight: "700",
           fontSize: 9,
-          letterSpacing: 0.8,
+          letterSpacing: 0.5,
         }}
       >
         {subtitle}
@@ -351,7 +322,7 @@ function StreakCompactBar({
   const loadingGroup = !!groupSummary?.loading;
 
   const pointsTarget = Math.round(Number(groupSummary?.myPoints || 0));
-  const rankParts = formatRankParts(groupSummary?.myRank, groupSummary?.totalMembers);
+  const rankDisplay = formatRankDisplay(groupSummary?.myRank);
 
   const dayPillLabel =
     Number(currentStreak || 0) === 1
@@ -377,25 +348,8 @@ function StreakCompactBar({
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "stretch" }}>
-          <DashboardColumn
-            icon="fire"
-            columnTheme={ui.streak}
-            ui={ui}
-            title={i18n.t("progression.statsStreakTitle", { defaultValue: "SÉRIE" })}
-            subtitle={i18n.t("progression.statsStreakSubtitle", { defaultValue: "EN FEU" })}
-            value={String(currentStreak)}
-            pillLabel={dayPillLabel}
-          />
-
           {showGroupStats ? (
             <>
-              <View
-                style={{
-                  width: 1,
-                  backgroundColor: ui.divider,
-                  marginVertical: 14,
-                }}
-              />
               <PointsDashboardColumn
                 columnTheme={ui.points}
                 ui={ui}
@@ -415,14 +369,30 @@ function StreakCompactBar({
                 columnTheme={ui.rank}
                 ui={ui}
                 title={i18n.t("progression.statsRankTitle", { defaultValue: "RANG" })}
-                subtitle={i18n.t("progression.statsRankSubtitle", { defaultValue: "MA POSITION" })}
-                value={rankParts.main}
-                valueSuffix={rankParts.suffix}
-                pillLabel={i18n.t("progression.statsPositionPill", { defaultValue: "POSITION" })}
+                subtitle={i18n.t("progression.statsRankSubtitle", { defaultValue: "MA POS." })}
+                value={rankDisplay}
+                pillLabel={i18n.t("progression.statsPositionPill", { defaultValue: "POS." })}
                 loading={loadingGroup}
+              />
+              <View
+                style={{
+                  width: 1,
+                  backgroundColor: ui.divider,
+                  marginVertical: 14,
+                }}
               />
             </>
           ) : null}
+
+          <DashboardColumn
+            icon="fire"
+            columnTheme={ui.streak}
+            ui={ui}
+            title={i18n.t("progression.statsStreakTitle", { defaultValue: "SÉRIE" })}
+            subtitle={i18n.t("progression.statsStreakSubtitle", { defaultValue: "EN FEU" })}
+            value={String(currentStreak)}
+            pillLabel={dayPillLabel}
+          />
         </View>
       </View>
 

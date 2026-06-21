@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Modal,
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import { useRouter } from "expo-router";
@@ -14,7 +13,7 @@ import i18n from "@src/i18n/i18n";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
-import FirstGoalLiveCard from "@src/firstGoal/FirstGoalLiveCard";
+import ResultsTabHint from "@src/home/components/ResultsTabHint";
 import {
   getFgcResultPlayerName,
   getFgcResultTeamAbbr,
@@ -22,8 +21,6 @@ import {
   getFgcResultPrefix,
   getFgcMode,
 } from "@src/firstGoal/fgcChallengeUtils";
-
-/* --------------------------------- Helpers -------------------------------- */
 
 function chunk(arr, size = 10) {
   const out = [];
@@ -80,12 +77,6 @@ function getSignupDeadline(ch) {
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
-}
-
-function getStatusCtaLabel() {
-  return i18n.t("firstGoal.home.viewPicks", {
-    defaultValue: "Voir les choix",
-  });
 }
 
 function listenMyPickForChallenge({ challengeId, uid, onData, onError }) {
@@ -233,9 +224,6 @@ export default function FirstGoalHomeSection({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [myPickByChallengeId, setMyPickByChallengeId] = useState({});
-  const [showStateModal, setShowStateModal] = useState(false);
-  const [selectedGameId, setSelectedGameId] = useState(null);
-  const [selectedChallenge, setSelectedChallenge] = useState(null);
 
   const mergeAndSet = useCallback((mapById) => {
     const list = Array.from(mapById.values());
@@ -518,20 +506,11 @@ export default function FirstGoalHomeSection({
                 ? i18n.t("firstGoal.cta.modifyPick", { defaultValue: "Modifier mon joueur" })
                 : i18n.t("firstGoal.live.join", { defaultValue: "Participer" });
 
-              const secondaryCtaLabel = getStatusCtaLabel();
               const showSecondaryCta = st !== "open";
 
               const onPressCta = () => {
                 if (!challengeId) return;
                 router.push(`/(first-goal)/pick/${challengeId}`);
-              };
-
-              const onPressStateCta = () => {
-                const gameId = String(ch?.gameId || "").trim();
-                if (!gameId) return;
-                setSelectedGameId(gameId);
-                setSelectedChallenge(ch);
-                setShowStateModal(true);
               };
 
               return (
@@ -629,23 +608,7 @@ export default function FirstGoalHomeSection({
 
                   <View style={{ marginTop: 12, gap: 10 }}>
                     {deadlinePassed ? (
-                      <TouchableOpacity
-                        onPress={onPressStateCta}
-                        activeOpacity={0.9}
-                        style={{
-                          width: "100%",
-                          paddingVertical: 10,
-                          borderRadius: 12,
-                          alignItems: "center",
-                          backgroundColor: "#b91c1c",
-                        }}
-                      >
-                        <Text style={{ color: "#fff", fontWeight: "900" }}>
-                          {i18n.t("firstGoal.home.viewResults", {
-                            defaultValue: "Voir les résultats",
-                          })}
-                        </Text>
-                      </TouchableOpacity>
+                      <ResultsTabHint colors={colors} />
                     ) : (
                       <>
                         {showParticipateCta ? (
@@ -665,23 +628,7 @@ export default function FirstGoalHomeSection({
                         ) : null}
 
                         {showSecondaryCta ? (
-                          <TouchableOpacity
-                            onPress={onPressStateCta}
-                            activeOpacity={0.9}
-                            style={{
-                              width: "100%",
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                              alignItems: "center",
-                              backgroundColor: colors.card,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                            }}
-                          >
-                            <Text style={{ color: colors.text, fontWeight: "900" }}>
-                              {secondaryCtaLabel}
-                            </Text>
-                          </TouchableOpacity>
+                          <ResultsTabHint colors={colors} />
                         ) : null}
                       </>
                     )}
@@ -692,85 +639,6 @@ export default function FirstGoalHomeSection({
           </View>
         )}
       </View>
-
-      <Modal
-        visible={showStateModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => {
-          setShowStateModal(false);
-          setSelectedChallenge(null);
-        }}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.4)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.background,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              padding: 16,
-              maxHeight: "85%",
-            }}
-          >
-            <View style={{ alignItems: "center", marginBottom: 8 }}>
-              <View
-                style={{
-                  width: 48,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: colors.border,
-                }}
-              />
-            </View>
-
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 10,
-              }}
-            >
-              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-                {selectedChallenge
-                  ? getFgcTitle(selectedChallenge, i18n.t.bind(i18n))
-                  : i18n.t("firstGoal.live.title", { defaultValue: "Défi: Premier but" })}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => {
-                  setShowStateModal(false);
-                  setSelectedChallenge(null);
-                }}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <MaterialCommunityIcons name="close" size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <FirstGoalLiveCard
-              visible={showStateModal}
-              gameId={selectedGameId}
-              colors={colors}
-            />
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }

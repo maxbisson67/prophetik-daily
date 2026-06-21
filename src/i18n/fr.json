@@ -241,6 +241,7 @@
       "upgradeCta": "Voir les forfaits",   
       "launchAscension":"Lancer une ascension", 
       "participate":"Participer",
+      "resultsTabHint": "Consulte les résultats dans l'onglet {{tab}}.",
       "selectGroupLabel": "Sélectionne un groupe pour voir les défis associés",
       "threeWays":"Trois façons de jouer sur Prophetik",
       "threeWaysSub":"Choisis ton style aujourd’hui.",
@@ -300,7 +301,8 @@
         "empty": "Aucun défi premier but aujourd'hui dans tes groupes",
         "signupDeadline": "Heure limite d'inscription",
         "signupClosed": "Fermé",
-        "viewResults": "Voir les résultats",
+        "viewResults": "Voir le résultat",
+        "viewMyPicks": "Voir mes choix",
         "viewParticipants": "Voir les participants",
         "viewPicks": "Voir les choix",
         "noWinner": "Aucun gagnant",
@@ -1232,10 +1234,10 @@
       "statsPointsTitle": "POINTS",
       "statsPointsSubtitle": "MES POINTS",
       "statsRankTitle": "RANG",
-      "statsRankSubtitle": "MA POSITION",
+      "statsRankSubtitle": "MA POS.",
       "statsDayPill": "JOUR",
       "statsPointsPill": "POINTS",
-      "statsPositionPill": "POSITION",
+      "statsPositionPill": "POS.",
       "statsFooterPrefix": "Continue comme ça !",
       "statsFooterEmphasis": "Bats ta meilleure série !",
       "days": "{{count}} j",
@@ -1428,6 +1430,42 @@
 
       "seasonLine": "Saison {{seasonId}} · {{from}} → {{to}}",
 
+      "selectGroupLabel": "Sélectionne un groupe pour voir le classement",
+
+      "sections": {
+        "topScorers": "Meilleurs pointeurs",
+        "fgc": "Prédire le premier but",
+        "tp": "Prédire les match",
+        "ts": "Prédire les meilleurs joueurs"
+      },
+
+      "columns": {
+        "player": "Joueur",
+        "total": "Total",
+        "points": "Points",
+        "correctPicks": "Bonnes prédictions",
+        "shareFgc": "% du total (FGC)",
+        "shareTp": "% du total (TP)",
+        "shareTs": "% du total (TS)"
+      },
+
+      "challenge": {
+        "noStats": {
+          "fgc": "Aucune donnée Prédire le premier but pour cette saison.",
+          "tp": "Aucune donnée Prédire les match pour cette saison.",
+          "ts": "Aucune donnée Prédire les meilleurs joueurs pour cette saison."
+        }
+      },
+
+      "totals": {
+        "challengePoints": "Points totaux"
+      },
+
+      "actions": {
+        "showAll": "Voir tout ›",
+        "showLess": "Voir moins ›"
+      },
+
       "group": {
         "noStats": "Pas encore de statistiques pour ce groupe."
       },
@@ -1564,6 +1602,7 @@
     "todayTitle": "Aujourd'hui",
     "yesterdayTitle": "Hier",
     "todayDaySummary": "Défis disponibles aujourd'hui",
+    "todayMixedSummary": "Défis et résultats du jour",
     "pastDaySummary": "Résultats des défis de cette journée",
     "todayCompactSummary": "{{joined}} / {{total}} défis rejoints aujourd'hui",
     "goToAccueil": "Participer aux défis du jour",
@@ -1592,7 +1631,7 @@
     "pointsShort": "pt(s)",
     "status": {
       "active": "Actif",
-      "awaiting": "En attente",
+      "awaiting": "En cours",
       "cancelledGhost": "Annulé",
       "completed": "Terminé"
     }
@@ -1612,6 +1651,8 @@
       "myTotalPoints": "Ton total : {{points}} pt(s)",
       "myPickShort": "Toi",
       "seeResults": "Voir le résultat",
+      "viewResults": "Voir les résultats",
+      "viewMyPicks": "Voir mes choix",
       "modifyTeams": "Modifier mes équipes",
       "resultsAvailable": "Résultats disponibles",
       "bundleProgress": "{{done}}/{{total}} prédictions complétées",
@@ -1626,7 +1667,12 @@
     },
     "results": {
       "officialScore": "Résultat",
-      "myTotalPoints": "Mon total : {{points}} pt(s)",
+      "liveScore": "Live",
+      "predictionLine": "Prédiction",
+      "unconfirmedPoints": "{{points}} pt(s) non confirmés",
+      "noPoints": "0 pt",
+      "provisionalHint": "Points provisoires selon le score en cours",
+      "myTotalPoints": "Mes points : {{points}} pt(s)",
       "participantsModalSubtitle": "{{count}} match(s) · classement par points",
       "participantStats": "{{winners}} bon(s) choix(s) · {{exact}} pointage(s) exact(s)"
     },

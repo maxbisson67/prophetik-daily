@@ -170,6 +170,8 @@ export async function resolveTeamPredictionBundleDoc({ db, doc }) {
       );
     }
 
+    await applyPayoutsForDecidedSlots(doc.id, refreshed);
+
     return { bundleId: doc.id, changed: false, status: nextStatus };
   }
 
@@ -226,6 +228,36 @@ export async function resolveTeamPredictionBundles({ db, bundleId = null } = {})
 
     for (const doc of snap.docs) {
       results.push(await resolveTeamPredictionBundleDoc({ db, doc }));
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+    if (snap.size < BATCH_SIZE) break;
+  }
+
+  // Recovery: bundles déjà "decided" mais avec slots non payés
+  lastDoc = null;
+  while (true) {
+    let query = db
+      .collection("team_prediction_bundles")
+      .where("status", "==", "decided")
+      .limit(BATCH_SIZE);
+
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snap = await query.get();
+    if (snap.empty) break;
+
+    for (const doc of snap.docs) {
+      const games = Array.isArray(doc.data()?.games) ? doc.data().games : [];
+      const hasUnpaid = games.some(
+        (g) =>
+          String(g?.status || "").toLowerCase() === "decided" && g?.payoutApplied !== true
+      );
+      if (hasUnpaid) {
+        await applyPayoutsForDecidedSlots(doc.id, games);
+      }
     }
 
     lastDoc = snap.docs[snap.docs.length - 1];

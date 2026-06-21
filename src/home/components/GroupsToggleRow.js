@@ -10,6 +10,7 @@ export default function GroupsToggleRow({
   groups = [], // [{ id, name, avatarUrl, favoriteTeam }]
   value,       // currentGroupId
   onChange,    // (groupId) => void
+  hintKey = "home.selectGroupLabel",
 }) {
   const [open, setOpen] = useState(false);
 
@@ -42,8 +43,8 @@ export default function GroupsToggleRow({
           <GroupAvatar group={selected} size={26} colors={colors} />
           <View style={{ flex: 1 }}>
           <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
-            {i18n.t("home.selectGroupLabel", {
-              defaultValue: "Sélectionne un groupe pour voir les défis associés",
+            {i18n.t(hintKey, {
+              defaultValue: "Sélectionne un groupe",
             })}
           </Text>
             <Text numberOfLines={1} style={{ color: colors.text, fontSize: 14, fontWeight: "900" }}>

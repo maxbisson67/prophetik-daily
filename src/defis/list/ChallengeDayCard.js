@@ -5,11 +5,11 @@ import i18n from "@src/i18n/i18n";
 import FgcResultDetailBlock from "@src/defis/results/FgcResultDetailBlock";
 import TpResultDetailBlock from "@src/defis/results/TpResultDetailBlock";
 import {
-  formatTpBundleMatchupSummary,
   isHistoryResultItem,
-  tpEntryHasParticipation,
+  resolveChallengeDisplayStatus,
 } from "@src/defis/results/challengeResultsModel";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
+import { isTpResultsViewStatus } from "@src/defis/results/navigateToMesResultats";
 
 function initialsFrom(nameOrEmail = "") {
   const s = String(nameOrEmail).trim();
@@ -126,9 +126,9 @@ function statusUi(status) {
     };
   }
 
-  if (st === "awaiting_result" || st === "pending") {
+  if (st === "awaiting_result" || st === "pending" || st === "locked" || st === "partial") {
     return {
-      label: i18n.t("challenges.status.awaiting", { defaultValue: "En attente" }),
+      label: i18n.t("challenges.status.awaiting", { defaultValue: "En cours" }),
       color: "#ea580c",
       icon: "timer-outline",
       bg: "rgba(234,88,12,0.10)",
@@ -163,33 +163,30 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
   participationMaps,
   onOpen,
 }) {
-  const ui = statusUi(item.status);
+  const displayStatus = resolveChallengeDisplayStatus(item);
+  const ui = statusUi(displayStatus);
   const payout = getTotalPayout(item.raw);
   const tpEntry = item.kind === "tp" ? participationMaps?.tp?.[item.id] : null;
-  const tpTotalPoints = Number(tpEntry?.totalPoints ?? 0);
 
-  const showPastSummary =
-    !isToday &&
-    ["closed", "decided", "completed", "cancelled_ghost"].includes(item.status);
+  const showPastSummary = isHistoryResultItem(item);
 
-  const showCta = !(
-    showPastSummary &&
-    (item.kind === "fgc" || (item.kind === "tp" && item.subtype === "bundle"))
-  );
+  const hasInlineResultsDetail =
+    (item.kind === "tp" && item.subtype === "bundle") ||
+    (showPastSummary && item.kind === "fgc");
+
+  const showCta = !hasInlineResultsDetail;
 
   const openCtaLabel = (() => {
+    if (!showPastSummary && isToday) {
+      return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
+    }
     if (item.kind === "tp") {
-      return isHistoryResultItem(item)
+      return isTpResultsViewStatus(displayStatus) || isHistoryResultItem(item)
         ? i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" })
         : i18n.t("challenges.openChallenge", { defaultValue: "Ouvrir" });
     }
     if (item.kind === "fgc") {
-      return isToday
-        ? i18n.t("challenges.viewParticipants", { defaultValue: "Voir les participants" })
-        : i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
-    }
-    if (isToday) {
-      return i18n.t("challenges.openChallenge", { defaultValue: "Ouvrir" });
+      return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
     }
     return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
   })();
@@ -304,32 +301,13 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
         <View style={{ marginTop: 10 }}>
         {item.kind === "fgc" && showPastSummary ? (
           <FgcResultDetailBlock item={item} colors={colors} />
-        ) : item.kind === "tp" && item.subtype === "bundle" && showPastSummary ? (
+        ) : item.kind === "tp" && item.subtype === "bundle" ? (
           <TpResultDetailBlock
             item={item}
             colors={colors}
             myEntry={tpEntry}
+            showLiveScores={!showPastSummary}
           />
-        ) : item.kind === "tp" && item.subtype === "bundle" ? (
-          <>
-            <Text style={{ color: colors.text, fontWeight: "800", fontSize: 13 }}>
-              {i18n.t("tp.home.bundleTitle", {
-                defaultValue: "{{count}} match(s) à prédire",
-                count: Number(item.raw?.gameCount || item.raw?.games?.length || 0),
-              })}
-            </Text>
-            <Text style={{ color: colors.subtext, marginTop: 4, fontSize: 12, lineHeight: 18 }}>
-              {formatTpBundleMatchupSummary(item.raw) || "—"}
-            </Text>
-            {tpEntryHasParticipation(tpEntry) ? (
-              <Text style={{ color: colors.text, marginTop: 6, fontSize: 13, fontWeight: "800" }}>
-                {i18n.t("tp.home.myTotalPoints", {
-                  defaultValue: "Ton total : {{points}} pt(s)",
-                  points: tpTotalPoints,
-                })}
-              </Text>
-            ) : null}
-          </>
         ) : item.kind === "tp" ? (
             <Text style={{ color: colors.text, fontWeight: "900" }}>
             {safeText(item.raw?.awayAbbr)} @ {safeText(item.raw?.homeAbbr)}
@@ -337,7 +315,7 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
         ) : null}
         </View>
 
-      {isToday ? (
+      {isToday && !showPastSummary && displayStatus === "open" ? (
         <View style={{ marginTop: 8 }}>
           <Text style={{ color: colors.subtext, fontSize: 13 }}>
             {i18n.t("challenges.signupDeadlineLabel", { defaultValue: "Heure limite" })}:{" "}
@@ -410,6 +388,29 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
   getTodayKey,
 }) {
   const isToday = section.key === getTodayKey();
+  const hasActiveTodayItems = isToday && section.data.some((item) => !isHistoryResultItem(item));
+  const hasFinishedTodayItems = isToday && section.data.some((item) => isHistoryResultItem(item));
+
+  const sectionSubtitle = (() => {
+    if (!isToday) {
+      return i18n.t("challenges.pastDaySummary", {
+        defaultValue: "Résultats des défis de cette journée",
+      });
+    }
+    if (hasActiveTodayItems && hasFinishedTodayItems) {
+      return i18n.t("challenges.todayMixedSummary", {
+        defaultValue: "Défis et résultats du jour",
+      });
+    }
+    if (hasActiveTodayItems) {
+      return i18n.t("challenges.todayDaySummary", {
+        defaultValue: "Défis disponibles aujourd’hui",
+      });
+    }
+    return i18n.t("challenges.pastDaySummary", {
+      defaultValue: "Résultats des défis de cette journée",
+    });
+  })();
 
   return (
     <View
@@ -439,13 +440,7 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
         </Text>
 
         <Text style={{ marginTop: 2, color: colors.subtext, fontSize: 12 }}>
-          {isToday
-            ? i18n.t("challenges.todayDaySummary", {
-                defaultValue: "Défis disponibles aujourd’hui",
-              })
-            : i18n.t("challenges.pastDaySummary", {
-                defaultValue: "Résultats des défis de cette journée",
-              })}
+          {sectionSubtitle}
         </Text>
       </View>
 

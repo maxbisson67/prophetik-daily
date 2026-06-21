@@ -246,7 +246,8 @@
     "upgradeToJoin": "Upgrade to Pro or VIP to join this challenge.",
     "upgradeCta": "See plans",
     "launchAscension":"Start an Ascension",
-    "participate":"Participate", 
+    "participate":"Participate",
+    "resultsTabHint": "View results in the {{tab}} tab.",
     "selectGroupLabel": "Select a group to view its challenges",
     "threeWays":"Three ways to play on Prophetik",
     "threeWaysSub":"Choose your style today.",
@@ -307,7 +308,8 @@
       "empty": "No first-goal challenge in your groups today",
       "signupDeadline": "Registration deadline",
       "signupClosed": "Closed",
-      "viewResults": "View results",
+      "viewResults": "View result",
+      "viewMyPicks": "View my picks",
       "viewParticipants": "View participants",
       "viewPicks": "View picks",
       "noWinner": "No winner",
@@ -1248,10 +1250,10 @@
     "statsPointsTitle": "POINTS",
     "statsPointsSubtitle": "MY POINTS",
     "statsRankTitle": "RANK",
-    "statsRankSubtitle": "MY POSITION",
+    "statsRankSubtitle": "MY POS.",
     "statsDayPill": "DAY",
     "statsPointsPill": "POINTS",
-    "statsPositionPill": "POSITION",
+    "statsPositionPill": "POS.",
     "statsFooterPrefix": "Keep it up!",
     "statsFooterEmphasis": "Beat your best streak!",
     "days": "{{count}} d",
@@ -1444,6 +1446,42 @@
 
     "seasonLine": "Season {{seasonId}} · {{from}} → {{to}}",
 
+    "selectGroupLabel": "Select a group to view the leaderboard",
+
+    "sections": {
+      "topScorers": "Top scorers",
+      "fgc": "Predict the first goal",
+      "tp": "Predict the match",
+      "ts": "Predict the best players"
+    },
+
+    "columns": {
+      "player": "Player",
+      "total": "Total",
+      "points": "Points",
+      "correctPicks": "Correct picks",
+      "shareFgc": "% of personal total (FGC)",
+      "shareTp": "% of personal total (TP)",
+      "shareTs": "% of personal total (TS)"
+    },
+
+    "challenge": {
+      "noStats": {
+        "fgc": "No Predict the first goal data for this season.",
+        "tp": "No Predict the match data for this season.",
+        "ts": "No Predict the best players data for this season."
+      }
+    },
+
+    "totals": {
+      "challengePoints": "Total points"
+    },
+
+    "actions": {
+      "showAll": "See all ›",
+      "showLess": "See less ›"
+    },
+
     "group": {
       "noStats": "No stats yet for this group."
     },
@@ -1581,6 +1619,7 @@
     "todayTitle": "Today",
     "yesterdayTitle": "Yesterday",
     "todayDaySummary": "Challenges available today",
+    "todayMixedSummary": "Today's challenges and results",
     "pastDaySummary": "Results for this day",
     "todayCompactSummary": "{{joined}} / {{total}} challenges joined today",
     "goToAccueil": "Join today's challenges",
@@ -1609,7 +1648,7 @@
     "pointsShort": "pt(s)",
     "status": {
       "active": "Active",
-      "awaiting": "Pending",
+      "awaiting": "In progress",
       "cancelledGhost": "Cancelled",
       "completed": "Completed"
     }
@@ -1629,6 +1668,8 @@
       "myTotalPoints": "Your total: {{points}} pt(s)",
       "myPickShort": "You",
       "seeResults": "See results",
+      "viewResults": "See results",
+      "viewMyPicks": "View my picks",
       "modifyTeams": "Edit my picks",
       "resultsAvailable": "Results available",
       "bundleProgress": "{{done}}/{{total}} predictions completed",
@@ -1643,7 +1684,12 @@
     },
     "results": {
       "officialScore": "Result",
-      "myTotalPoints": "My total: {{points}} pt(s)",
+      "liveScore": "Live",
+      "predictionLine": "Prediction",
+      "unconfirmedPoints": "{{points}} unconfirmed pt(s)",
+      "noPoints": "0 pt",
+      "provisionalHint": "Provisional points based on the current score",
+      "myTotalPoints": "My points: {{points}} pt(s)",
       "participantsModalSubtitle": "{{count}} game(s) · ranked by points",
       "participantStats": "{{winners}} correct pick(s) · {{exact}} exact score(s)"
     },

@@ -16,6 +16,7 @@ import {
   isBundleDecided,
   isSlotDecided,
 } from "@src/defis/tpBundleDisplayHelpers";
+import ResultsTabHint from "@src/home/components/ResultsTabHint";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
@@ -106,7 +107,7 @@ export default function TeamPredictionBundleHomeCard({
   entry,
   league,
   colors,
-  onPressSecondary,
+  groupId = null,
 }) {
   const router = useRouter();
   const games = Array.isArray(bundle?.games) ? bundle.games : [];
@@ -130,17 +131,21 @@ export default function TeamPredictionBundleHomeCard({
 
   const allPicksComplete = gameCount > 0 && picksCompletedCount >= gameCount;
 
-  const ctaLabel = bundleDecided || locked
-    ? i18n.t("tp.home.seeResults", { defaultValue: "Voir le résultat" })
-    : allPicksComplete
+  const showResultsHub = bundleDecided || locked;
+
+  const ctaLabel = allPicksComplete
     ? i18n.t("tp.home.modifyTeams", { defaultValue: "Modifier mes équipes" })
     : i18n.t("common.participate", { defaultValue: "Participer" });
 
-  const statusLower = String(bundle?.status || "open").toLowerCase();
-  const showSecondaryCta = !bundleDecided && statusLower !== "open";
-  const secondaryCtaLabel = i18n.t("tp.home.viewPredictions", {
-    defaultValue: "Voir les prédictions",
-  });
+  const onPressCta = () => {
+    const challengeId = String(bundle?.id || "").trim();
+    if (!challengeId) return;
+
+    router.push({
+      pathname: "/(drawer)/(team-prediction)/pick/[challengeId]",
+      params: { challengeId },
+    });
+  };
 
   return (
     <View
@@ -210,42 +215,23 @@ export default function TeamPredictionBundleHomeCard({
       </View>
 
       <View style={{ marginTop: 12, gap: 10 }}>
-        <TouchableOpacity
-          onPress={() =>
-            router.push({
-              pathname: "/(drawer)/(team-prediction)/pick/[challengeId]",
-              params: { challengeId: bundle.id },
-            })
-          }
-          activeOpacity={0.9}
-          style={{
-            width: "100%",
-            paddingVertical: 10,
-            borderRadius: 12,
-            alignItems: "center",
-            backgroundColor: "#b91c1c",
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "900" }}>{ctaLabel}</Text>
-        </TouchableOpacity>
-
-        {showSecondaryCta ? (
+        {showResultsHub ? (
+          <ResultsTabHint colors={colors} />
+        ) : (
           <TouchableOpacity
-            onPress={onPressSecondary}
+            onPress={onPressCta}
             activeOpacity={0.9}
             style={{
               width: "100%",
               paddingVertical: 10,
               borderRadius: 12,
               alignItems: "center",
-              backgroundColor: colors.card,
-              borderWidth: 1,
-              borderColor: colors.border,
+              backgroundColor: "#b91c1c",
             }}
           >
-            <Text style={{ color: colors.text, fontWeight: "900" }}>{secondaryCtaLabel}</Text>
+            <Text style={{ color: "#fff", fontWeight: "900" }}>{ctaLabel}</Text>
           </TouchableOpacity>
-        ) : null}
+        )}
       </View>
     </View>
   );
