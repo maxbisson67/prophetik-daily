@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 import useEntitlement from "../subscriptions/useEntitlement";
 import firestore from "@react-native-firebase/firestore";
 import Analytics from "@src/services/analytics";
+import { isMlbScheduleGameSelectable } from "@src/mlb/mlbGameStatusUtils";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -23,17 +24,52 @@ function ymdToCompact(ymd) {
   return String(ymd || "").slice(0, 10).replace(/-/g, "");
 }
 
-async function fetchEligibleDaySummaryFromFirestore(gameDateYmd) {
+function tsToIso(v) {
+  if (!v) return null;
+  const d =
+    typeof v?.toDate === "function"
+      ? v.toDate()
+      : v instanceof Date
+      ? v
+      : new Date(v);
+  return Number.isFinite(d?.getTime?.()) ? d.toISOString() : null;
+}
+
+async function fetchEligibleDaySummaryFromFirestore(gameDateYmd, sport = "NHL") {
   if (!gameDateYmd) return { status: "none", count: 0, firstISO: null };
 
-  const dayId = ymdToCompact(gameDateYmd); // "YYYYMMDD"
+  const league = String(sport || "NHL").toUpperCase();
+  const dayId = ymdToCompact(gameDateYmd);
 
   try {
+    if (league === "MLB") {
+      const dayDocRef = firestore().doc(`mlb_schedule_daily/${dayId}`);
+      const daySnap = await dayDocRef.get();
+
+      if (!daySnap.exists) {
+        return { status: "not_ready", count: 0, firstISO: null };
+      }
+
+      const snap = await dayDocRef
+        .collection("games")
+        .orderBy("startTimeUTC", "asc")
+        .limit(50)
+        .get();
+
+      const eligible = snap.docs.filter((doc) =>
+        isMlbScheduleGameSelectable(doc.data() || {})
+      );
+
+      const count = eligible.length;
+      const firstISO = count ? tsToIso(eligible[0]?.data()?.startTimeUTC) : null;
+
+      return { status: count ? "ok" : "none", count, firstISO };
+    }
+
     const dayDocRef = firestore().doc(`nhl_matchups_daily/${dayId}`);
     const daySnap = await dayDocRef.get();
 
     if (!daySnap.exists) {
-      // Données pas encore ingérées
       return { status: "not_ready", count: 0, firstISO: null };
     }
 
@@ -41,11 +77,11 @@ async function fetchEligibleDaySummaryFromFirestore(gameDateYmd) {
       .collection("games")
       .where("eligibleForProphetik", "==", true)
       .orderBy("startTimeUTC", "asc")
-      .limit(50) // assez pour compter sans exploser (ou augmente si tu veux)
+      .limit(50)
       .get();
 
     const count = snap.size || 0;
-    const firstISO = count ? snap.docs[0]?.data()?.startTimeUTC || null : null;
+    const firstISO = count ? tsToIso(snap.docs[0]?.data()?.startTimeUTC) : null;
 
     return { status: count ? "ok" : "none", count, firstISO };
   } catch (e) {
@@ -436,6 +472,16 @@ const nova = useMemo(() => {
     return new Date(first.getTime() - SIGNUP_DEADLINE_MINUTES_BEFORE_FIRST_GAME * 60 * 1000);
   }, [verifyFirstISO]);
 
+  const selectedGroup = useMemo(
+    () => selectableGroups.find((g) => g.id === selectedGroupId) || null,
+    [selectableGroups, selectedGroupId]
+  );
+
+  const groupSport = useMemo(
+    () => String(selectedGroup?.sport || "NHL").toUpperCase(),
+    [selectedGroup?.sport]
+  );
+
   const verifyDate = useCallback(async () => {
     if (!gameDateYmd) return;
 
@@ -444,7 +490,10 @@ const nova = useMemo(() => {
     setVerifyMsg("");
 
     try {
-      const { status, count, firstISO } = await fetchEligibleDaySummaryFromFirestore(gameDateYmd);    
+      const { status, count, firstISO } = await fetchEligibleDaySummaryFromFirestore(
+        gameDateYmd,
+        groupSport
+      );
       setVerifyCount(count);
       setVerifyFirstISO(firstISO);
 
@@ -496,7 +545,7 @@ const nova = useMemo(() => {
     } finally {
       setVerifying(false);
     }
-  }, [gameDateYmd]);
+  }, [gameDateYmd, groupSport]);
 
   // Auto-verify only when step 3 visible
   useEffect(() => {
@@ -509,7 +558,7 @@ const nova = useMemo(() => {
     if (!visible) return;
     if (step !== 3) return;
     verifyDate();
-  }, [gameDateYmd, visible, step, verifyDate]);
+  }, [gameDateYmd, groupSport, visible, step, verifyDate]);
 
   const onGoToSubscriptions = useCallback(() => {
     onClose?.();
@@ -558,7 +607,8 @@ const nova = useMemo(() => {
       let firstISO = verifyFirstISO;
 
       if (!firstISO) {
-        const { status, count, firstISO: fsFirstISO } = await fetchEligibleDaySummaryFromFirestore(gameDateYmd);
+        const { status, count, firstISO: fsFirstISO } =
+          await fetchEligibleDaySummaryFromFirestore(gameDateYmd, groupSport);
 
         if (status === "not_ready") {
           Alert.alert(
@@ -656,11 +706,6 @@ const nova = useMemo(() => {
     setShowDayPicker(false);
     onClose?.();
   }, [onClose]);
-
-  const selectedGroup = useMemo(
-    () => selectableGroups.find((g) => g.id === selectedGroupId) || null,
-    [selectableGroups, selectedGroupId]
-  );
 
   const renderStep1 = () => {
     return (
@@ -938,7 +983,12 @@ const nova = useMemo(() => {
         </Text>
 
         <Text style={{ fontWeight: "700", color: colors.text }}>
-          {i18n.t("defi.create.date.labelBase", { defaultValue: "Date NHL{{meta}}", meta })}
+          {groupSport === "MLB"
+            ? i18n.t("defi.create.date.labelMlb", {
+                defaultValue: "Date MLB{{meta}}",
+                meta,
+              })
+            : i18n.t("defi.create.date.labelBase", { defaultValue: "Date NHL{{meta}}", meta })}
         </Text>
 
         {verifyMsg ? (

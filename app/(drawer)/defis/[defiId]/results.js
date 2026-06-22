@@ -456,6 +456,12 @@
       [defi]
     );
 
+    const defiSport = React.useMemo(
+      () => String(defi?.sport || group?.sport || "NHL").toUpperCase(),
+      [defi?.sport, group?.sport]
+    );
+    const isMlbTs = defiSport === "MLB";
+
     // 🔒 Caviardage
     const firstGameDate = React.useMemo(() => {
       const v = defi?.firstGameUTC;
@@ -700,6 +706,9 @@ useEffect(() => {
           const d = snap.data() || {};
           setLiveStats({
             playerGoals: d.playerGoals || {},
+            playerHits: d.playerHits || d.playerGoals || {},
+            playerRbi: d.playerRbi || d.playerAssists || {},
+            playerHomeRuns: d.playerHomeRuns || {},
             playerA1: d.playerA1 || {},
             playerA2: d.playerA2 || {},
             playerAssists: d.playerAssists || d.assists || {},
@@ -1132,6 +1141,7 @@ useEffect(() => {
                 currentUid={user?.uid}
                 hideOthersPicks={hideOthersPicks}
                 revealTimeLabel={revealTimeLabel}
+                isMlbTs={isMlbTs}
               />
             </ScrollView>
 
@@ -1473,7 +1483,8 @@ useEffect(() => {
     playerMap,
     currentUid,
     hideOthersPicks,
-    revealTimeLabel
+    revealTimeLabel,
+    isMlbTs = false,
   }) {
   
     if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
@@ -1525,7 +1536,11 @@ useEffect(() => {
         {/* 🔸 LÉGENDE */}
         <View style={{ alignItems: 'center', marginBottom: 8 }}>
           <Text style={{ fontSize: 12, color: colors.subtext }}>
-            {i18n.t('defi.results.participants.legend')}
+            {isMlbTs
+              ? i18n.t("defi.results.participants.legendMlb", {
+                  defaultValue: "H = hits · RBI = points produits · HR = bonus circuit",
+                })
+              : i18n.t('defi.results.participants.legend')}
           </Text>
         </View>
 
@@ -1543,16 +1558,23 @@ useEffect(() => {
       if (!pid || seen.has(pid)) continue;
       seen.add(pid);
 
-      const g = Number(liveStats.playerGoals?.[pid] || 0);
+      const g = isMlbTs
+        ? Number(liveStats.playerHits?.[pid] ?? liveStats.playerGoals?.[pid] ?? 0)
+        : Number(liveStats.playerGoals?.[pid] || 0);
       const a1 = Number(liveStats.playerA1?.[pid] || 0);
       const a2 = Number(liveStats.playerA2?.[pid] || 0);
-      const aC = Number(liveStats.playerAssists?.[pid] || 0);
-      const pts = Number(liveStats.playerPoints?.[pid] || 0);
+      const aC = isMlbTs
+        ? Number(liveStats.playerRbi?.[pid] ?? liveStats.playerAssists?.[pid] ?? 0)
+        : Number(liveStats.playerAssists?.[pid] || 0);
+      const hr = isMlbTs ? Number(liveStats.playerHomeRuns?.[pid] || 0) : 0;
+      const ptsFromLive = Number(liveStats.playerPoints?.[pid] || 0);
 
-      const derived = Math.max(0, pts - g);
-      const assists = Math.max(a1 + a2, aC, derived);
+      const derived = Math.max(0, ptsFromLive - g);
+      const assists = isMlbTs ? aC : Math.max(a1 + a2, aC, derived);
 
-      const points = g + assists;
+      const points = isMlbTs
+        ? ptsFromLive || g + assists + hr
+        : g + assists;
 
       rows.push({
         playerId: pid,
@@ -1561,6 +1583,7 @@ useEffect(() => {
         teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
         goals: g,
         assists,
+        homeRuns: hr,
         points,
       });
     }
@@ -1630,7 +1653,12 @@ useEffect(() => {
           {rows.map((row) => {
             const goals = Number(row.goals) || 0;
             const assists = Number(row.assists) || 0;
-            const points = goals + assists;
+            const homeRuns = Number(row.homeRuns) || 0;
+            const points = Number(row.points) || (isMlbTs ? goals + assists + homeRuns : goals + assists);
+
+            const statLabel = isMlbTs
+              ? `${goals}-${assists}-${homeRuns}=${points}`
+              : `${goals}-${assists}=${points}`;
 
             return (
               <View
@@ -1693,7 +1721,7 @@ useEffect(() => {
                     fontVariant: ["tabular-nums"],
                   }}
                 >
-                  {`${goals}-${assists}=${points}`}
+                  {statLabel}
                 </Text>
               </View>
             );

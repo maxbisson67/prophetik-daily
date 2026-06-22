@@ -6,6 +6,10 @@ import { APP_TZ, appYmd, addDays } from "../ProphetikDate.js";
 import { FUNCTIONS_REGION } from "../regions.js";
 import { createTpBundleForGroupIfNeeded } from "./createTpBundleForGroup.js";
 import { notifyGroupOfAutopilotChallenges } from "./autopilotNotification.js";
+import {
+  createAutopilotTsDefiForGroup,
+  hasExistingTsForGroupDay,
+} from "../defis/autopilotTsCreate.js";
 
 const MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule";
 
@@ -395,6 +399,51 @@ export const createDailyFgcAutopilot = onSchedule(
           logger.info("[GROUP AUTOPILOT] tp skipped existing", { groupId, sport });
         } else if (tpResult.reason === "no-games") {
           logger.info("[GROUP AUTOPILOT] tp skipped no games", { groupId, sport });
+        }
+
+        const tsExists = await hasExistingTsForGroupDay({ groupId, gameYmd });
+        if (!tsExists) {
+          if (scheduleCache[sport] == null) {
+            scheduleCache[sport] =
+              sport === "MLB"
+                ? await fetchMlbScheduleForYmd(gameYmd)
+                : await fetchNhlScheduleForYmd(gameYmd);
+          }
+
+          const tsGames = scheduleCache[sport] || [];
+          const tsFirst =
+            tsGames.length > 0
+              ? tsGames.reduce((earliest, g) =>
+                  !earliest || g.gameStartTimeUTC < earliest.gameStartTimeUTC ? g : earliest
+                )
+              : null;
+
+          if (tsFirst?.gameStartTimeUTC) {
+            const defiId = await createAutopilotTsDefiForGroup({
+              groupId,
+              sport,
+              gameYmd,
+              firstGameUTC: tsFirst.gameStartTimeUTC,
+            });
+
+            if (defiId) {
+              createdChallenges.push({
+                type: "ts",
+                defiId,
+                label: "Top scoreurs 3×3",
+              });
+
+              logger.info("[GROUP AUTOPILOT] ts created", {
+                groupId,
+                sport,
+                defiId,
+              });
+            }
+          } else {
+            logger.info("[GROUP AUTOPILOT] ts skipped no games", { groupId, sport });
+          }
+        } else {
+          logger.info("[GROUP AUTOPILOT] ts skipped existing", { groupId, sport });
         }
 
         if (createdChallenges.length) {

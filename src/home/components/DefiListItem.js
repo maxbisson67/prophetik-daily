@@ -1,8 +1,14 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
+import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
+import {
+  formatParticipantCtaLabel,
+  resolveParticipantTaskStatus,
+} from "@src/defis/participant/participantTaskStatus";
+import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
 
 import { TeamLogo } from "@src/nhl/nhlAssets";
 
@@ -63,7 +69,7 @@ function getPlayerLastName(fullName) {
   return parts[parts.length - 1] || s;
 }
 
-function getPlayerAvatarUrl(player) {
+function getPlayerAvatarUrl(player, sport = "NHL") {
   const explicit =
     player?.headshotUrl ||
     player?.avatarUrl ||
@@ -75,10 +81,10 @@ function getPlayerAvatarUrl(player) {
   const id = String(player?.playerId || "").trim();
   if (!id) return null;
 
-  return `https://assets.nhle.com/mugs/nhl/20252026/${id}.png`;
+  return resolveDefiHeadshotUrl(sport, player?.teamAbbr, id);
 }
 
-function normalizeTsPlayerRow(player, idx = 0) {
+function normalizeTsPlayerRow(player, idx = 0, sport = "NHL") {
   if (!player || typeof player !== "object") return null;
 
   const playerName =
@@ -101,7 +107,7 @@ function normalizeTsPlayerRow(player, idx = 0) {
     lastName: getPlayerLastName(playerName),
     teamAbbr: player?.teamAbbr || player?.team || "",
     playerId: player?.playerId || "",
-    avatarUrl: getPlayerAvatarUrl(player),
+    avatarUrl: getPlayerAvatarUrl(player, sport),
   };
 }
 
@@ -146,7 +152,7 @@ function SecondaryTsCta({ colors, onPress, RED_DARK }) {
   );
 }
 
-function getTsSelectionLines(item) {
+function getTsSelectionLines(item, sport = "NHL") {
   const entry =
     item?.myEntry ||
     item?.myParticipation ||
@@ -169,7 +175,7 @@ function getTsSelectionLines(item) {
   for (const collection of candidateCollections) {
     if (Array.isArray(collection)) {
       const rows = collection
-        .map((p, idx) => normalizeTsPlayerRow(p, idx))
+        .map((p, idx) => normalizeTsPlayerRow(p, idx, sport))
         .filter(Boolean);
 
       if (rows.length) return rows;
@@ -177,7 +183,7 @@ function getTsSelectionLines(item) {
 
     if (collection && typeof collection === "object") {
       const rows = objectValuesSorted(collection)
-        .map((p, idx) => normalizeTsPlayerRow(p, idx))
+        .map((p, idx) => normalizeTsPlayerRow(p, idx, sport))
         .filter(Boolean);
 
       if (rows.length) return rows;
@@ -199,7 +205,7 @@ function getTsSelectionLines(item) {
         lastName: getPlayerLastName(oneName),
         teamAbbr: entry?.teamAbbr || "",
         playerId: entry?.playerId || "",
-        avatarUrl: getPlayerAvatarUrl(entry),
+        avatarUrl: getPlayerAvatarUrl(entry, sport),
       },
     ];
   }
@@ -357,8 +363,27 @@ export default function DefiListItem({
   const isAsc = isAscensionDefi(item);
   const isTS = isTsDefi(item);
 
+  const itemSport = String(item?.sport || "NHL").toUpperCase();
+  const tsSelectionLines = isTS ? getTsSelectionLines(item, itemSport) : [];
 
-  const tsSelectionLines = isTS ? getTsSelectionLines(item) : [];
+  const participantTask = useMemo(() => {
+    if (!isTS) return null;
+    return resolveParticipantTaskStatus(
+      {
+        kind: "ts",
+        id: item?.id,
+        type: item?.type,
+        status: item?.status,
+        signupDeadline: signupDeadlineValue,
+        raw: item,
+      },
+      {
+        isToday: true,
+        entry: item?.myParticipation,
+        uiStatus,
+      }
+    );
+  }, [isTS, item, signupDeadlineValue, uiStatus]);
 
   const pickCount = getTsPickCount(item, tsSelectionLines);
   const title = isTS
@@ -367,22 +392,29 @@ export default function DefiListItem({
     ? ascLabel(item)
     : normalDefiLabel(item);
 
+  const ctaFromTask = participantTask?.showPrimaryCta
+    ? formatParticipantCtaLabel(participantTask.ctaKey)
+    : participantTask?.showModifyCta
+    ? formatParticipantCtaLabel(participantTask.ctaKey)
+    : null;
+
   const ctaLabel = lockedByPlan
     ? i18n.t("home.upgradeCta", { defaultValue: "Voir les forfaits" })
     : showResultsCta
     ? i18n.t("home.viewResults", { defaultValue: "Voir les résultats" })
-    : tsSelectionLines.length > 0
-    ? i18n.t("home.modifyMySelection", {
-        defaultValue: "Modifier ma sélection",
-      })
-    : pickCount > 1
-    ? i18n.t("home.pickMyXPlayers", {
-        defaultValue: "Choisir mes {{count}} joueurs",
-        count: pickCount,
-      })
-    : i18n.t("home.pickMyOnePlayer", {
-        defaultValue: "Choisir mon joueur",
-      });
+    : ctaFromTask ||
+      (tsSelectionLines.length > 0
+        ? i18n.t("home.modifyMySelection", {
+            defaultValue: "Modifier ma sélection",
+          })
+        : pickCount > 1
+        ? i18n.t("home.pickMyXPlayers", {
+            defaultValue: "Choisir mes {{count}} joueurs",
+            count: pickCount,
+          })
+        : i18n.t("home.pickMyOnePlayer", {
+            defaultValue: "Choisir mon joueur",
+          }));
 
 
 
@@ -407,6 +439,16 @@ export default function DefiListItem({
         >
           {title}
         </Text>
+
+        {participantTask ? (
+          <View style={{ marginTop: 8, alignSelf: "flex-start" }}>
+            <ParticipantTaskStatusChip
+              task={participantTask}
+              colors={colors}
+              compact
+            />
+          </View>
+        ) : null}
 
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
           <Text style={{ color: "#f97316", fontWeight: "900", fontSize: 14 }}>

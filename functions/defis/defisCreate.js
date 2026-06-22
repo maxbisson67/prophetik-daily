@@ -96,8 +96,8 @@ function ymdToCompact(ymd) {
   return String(ymd || "").slice(0, 10).replace(/-/g, "");
 }
 
-async function hasEligibleProphetikGamesForYmd(ymd) {
-  const dayId = ymdToCompact(ymd); // "YYYYMMDD"
+async function hasEligibleNhlGamesForYmd(ymd) {
+  const dayId = ymdToCompact(ymd);
 
   const snap = await db
     .collection("nhl_matchups_daily")
@@ -108,6 +108,23 @@ async function hasEligibleProphetikGamesForYmd(ymd) {
     .get();
 
   return !snap.empty;
+}
+
+async function hasEligibleMlbGamesForYmd(ymd) {
+  const dayId = ymdToCompact(ymd);
+
+  const snap = await db
+    .collection(`mlb_schedule_daily/${dayId}/games`)
+    .limit(1)
+    .get();
+
+  return !snap.empty;
+}
+
+async function hasEligibleGamesForYmd(ymd, sport = "NHL") {
+  const s = String(sport || "NHL").toUpperCase();
+  if (s === "MLB") return hasEligibleMlbGamesForYmd(ymd);
+  return hasEligibleNhlGamesForYmd(ymd);
 }
 
 async function getUserTier(uid) {
@@ -238,11 +255,13 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
     const usageId = `${uid}_${weekKey}`;
     const usageRef = db.doc(`usage_weekly/${usageId}`);
 
+    const groupSnap = await db.doc(`groups/${groupId}`).get();
+    const groupSport = String(groupSnap.data()?.sport || "NHL").toUpperCase();
+
     // game date
     const gameDateYmd = normalizeGameDate(input.gameDate); // "YYYY-MM-DD"
 
-    // ✅ Refuser création si aucun match éligible à cette date (ex: pré-saison gameType=1)
-    const eligible = await hasEligibleProphetikGamesForYmd(gameDateYmd);
+    const eligible = await hasEligibleGamesForYmd(gameDateYmd, groupSport);
     if (!eligible) {
       throw new HttpsError("failed-precondition", "DATE_NOT_ELIGIBLE", {
         reason: "DATE_NOT_ELIGIBLE",
@@ -310,6 +329,8 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
         gameDate: gameDateYmd,
         createdBy: uid,
         participationCost,
+        potJoinIncrement: type,
+        sport: groupSport,
         status,
         firstGameUTC,
         signupDeadline,

@@ -139,7 +139,7 @@ export async function buildMlbDefiPlayerPool({
       const hits = num(d.hits, 0);
       const homeRuns = num(d.homeRuns, 0);
       const gamesPlayed = num(d.gamesPlayed, 0);
-      const points = runs + rbi;
+      const points = hits + rbi + homeRuns;
 
       statsMap.set(pid, {
         runs,
@@ -157,8 +157,11 @@ export async function buildMlbDefiPlayerPool({
     const st = statsMap.get(p.playerId) || {};
     return {
       ...p,
-      goals: num(st.runs, 0),
+      goals: num(st.hits, 0),
       assists: num(st.rbi, 0),
+      hits: num(st.hits, 0),
+      rbi: num(st.rbi, 0),
+      homeRuns: num(st.homeRuns, 0),
       points: num(st.points, 0),
       gamesPlayed: num(st.gamesPlayed, 0),
       pointsPerGame: num(st.pointsPerGame, 0),
@@ -191,6 +194,9 @@ export async function buildMlbDefiPlayerPool({
       injury: p.injury || null,
       goals: num(p.goals, 0),
       assists: num(p.assists, 0),
+      hits: num(p.hits, 0),
+      rbi: num(p.rbi, 0),
+      homeRuns: num(p.homeRuns, 0),
       points: num(p.points, 0),
       gamesPlayed: num(p.gamesPlayed, 0),
       pointsPerGame: num(p.pointsPerGame, 0),

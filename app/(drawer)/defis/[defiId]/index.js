@@ -88,10 +88,10 @@ function teamLogo(abbr) {
   return LOGO_MAP[String(abbr || "").toUpperCase()];
 }
 
-function headshotUrl(abbr, playerId) {
-  return abbr && playerId
-    ? `https://assets.nhle.com/mugs/nhl/20252026/${String(abbr).toUpperCase()}/${playerId}.png`
-    : null;
+import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
+
+function headshotUrlForSport(sport, abbr, playerId) {
+  return resolveDefiHeadshotUrl(sport, abbr, playerId);
 }
 
 function getPickPrefix() {
@@ -292,6 +292,16 @@ export default function DefiParticipationScreen() {
   }, [defi?.type]);
 
   const rules = useMemo(() => getDefiRules(defi?.type), [defi?.type]);
+
+  const defiSport = useMemo(
+    () => String(defi?.sport || defi?.poolSport || "NHL").toUpperCase(),
+    [defi?.sport, defi?.poolSport]
+  );
+
+  const headshotUrl = useCallback(
+    (abbr, playerId) => headshotUrlForSport(defiSport, abbr, playerId),
+    [defiSport]
+  );
 
   const requirementsText = useMemo(() => (rules ? fmtTierRequirements(rules) : null), [rules]);
 

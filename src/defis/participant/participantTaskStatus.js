@@ -52,6 +52,79 @@ function canActOnFgc(displayStatus) {
   return st === "open" || st === "postponed";
 }
 
+function toDateMs(v) {
+  if (!v) return null;
+  const d =
+    typeof v?.toDate === "function"
+      ? v.toDate()
+      : v instanceof Date
+      ? v
+      : new Date(v);
+  const ms = d?.getTime?.();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function countTsCompletePicks(entry, required) {
+  const picks = Array.isArray(entry?.picks) ? entry.picks : [];
+  const done = picks.filter((p) => p?.playerId).length;
+  return { done, total: required, hasAnyPick: done > 0 };
+}
+
+function resolveTsParticipantTaskStatus(item, options = {}) {
+  const { isToday = false, nowMs = Date.now() } = options;
+  const entry = options.entry ?? options.participation ?? null;
+  const required = toNumber(item?.raw?.type ?? item?.type ?? 3, 3);
+  const { done, total, hasAnyPick } = countTsCompletePicks(entry, required);
+
+  const uiStatus = String(options.uiStatus || item?.status || "open").toLowerCase();
+  const deadlineMs = toDateMs(
+    options.signupDeadline ?? item?.signupDeadline ?? item?.raw?.signupDeadline
+  );
+  const pastDeadline = deadlineMs != null && nowMs >= deadlineMs;
+  const canAct = uiStatus === "open" && !pastDeadline;
+  const isPast = !isToday || pastDeadline || uiStatus !== "open";
+
+  if (isPast) {
+    return buildParticipantTaskResult({
+      state: hasAnyPick
+        ? PARTICIPANT_TASK_STATES.CLOSED_JOINED
+        : PARTICIPANT_TASK_STATES.CLOSED_NOT_JOINED,
+      done,
+      total,
+      progressHint: hasAnyPick && done < total,
+    });
+  }
+
+  if (done === 0) {
+    return buildParticipantTaskResult({
+      state: PARTICIPANT_TASK_STATES.ACTION_REQUIRED,
+      done,
+      total,
+      ctaKey: "participate",
+      showPrimaryCta: true,
+    });
+  }
+
+  if (done > 0 && done < total) {
+    return buildParticipantTaskResult({
+      state: PARTICIPANT_TASK_STATES.PARTIAL,
+      done,
+      total,
+      ctaKey: "complete",
+      showPrimaryCta: true,
+    });
+  }
+
+  return buildParticipantTaskResult({
+    state: PARTICIPANT_TASK_STATES.DONE_WAITING,
+    done,
+    total,
+    ctaKey: canAct ? "modify" : null,
+    showModifyCta: canAct,
+    progressHint: total > 0 && done >= total,
+  });
+}
+
 function buildParticipantTaskResult({
   state,
   done = 0,
@@ -201,6 +274,10 @@ export function resolveParticipantTaskStatus(item, options = {}) {
 
   if (item.kind === "tp") {
     return resolveTpParticipantTaskStatus(item, options);
+  }
+
+  if (item.kind === "ts") {
+    return resolveTsParticipantTaskStatus(item, options);
   }
 
   const hasEntry = !!options.entry || !!options.participation;

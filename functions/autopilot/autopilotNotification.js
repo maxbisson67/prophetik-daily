@@ -16,6 +16,10 @@ function challengeLabel(challenge, sport) {
     return count > 1 ? `${count} matchs à prédire` : "Prédire l'issue des matchs";
   }
 
+  if (challenge.type === "ts") {
+    return challenge.label || "Top scoreurs 3×3";
+  }
+
   if (challenge.label) return String(challenge.label);
   return null;
 }
@@ -47,6 +51,9 @@ export function buildAutopilotNotificationPayload({ groupId, sport, createdChall
     }
     if (challenge.type === "tp" && challenge.bundleId) {
       data.tpBundleId = String(challenge.bundleId);
+    }
+    if (challenge.type === "ts" && (challenge.defiId || challenge.id)) {
+      data.tsDefiId = String(challenge.defiId || challenge.id);
     }
   }
 
