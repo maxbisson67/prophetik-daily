@@ -40,6 +40,8 @@ import {
   isBundleDecided,
   isSlotDecided,
 } from "@src/defis/tpBundleDisplayHelpers";
+import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 
 const RED = "#b91c1c";
 
@@ -289,11 +291,14 @@ function BundleMatchPickSection({
   colors,
   formatTeamLine,
   nowTick,
+  scheduleInfo = null,
 }) {
   const isMlb = league === "MLB";
   const gameId = String(slot?.gameId || "");
   const decided = isSlotDecided(slot);
-  const locked = decided || isSlotLocked(slot);
+  const postponed = isMlb && isMlbGamePostponed(scheduleInfo?.status);
+  const locked =
+    decided || isSlotLocked(slot, nowTick, { scheduleStatus: scheduleInfo?.status });
   const awayAbbr = String(slot?.awayAbbr || "");
   const homeAbbr = String(slot?.homeAbbr || "");
   const awayTeam = lookupTeamByAbbr(league, awayAbbr);
@@ -326,6 +331,10 @@ function BundleMatchPickSection({
         {decided ? (
           <Text style={{ color: "#2563eb", fontWeight: "900", fontSize: 12 }}>
             {i18n.t("tp.pick.decided", { defaultValue: "Terminé" })}
+          </Text>
+        ) : postponed ? (
+          <Text style={{ color: "#d97706", fontWeight: "900", fontSize: 12 }}>
+            {i18n.t("tp.home.postponed", { defaultValue: "Reporté" })}
           </Text>
         ) : locked ? (
           <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
@@ -377,12 +386,20 @@ function BundleMatchPickSection({
         </>
       ) : (
         <>
-      <MatchLockInfo
-        slot={slot}
-        locked={locked}
-        nowTick={nowTick}
-        colors={colors}
-      />
+      {postponed ? (
+        <Text style={{ color: "#d97706", fontSize: 12, marginBottom: 8, fontWeight: "800" }}>
+          {i18n.t("tp.pick.postponedHint", {
+            defaultValue: "Match reporté — prédiction ouverte",
+          })}
+        </Text>
+      ) : (
+        <MatchLockInfo
+          slot={slot}
+          locked={locked}
+          nowTick={nowTick}
+          colors={colors}
+        />
+      )}
 
       <View
         style={{
@@ -516,6 +533,19 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     [bundle?.games]
   );
   const { formatLine: formatTeamLine } = useTpBundleTeamRecords({ bundle, games, league });
+
+  const mlbScheduleTargets = useMemo(
+    () =>
+      isMlb
+        ? games.map((slot) => ({
+            gameYmd: bundle?.gameYmd,
+            gameId: slot?.gameId,
+          }))
+        : [],
+    [isMlb, games, bundle?.gameYmd]
+  );
+
+  const scheduleByGameId = useMlbScheduleGames(mlbScheduleTargets);
 
   useEffect(() => {
     if (!authReady || !user?.uid || !bundleId) return;
@@ -714,6 +744,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                     onSave={() => handleSaveMatch(gameId)}
                     saving={savingGameId === gameId}
                     colors={colors}
+                    scheduleInfo={scheduleByGameId[gameId] || null}
                   />
                 );
               })}

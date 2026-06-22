@@ -15,24 +15,37 @@ import {
   getFgcResultPrefix,
   getFgcResultTeamAbbr,
 } from "@src/firstGoal/fgcChallengeUtils";
+import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import { resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
 
 function safeAbbr(v) {
   const s = String(v || "").trim().toUpperCase();
   return s || "";
 }
 
-function MatchupRow({ awayAbbr, homeAbbr, sport, colors }) {
+function MatchupRow({ awayAbbr, homeAbbr, sport, colors, matchTask = null }) {
   const away = safeAbbr(awayAbbr);
   const home = safeAbbr(homeAbbr);
   const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <TeamLogoBadge team={lookupTeamByAbbr(league, away)} size={22} colors={colors} />
-      <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>{away || "—"}</Text>
-      <Text style={{ color: colors.subtext, marginHorizontal: 10, fontWeight: "900" }}>@</Text>
-      <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>{home || "—"}</Text>
-      <TeamLogoBadge team={lookupTeamByAbbr(league, home)} size={22} colors={colors} />
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
+        <TeamLogoBadge team={lookupTeamByAbbr(league, away)} size={22} colors={colors} />
+        <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>{away || "—"}</Text>
+        <Text style={{ color: colors.subtext, marginHorizontal: 10, fontWeight: "900" }}>@</Text>
+        <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>{home || "—"}</Text>
+        <TeamLogoBadge team={lookupTeamByAbbr(league, home)} size={22} colors={colors} />
+      </View>
+
+      {matchTask ? <MatchTaskStatusChip task={matchTask} colors={colors} compact /> : null}
     </View>
   );
 }
@@ -63,7 +76,7 @@ function isCorrectPick(entry, winnerPlayerId) {
   return String(entry.playerId) === String(winnerPlayerId);
 }
 
-export default function FgcResultDetailBlock({ item, colors }) {
+export default function FgcResultDetailBlock({ item, colors, scheduleStatus = null }) {
   const { user } = useAuth();
   const uid = String(user?.uid || "");
 
@@ -126,6 +139,7 @@ export default function FgcResultDetailBlock({ item, colors }) {
   const myPoints = entryPoints(myEntry);
   const myCorrect = isCorrectPick(myEntry, winnerPlayerId);
   const myTeamAbbr = entryTeamAbbr(myEntry);
+  const matchTask = resolveFgcMatchStatus(challenge, { scheduleStatus });
 
   return (
     <View style={{ marginTop: 10 }}>
@@ -134,6 +148,7 @@ export default function FgcResultDetailBlock({ item, colors }) {
         homeAbbr={challenge?.homeAbbr}
         sport={challengeLeague}
         colors={colors}
+        matchTask={matchTask}
       />
 
       <View

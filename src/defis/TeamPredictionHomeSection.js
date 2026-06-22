@@ -19,6 +19,12 @@ import TeamPredictionBundleHomeCard from "@src/defis/TeamPredictionBundleHomeCar
 import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
 import { listenRNFB } from "@src/home/firestoreListen";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
+import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
+import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+import {
+  getProphetikBusinessYmdCompact,
+  getPreviousProphetikBusinessYmdCompact,
+} from "@src/lib/prophetikBusinessDate";
 
 /* ---------------- Helpers ---------------- */
 
@@ -41,22 +47,8 @@ function toYmdCompact(date = new Date()) {
   ).padStart(2, "0")}`;
 }
 
-function getBusinessDate(now = new Date()) {
-  const d = new Date(now);
-  if (d.getHours() < 4) {
-    d.setDate(d.getDate() - 1);
-  }
-  return d;
-}
-
 function getBusinessYmdCompact(now = new Date()) {
-  return toYmdCompact(getBusinessDate(now));
-}
-
-function getPreviousBusinessYmdCompact(now = new Date()) {
-  const d = new Date(getBusinessDate(now));
-  d.setDate(d.getDate() - 1);
-  return toYmdCompact(d);
+  return getProphetikBusinessYmdCompact(now);
 }
 
 function getDeadline(ch) {
@@ -296,6 +288,30 @@ export default function TeamPredictionHomeSection({
     [items, sportLeague]
   );
 
+  const mlbScheduleTargets = useMemo(() => {
+    if (sportLeague !== "MLB") return [];
+
+    const targets = [];
+
+    if (bundle?.games?.length) {
+      const gameYmd = String(bundle?.gameYmd || "").trim();
+      bundle.games.forEach((slot) => {
+        const gameId = String(slot?.gameId || "").trim();
+        if (gameYmd && gameId) targets.push({ gameYmd, gameId });
+      });
+    }
+
+    legacyItems.forEach((ch) => {
+      const gameYmd = String(ch?.gameYmd || "").trim();
+      const gameId = String(ch?.gameId || ch?.gamePk || "").trim();
+      if (gameYmd && gameId) targets.push({ gameYmd, gameId });
+    });
+
+    return targets;
+  }, [sportLeague, bundle?.gameYmd, bundle?.games, legacyItems]);
+
+  const scheduleByGameId = useMlbScheduleGames(mlbScheduleTargets);
+
   const hasAnyTpContent = !!bundle || legacyItems.length > 0;
 
   useEffect(() => {
@@ -503,7 +519,7 @@ export default function TeamPredictionHomeSection({
     }
 
     const businessToday = getBusinessYmdCompact();
-    const businessYesterday = getPreviousBusinessYmdCompact();
+    const businessYesterday = getPreviousProphetikBusinessYmdCompact();
 
     setLoading(true);
 
@@ -674,6 +690,7 @@ export default function TeamPredictionHomeSection({
               league={sportLeague}
               colors={colors}
               groupId={currentGroupId}
+              scheduleByGameId={scheduleByGameId}
             />
           ) : null}
 
@@ -693,14 +710,19 @@ export default function TeamPredictionHomeSection({
               (Array.isArray(ch?.participantUids) ? ch.participantUids.length : 0);
 
             const statusLower = String(ch.status || "").toLowerCase();
+            const gameId = String(ch?.gameId || ch?.gamePk || "").trim();
+            const scheduleInfo = scheduleByGameId[gameId] || null;
+            const postponed =
+              challengeLeague === "MLB" && isMlbGamePostponed(scheduleInfo?.status);
 
             const locked =
-              statusLower === "locked" ||
-              statusLower === "live" ||
-              statusLower === "pending" ||
-              statusLower === "decided" ||
-              statusLower === "closed" ||
-              (deadline ? Date.now() >= deadline.getTime() : false);
+              !postponed &&
+              (statusLower === "locked" ||
+                statusLower === "live" ||
+                statusLower === "pending" ||
+                statusLower === "decided" ||
+                statusLower === "closed" ||
+                (deadline ? Date.now() >= deadline.getTime() : false));
 
             const ctaLabel = hasEntry
               ? i18n.t("tp.home.modifyTeam", { defaultValue: "Modifier mon équipe" })
@@ -734,7 +756,12 @@ export default function TeamPredictionHomeSection({
                   colors={colors}
                 />
 
-                <TpHomeDeadlineBlock locked={locked} deadline={deadline} colors={colors} />
+                <TpHomeDeadlineBlock
+                  locked={locked}
+                  deadline={deadline}
+                  postponed={postponed}
+                  colors={colors}
+                />
 
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
                   <MaterialCommunityIcons name="account-group" size={16} color={colors.subtext} />

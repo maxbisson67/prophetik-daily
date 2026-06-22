@@ -5,6 +5,11 @@ import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, FieldValue, logger } from "../utils.js";
 import { FUNCTIONS_REGION } from "../regions.js";
+import {
+  isMlbGameFinal,
+  isMlbGamePostponedFromLiveFeed,
+  isMlbGamePreGame,
+} from "../mlb/mlbGameStatus.js";
 
 const SCHEDULER_REGION = FUNCTIONS_REGION;
 const REVEAL_DELAY_SECONDS = 90;
@@ -46,17 +51,85 @@ function challengeGamePk(ch) {
 }
 
 function isMlbFinal(liveFeed) {
-  const abs = String(liveFeed?.gameData?.status?.abstractGameState || "").toLowerCase();
-  const detailed = String(liveFeed?.gameData?.status?.detailedState || "").toLowerCase();
-  const coded = String(liveFeed?.gameData?.status?.statusCode || "").toLowerCase();
-  const inningState = String(liveFeed?.liveData?.linescore?.currentInningState || "").toLowerCase();
+  return isMlbGameFinal(liveFeed);
+}
 
-  return (
-    abs === "final" ||
-    detailed.includes("final") ||
-    coded === "f" ||
-    inningState === "final"
+function isMlbPreGame(liveFeed) {
+  return isMlbGamePreGame(liveFeed);
+}
+
+function isMlbPostponed(liveFeed) {
+  return isMlbGamePostponedFromLiveFeed(liveFeed);
+}
+
+function resolveChallengeReopenStatus(ch, now = new Date()) {
+  const start = ch?.gameStartTimeUTC?.toDate?.();
+  if (!start) return "open";
+
+  const lockAt = new Date(start.getTime() - 5 * 60 * 1000);
+  return now >= lockAt ? "locked" : "open";
+}
+
+async function resetPrematureTerminalGame(fgRef) {
+  await fgRef.set(
+    {
+      status: "none",
+      message: "Reset: match non commencé.",
+      candidate: FieldValue.delete(),
+      revealAt: FieldValue.delete(),
+      finalReviewAt: FieldValue.delete(),
+      provisionalAt: FieldValue.delete(),
+      confirmedAt: FieldValue.delete(),
+      result: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
   );
+}
+
+async function reopenPrematurelyClosedChallenges(gamePk, { now = new Date(), force = false } = {}) {
+  const pk = str(gamePk);
+  if (!pk) return 0;
+
+  const snap = await db
+    .collection("first_goal_challenges")
+    .where("league", "==", "MLB")
+    .where("gameId", "==", pk)
+    .get();
+
+  let reopened = 0;
+
+  for (const doc of snap.docs) {
+    const ch = doc.data() || {};
+    if (!isMlbFirstRbiChallenge(ch)) continue;
+
+    const status = String(ch.status || "").toLowerCase();
+    const reopenable = force
+      ? ["closed", "decided", "locked"].includes(status)
+      : ["closed", "decided"].includes(status);
+    if (!reopenable) continue;
+
+    const start = ch.gameStartTimeUTC?.toDate?.();
+    if (!force && start && now.getTime() >= start.getTime()) continue;
+
+    await doc.ref.set(
+      {
+        status: force ? "open" : resolveChallengeReopenStatus(ch, now),
+        closedAt: FieldValue.delete(),
+        decidedAt: FieldValue.delete(),
+        firstRbi: FieldValue.delete(),
+        firstGoal: FieldValue.delete(),
+        resultMessage: FieldValue.delete(),
+        winnersCount: 0,
+        winnersPreviewUids: [],
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    reopened += 1;
+  }
+
+  return reopened;
 }
 
 function teamAbbrFromNode(node) {
@@ -281,7 +354,41 @@ export async function runMlbFirstRbiDetectForGamePk(gamePk) {
   const existing = existingSnap.exists ? existingSnap.data() || {} : null;
   const existingStatus = String(existing?.status || "");
 
+  let liveFeed = null;
+  const loadLiveFeed = async () => {
+    if (!liveFeed) liveFeed = await fetchMlbLiveFeed(pk);
+    return liveFeed;
+  };
+
   if (existingStatus === "confirmed" || existingStatus === "no_winner") {
+    try {
+      liveFeed = await loadLiveFeed();
+    } catch (e) {
+      logger.warn("[FGC-MLB] terminal verify fetch failed", {
+        gamePk: pk,
+        err: String(e?.message || e),
+      });
+    }
+
+    if (liveFeed && (isMlbPreGame(liveFeed) || isMlbPostponed(liveFeed))) {
+      const postponed = isMlbPostponed(liveFeed);
+      await resetPrematureTerminalGame(fgRef);
+      const reopened = await reopenPrematurelyClosedChallenges(pk, { force: postponed });
+      logger.warn("[FGC-MLB] repaired premature terminal state", {
+        gamePk: pk,
+        previousStatus: existingStatus,
+        postponed,
+        reopened,
+      });
+      return {
+        ok: true,
+        repaired: true,
+        reason: postponed ? "postponed-terminal-reset" : "pregame-terminal-reset",
+        gamePk: pk,
+        reopened,
+      };
+    }
+
     const applyRes = await repairConfirmedMlbFirstRbiForGamePk(pk);
     return {
       ok: true,
@@ -293,12 +400,12 @@ export async function runMlbFirstRbiDetectForGamePk(gamePk) {
     };
   }
 
-  const liveFeed = await fetchMlbLiveFeed(pk);
+  liveFeed = await loadLiveFeed();
   const allPlays = liveFeed?.liveData?.plays?.allPlays || [];
   const firstRbi = extractFirstRbiFromAllPlays(allPlays, liveFeed);
 
   if (!firstRbi) {
-    if (isMlbFinal(liveFeed)) {
+    if (isMlbFinal(liveFeed) && !isMlbPreGame(liveFeed)) {
       const beforeStatus = existingStatus || "";
       await writeNoWinner(fgRef, pk);
       await applyFirstRbiResultToChallengesCore({
@@ -538,7 +645,7 @@ export const confirmPendingMlbFirstRbiGames_mutualized = onSchedule(
       }
 
       if (!currentFirst) {
-        if (liveFeed && isMlbFinal(liveFeed)) {
+        if (liveFeed && isMlbFinal(liveFeed) && !isMlbPreGame(liveFeed)) {
           const beforeStatus = String(fg.status || "");
           await writeNoWinner(fgRef, gamePk);
           await applyFirstRbiResultToChallengesCore({
@@ -659,6 +766,23 @@ export async function applyFirstRbiResultToChallengesCore({
   if (!terminal) return { ok: false, reason: "not-terminal" };
   if (!force && beforeStatus === afterStatus) {
     return { ok: true, skipped: true, reason: "same-status" };
+  }
+
+  try {
+    const liveFeed = await fetchMlbLiveFeed(pk);
+    if (isMlbPreGame(liveFeed) || isMlbPostponed(liveFeed)) {
+      logger.warn("[RBI-M] skip apply: match not started or postponed", {
+        gamePk: pk,
+        afterStatus,
+        postponed: isMlbPostponed(liveFeed),
+      });
+      return { ok: false, reason: isMlbPostponed(liveFeed) ? "postponed" : "pregame", gamePk: pk };
+    }
+  } catch (e) {
+    logger.warn("[RBI-M] pregame verify fetch failed", {
+      gamePk: pk,
+      err: String(e?.message || e),
+    });
   }
 
   const challengeDocs = await queryMlbFirstRbiChallenges(pk);

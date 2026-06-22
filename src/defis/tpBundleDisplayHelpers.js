@@ -1,25 +1,38 @@
-import { isSlotLocked } from "@src/defis/tpDeadlineHelpers";
+import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+import {
+  MATCH_TASK_STATES,
+  resolveTpSlotMatchStatus,
+} from "@src/defis/match/matchTaskStatus";
 
 export function isSlotDecided(slot) {
   return String(slot?.status || "").toLowerCase() === "decided";
 }
 
-/** Statut UI d'un match TP dans Mes résultats : registered | in_progress | completed */
-export function resolveTpSlotResultsStatus(slot) {
-  const st = String(slot?.status || "open").toLowerCase();
-  if (isSlotDecided(slot) || st === "closed") return "completed";
-  if (["live", "locked", "pending"].includes(st)) return "in_progress";
-
-  if (st === "open") {
-    return isSlotLocked(slot) ? "in_progress" : "registered";
-  }
-
-  return "in_progress";
+/** @deprecated Préférer resolveTpSlotMatchStatus — alias legacy pour compatibilité. */
+export function resolveTpSlotResultsStatus(slot, options = {}) {
+  const task = resolveTpSlotMatchStatus(slot, options);
+  const legacyMap = {
+    [MATCH_TASK_STATES.NOT_STARTED]: "registered",
+    [MATCH_TASK_STATES.IN_PROGRESS]: "in_progress",
+    [MATCH_TASK_STATES.COMPLETED]: "completed",
+    [MATCH_TASK_STATES.POSTPONED]: "postponed",
+  };
+  return legacyMap[task.state] || "in_progress";
 }
 
 export function isBundleDecided(bundle) {
   const status = String(bundle?.status || "").toLowerCase();
   return status === "decided" || status === "closed";
+}
+
+export function hasOpenPostponedTpSlot(games = [], league, scheduleByGameId = {}) {
+  if (String(league || "").toUpperCase() !== "MLB") return false;
+
+  return (games || []).some((slot) => {
+    if (isSlotDecided(slot)) return false;
+    const scheduleInfo = scheduleByGameId[String(slot?.gameId || "")];
+    return isMlbGamePostponed(scheduleInfo?.status);
+  });
 }
 
 function safeAbbr(v) {

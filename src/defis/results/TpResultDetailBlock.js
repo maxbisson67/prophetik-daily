@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import firestore from "@react-native-firebase/firestore";
 
@@ -10,6 +10,12 @@ import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import TpParticipantsModal from "@src/defis/results/TpParticipantsModal";
 import { tpEntryHasParticipation } from "@src/defis/results/challengeResultsModel";
 import {
+  formatParticipantTaskLabel,
+  resolveParticipantTaskStatus,
+} from "@src/defis/participant/participantTaskStatus";
+import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import { resolveTpSlotMatchStatus } from "@src/defis/match/matchTaskStatus";
+import {
   formatPickPoints,
   getLiveScores,
   getPickScores,
@@ -18,10 +24,12 @@ import {
   isSlotDecided,
   lookupPickByGameId,
   resolveTpPickResult,
-  resolveTpSlotResultsStatus,
   scoreTpPickAgainstLive,
 } from "@src/defis/tpBundleDisplayHelpers";
-import useLiveGameScores from "@src/defis/results/useLiveGameScores";
+import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+import useLiveGameScores, {
+  normalizeMlbScheduleGameForLive,
+} from "@src/defis/results/useLiveGameScores";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
@@ -31,32 +39,163 @@ function formatScoreValue(v) {
   return v != null && Number.isFinite(Number(v)) ? String(v) : "—";
 }
 
-function TpScoreboardRow({ label, awayTeam, homeTeam, awayAbbr, homeAbbr, awayScore, homeScore, suffix, colors }) {
+const SCORE_LABEL_WIDTH = 88;
+const SCORE_COL_WIDTH = 64;
+const LOGO_SLOT_HEIGHT = 28;
+
+function scoreBoxBorderStyle(colors) {
+  return {
+    borderWidth: StyleSheet.hairlineWidth > 0 ? StyleSheet.hairlineWidth * 2 : 1,
+    borderColor: colors.subtext,
+  };
+}
+
+function ScoreBox({ value, colors }) {
   return (
-    <View style={{ marginTop: 8 }}>
-      <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800", marginBottom: 4 }}>
+    <View
+      style={{
+        width: SCORE_COL_WIDTH,
+        minHeight: 44,
+        paddingVertical: 8,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.card,
+        ...scoreBoxBorderStyle(colors),
+      }}
+    >
+      <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
+        {formatScoreValue(value)}
+      </Text>
+    </View>
+  );
+}
+
+function TeamScoreColumn({ team, score, showLogo, colors }) {
+  return (
+    <View style={{ width: SCORE_COL_WIDTH, alignItems: "center" }}>
+      {showLogo ? (
+        <View
+          style={{
+            height: LOGO_SLOT_HEIGHT,
+            alignItems: "center",
+            justifyContent: "flex-end",
+            marginBottom: 6,
+          }}
+        >
+          <TeamLogoBadge team={team} size={22} colors={colors} />
+        </View>
+      ) : null}
+      <ScoreBox value={score} colors={colors} />
+    </View>
+  );
+}
+
+function ScoreGridRow({ label, awayTeam, homeTeam, awayScore, homeScore, showLogos, colors }) {
+  const labelPadBottom = showLogos ? 12 : 4;
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+      <Text
+        style={{
+          width: SCORE_LABEL_WIDTH,
+          color: colors.subtext,
+          fontSize: 12,
+          fontWeight: "800",
+          paddingBottom: labelPadBottom,
+        }}
+      >
         {label}
       </Text>
-      <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-        <TeamLogoBadge team={awayTeam} size={16} colors={colors} />
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>{awayAbbr}</Text>
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
-          ({formatScoreValue(awayScore)})
-        </Text>
-        <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 13, marginHorizontal: 2 }}>
+
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "flex-end",
+          justifyContent: "center",
+        }}
+      >
+        <TeamScoreColumn
+          team={awayTeam}
+          score={awayScore}
+          showLogo={showLogos}
+          colors={colors}
+        />
+
+        <Text
+          style={{
+            color: colors.subtext,
+            fontWeight: "900",
+            fontSize: 16,
+            paddingHorizontal: 8,
+            paddingBottom: labelPadBottom,
+          }}
+        >
           -
         </Text>
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
-          ({formatScoreValue(homeScore)})
-        </Text>
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>{homeAbbr}</Text>
-        <TeamLogoBadge team={homeTeam} size={16} colors={colors} />
-        {suffix ? (
-          <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>
-            {suffix}
-          </Text>
-        ) : null}
+
+        <TeamScoreColumn
+          team={homeTeam}
+          score={homeScore}
+          showLogo={showLogos}
+          colors={colors}
+        />
       </View>
+    </View>
+  );
+}
+
+function TpMatchScorePanel({
+  liveLabel,
+  liveAwayScore,
+  liveHomeScore,
+  pickAwayScore,
+  pickHomeScore,
+  hasPick,
+  postponed,
+  awayTeam,
+  homeTeam,
+  colors,
+}) {
+  return (
+    <View>
+      <ScoreGridRow
+        label={`${liveLabel}:`}
+        awayTeam={awayTeam}
+        homeTeam={homeTeam}
+        awayScore={postponed ? null : liveAwayScore}
+        homeScore={postponed ? null : liveHomeScore}
+        showLogos={false}
+        colors={colors}
+      />
+
+      {hasPick ? (
+        <>
+          <View style={{ height: 10 }} />
+          <ScoreGridRow
+            label={`${i18n.t("tp.results.predictionLine", { defaultValue: "Prédiction" })}:`}
+            awayTeam={awayTeam}
+            homeTeam={homeTeam}
+            awayScore={pickAwayScore}
+            homeScore={pickHomeScore}
+            showLogos
+            colors={colors}
+          />
+        </>
+      ) : (
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 12,
+            marginLeft: SCORE_LABEL_WIDTH,
+            marginTop: 4,
+          }}
+        >
+          {i18n.t("challenges.noPickForMatch", { defaultValue: "Aucune prédiction" })}
+        </Text>
+      )}
     </View>
   );
 }
@@ -67,58 +206,46 @@ function MatchDivider() {
       style={{
         height: 1,
         backgroundColor: "rgba(239,68,68,0.24)",
-        marginVertical: 12,
+        marginVertical: 10,
       }}
     />
   );
 }
 
-function TpSlotStatusChip({ status, colors }) {
-  const ui = (() => {
-    if (status === "registered") {
-      return {
-        label: i18n.t("challenges.joined", { defaultValue: "Inscrit" }),
-        color: "#16a34a",
-        icon: "checkmark-circle-outline",
-        bg: "rgba(22,163,74,0.10)",
-      };
-    }
-    if (status === "completed") {
-      return {
-        label: i18n.t("challenges.status.completed", { defaultValue: "Terminé" }),
-        color: "#6b7280",
-        icon: "checkmark-circle",
-        bg: "rgba(107,114,128,0.10)",
-      };
-    }
-    return {
-      label: i18n.t("challenges.status.awaiting", { defaultValue: "En cours" }),
-      color: "#ea580c",
-      icon: "timer-outline",
-      bg: "rgba(234,88,12,0.10)",
-    };
-  })();
-
+function SectionDivider() {
   return (
     <View
       style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 999,
-        backgroundColor: ui.bg,
+        height: 1,
+        backgroundColor: "rgba(239,68,68,0.32)",
+        marginTop: 4,
+        marginBottom: 12,
       }}
-    >
-      <Ionicons name={ui.icon} size={12} color={ui.color} />
-      <Text style={{ marginLeft: 5, color: ui.color, fontWeight: "800", fontSize: 11 }}>
-        {ui.label}
-      </Text>
-    </View>
+    />
   );
 }
 
-function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors, liveGame }) {
+function SectionTitle({ children, colors }) {
+  return (
+    <Text style={{ color: colors.text, fontWeight: "800", fontSize: 13, marginBottom: 6 }}>
+      {children}
+    </Text>
+  );
+}
+
+function resolveMatchPeriodLabel({
+  slot,
+  league,
+  effectiveLiveGame,
+  slotDecided,
+  postponed,
+}) {
+  if (postponed) return null;
+  if (slotDecided) return formatOfficialPeriodSuffix(slot, league);
+  return String(effectiveLiveGame?.statusText || "").trim() || null;
+}
+
+function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors, liveGame, scheduleInfo = null }) {
   const awayAbbr = safeAbbr(slot?.awayAbbr);
   const homeAbbr = safeAbbr(slot?.homeAbbr);
   const awayTeam = lookupTeamByAbbr(league, awayAbbr);
@@ -126,9 +253,19 @@ function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors, live
 
   const slotDecided = isSlotDecided(slot);
   const slotStatus = String(slot?.status || "").toLowerCase();
-  const liveScores = getLiveScores(liveGame);
+  const postponed = isMlbGamePostponed(scheduleInfo?.status);
+  const scheduleLive =
+    league === "MLB" && scheduleInfo
+      ? normalizeMlbScheduleGameForLive(scheduleInfo)
+      : null;
+  const effectiveLiveGame = liveGame || scheduleLive;
+  const liveScores = getLiveScores(effectiveLiveGame);
   const hasLiveScores = liveScores.away != null && liveScores.home != null;
-  const showLive = !slotDecided && hasLiveScores && ["live", "locked"].includes(slotStatus);
+  const showLive =
+    !postponed &&
+    !slotDecided &&
+    hasLiveScores &&
+    (["live", "locked", "pending"].includes(slotStatus) || !!effectiveLiveGame?.isLive);
 
   const officialScores = getSlotOfficialScores(slot);
   const pickScores = getPickScores(pick);
@@ -137,74 +274,90 @@ function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors, live
   const resolved = slotDecided
     ? resolveTpPickResult({ pick, slot, pickResult, bundle })
     : showLive
-    ? scoreTpPickAgainstLive(pick, slot, liveGame, bundle)
+    ? scoreTpPickAgainstLive(pick, slot, effectiveLiveGame, bundle)
     : null;
 
   const pointsLine = formatPickPoints(pickResult || resolved);
   const isProvisional = showLive && resolved?.provisional;
 
-  const liveSuffix = showLive
-    ? String(liveGame?.statusText || "").trim() || null
-    : slotDecided
-    ? formatOfficialPeriodSuffix(slot, league)
-    : null;
+  const periodLabel = resolveMatchPeriodLabel({
+    slot,
+    league,
+    effectiveLiveGame,
+    slotDecided,
+    postponed,
+  });
 
-  const scoreboardProps = {
-    awayTeam,
-    homeTeam,
-    awayAbbr,
-    homeAbbr,
-    colors,
-  };
+  const liveAwayScore = slotDecided ? officialScores.away : showLive ? liveScores.away : null;
+  const liveHomeScore = slotDecided ? officialScores.home : showLive ? liveScores.home : null;
+  const liveLabel = slotDecided
+    ? i18n.t("tp.results.officialScore", { defaultValue: "Résultat" })
+    : i18n.t("tp.results.liveScore", { defaultValue: "Live" });
 
-  const slotResultsStatus = resolveTpSlotResultsStatus(slot);
+  const matchTask = resolveTpSlotMatchStatus(slot, { scheduleStatus: scheduleInfo?.status });
 
   return (
-    <View style={{ paddingVertical: 4 }}>
+    <View style={{ paddingVertical: 2 }}>
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 4,
+          gap: 8,
         }}
       >
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
-          {awayAbbr} @ {homeAbbr}
-        </Text>
-        <TpSlotStatusChip status={slotResultsStatus} colors={colors} />
+        <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
+          <TeamLogoBadge team={awayTeam} size={22} colors={colors} />
+          <Text
+            style={{
+              color: colors.text,
+              fontWeight: "900",
+              fontSize: 14,
+              marginLeft: 8,
+              marginRight: 8,
+            }}
+          >
+            {awayAbbr}
+          </Text>
+          <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 14, marginRight: 8 }}>
+            -
+          </Text>
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, marginRight: 8 }}>
+            {homeAbbr}
+          </Text>
+          <TeamLogoBadge team={homeTeam} size={22} colors={colors} />
+        </View>
+
+        <MatchTaskStatusChip task={matchTask} colors={colors} compact />
       </View>
 
-      {slotDecided ? (
-        <TpScoreboardRow
-          {...scoreboardProps}
-          label={i18n.t("tp.results.officialScore", { defaultValue: "Résultat" })}
-          awayScore={officialScores.away}
-          homeScore={officialScores.home}
-          suffix={liveSuffix}
-        />
-      ) : showLive ? (
-        <TpScoreboardRow
-          {...scoreboardProps}
-          label={i18n.t("tp.results.liveScore", { defaultValue: "Live" })}
-          awayScore={liveScores.away}
-          homeScore={liveScores.home}
-          suffix={liveSuffix}
-        />
+      {periodLabel ? (
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 11,
+            fontWeight: "700",
+            marginTop: 1,
+            lineHeight: 14,
+          }}
+        >
+          {periodLabel}
+        </Text>
       ) : null}
 
-      {hasPick ? (
-        <TpScoreboardRow
-          {...scoreboardProps}
-          label={i18n.t("tp.results.predictionLine", { defaultValue: "Prédiction" })}
-          awayScore={pickScores.away}
-          homeScore={pickScores.home}
-        />
-      ) : (
-        <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8 }}>
-          {i18n.t("challenges.noPickForMatch", { defaultValue: "Aucune prédiction" })}
-        </Text>
-      )}
+      <TpMatchScorePanel
+        liveLabel={liveLabel}
+        liveAwayScore={liveAwayScore}
+        liveHomeScore={liveHomeScore}
+        pickAwayScore={pickScores.away}
+        pickHomeScore={pickScores.home}
+        hasPick={hasPick}
+        postponed={postponed}
+        awayTeam={awayTeam}
+        homeTeam={homeTeam}
+        colors={colors}
+      />
 
       {resolved != null && (isProvisional || slotDecided) ? (
         <View
@@ -241,11 +394,18 @@ function TpMatchResultRow({ slot, league, pick, pickResult, bundle, colors, live
           ) : null}
         </View>
       ) : null}
+
     </View>
   );
 }
 
-export default function TpResultDetailBlock({ item, colors, myEntry = null, showLiveScores = false }) {
+export default function TpResultDetailBlock({
+  item,
+  colors,
+  myEntry = null,
+  showLiveScores = false,
+  scheduleByGameId = {},
+}) {
   const { user } = useAuth();
   const uid = String(user?.uid || "");
 
@@ -269,18 +429,36 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null, show
   const totalPoints = Number(myEntryEffective?.totalPoints ?? 0);
   const hasParticipation = tpEntryHasParticipation(myEntryEffective);
 
+  const participantTask = useMemo(
+    () =>
+      resolveParticipantTaskStatus(
+        { kind: "tp", subtype: "bundle", raw: bundle },
+        {
+          isToday: showLiveScores,
+          entry: myEntryEffective,
+          scheduleByGameId,
+        }
+      ),
+    [bundle, showLiveScores, myEntryEffective, scheduleByGameId]
+  );
+
   const liveGameIds = useMemo(() => {
     if (!showLiveScores) return [];
     return games
       .filter((slot) => {
-        const st = String(slot?.status || "").toLowerCase();
-        return !isSlotDecided(slot) && ["live", "locked"].includes(st);
+        const gameId = String(slot.gameId || "");
+        if (isMlbGamePostponed(scheduleByGameId?.[gameId]?.status)) return false;
+        return !isSlotDecided(slot);
       })
       .map((slot) => String(slot.gameId || ""))
       .filter(Boolean);
-  }, [games, showLiveScores]);
+  }, [games, showLiveScores, scheduleByGameId]);
 
-  const liveScores = useLiveGameScores(liveGameIds, league, bundle?.gameYmd);
+  const liveScores = useLiveGameScores(
+    liveGameIds,
+    league,
+    bundle?.gameYmd || item?.dateKey
+  );
 
   useEffect(() => {
     if (!bundleId) {
@@ -324,12 +502,12 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null, show
 
   return (
     <View style={{ marginTop: 10 }}>
-      <Text style={{ color: colors.text, fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
-        {i18n.t("tp.home.bundleTitle", {
-          defaultValue: "{{count}} match(s) à prédire",
+      <SectionTitle colors={colors}>
+        {i18n.t("tp.results.matchupsSectionTitle", {
+          defaultValue: "Matchs ({{count}})",
           count: gameCount,
         })}
-      </Text>
+      </SectionTitle>
 
       {games.map((slot, index) => {
         const gameId = String(slot.gameId || "");
@@ -343,22 +521,31 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null, show
               pickResult={lookupPickByGameId(pickResults, gameId)}
               colors={colors}
               liveGame={liveScores[gameId] || null}
+              scheduleInfo={scheduleByGameId[gameId] || null}
             />
             {index < games.length - 1 ? <MatchDivider /> : null}
           </View>
         );
       })}
 
+      <SectionDivider />
+
+      <SectionTitle colors={colors}>
+        {i18n.t("tp.results.summarySectionTitle", {
+          defaultValue: "Mon bilan",
+        })}
+      </SectionTitle>
+
       {hasParticipation ? (
-        <Text style={{ color: colors.text, marginTop: 10, fontSize: 13, fontWeight: "900" }}>
+        <Text style={{ color: colors.text, fontSize: 13, fontWeight: "900" }}>
           {i18n.t("tp.results.myTotalPoints", {
             defaultValue: "Mes points : {{points}} pt(s)",
             points: totalPoints,
           })}
         </Text>
       ) : (
-        <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
-          {i18n.t("challenges.notJoined", { defaultValue: "Non inscrit" })}
+        <Text style={{ color: colors.subtext, fontSize: 13 }}>
+          {formatParticipantTaskLabel(participantTask)}
         </Text>
       )}
 
@@ -367,7 +554,7 @@ export default function TpResultDetailBlock({ item, colors, myEntry = null, show
           onPress={() => setShowParticipantsModal(true)}
           activeOpacity={0.85}
           style={{
-            marginTop: 12,
+            marginTop: 10,
             flexDirection: "row",
             alignItems: "center",
             alignSelf: "flex-start",

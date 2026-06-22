@@ -5,6 +5,7 @@ import { incrementLeaderboardTpSlotPoints } from "../leaderboard/incrementLeader
 import { safeUpper } from "../teamPredictionChallenges/tpGameSources.js";
 import { readScoringConfig, scorePick } from "./tpBundleScoring.js";
 import { computeBundleStatus } from "./tpBundleUtils.js";
+import { notifyTpExactScore } from "../notifications/notifyChallengeWin.js";
 
 const db = getFirestore();
 
@@ -79,6 +80,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
     );
 
     const winnerProgression = [];
+    const exactScoreNotifications = [];
     const leaderboardUpdates = [];
     let slotPayoutTotal = 0;
 
@@ -98,6 +100,12 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
         winnerProgression.push({
           uid: String(entryDoc.id),
           isExactScore: scored.exactScoreCorrect,
+        });
+      }
+
+      if (scored.exactScoreCorrect) {
+        exactScoreNotifications.push({
+          uid: String(entryDoc.id),
         });
       }
 
@@ -176,11 +184,42 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
       skipped: false,
       slotPayoutTotal,
       winnerProgression,
+      exactScoreNotifications,
       leaderboardUpdates,
       groupId,
       gameYmd: bundle.gameYmd,
+      slotMeta: {
+        awayAbbr: slot.awayAbbr,
+        homeAbbr: slot.homeAbbr,
+        awayScore: official.awayScore,
+        homeScore: official.homeScore,
+      },
     };
   });
+
+  if (result?.ok && !result?.skipped && Array.isArray(result.exactScoreNotifications)) {
+    for (const row of result.exactScoreNotifications) {
+      try {
+        await notifyTpExactScore({
+          bundleId,
+          groupId: result.groupId,
+          gameId,
+          uid: row.uid,
+          awayAbbr: result.slotMeta?.awayAbbr,
+          homeAbbr: result.slotMeta?.homeAbbr,
+          awayScore: result.slotMeta?.awayScore,
+          homeScore: result.slotMeta?.homeScore,
+        });
+      } catch (pushErr) {
+        logger.warn("[TP bundle payout] exact score push failed", {
+          bundleId,
+          gameId,
+          uid: row.uid,
+          err: String(pushErr?.message || pushErr),
+        });
+      }
+    }
+  }
 
   if (result?.ok && !result?.skipped && Array.isArray(result.winnerProgression)) {
     for (const winner of result.winnerProgression) {

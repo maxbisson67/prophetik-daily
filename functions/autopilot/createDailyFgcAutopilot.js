@@ -92,6 +92,7 @@ async function fetchMlbScheduleForYmd(gameYmd) {
 
     const abstractState = String(game?.status?.abstractGameState || "");
     if (["Cancelled", "Postponed"].includes(abstractState)) continue;
+    if (String(game?.status?.detailedState || "").toLowerCase().includes("postpon")) continue;
 
     const gameType = String(game?.gameType || "");
     if (gameType && gameType !== "R") continue;

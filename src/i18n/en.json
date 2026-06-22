@@ -1242,7 +1242,45 @@
     "streakBest": "Best streak",
     "streakOnFire": "STREAK ON FIRE",
     "streakBestShort": "TO BEAT",
+    "streakRecordLine": "Record: {{best}} days",
+    "streakMotivation": {
+      "start": "Play today to start your streak!",
+      "continue": "Keep your streak going!",
+      "tomorrow": "Play tomorrow to reach {{count}} days"
+    },
     "daysLabel": "DAYS",
+    "hero": {
+      "badgesLine": "{{unlocked}} / {{total}} BADGES",
+      "progressPct": "{{pct}} %"
+    },
+    "levels": {
+      "recrue": "Rookie",
+      "prospect": "Prospect",
+      "veteran": "Veteran",
+      "allstar": "All-Star",
+      "legend": "Legend"
+    },
+    "nextGoal": {
+      "title": "Next goal",
+      "allUnlocked": "All MVP badges unlocked — nice work!"
+    },
+    "career": {
+      "title": "My Prophetik career",
+      "participations": "Challenges played",
+      "correctPredictions": "Correct predictions",
+      "bestStreak": "Best streak",
+      "tsFivePointNights": "5+ pt nights",
+      "fgcWins": "FGC wins",
+      "exactScores": "Exact scores"
+    },
+    "displaySections": {
+      "participation": "Participation",
+      "prediction": "Predictions",
+      "streak": "Streaks",
+      "fgc": "FGC",
+      "performance": "Performances",
+      "prestige": "Prestige"
+    },
     "myPoints": "My points: {{points}}",
     "myRank": "My rank: {{rank}}",
     "statsStreakTitle": "STREAK",
@@ -1358,6 +1396,7 @@
     "groups": "Groups",
     "challenges": "My results",
     "leaderboard": "Leaderboard",
+    "badges": "Badges",
     "matchLive": "Live game",
     "help":"Help"
   },
@@ -1652,6 +1691,25 @@
       "cancelledGhost": "Cancelled",
       "completed": "Completed"
     }
+  },
+  "participant": {
+    "actionRequired": "To do",
+    "partial": "To complete · {{done}}/{{total}}",
+    "joined": "Joined",
+    "notJoined": "Not joined",
+    "picksProgressHint": "{{done}}/{{total}} games predicted",
+    "cta": {
+      "participate": "Participate",
+      "complete": "Complete",
+      "modify": "Edit"
+    }
+  },
+  "match": {
+    "notStarted": "Not started",
+    "inProgress": "In progress",
+    "completed": "Completed",
+    "postponed": "Postponed",
+    "unknown": "—"
   },
   "tp": {
     "home": {

@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { buildEmptyMlbPitcher } from "../mlb/mlbProbablePitchers.js";
+import { APP_TZ, addDaysToYmd, toYmdInTz } from "../ProphetikDate.js";
 import {
   TP_DEFAULT_SCORING,
   getDateValue,
@@ -11,20 +12,29 @@ export const TP_BUNDLE_MAX_GAMES = 3;
 export const TP_LOCK_BEFORE_MINUTES = 5;
 export const TP_EXPIRES_AFTER_DAYS = 2;
 
+function hourInAppTz(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TZ,
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(now instanceof Date ? now : new Date(now));
+
+  return Number(parts.find((p) => p.type === "hour")?.value || 0);
+}
+
+export function getBusinessYmdDashed(now = new Date()) {
+  const ymd = toYmdInTz(now, APP_TZ);
+  return hourInAppTz(now) < 4 ? addDaysToYmd(ymd, -1) : ymd;
+}
+
 export function getBusinessDate(now = new Date()) {
-  const d = new Date(now);
-  if (d.getHours() < 4) {
-    d.setDate(d.getDate() - 1);
-  }
-  return d;
+  const ymd = getBusinessYmdDashed(now);
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
 }
 
 export function ymdFromBusinessDate(now = new Date()) {
-  const d = getBusinessDate(now);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}${mm}${dd}`;
+  return getBusinessYmdDashed(now).replace(/-/g, "");
 }
 
 export function buildTeamPredictionBundleId({ league, groupId, gameYmd }) {

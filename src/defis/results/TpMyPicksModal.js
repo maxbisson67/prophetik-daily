@@ -4,7 +4,14 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import TpResultDetailBlock from "@src/defis/results/TpResultDetailBlock";
 
-export default function TpMyPicksModal({ visible, item, colors, myEntry, onClose }) {
+export default function TpMyPicksModal({
+  visible,
+  item,
+  colors,
+  myEntry,
+  scheduleByGameId = {},
+  onClose,
+}) {
   const bundle = item?.raw || {};
 
   return (
@@ -71,6 +78,7 @@ export default function TpMyPicksModal({ visible, item, colors, myEntry, onClose
               colors={colors}
               myEntry={myEntry}
               showLiveScores
+              scheduleByGameId={scheduleByGameId}
             />
           </ScrollView>
         </View>

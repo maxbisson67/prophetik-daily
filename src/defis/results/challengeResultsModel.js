@@ -1,10 +1,50 @@
+import { toDateAny } from "@src/defis/tpDeadlineHelpers";
+import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+
 export function normalizeStatus(st) {
   return String(st || "").toLowerCase().trim();
 }
 
+const FGC_TERMINAL_STATUSES = new Set(["decided", "closed", "completed"]);
+const FGC_LOCK_BEFORE_MS = 5 * 60 * 1000;
+
+function getFgcGameStartDate(item) {
+  const raw = item?.raw || {};
+  return toDateAny(item?.firstGameUTC ?? raw?.gameStartTimeUTC);
+}
+
+function resolveFgcPreGameStatus(item, nowMs = Date.now()) {
+  const start = getFgcGameStartDate(item);
+  if (!start) return "open";
+
+  const lockAtMs = start.getTime() - FGC_LOCK_BEFORE_MS;
+  return nowMs >= lockAtMs ? "locked" : "open";
+}
+
 /** Statut UI d'un défi — pour les bundles TP, dérivé des matchs (évite « Terminé » trop tôt). */
-export function resolveChallengeDisplayStatus(item) {
+export function resolveChallengeDisplayStatus(item, options = {}) {
+  const scheduleStatus = options?.scheduleStatus;
+
+  if (item?.kind === "fgc" && isMlbGamePostponed(scheduleStatus)) {
+    return "postponed";
+  }
+
   const top = normalizeStatus(item?.status);
+
+  if (item?.kind === "fgc") {
+    if (!top) return resolveFgcPreGameStatus(item);
+
+    if (top === "cancelled_ghost") return top;
+
+    if (FGC_TERMINAL_STATUSES.has(top)) {
+      const start = getFgcGameStartDate(item);
+      if (start && Date.now() < start.getTime()) {
+        return resolveFgcPreGameStatus(item);
+      }
+    }
+
+    return top;
+  }
 
   if (item?.kind === "tp" && item?.subtype === "bundle") {
     const games = Array.isArray(item?.raw?.games) ? item.raw.games : [];
@@ -30,8 +70,28 @@ export const HISTORY_RESULT_STATUSES = new Set([
   "cancelled_ghost",
 ]);
 
-export function isHistoryResultItem(item) {
-  return HISTORY_RESULT_STATUSES.has(resolveChallengeDisplayStatus(item));
+export function isHistoryResultItem(item, options = {}) {
+  return HISTORY_RESULT_STATUSES.has(resolveChallengeDisplayStatus(item, options));
+}
+
+function tpBundleHasDecidedSlot(item) {
+  const games = Array.isArray(item?.raw?.games) ? item.raw.games : [];
+  return games.some((g) => normalizeStatus(g?.status) === "decided");
+}
+
+/** Afficher un défi passé dans Mes résultats (hors « Aujourd'hui »). */
+export function shouldShowPastDayResultItem(item, options = {}) {
+  const displayStatus = resolveChallengeDisplayStatus(item, options);
+
+  if (displayStatus === "postponed") return true;
+  if (isHistoryResultItem(item, options)) return true;
+
+  if (item?.kind === "tp" && item?.subtype === "bundle") {
+    if (!tpBundleHasDecidedSlot(item)) return false;
+    return ["partial", "locked", "live", "pending"].includes(displayStatus);
+  }
+
+  return false;
 }
 
 export function formatTpBundleMatchupSummary(bundle = {}) {

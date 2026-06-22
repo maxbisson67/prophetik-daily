@@ -1,3 +1,5 @@
+import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+
 export const TP_DISPLAY_TZ = "America/Toronto";
 export const TP_LOCK_BEFORE_MS = 5 * 60 * 1000;
 
@@ -69,7 +71,9 @@ export function getSlotLockedAt(slot) {
   return null;
 }
 
-export function isSlotLocked(slot, nowMs = Date.now()) {
+export function isSlotLocked(slot, nowMs = Date.now(), options = {}) {
+  if (isMlbGamePostponed(options?.scheduleStatus)) return false;
+
   const status = String(slot?.status || "open").toLowerCase();
   if (status !== "open") return true;
 

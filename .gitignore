@@ -96,3 +96,5 @@ yarn-error.*
 
 # @end expo-cli
 functions/scripts/serviceAccountKey.json
+serviceAccount.json
+play-service-account.json

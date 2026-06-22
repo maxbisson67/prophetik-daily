@@ -49,6 +49,7 @@ import useEntitlement from "../subscriptions/useEntitlement";
 import useCurrentSeason from "@src/hooks/useCurrentSeason";
 import useGroupLeaderboardSummary from "@src/leaderboard/useGroupLeaderboardSummary";
 import SportGlyph from "@src/sports/SportGlyph";
+import { BADGES_TAB_HREF } from "@src/achievements/screens/ProgressionScreen";
 
 import { listenRNFB } from "@src/dev/fsListen";
 
@@ -1052,7 +1053,7 @@ const avatarUrl =
                 onSelectGroup={onSelectGroup}
                 stats={meDoc?.stats}
                 achievements={meDoc?.achievements}
-                onPressProgression={() => router.push("/(drawer)/progression")}
+                onPressProgression={() => router.push(BADGES_TAB_HREF)}
                 groupSummary={streakGroupSummary}
               />
               </View>

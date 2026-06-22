@@ -15,7 +15,7 @@
       "resizeMode": "contain"
     },
     "updates": {
-      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/b58db99d-83c8-4770-a5ff-e940f63c5883"
     },

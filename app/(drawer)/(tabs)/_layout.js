@@ -71,6 +71,17 @@ export default function TabsLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="BadgesScreen"
+        options={{
+          title: i18n.t("tabs.badges", { defaultValue: "Badges" }),
+          headerLeft: (props) => <DrawerToggleButton {...props} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="ribbon-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
       <Tabs.Screen name="GroupsScreen" options={{ href: null }} />
       <Tabs.Screen name="sports" options={{ href: null }} />
       <Tabs.Screen name="index" options={{ href: null, headerShown: false }} />

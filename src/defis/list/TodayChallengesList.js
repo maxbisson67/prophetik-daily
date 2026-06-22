@@ -1,13 +1,13 @@
 import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
-import { tpEntryHasParticipation, resolveChallengeDisplayStatus } from "@src/defis/results/challengeResultsModel";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
-
-function normalizeStatus(st) {
-  return String(st || "").toLowerCase().trim();
-}
+import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
+import {
+  formatParticipantCtaLabel,
+  participantHasJoined,
+  resolveParticipantTaskStatusForItem,
+} from "@src/defis/participant/participantTaskStatus";
 
 function toDateAny(v) {
   if (!v) return null;
@@ -39,45 +39,6 @@ function titleForItem(item) {
   return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
 }
 
-function statusUi(status) {
-  const st = normalizeStatus(status);
-
-  if (st === "open" || st === "live") {
-    return {
-      label: i18n.t("challenges.status.active", { defaultValue: "Actif" }),
-      color: "#16a34a",
-      icon: "flame",
-    };
-  }
-
-  if (st === "awaiting_result" || st === "pending" || st === "locked" || st === "partial") {
-    return {
-      label: i18n.t("challenges.status.awaiting", { defaultValue: "En cours" }),
-      color: "#ea580c",
-      icon: "time-outline",
-    };
-  }
-
-  return {
-    label: i18n.t("challenges.status.completed", { defaultValue: "Terminé" }),
-    color: "#6b7280",
-    icon: "checkmark-circle-outline",
-  };
-}
-
-function isParticipating(item, maps) {
-  if (item.kind === "fgc") {
-    return !!maps?.fgc?.[item.id]?.hasPick;
-  }
-  if (item.kind === "tp") {
-    return tpEntryHasParticipation(maps?.tp?.[item.id]);
-  }
-  if (item.kind === "ts") {
-    return !!maps?.ts?.[item.id];
-  }
-  return false;
-}
-
 function typeOrder(kind) {
   if (kind === "fgc") return 0;
   if (kind === "tp") return 1;
@@ -93,12 +54,15 @@ function challengeSortValue(item) {
   return d ? d.getTime() : 0;
 }
 
-function resultsCtaLabel() {
-  return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
-}
+function Row({ item, participationMaps, colors, showDivider, onPress }) {
+  const participantTask = resolveParticipantTaskStatusForItem(item, {
+    isToday: true,
+    participationMaps,
+  });
 
-function Row({ item, participating, participationMaps, colors, showDivider, onPress }) {
-  const status = statusUi(resolveChallengeDisplayStatus(item));
+  const primaryCtaLabel = formatParticipantCtaLabel(
+    participantTask.showPrimaryCta ? participantTask.ctaKey : null
+  );
 
   return (
     <View>
@@ -106,68 +70,22 @@ function Row({ item, participating, participationMaps, colors, showDivider, onPr
         <View
           style={{
             flexDirection: "row",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "space-between",
             gap: 10,
           }}
         >
           <Text
             style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}
-            numberOfLines={1}
+            numberOfLines={2}
           >
             {titleForItem(item)}
           </Text>
 
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Ionicons name={status.icon} size={14} color={status.color} />
-            <Text
-              style={{
-                marginLeft: 5,
-                color: status.color,
-                fontWeight: "800",
-                fontSize: 12,
-              }}
-            >
-              {status.label}
-            </Text>
-          </View>
+          <ParticipantTaskStatusChip task={participantTask} colors={colors} compact />
         </View>
 
-        <View
-          style={{
-            marginTop: 6,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-            <Ionicons
-              name={participating ? "checkmark-circle" : "ellipse-outline"}
-              size={15}
-              color={participating ? "#16a34a" : colors.subtext}
-            />
-            <Text
-              style={{
-                marginLeft: 6,
-                color: participating ? colors.text : colors.subtext,
-                fontWeight: participating ? "800" : "700",
-                fontSize: 13,
-              }}
-            >
-              {participating
-                ? item.kind === "tp" && item.subtype === "bundle"
-                  ? i18n.t("challenges.tpBundleJoined", {
-                      defaultValue: "{{done}}/{{total}} matchs prédits",
-                      done: Number(participationMaps?.tp?.[item.id]?.picksCompletedCount ?? 0),
-                      total: Number(item.raw?.gameCount || item.raw?.games?.length || 0),
-                    })
-                  : i18n.t("challenges.joined", { defaultValue: "Inscrit" })
-                : i18n.t("challenges.notJoined", { defaultValue: "Non inscrit" })}
-            </Text>
-          </View>
-
+        <View style={{ marginTop: 6 }}>
           <Text style={{ color: colors.subtext, fontSize: 13 }}>
             {item.kind === "tp" && item.subtype === "bundle"
               ? i18n.t("challenges.matchCountShort", {
@@ -185,9 +103,9 @@ function Row({ item, participating, participationMaps, colors, showDivider, onPr
           </Text>
         </View>
 
-        {onPress ? (
+        {onPress && participantTask.showPrimaryCta && primaryCtaLabel ? (
           <TouchableOpacity
-            onPress={() => onPress(item)}
+            onPress={() => onPress(item, participantTask)}
             activeOpacity={0.9}
             style={{
               marginTop: 12,
@@ -198,7 +116,7 @@ function Row({ item, participating, participationMaps, colors, showDivider, onPr
               backgroundColor: "#b91c1c",
             }}
           >
-            <Text style={{ color: "#fff", fontWeight: "900" }}>{resultsCtaLabel()}</Text>
+            <Text style={{ color: "#fff", fontWeight: "900" }}>{primaryCtaLabel}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -232,7 +150,14 @@ export default function TodayChallengesList({
   }, [items]);
 
   const joinedCount = useMemo(() => {
-    return sorted.filter((item) => isParticipating(item, participationMaps)).length;
+    return sorted.filter((item) =>
+      participantHasJoined(
+        resolveParticipantTaskStatusForItem(item, {
+          isToday: true,
+          participationMaps,
+        })
+      )
+    ).length;
   }, [sorted, participationMaps]);
 
   if (!sorted.length) return null;
@@ -271,7 +196,6 @@ export default function TodayChallengesList({
           <Row
             key={`${item.kind}-${item.id}`}
             item={item}
-            participating={isParticipating(item, participationMaps)}
             participationMaps={participationMaps}
             colors={colors}
             showDivider={index < sorted.length - 1}

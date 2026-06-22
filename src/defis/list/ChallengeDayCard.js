@@ -10,6 +10,13 @@ import {
 } from "@src/defis/results/challengeResultsModel";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 import { isTpResultsViewStatus } from "@src/defis/results/navigateToMesResultats";
+import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
+import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import {
+  formatParticipantCtaLabel,
+  resolveParticipantTaskStatusForItem,
+} from "@src/defis/participant/participantTaskStatus";
+import { resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
 
 function initialsFrom(nameOrEmail = "") {
   const s = String(nameOrEmail).trim();
@@ -114,44 +121,6 @@ function cardTypeTitle(item) {
   return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
 }
 
-function statusUi(status) {
-  const st = String(status || "").toLowerCase().trim();
-
-  if (st === "open" || st === "live") {
-    return {
-      label: i18n.t("challenges.status.active", { defaultValue: "Actif" }),
-      color: "#16a34a",
-      icon: "flame",
-      bg: "rgba(34,197,94,0.12)",
-    };
-  }
-
-  if (st === "awaiting_result" || st === "pending" || st === "locked" || st === "partial") {
-    return {
-      label: i18n.t("challenges.status.awaiting", { defaultValue: "En cours" }),
-      color: "#ea580c",
-      icon: "timer-outline",
-      bg: "rgba(234,88,12,0.10)",
-    };
-  }
-
-  if (st === "cancelled_ghost") {
-    return {
-      label: i18n.t("challenges.status.cancelledGhost", { defaultValue: "Annulé" }),
-      color: "#9ca3af",
-      icon: "alert-circle-outline",
-      bg: "rgba(156,163,175,0.12)",
-    };
-  }
-
-  return {
-    label: i18n.t("challenges.status.completed", { defaultValue: "Terminé" }),
-    color: "#6b7280",
-    icon: "checkmark-circle",
-    bg: "rgba(107,114,128,0.10)",
-  };
-}
-
 const RED = "#b91c1c";
 const RED_BOTTOM = "#991b1b";
 
@@ -161,25 +130,45 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
   colors,
   winnerInfoMap,
   participationMaps,
+  scheduleByChallengeId = {},
+  scheduleByGameId = {},
   onOpen,
 }) {
-  const displayStatus = resolveChallengeDisplayStatus(item);
-  const ui = statusUi(displayStatus);
+  const scheduleInfo = scheduleByChallengeId?.[item.id] || null;
+  const displayStatus = resolveChallengeDisplayStatus(item, {
+    scheduleStatus: scheduleInfo?.status,
+  });
   const payout = getTotalPayout(item.raw);
   const tpEntry = item.kind === "tp" ? participationMaps?.tp?.[item.id] : null;
 
-  const showPastSummary = isHistoryResultItem(item);
+  const participantTask = resolveParticipantTaskStatusForItem(item, {
+    isToday,
+    participationMaps,
+    scheduleStatus: scheduleInfo?.status,
+    scheduleByGameId,
+  });
+
+  const showPastSummary = isHistoryResultItem(item, {
+    scheduleStatus: scheduleInfo?.status,
+  });
 
   const hasInlineResultsDetail =
     (item.kind === "tp" && item.subtype === "bundle") ||
     (showPastSummary && item.kind === "fgc");
 
-  const showCta = !hasInlineResultsDetail;
+  const showParticipantPrimaryCta =
+    isToday && (participantTask.showPrimaryCta || participantTask.showModifyCta);
+
+  const showLegacyResultsCta = !hasInlineResultsDetail && !showParticipantPrimaryCta;
+
+  const participantPrimaryLabel = formatParticipantCtaLabel(
+    participantTask.showPrimaryCta ? participantTask.ctaKey : null
+  );
+  const participantModifyLabel = formatParticipantCtaLabel(
+    participantTask.showModifyCta ? "modify" : null
+  );
 
   const openCtaLabel = (() => {
-    if (!showPastSummary && isToday) {
-      return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
-    }
     if (item.kind === "tp") {
       return isTpResultsViewStatus(displayStatus) || isHistoryResultItem(item)
         ? i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" })
@@ -281,32 +270,43 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
           </Text>
         </View>
 
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 10,
-            paddingVertical: 5,
-            borderRadius: 999,
-            backgroundColor: ui.bg,
-          }}
-        >
-          <Ionicons name={ui.icon} size={14} color={ui.color} />
-          <Text style={{ marginLeft: 6, color: ui.color, fontWeight: "800", fontSize: 12 }}>
-            {ui.label}
-          </Text>
-        </View>
+        {item.kind === "fgc" || item.kind === "tp" ? (
+          <ParticipantTaskStatusChip task={participantTask} colors={colors} />
+        ) : null}
       </View>
 
         <View style={{ marginTop: 10 }}>
         {item.kind === "fgc" && showPastSummary ? (
-          <FgcResultDetailBlock item={item} colors={colors} />
+          <FgcResultDetailBlock
+            item={item}
+            colors={colors}
+            scheduleStatus={scheduleInfo?.status}
+          />
+        ) : item.kind === "fgc" && isToday && !showPastSummary ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}>
+              {safeText(item.raw?.awayAbbr)} @ {safeText(item.raw?.homeAbbr)}
+            </Text>
+            <MatchTaskStatusChip
+              task={resolveFgcMatchStatus(item.raw, { scheduleStatus: scheduleInfo?.status })}
+              colors={colors}
+              compact
+            />
+          </View>
         ) : item.kind === "tp" && item.subtype === "bundle" ? (
           <TpResultDetailBlock
             item={item}
             colors={colors}
             myEntry={tpEntry}
             showLiveScores={!showPastSummary}
+            scheduleByGameId={scheduleByGameId}
           />
         ) : item.kind === "tp" ? (
             <Text style={{ color: colors.text, fontWeight: "900" }}>
@@ -350,11 +350,53 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
         </>
         ) : null}
 
-        {showCta ? (
-        <View style={{ marginTop: 12 }}>
+        {showParticipantPrimaryCta ? (
+          <View style={{ marginTop: 12, gap: 8 }}>
+            {participantTask.showPrimaryCta && participantPrimaryLabel ? (
+              <TouchableOpacity
+                onPress={() => onOpen(item, isToday, participantTask)}
+                activeOpacity={0.9}
+                style={{
+                  width: "100%",
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  backgroundColor: "#b91c1c",
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "900" }}>{participantPrimaryLabel}</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {participantTask.showModifyCta &&
+            participantModifyLabel &&
+            !participantTask.showPrimaryCta ? (
+              <TouchableOpacity
+                onPress={() => onOpen(item, isToday, participantTask)}
+                activeOpacity={0.9}
+                style={{
+                  width: "100%",
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  backgroundColor: colors.card2,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ color: colors.text, fontWeight: "900" }}>
+                  {participantModifyLabel}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        {showLegacyResultsCta ? (
+          <View style={{ marginTop: 12 }}>
             <TouchableOpacity
-            onPress={() => onOpen(item, isToday)}
-            style={{
+              onPress={() => onOpen(item, isToday, participantTask)}
+              style={{
                 width: "100%",
                 paddingVertical: 10,
                 borderRadius: 12,
@@ -362,18 +404,18 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
                 backgroundColor: isToday ? "#b91c1c" : colors.card2,
                 borderWidth: isToday ? 0 : 1,
                 borderColor: isToday ? "transparent" : colors.border,
-            }}
+              }}
             >
-            <Text
+              <Text
                 style={{
-                color: isToday ? "#fff" : colors.text,
-                fontWeight: "900",
+                  color: isToday ? "#fff" : colors.text,
+                  fontWeight: "900",
                 }}
-            >
-              {openCtaLabel}
-            </Text>
+              >
+                {openCtaLabel}
+              </Text>
             </TouchableOpacity>
-        </View>
+          </View>
         ) : null}
             </View>
   );
@@ -384,12 +426,27 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
   colors,
   winnerInfoMap,
   participationMaps,
+  scheduleByChallengeId = {},
+  scheduleByGameId = {},
   onOpen,
   getTodayKey,
 }) {
   const isToday = section.key === getTodayKey();
-  const hasActiveTodayItems = isToday && section.data.some((item) => !isHistoryResultItem(item));
-  const hasFinishedTodayItems = isToday && section.data.some((item) => isHistoryResultItem(item));
+  const hasActiveTodayItems =
+    isToday &&
+    section.data.some(
+      (item) =>
+        !isHistoryResultItem(item, {
+          scheduleStatus: scheduleByChallengeId?.[item.id]?.status,
+        })
+    );
+  const hasFinishedTodayItems =
+    isToday &&
+    section.data.some((item) =>
+      isHistoryResultItem(item, {
+        scheduleStatus: scheduleByChallengeId?.[item.id]?.status,
+      })
+    );
 
   const sectionSubtitle = (() => {
     if (!isToday) {
@@ -453,6 +510,8 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
               colors={colors}
               winnerInfoMap={winnerInfoMap}
               participationMaps={participationMaps}
+              scheduleByChallengeId={scheduleByChallengeId}
+              scheduleByGameId={scheduleByGameId}
               onOpen={onOpen}
             />
 

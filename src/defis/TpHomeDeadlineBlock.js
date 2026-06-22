@@ -7,9 +7,34 @@ export default function TpHomeDeadlineBlock({
   locked,
   deadline,
   nextSlot = null,
+  postponed = false,
   colors,
 }) {
   const deadlineHM = fmtTimeShort(deadline);
+
+  if (postponed && locked) {
+    return (
+      <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
+        <Text style={{ color: "#d97706", fontWeight: "900" }}>
+          {i18n.t("tp.home.postponedParticipate", {
+            defaultValue: "Match reporté — tu peux encore participer",
+          })}
+        </Text>
+      </Text>
+    );
+  }
+
+  if (postponed) {
+    return (
+      <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
+        {i18n.t("tp.home.gameStatus", { defaultValue: "Statut du match" })}
+        {": "}
+        <Text style={{ color: "#d97706", fontWeight: "900" }}>
+          {i18n.t("tp.home.postponed", { defaultValue: "Reporté" })}
+        </Text>
+      </Text>
+    );
+  }
 
   if (locked) {
     return (

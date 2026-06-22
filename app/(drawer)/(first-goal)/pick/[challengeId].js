@@ -22,6 +22,8 @@ import Analytics from "@src/services/analytics";
 import { getFgcLeague } from "@src/firstGoal/fgcChallengeUtils";
 import FgcMatchupHeader from "@src/firstGoal/FgcMatchupHeader";
 import useFgcProbablePitchers from "@src/firstGoal/useFgcProbablePitchers";
+import useFgcGameSchedules from "@src/firstGoal/useFgcGameSchedules";
+import { isMlbGamePostponed } from "@src/firstGoal/fgcGameScheduleUtils";
 import { loadFgcPlayersProgressive } from "@src/players/loadFgcPlayersWithSeasonStats";
 import {
   getPlayerSeasonStatLines,
@@ -431,12 +433,16 @@ export default function FirstGoalPickScreen() {
   }, [challenge?.homeAbbr, challenge?.awayAbbr, challenge?.league, challenge?.fgcMode]);
 
   const probablePitchers = useFgcProbablePitchers(challenge);
+  const scheduleByChallengeId = useFgcGameSchedules(challenge ? [challenge] : []);
+  const scheduleInfo = challenge ? scheduleByChallengeId[String(challenge.id || "")] : null;
+  const isPostponed = isMlbGamePostponed(scheduleInfo?.status);
 
   const derived = useMemo(() => {
     const st = String(challenge?.status || "").toLowerCase();
     const league = getFgcLeague(challenge);
 
-    const statusBlocksPick = ["decided", "closed"].includes(st) || st === "pending";
+    const statusBlocksPick =
+      !isPostponed && (["decided", "closed"].includes(st) || st === "pending");
 
     const startDate = toDateSafe(challenge?.gameStartTimeUTC);
     const startMs = startDate ? startDate.getTime() : null;
@@ -444,11 +450,11 @@ export default function FirstGoalPickScreen() {
     const cutoffMs = startMs != null ? startMs - 5 * 60 * 1000 : null;
     const nowMs = Date.now();
 
-    const started = startMs != null ? nowMs >= startMs : false;
-    const pastCutoff = cutoffMs != null ? nowMs >= cutoffMs : false;
+    const started = !isPostponed && startMs != null ? nowMs >= startMs : false;
+    const pastCutoff = !isPostponed && cutoffMs != null ? nowMs >= cutoffMs : false;
 
     const hasPicked = !!(entry?.playerId && String(entry.playerId).trim().length > 0);
-    const locked = statusBlocksPick || pastCutoff || started;
+    const locked = isPostponed ? st === "decided" || st === "pending" : statusBlocksPick || pastCutoff || started;
     const canEditPick = hasPicked && !locked;
 
     const cutoffDate = cutoffMs != null ? new Date(cutoffMs) : null;
@@ -469,7 +475,9 @@ export default function FirstGoalPickScreen() {
             defaultValue: "Choisis le joueur qui marquera le premier but",
           });
 
-    const subtitle = hasPicked
+    const subtitle = isPostponed
+      ? `📅 ${i18n.t("firstGoal.pick.postponed", { defaultValue: "Match reporté — tu peux participer" })}`
+      : hasPicked
       ? locked
         ? `🎯 ${i18n.t("firstGoal.pick.alreadyPicked", {
             defaultValue: "Ton choix est verrouillé",
@@ -500,7 +508,7 @@ export default function FirstGoalPickScreen() {
       cutoffHm,
       canEditPick,
     };
-  }, [challenge, entry, lang]);
+  }, [challenge, entry, lang, isPostponed]);
 
   useEffect(() => {
     if (!players.length || initialTeamSetRef.current) return;

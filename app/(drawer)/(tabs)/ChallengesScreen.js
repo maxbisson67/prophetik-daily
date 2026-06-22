@@ -24,11 +24,21 @@ import {
   resolveChallengeDisplayStatus,
   mergeTpItemsByDate,
   tpEntryHasParticipation,
+  shouldShowPastDayResultItem,
 } from "@src/defis/results/challengeResultsModel";
+import {
+  getProphetikBusinessDate,
+  getProphetikBusinessYmd,
+} from "@src/lib/prophetikBusinessDate";
 import { isTpResultsViewStatus } from "@src/defis/results/navigateToMesResultats";
+import {
+  PARTICIPANT_TASK_STATES,
+  resolveParticipantTaskStatusForItem,
+} from "@src/defis/participant/participantTaskStatus";
 import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
 import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
+import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 
 const GROUP_PLACEHOLDER = require("@src/assets/group-placeholder.png");
 
@@ -73,16 +83,6 @@ function normalizeYmdString(v) {
   return "";
 }
 
-function prophetikBusinessDate(now = new Date()) {
-  const d = new Date(now);
-  if (d.getHours() < 4) d.setDate(d.getDate() - 1);
-  return d;
-}
-
-function prophetikBusinessYmd() {
-  return ymdLocal(prophetikBusinessDate());
-}
-
 function addDays(date, days) {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -90,7 +90,7 @@ function addDays(date, days) {
 }
 
 function buildLast7DaysIncludingToday() {
-  const base = prophetikBusinessDate();
+  const base = getProphetikBusinessDate();
   return Array.from({ length: 8 }, (_, i) => {
     const d = addDays(base, -i);
     return {
@@ -101,8 +101,8 @@ function buildLast7DaysIncludingToday() {
 }
 
 function prettyDateLabel(ymd) {
-  const today = prophetikBusinessYmd();
-  const yesterday = ymdLocal(addDays(prophetikBusinessDate(), -1));
+  const today = getProphetikBusinessYmd();
+  const yesterday = ymdLocal(addDays(getProphetikBusinessDate(), -1));
 
   if (ymd === today) {
     return i18n.t("challenges.todayTitle", { defaultValue: "Aujourd’hui" });
@@ -299,12 +299,62 @@ export default function ChallengesScreen() {
   const dayKeys = useMemo(() => buildLast7DaysIncludingToday(), []);
   const dayYmdSet = useMemo(() => new Set(dayKeys.map((d) => d.ymd)), [dayKeys]);
 
-  const todayKey = prophetikBusinessYmd();
+  const todayKey = getProphetikBusinessYmd();
 
   const allItems = useMemo(
     () => [...fgcItems, ...tpItems, ...tsItems],
     [fgcItems, tpItems, tsItems]
   );
+
+  const mlbScheduleTargets = useMemo(() => {
+    const targets = [];
+    const seen = new Set();
+
+    const pushTarget = (gameYmd, gameId) => {
+      const ymd = String(gameYmd || "").trim();
+      const id = String(gameId || "").trim();
+      if (!ymd || !id) return;
+      const key = `${ymd}|${id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      targets.push({ gameYmd: ymd, gameId: id });
+    };
+
+    fgcItems
+      .filter((item) => String(item?.raw?.league || "").toUpperCase() === "MLB")
+      .forEach((item) => {
+        pushTarget(item?.raw?.gameYmd || item?.dateKey, item?.raw?.gameId || item?.raw?.gamePk);
+      });
+
+    tpItems
+      .filter(
+        (item) =>
+          item?.subtype === "bundle" &&
+          String(item?.raw?.league || "").toUpperCase() === "MLB"
+      )
+      .forEach((item) => {
+        const gameYmd = item?.raw?.gameYmd || item?.dateKey;
+        (item?.raw?.games || []).forEach((slot) => {
+          pushTarget(gameYmd, slot?.gameId);
+        });
+      });
+
+    return targets;
+  }, [fgcItems, tpItems]);
+
+  const scheduleByGameId = useMlbScheduleGames(mlbScheduleTargets);
+
+  const fgcScheduleByChallengeId = useMemo(() => {
+    const out = {};
+
+    fgcItems.forEach((item) => {
+      const gameId = String(item?.raw?.gameId || item?.raw?.gamePk || "").trim();
+      if (!gameId) return;
+      out[item.id] = scheduleByGameId[gameId] || null;
+    });
+
+    return out;
+  }, [fgcItems, scheduleByGameId]);
 
   const [fgcParticipationMap, setFgcParticipationMap] = useState({});
   const [tpParticipationMap, setTpParticipationMap] = useState({});
@@ -722,8 +772,13 @@ export default function ChallengesScreen() {
         byDay[item.dateKey].data.push(item);
         return;
       }
-      if (!isHistoryResultItem(item)) return;
-      byDay[item.dateKey].data.push(item);
+
+      const scheduleStatus =
+        item.kind === "fgc" ? fgcScheduleByChallengeId?.[item.id]?.status : undefined;
+
+      if (shouldShowPastDayResultItem(item, { scheduleStatus })) {
+        byDay[item.dateKey].data.push(item);
+      }
     });
 
     return dayKeys
@@ -744,7 +799,7 @@ export default function ChallengesScreen() {
         };
       })
       .filter((s) => s.data[0].data.length > 0);
-  }, [dayKeys, fgcItems, tpItems, tsItems, todayKey]);
+  }, [dayKeys, fgcItems, tpItems, tsItems, todayKey, fgcScheduleByChallengeId]);
 
   /* ---------------- 6b) participation listeners ---------------- */
 
@@ -891,7 +946,7 @@ export default function ChallengesScreen() {
   /* ---------------- open card ---------------- */
 
   const openChallenge = useCallback(
-    (item, isToday) => {
+    (item, isToday, participantTask = null) => {
       if (item.kind === "ts") {
         if (isToday && !isHistoryResultItem(item)) {
           router.push(`/(drawer)/defis/${item.id}`);
@@ -907,9 +962,26 @@ export default function ChallengesScreen() {
       }
 
       if (item.kind === "tp") {
-        if (item.subtype === "bundle" && isTpResultsViewStatus(resolveChallengeDisplayStatus(item))) {
-          setTpModalItem(item);
-          return;
+        const task =
+          participantTask ||
+          resolveParticipantTaskStatusForItem(item, {
+            isToday,
+            participationMaps,
+            scheduleStatus: fgcScheduleByChallengeId?.[item.id]?.status,
+            scheduleByGameId,
+          });
+
+        const needsPickScreen =
+          isToday &&
+          (task.state === PARTICIPANT_TASK_STATES.ACTION_REQUIRED ||
+            task.state === PARTICIPANT_TASK_STATES.PARTIAL ||
+            task.ctaKey === "modify");
+
+        if (item.subtype === "bundle" && !needsPickScreen) {
+          if (isTpResultsViewStatus(resolveChallengeDisplayStatus(item))) {
+            setTpModalItem(item);
+            return;
+          }
         }
 
         router.push({
@@ -918,7 +990,7 @@ export default function ChallengesScreen() {
         });
       }
     },
-    [router]
+    [router, participationMaps, fgcScheduleByChallengeId, scheduleByGameId]
   );
 
   const renderDaySection = useCallback(
@@ -928,11 +1000,13 @@ export default function ChallengesScreen() {
         colors={colors}
         winnerInfoMap={winnerInfoMap}
         participationMaps={participationMaps}
+        scheduleByChallengeId={fgcScheduleByChallengeId}
+        scheduleByGameId={scheduleByGameId}
         onOpen={openChallenge}
-        getTodayKey={prophetikBusinessYmd}
+        getTodayKey={getProphetikBusinessYmd}
       />
     ),
-    [colors, winnerInfoMap, participationMaps, openChallenge]
+    [colors, winnerInfoMap, participationMaps, openChallenge, fgcScheduleByChallengeId, scheduleByGameId]
   );
 
   /* ---------------- UI states ---------------- */
@@ -1005,6 +1079,7 @@ export default function ChallengesScreen() {
         item={tpModalItem}
         myEntry={tpModalItem ? tpParticipationMap[String(tpModalItem.id)] : null}
         colors={colors}
+        scheduleByGameId={scheduleByGameId}
         onClose={() => setTpModalItem(null)}
       />
 

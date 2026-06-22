@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
+import { syncAppLangToFirestore } from '@src/lib/push/syncAppLang';
 
 const AS_KEY = 'prophetik:lastPushToken';
 
@@ -158,6 +159,8 @@ export async function registerCurrentFcmToken(uid, { force = false } = {}) {
           { merge: true }
         );
       }
+
+      await syncAppLangToFirestore(uid).catch(() => {});
 
       return tokenValue;
     } catch (e) {

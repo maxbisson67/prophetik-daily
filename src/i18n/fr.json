@@ -1226,7 +1226,45 @@
       "streakBest": "Meilleure série",
       "streakOnFire": "SÉRIE EN FEU",
       "streakBestShort": "À BATTRE",
+      "streakRecordLine": "Record : {{best}} jours",
+      "streakMotivation": {
+        "start": "Participe aujourd'hui pour démarrer ta série !",
+        "continue": "Continue ta série !",
+        "tomorrow": "Joue demain pour atteindre {{count}} jours"
+      },
       "daysLabel": "JOURS",
+      "hero": {
+        "badgesLine": "{{unlocked}} / {{total}} BADGES",
+        "progressPct": "{{pct}} %"
+      },
+      "levels": {
+        "recrue": "Recrue",
+        "prospect": "Prospect",
+        "veteran": "Vétéran",
+        "allstar": "All-Star",
+        "legend": "Légende"
+      },
+      "nextGoal": {
+        "title": "Prochain objectif",
+        "allUnlocked": "Tous les badges MVP sont débloqués — bravo !"
+      },
+      "career": {
+        "title": "Ma carrière Prophetik",
+        "participations": "Défis joués",
+        "correctPredictions": "Bonnes prédictions",
+        "bestStreak": "Série record",
+        "tsFivePointNights": "Soirées 5+ points",
+        "fgcWins": "FGC remportés",
+        "exactScores": "Scores exacts"
+      },
+      "displaySections": {
+        "participation": "Participation",
+        "prediction": "Prédictions",
+        "streak": "Séries",
+        "fgc": "FGC",
+        "performance": "Performances",
+        "prestige": "Prestige"
+      },
       "myPoints": "Mes points: {{points}}",
       "myRank": "Ma position: {{rank}}",
       "statsStreakTitle": "SÉRIE",
@@ -1343,6 +1381,7 @@
       "groups": "Groupes",
       "challenges": "Mes résultats",
       "leaderboard": "Classement",
+      "badges": "Badges",
       "matchLive": "En direct",
        "help":"Aide"
     },
@@ -1635,6 +1674,25 @@
       "cancelledGhost": "Annulé",
       "completed": "Terminé"
     }
+  },
+  "participant": {
+    "actionRequired": "À faire",
+    "partial": "À compléter · {{done}}/{{total}}",
+    "joined": "Inscrit",
+    "notJoined": "Non inscrit",
+    "picksProgressHint": "{{done}}/{{total}} matchs prédits",
+    "cta": {
+      "participate": "Participer",
+      "complete": "Compléter",
+      "modify": "Modifier"
+    }
+  },
+  "match": {
+    "notStarted": "Non débuté",
+    "inProgress": "En cours",
+    "completed": "Terminé",
+    "postponed": "Reporté",
+    "unknown": "—"
   },
   "tp": {
     "home": {

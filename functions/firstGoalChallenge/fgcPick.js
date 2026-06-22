@@ -4,11 +4,14 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { isMlbGamePostponedFromLiveFeed } from "../mlb/mlbGameStatus.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const CUT_OFF_MINUTES = 5;
+const MLB_LIVE_FEED_URL = (gamePk) =>
+  `https://statsapi.mlb.com/api/v1.1/game/${encodeURIComponent(String(gamePk))}/feed/live`;
 
 function str(v) {
   return String(v ?? "").trim();
@@ -37,6 +40,24 @@ function getDisplayIdentity(auth) {
     uid: str(auth?.uid),
     // displayName et avatarUrl peuvent venir du client ou d’un doc participants
   };
+}
+
+async function isMlbChallengePostponed(ch) {
+  if (String(ch?.league || "").toUpperCase() !== "MLB") return false;
+
+  const gamePk = str(ch?.gamePk || ch?.gameId);
+  if (!gamePk) return false;
+
+  try {
+    const res = await fetch(MLB_LIVE_FEED_URL(gamePk), {
+      headers: { Accept: "application/json", "User-Agent": "prophetik/1.0" },
+    });
+    if (!res.ok) return false;
+    const feed = await res.json();
+    return isMlbGamePostponedFromLiveFeed(feed);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -78,6 +99,11 @@ export const fgcPick = onCall(
     const chRef = db.collection("first_goal_challenges").doc(challengeId);
     const entryRef = chRef.collection("entries").doc(uid);
 
+    const chPreviewSnap = await chRef.get();
+    if (!chPreviewSnap.exists) throw new HttpsError("not-found", "Challenge introuvable.");
+    const chPreview = chPreviewSnap.data() || {};
+    const postponed = await isMlbChallengePostponed(chPreview);
+
     try {
       const res = await db.runTransaction(async (tx) => {
         const chSnap = await tx.get(chRef);
@@ -86,8 +112,11 @@ export const fgcPick = onCall(
         const ch = chSnap.data() || {};
         const st = String(ch.status || "").toLowerCase();
 
-        // Ajuste si tu veux autoriser "open" seulement
-        if (!["open", "locked"].includes(st)) {
+        if (postponed) {
+          if (["decided", "pending"].includes(st)) {
+            throw new HttpsError("failed-precondition", "Le défi est verrouillé.");
+          }
+        } else if (!["open", "locked"].includes(st)) {
           throw new HttpsError("failed-precondition", "Le défi est verrouillé.");
         }
 
@@ -100,8 +129,12 @@ export const fgcPick = onCall(
         const cutoffMs = startMs - CUT_OFF_MINUTES * 60 * 1000;
         const n = nowMs();
 
-        if (n >= startMs) throw new HttpsError("failed-precondition", "Le match est commencé.");
-        if (n >= cutoffMs) throw new HttpsError("failed-precondition", "Le choix est verrouillé (cutoff).");
+        if (!postponed) {
+          if (n >= startMs) throw new HttpsError("failed-precondition", "Le match est commencé.");
+          if (n >= cutoffMs) {
+            throw new HttpsError("failed-precondition", "Le choix est verrouillé (cutoff).");
+          }
+        }
 
         const entrySnap = await tx.get(entryRef);
         const prev = entrySnap.exists ? (entrySnap.data() || {}) : {};

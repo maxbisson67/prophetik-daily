@@ -48,6 +48,37 @@ export function getBadgeProgress(def, stats) {
   };
 }
 
+/** Prochain badge verrouillé le plus proche du déblocage (pct le plus élevé). */
+export function findNextAchievement(
+  stats,
+  achievements,
+  definitions = MVP_ACHIEVEMENT_DEFINITIONS
+) {
+  const locked = definitions.filter((def) => !isAchievementUnlocked(achievements, def.id));
+  if (!locked.length) return null;
+
+  let best = null;
+
+  for (const def of locked) {
+    const progress = getBadgeProgress(def, stats);
+    if (!best) {
+      best = { def, ...progress };
+      continue;
+    }
+
+    if (progress.pct > best.pct) {
+      best = { def, ...progress };
+      continue;
+    }
+
+    if (progress.pct === best.pct && progress.threshold < best.threshold) {
+      best = { def, ...progress };
+    }
+  }
+
+  return best;
+}
+
 export function groupAchievementsByCategory(definitions = MVP_ACHIEVEMENT_DEFINITIONS) {
   const groups = Object.fromEntries(CATEGORY_ORDER.map((cat) => [cat, []]));
   for (const def of definitions) {

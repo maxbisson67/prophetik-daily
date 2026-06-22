@@ -1,7 +1,9 @@
 // src/i18n/LanguageProvider.js
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import auth from "@react-native-firebase/auth";
 import i18n from "./i18n";
+import { syncAppLangToFirestore } from "@src/lib/push/syncAppLang";
 
 const LanguageContext = createContext({
   lang: "fr",
@@ -30,11 +32,22 @@ export function LanguageProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!ready) return;
+    const uid = auth().currentUser?.uid;
+    if (!uid) return;
+    syncAppLangToFirestore(uid).catch(() => {});
+  }, [ready, lang]);
+
   const setLang = async (next) => {
     const v = next === "en" ? "en" : "fr";
     i18n.locale = v;                    // ✅ i18n-js
     setLangState(v);
     await AsyncStorage.setItem("appLang", v);
+    const uid = auth().currentUser?.uid;
+    if (uid) {
+      await syncAppLangToFirestore(uid).catch(() => {});
+    }
   };
 
   const value = useMemo(() => ({ lang, setLang, ready }), [lang, ready]);

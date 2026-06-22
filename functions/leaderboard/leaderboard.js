@@ -78,12 +78,13 @@ function bundleHasScoredSlots(bundle = {}) {
 
 function parseTpScoredEntry(entry = {}) {
   const points = toNumber(entry.points ?? entry.payout ?? entry.totalPoints, 0);
-  const won =
+  const winnerCorrect =
     entry.won === true || entry.winnerCorrect === true || points > 0;
 
   return {
     points,
-    won,
+    won: winnerCorrect,
+    correctCount: winnerCorrect ? 1 : 0,
     displayName: entry.displayName || null,
     avatarUrl: pickString(entry.avatarUrl),
   };
@@ -98,12 +99,14 @@ function parseTpBundleEntry(entry = {}) {
   }
 
   let pointsFromResults = 0;
-  let won = false;
+  let correctCount = 0;
 
   for (const result of Object.values(pickResults)) {
     if (!result || typeof result !== "object") continue;
     pointsFromResults += toNumber(result.points, 0);
-    if (result.won === true || result.winnerCorrect === true) won = true;
+    if (result.won === true || result.winnerCorrect === true) {
+      correctCount += 1;
+    }
   }
 
   const totalFromField = toNumber(entry.totalPoints, 0);
@@ -112,7 +115,8 @@ function parseTpBundleEntry(entry = {}) {
 
   return {
     points,
-    won,
+    won: correctCount > 0,
+    correctCount,
     displayName: entry.displayName || null,
     avatarUrl: pickString(entry.avatarUrl),
   };
@@ -130,6 +134,7 @@ function addTpLeaderboardEntry({
   uid,
   points,
   won,
+  correctCount,
   displayName,
   avatarUrl,
   gameDate,
@@ -139,26 +144,32 @@ function addTpLeaderboardEntry({
   const cur = ensureAgg(totals, uid);
   const weekKey = weekKeyFromGameDate({ seasonId, fromYmd, gameDate });
   const monthKey = monthKeyFromGameDate(gameDate);
+  const winsDelta =
+    Number.isFinite(Number(correctCount)) && Number(correctCount) >= 0
+      ? Number(correctCount)
+      : won
+      ? 1
+      : 0;
 
   cur.participations += 1;
-  if (won) cur.wins += 1;
+  cur.wins += winsDelta;
 
   cur.pointsTotal += toNumber(points, 0);
   incMap(cur.pointsByWeek, weekKey, points);
   incMap(cur.pointsByMonth, monthKey, points);
 
-  if (won) {
-    incMap(cur.winsByWeek, weekKey, 1);
-    incMap(cur.winsByMonth, monthKey, 1);
+  if (winsDelta > 0) {
+    incMap(cur.winsByWeek, weekKey, winsDelta);
+    incMap(cur.winsByMonth, monthKey, winsDelta);
   }
 
   cur.families.tp.plays += 1;
   cur.families.tp.points += toNumber(points, 0);
-  if (won) cur.families.tp.wins += 1;
+  cur.families.tp.wins += winsDelta;
 
   summary.totals.tp.plays += 1;
   summary.totals.tp.points += toNumber(points, 0);
-  if (won) summary.totals.tp.wins += 1;
+  summary.totals.tp.wins += winsDelta;
 
   const tpTypeKey = "TP";
   if (!cur.winsByType[tpTypeKey]) {
@@ -172,7 +183,7 @@ function addTpLeaderboardEntry({
   }
 
   cur.winsByType[tpTypeKey].plays += 1;
-  if (won) cur.winsByType[tpTypeKey].wins += 1;
+  cur.winsByType[tpTypeKey].wins += winsDelta;
   cur.winsByType[tpTypeKey].pointsTotal += toNumber(points, 0);
 
   if (!cur.displayName && displayName) cur.displayName = displayName;
@@ -582,7 +593,7 @@ const summary = {
       const uid = String(entry?.uid || e.id);
       if (!uid) continue;
 
-      const { points, won, displayName, avatarUrl } = parseTpScoredEntry(entry);
+      const { points, won, correctCount, displayName, avatarUrl } = parseTpScoredEntry(entry);
 
       addTpLeaderboardEntry({
         totals,
@@ -590,6 +601,7 @@ const summary = {
         uid,
         points,
         won,
+        correctCount,
         displayName,
         avatarUrl,
         gameDate,
@@ -630,7 +642,7 @@ const summary = {
       if (!uid) continue;
       if (!tpEntryHasParticipation(entry)) continue;
 
-      const { points, won, displayName, avatarUrl } = parseTpBundleEntry(entry);
+      const { points, won, correctCount, displayName, avatarUrl } = parseTpBundleEntry(entry);
 
       addTpLeaderboardEntry({
         totals,
@@ -638,6 +650,7 @@ const summary = {
         uid,
         points,
         won,
+        correctCount,
         displayName,
         avatarUrl,
         gameDate,

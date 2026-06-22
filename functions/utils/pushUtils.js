@@ -202,6 +202,59 @@ async function sendFcmPush(tokens, payload, channelId, logTag) {
   return { ok: true, success, failure };
 }
 
+export async function sendPushToUsers({
+  uids = [],
+  title,
+  body,
+  data = {},
+  channelId = "challenges_v2",
+  logTag = "sendPushToUsers",
+}) {
+  const uniqueUids = Array.from(new Set((uids || []).map(String).filter(Boolean)));
+
+  if (!uniqueUids.length) {
+    logger.info(`[${logTag}] no recipients`, {});
+    return { ok: true, reason: "NO_RECIPIENTS", recipients: 0, expoSent: 0, fcmSuccess: 0, fcmFailure: 0 };
+  }
+
+  const { expoTokens, fcmTokens } = await collectTokensForUids(uniqueUids, logTag);
+
+  if (!expoTokens.length && !fcmTokens.length) {
+    logger.info(`[${logTag}] no tokens`, { recipients: uniqueUids.length });
+    return {
+      ok: true,
+      reason: "NO_TOKENS",
+      recipients: uniqueUids.length,
+      expoSent: 0,
+      fcmSuccess: 0,
+      fcmFailure: 0,
+    };
+  }
+
+  let expoSent = 0;
+  let fcmSuccess = 0;
+  let fcmFailure = 0;
+
+  if (expoTokens.length) {
+    const r = await sendExpoPush(expoTokens, { title, body, data }, channelId, logTag);
+    expoSent = r.sent || 0;
+  }
+
+  if (fcmTokens.length) {
+    const r = await sendFcmPush(fcmTokens, { title, body, data }, channelId, logTag);
+    fcmSuccess = r.success || 0;
+    fcmFailure = r.failure || 0;
+  }
+
+  return {
+    ok: true,
+    recipients: uniqueUids.length,
+    expoSent,
+    fcmSuccess,
+    fcmFailure,
+  };
+}
+
 export async function sendPushToGroup({
   groupId,
   createdBy,

@@ -157,7 +157,35 @@ function NotificationsMount() {
         }
 
         const groupId = data.groupId ? String(data.groupId) : "";
-        if (groupId && (data.action === "OPEN_GROUP_HOME" || data.action === "OPEN_FGC")) {
+        const openChallengeId = data.openChallengeId
+          ? String(data.openChallengeId)
+          : data.challengeId
+          ? String(data.challengeId)
+          : data.bundleId
+          ? String(data.bundleId)
+          : "";
+        const kind = data.kind ? String(data.kind).toLowerCase() : "";
+
+        if (
+          groupId &&
+          openChallengeId &&
+          (data.action === "OPEN_FGC_RESULTS" ||
+            data.action === "OPEN_TP_RESULTS" ||
+            data.action === "OPEN_FGC" ||
+            data.action === "OPEN_GROUP_HOME")
+        ) {
+          if (data.action === "OPEN_FGC_RESULTS" || data.action === "OPEN_TP_RESULTS") {
+            router.push({
+              pathname: "/(drawer)/(tabs)/ChallengesScreen",
+              params: {
+                groupId,
+                openChallengeId,
+                kind: kind || (data.action === "OPEN_TP_RESULTS" ? "tp" : "fgc"),
+              },
+            });
+            return;
+          }
+
           router.push({
             pathname: "/(drawer)/(tabs)/AccueilScreen",
             params: { groupId },

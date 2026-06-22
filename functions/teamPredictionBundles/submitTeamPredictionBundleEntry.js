@@ -10,6 +10,7 @@ import {
   isSlotOpenForPick,
   refreshSlotStatuses,
 } from "./tpBundleUtils.js";
+import { isMlbScheduleGamePostponed } from "../mlb/mlbGameStatus.js";
 import { deriveWinnerAbbr } from "./tpBundleScoring.js";
 
 if (!getApps().length) initializeApp();
@@ -57,6 +58,17 @@ function pickAvatarUrl(participant = {}) {
     participant.jerseyFrontUrl ||
     null
   );
+}
+
+async function isMlbSlotPostponed(slot, gameYmd) {
+  const gameId = String(slot?.gameId || "").trim();
+  const ymd = String(gameYmd || "").replace(/\D/g, "");
+  if (!gameId || !ymd) return false;
+
+  const snap = await db.doc(`mlb_schedule_daily/${ymd}/games/${gameId}`).get();
+  if (!snap.exists) return false;
+
+  return isMlbScheduleGamePostponed(snap.data() || {});
 }
 
 function normalizePickInput(raw = {}, slot = {}, league) {
@@ -173,7 +185,10 @@ export const submitTeamPredictionBundleEntry = onCall(
         throw new HttpsError("invalid-argument", `Match inconnu dans le bundle: ${gameId}`);
       }
 
-      if (!isSlotOpenForPick(slot)) {
+      const postponed =
+        league === "MLB" && (await isMlbSlotPostponed(slot, bundle.gameYmd));
+
+      if (!postponed && !isSlotOpenForPick(slot)) {
         throw new HttpsError(
           "failed-precondition",
           `Le match ${slot.awayAbbr} @ ${slot.homeAbbr} n'est plus ouvert aux prédictions.`

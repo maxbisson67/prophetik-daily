@@ -38,6 +38,9 @@ function getHeaderTitle(route) {
     case "ClassementScreen":
       return i18n.t("tabs.leaderboard", { defaultValue: "Classement" });
 
+    case "BadgesScreen":
+      return i18n.t("tabs.badges", { defaultValue: "Badges" });
+
     case "GroupsScreen":
       return i18n.t("drawer.groups", { defaultValue: "Mes groupes" });
 
@@ -282,15 +285,6 @@ function CustomDrawerContent(props) {
         onPress={() => closeAndPush("/(drawer)/profile")}
         icon={({ size }) => (
           <Ionicons name="person-circle-outline" size={size} color={colors.text} />
-        )}
-      />
-
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t("drawer.progression", { defaultValue: "Progression & badges" })}
-        onPress={() => closeAndPush("/(drawer)/progression")}
-        icon={({ size }) => (
-          <MaterialCommunityIcons name="medal-outline" size={size} color={colors.text} />
         )}
       />
 

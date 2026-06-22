@@ -21,6 +21,15 @@ import {
   getFgcResultPrefix,
   getFgcMode,
 } from "@src/firstGoal/fgcChallengeUtils";
+import { isFgcChallengeParticipationOpen } from "@src/firstGoal/fgcGameScheduleUtils";
+import useFgcGameSchedules from "@src/firstGoal/useFgcGameSchedules";
+import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
+import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import {
+  formatParticipantCtaLabel,
+  resolveParticipantTaskStatus,
+} from "@src/defis/participant/participantTaskStatus";
+import { resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
 
 function chunk(arr, size = 10) {
   const out = [];
@@ -224,6 +233,7 @@ export default function FirstGoalHomeSection({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [myPickByChallengeId, setMyPickByChallengeId] = useState({});
+  const gameSchedulesByChallengeId = useFgcGameSchedules(items.slice(0, 6));
 
   const mergeAndSet = useCallback((mapById) => {
     const list = Array.from(mapById.values());
@@ -463,10 +473,18 @@ export default function FirstGoalHomeSection({
               const myPick = myPickByChallengeId?.[challengeId]?.data || null;
               const hasMyPick = !!myPickByChallengeId?.[challengeId]?.hasPick;
 
+              const scheduleInfo = gameSchedulesByChallengeId?.[challengeId] || null;
+              const participation = isFgcChallengeParticipationOpen({
+                challengeStatus: ch?.status,
+                scheduleStatus: scheduleInfo?.status,
+                hasMyPick,
+                deadlinePassed,
+              });
+
               const st = String(ch.status || "").toLowerCase();
-              const isLocked = st !== "open";
-              const shouldShowParticipate = st === "open" && !hasMyPick && !deadlinePassed;
-              const shouldShowEdit = st === "open" && hasMyPick && !deadlinePassed;
+              const isLocked = st !== "open" && !participation.showPostponed;
+              const shouldShowParticipate = participation.canParticipate;
+              const shouldShowEdit = participation.canEdit;
               const showParticipateCta = shouldShowParticipate || shouldShowEdit;
 
               if (__DEV__) {
@@ -486,9 +504,29 @@ export default function FirstGoalHomeSection({
                 });
               }
 
-              const isDecided = st === "decided" || st === "closed";
+              const isDecided =
+                (st === "decided" || st === "closed") && !participation.showPostponed;
               const resultPlayerName = isDecided ? getFgcResultPlayerName(ch) : null;
               const resultTeamAbbr = isDecided ? getFgcResultTeamAbbr(ch) : "";
+
+              const participantTask = resolveParticipantTaskStatus(
+                {
+                  kind: "fgc",
+                  id: challengeId,
+                  status: ch?.status,
+                  raw: ch,
+                },
+                {
+                  isToday: !isDecided,
+                  scheduleStatus: scheduleInfo?.status,
+                  participation: { hasPick: hasMyPick, data: myPick },
+                  hasPick: hasMyPick,
+                }
+              );
+
+              const matchTask = resolveFgcMatchStatus(ch, {
+                scheduleStatus: scheduleInfo?.status,
+              });
 
               const pickedPlayerName =
                 myPick?.playerName ||
@@ -502,11 +540,20 @@ export default function FirstGoalHomeSection({
                   myPick?.selectedTeamAbbr
               );
 
-              const ctaLabel = hasMyPick
-                ? i18n.t("firstGoal.cta.modifyPick", { defaultValue: "Modifier mon joueur" })
-                : i18n.t("firstGoal.live.join", { defaultValue: "Participer" });
+              const ctaLabel =
+                formatParticipantCtaLabel(
+                  participantTask.showPrimaryCta
+                    ? participantTask.ctaKey
+                    : participantTask.showModifyCta
+                    ? "modify"
+                    : null
+                ) ||
+                (hasMyPick
+                  ? i18n.t("firstGoal.cta.modifyPick", { defaultValue: "Modifier mon joueur" })
+                  : i18n.t("firstGoal.live.join", { defaultValue: "Participer" }));
 
-              const showSecondaryCta = st !== "open";
+              const showPrimaryCta = participantTask.showPrimaryCta && showParticipateCta;
+              const showModifyCta = participantTask.showModifyCta && showParticipateCta && !showPrimaryCta;
 
               const onPressCta = () => {
                 if (!challengeId) return;
@@ -524,26 +571,81 @@ export default function FirstGoalHomeSection({
                     backgroundColor: colors.card,
                   }}
                 >
-                  <MatchupRow
-                    awayAbbr={awayAbbr}
-                    homeAbbr={homeAbbr}
-                    sport={challengeLeague}
-                    colors={colors}
-                  />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Text
+                      style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}
+                      numberOfLines={2}
+                    >
+                      {getFgcTitle(ch, i18n.t.bind(i18n))}
+                    </Text>
+
+                    {!isDecided ? (
+                      <ParticipantTaskStatusChip
+                        task={participantTask}
+                        colors={colors}
+                        compact
+                      />
+                    ) : null}
+                  </View>
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <MatchupRow
+                        awayAbbr={awayAbbr}
+                        homeAbbr={homeAbbr}
+                        sport={challengeLeague}
+                        colors={colors}
+                      />
+                    </View>
+
+                    {!isDecided ? (
+                      <MatchTaskStatusChip task={matchTask} colors={colors} compact />
+                    ) : null}
+                  </View>
 
                   <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
-                    {i18n.t("firstGoal.home.signupDeadline", {
-                      defaultValue: "Heure limite d'inscription",
-                    })}
-                    {": "}
-                    {deadlinePassed ? (
-                      <Text style={{ color: colors.text, fontWeight: "900" }}>
-                        {i18n.t("firstGoal.home.signupClosed", { defaultValue: "Fermé" })}
-                      </Text>
+                    {participation.showPostponed ? (
+                      <>
+                        {i18n.t("firstGoal.home.gameStatus", {
+                          defaultValue: "Statut du match",
+                        })}
+                        {": "}
+                        <Text style={{ color: "#d97706", fontWeight: "900" }}>
+                          {i18n.t("firstGoal.home.postponed", { defaultValue: "Reporté" })}
+                        </Text>
+                      </>
                     ) : (
-                      <Text style={{ color: colors.text, fontWeight: "900" }}>
-                        {deadlineHM || "—"}
-                      </Text>
+                      <>
+                        {i18n.t("firstGoal.home.signupDeadline", {
+                          defaultValue: "Heure limite d'inscription",
+                        })}
+                        {": "}
+                        {deadlinePassed ? (
+                          <Text style={{ color: colors.text, fontWeight: "900" }}>
+                            {i18n.t("firstGoal.home.signupClosed", { defaultValue: "Fermé" })}
+                          </Text>
+                        ) : (
+                          <Text style={{ color: colors.text, fontWeight: "900" }}>
+                            {deadlineHM || "—"}
+                          </Text>
+                        )}
+                      </>
                     )}
                   </Text>
 
@@ -607,11 +709,11 @@ export default function FirstGoalHomeSection({
                   ) : null}
 
                   <View style={{ marginTop: 12, gap: 10 }}>
-                    {deadlinePassed ? (
+                    {deadlinePassed && !participation.showPostponed ? (
                       <ResultsTabHint colors={colors} />
                     ) : (
                       <>
-                        {showParticipateCta ? (
+                        {showPrimaryCta ? (
                           <TouchableOpacity
                             onPress={onPressCta}
                             activeOpacity={0.9}
@@ -627,7 +729,27 @@ export default function FirstGoalHomeSection({
                           </TouchableOpacity>
                         ) : null}
 
-                        {showSecondaryCta ? (
+                        {showModifyCta ? (
+                          <TouchableOpacity
+                            onPress={onPressCta}
+                            activeOpacity={0.9}
+                            style={{
+                              width: "100%",
+                              paddingVertical: 10,
+                              borderRadius: 12,
+                              alignItems: "center",
+                              backgroundColor: colors.card2,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                            }}
+                          >
+                            <Text style={{ color: colors.text, fontWeight: "900" }}>
+                              {ctaLabel}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+
+                        {!showPrimaryCta && !showModifyCta && st !== "open" && !participation.showPostponed ? (
                           <ResultsTabHint colors={colors} />
                         ) : null}
                       </>
