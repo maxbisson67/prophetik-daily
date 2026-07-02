@@ -6,6 +6,11 @@ import LeaderboardRankBadge from "./LeaderboardRankBadge";
 import useLeaderboardProfiles, {
   resolveLeaderboardMember,
 } from "./useLeaderboardProfiles";
+import {
+  deriveTpExactCount,
+  fgcDisplayPoints,
+  isMlbSport,
+} from "./leaderboardDashboardHelpers";
 
 const AVATAR_PLACEHOLDER = require("@src/assets/avatar-placeholder.png");
 
@@ -99,47 +104,19 @@ function ChallengeCard({
   title,
   accent,
   rows,
-  winsKey,
-  pointsKey,
-  playsKey,
+  columns,
+  sortValue,
+  hasActivity,
   colors,
   profiles,
   onRowPress,
   emptyText,
-  t,
 }) {
   const sorted = useMemo(() => {
     const copy = [...(rows || [])];
-    copy.sort((a, b) => Number(b?.[pointsKey] ?? 0) - Number(a?.[pointsKey] ?? 0));
-    return copy.filter((r) => {
-      const pts = Number(r?.[pointsKey] ?? 0) || 0;
-      const wins = Number(r?.[winsKey] ?? 0) || 0;
-      const plays = playsKey
-        ? Number(r?.[`${playsKey}Plays`] ?? r?.families?.[playsKey]?.plays ?? 0) || 0
-        : 0;
-      return pts > 0 || wins > 0 || plays > 0;
-    });
-  }, [rows, pointsKey, winsKey, playsKey]);
-
-  const columns = [
-    { key: "player", label: t("leaderboard.columns.player") },
-    {
-      key: "wins",
-      label: t("leaderboard.columns.correctPicks"),
-      flex: 1,
-      render: (row) => String(Number(row?.[winsKey] ?? 0) || 0),
-      color: accent,
-      bold: true,
-    },
-    {
-      key: "points",
-      label: t("leaderboard.columns.points"),
-      flex: 1,
-      render: (row) => String(Number(row?.[pointsKey] ?? 0) || 0),
-      color: accent,
-      bold: true,
-    },
-  ];
+    copy.sort((a, b) => Number(sortValue(b) ?? 0) - Number(sortValue(a) ?? 0));
+    return copy.filter((row) => hasActivity(row));
+  }, [rows, sortValue, hasActivity]);
 
   return (
     <View style={[cardStyle(colors, accent), { marginBottom: 16 }]}>
@@ -260,13 +237,92 @@ function RankedRows({
   });
 }
 
+function buildChallengeColumns({ t, accent, variant }) {
+  const statColumn = (key, label, render) => ({
+    key,
+    label,
+    flex: 1,
+    render,
+    color: accent,
+    bold: true,
+  });
+
+  if (variant === "fgc") {
+    return [
+      { key: "player", label: t("leaderboard.columns.player") },
+      statColumn("successes", t("leaderboard.columns.successes"), (row) =>
+        String(Number(row?.fgcWins ?? 0) || 0)
+      ),
+      statColumn("points", t("leaderboard.columns.points"), (row) =>
+        String(fgcDisplayPoints(row))
+      ),
+    ];
+  }
+
+  if (variant === "tp") {
+    return [
+      { key: "player", label: t("leaderboard.columns.player") },
+      statColumn("successes", t("leaderboard.columns.successes"), (row) =>
+        String(Number(row?.tpWins ?? 0) || 0)
+      ),
+      statColumn("exacts", t("leaderboard.columns.exacts"), (row) =>
+        String(deriveTpExactCount(row))
+      ),
+      statColumn("points", t("leaderboard.columns.points"), (row) =>
+        String(Number(row?.tpPoints ?? 0) || 0)
+      ),
+    ];
+  }
+
+  return [
+    { key: "player", label: t("leaderboard.columns.player") },
+    statColumn("victories", t("leaderboard.columns.victories"), (row) =>
+      String(Number(row?.tsWins ?? 0) || 0)
+    ),
+    statColumn("points", t("leaderboard.columns.points"), (row) =>
+      String(Number(row?.tsPoints ?? 0) || 0)
+    ),
+  ];
+}
+
 export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPress, emptyText }) {
   const t = i18n.t.bind(i18n);
   const [showAllTotals, setShowAllTotals] = useState(false);
+  const mlb = isMlbSport(sport);
 
   const normalizedRows = rows || [];
   const uids = useMemo(() => normalizedRows.map((r) => String(r.id)), [normalizedRows]);
   const profiles = useLeaderboardProfiles(uids);
+
+  const sectionTitles = useMemo(
+    () => ({
+      fgc: mlb
+        ? t("leaderboard.sections.fgcMlb", { defaultValue: "Premier point produit" })
+        : t("leaderboard.sections.fgcNhl", { defaultValue: "Premier but" }),
+      tp: t("leaderboard.sections.tp", { defaultValue: "Prédire l'issue du match" }),
+      ts: t("leaderboard.sections.ts", { defaultValue: "Trio du jour" }),
+    }),
+    [mlb, t]
+  );
+
+  const emptyTexts = useMemo(
+    () => ({
+      fgc: mlb
+        ? t("leaderboard.challenge.noStats.fgcMlb", {
+            defaultValue: "Aucune donnée Premier point produit pour cette compétition.",
+          })
+        : t("leaderboard.challenge.noStats.fgcNhl", {
+            defaultValue: "Aucune donnée Premier but pour cette compétition.",
+          }),
+      tp: t("leaderboard.challenge.noStats.tp", {
+        defaultValue: "Aucune donnée Prédire l'issue du match pour cette compétition.",
+      }),
+      ts: t("leaderboard.challenge.noStats.ts", {
+        defaultValue: "Aucune donnée Trio du jour pour cette compétition.",
+      }),
+    }),
+    [mlb, t]
+  );
 
   const totalsSorted = useMemo(() => {
     const copy = [...normalizedRows];
@@ -338,47 +394,57 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
 
       <ChallengeCard
         sport={sport}
-        title={t("leaderboard.sections.fgc")}
+        title={sectionTitles.fgc}
         accent="#22C55E"
         rows={normalizedRows}
-        winsKey="fgcWins"
-        pointsKey="fgcPoints"
-        playsKey="fgc"
+        columns={buildChallengeColumns({ t, accent: "#22C55E", variant: "fgc" })}
+        sortValue={(row) => fgcDisplayPoints(row)}
+        hasActivity={(row) => {
+          const wins = Number(row?.fgcWins ?? 0) || 0;
+          const pts = fgcDisplayPoints(row);
+          return wins > 0 || pts > 0;
+        }}
         colors={colors}
         profiles={profiles}
         onRowPress={onRowPress}
-        emptyText={t("leaderboard.challenge.noStats.fgc")}
-        t={t}
+        emptyText={emptyTexts.fgc}
       />
 
       <ChallengeCard
         sport={sport}
-        title={t("leaderboard.sections.tp")}
+        title={sectionTitles.tp}
         accent="#3B82F6"
         rows={normalizedRows}
-        winsKey="tpWins"
-        pointsKey="tpPoints"
-        playsKey="tp"
+        columns={buildChallengeColumns({ t, accent: "#3B82F6", variant: "tp" })}
+        sortValue={(row) => Number(row?.tpPoints ?? 0) || 0}
+        hasActivity={(row) => {
+          const pts = Number(row?.tpPoints ?? 0) || 0;
+          const wins = Number(row?.tpWins ?? 0) || 0;
+          const exacts = deriveTpExactCount(row);
+          return pts > 0 || wins > 0 || exacts > 0;
+        }}
         colors={colors}
         profiles={profiles}
         onRowPress={onRowPress}
-        emptyText={t("leaderboard.challenge.noStats.tp")}
-        t={t}
+        emptyText={emptyTexts.tp}
       />
 
       <ChallengeCard
         sport={sport}
-        title={t("leaderboard.sections.ts")}
+        title={sectionTitles.ts}
         accent="#A855F7"
         rows={normalizedRows}
-        winsKey="tsWins"
-        pointsKey="tsPoints"
-        playsKey="ts"
+        columns={buildChallengeColumns({ t, accent: "#A855F7", variant: "ts" })}
+        sortValue={(row) => Number(row?.tsPoints ?? 0) || 0}
+        hasActivity={(row) => {
+          const pts = Number(row?.tsPoints ?? 0) || 0;
+          const wins = Number(row?.tsWins ?? 0) || 0;
+          return pts > 0 || wins > 0;
+        }}
         colors={colors}
         profiles={profiles}
         onRowPress={onRowPress}
-        emptyText={t("leaderboard.challenge.noStats.ts")}
-        t={t}
+        emptyText={emptyTexts.ts}
       />
     </View>
   );

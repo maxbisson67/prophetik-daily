@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldPath } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import * as logger from "firebase-functions/logger";
+import { filterUidsByNotificationPref } from "../notifications/notificationPrefs.js";
 
 if (!getApps().length) initializeApp();
 
@@ -209,8 +210,21 @@ export async function sendPushToUsers({
   data = {},
   channelId = "challenges_v2",
   logTag = "sendPushToUsers",
+  notificationPrefKey = null,
 }) {
-  const uniqueUids = Array.from(new Set((uids || []).map(String).filter(Boolean)));
+  let uniqueUids = Array.from(new Set((uids || []).map(String).filter(Boolean)));
+
+  if (notificationPrefKey && uniqueUids.length) {
+    const before = uniqueUids.length;
+    uniqueUids = await filterUidsByNotificationPref(uniqueUids, notificationPrefKey, db);
+    if (before !== uniqueUids.length) {
+      logger.info(`[${logTag}] filtered by notification pref`, {
+        prefKey: notificationPrefKey,
+        before,
+        after: uniqueUids.length,
+      });
+    }
+  }
 
   if (!uniqueUids.length) {
     logger.info(`[${logTag}] no recipients`, {});
@@ -265,6 +279,7 @@ export async function sendPushToGroup({
   data = {},
   channelId = "challenges_v2",
   logTag = "sendPushToGroup",
+  notificationPrefKey = null,
 }) {
   const uids = await collectUidsForGroup({
     groupId,
@@ -279,7 +294,26 @@ export async function sendPushToGroup({
     return { ok: true, reason: "NO_RECIPIENTS", recipients: 0, expoSent: 0, fcmSuccess: 0, fcmFailure: 0 };
   }
 
-  const { expoTokens, fcmTokens } = await collectTokensForUids(Array.from(uids), logTag);
+  let uidList = Array.from(uids);
+
+  if (notificationPrefKey) {
+    const before = uidList.length;
+    uidList = await filterUidsByNotificationPref(uidList, notificationPrefKey, db);
+    if (before !== uidList.length) {
+      logger.info(`[${logTag}] filtered by notification pref`, {
+        prefKey: notificationPrefKey,
+        before,
+        after: uidList.length,
+      });
+    }
+  }
+
+  if (!uidList.length) {
+    logger.info(`[${logTag}] no recipients after pref filter`, { groupId: String(groupId) });
+    return { ok: true, reason: "NO_RECIPIENTS_AFTER_PREF", recipients: 0, expoSent: 0, fcmSuccess: 0, fcmFailure: 0 };
+  }
+
+  const { expoTokens, fcmTokens } = await collectTokensForUids(uidList, logTag);
 
   let expoSent = 0;
   let fcmSuccess = 0;
@@ -296,5 +330,5 @@ export async function sendPushToGroup({
     fcmFailure = r.failure || 0;
   }
 
-  return { ok: true, recipients: uids.size, expoSent, fcmSuccess, fcmFailure };
+  return { ok: true, recipients: uidList.length, expoSent, fcmSuccess, fcmFailure };
 }

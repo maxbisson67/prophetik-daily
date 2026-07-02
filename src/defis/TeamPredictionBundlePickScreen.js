@@ -1,16 +1,16 @@
 // src/defis/TeamPredictionBundlePickScreen.js
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  ScrollView,
   TextInput,
-  Alert,
   StyleSheet,
+  Platform,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { Stack, useRouter } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
@@ -35,13 +35,12 @@ import {
   isSlotLocked,
 } from "@src/defis/tpDeadlineHelpers";
 import {
-  formatPickPoints,
-  formatResultWinnerLine,
   isBundleDecided,
   isSlotDecided,
 } from "@src/defis/tpBundleDisplayHelpers";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
+import NovaCoachPanel from "@src/nova/NovaCoachPanel";
 
 const RED = "#b91c1c";
 
@@ -64,8 +63,9 @@ function TeamStandingsLine({ line, colors }) {
   );
 }
 
-function ScoreInputBox({ value, onChangeText, editable, colors }) {
+function ScoreInputBox({ value, onChangeText, editable, colors, onFocus }) {
   const active = editable;
+  const inputRef = useRef(null);
 
   return (
     <View
@@ -78,8 +78,10 @@ function ScoreInputBox({ value, onChangeText, editable, colors }) {
       ]}
     >
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
+        onFocus={() => onFocus?.(inputRef.current)}
         editable={editable}
         keyboardType="number-pad"
         maxLength={2}
@@ -185,10 +187,87 @@ function draftFromSavedPick(pick, isMlb) {
 }
 
 function canSaveDraft(draft, isMlb) {
+  if (!draft || typeof draft !== "object") return false;
   if (draft.away === "" || draft.home === "") return false;
   if (Number(draft.away) === Number(draft.home)) return false;
   if (!isMlb && !draft.outcome) return false;
   return true;
+}
+
+function draftMatchesSaved(draft, savedPick, isMlb) {
+  if (!draft || !savedPick || !canSaveDraft(draft, isMlb)) return false;
+  if (Number(draft.away) !== Number(savedPick.predictedAwayScore)) return false;
+  if (Number(draft.home) !== Number(savedPick.predictedHomeScore)) return false;
+  const outcome = isMlb ? "FINAL" : draft.outcome;
+  if (!isMlb && String(savedPick.predictedOutcome || "") !== String(outcome)) return false;
+  return true;
+}
+
+function pickPayloadFromDraft(draft, isMlb) {
+  return {
+    predictedAwayScore: Number(draft.away),
+    predictedHomeScore: Number(draft.home),
+    predictedOutcome: isMlb ? "FINAL" : draft.outcome,
+  };
+}
+
+function getCardSaveState({ draft, savedPick, isMlb, locked, decided, saving, hasError }) {
+  if (decided) return null;
+  if (saving) return "saving";
+  if (hasError && canSaveDraft(draft, isMlb) && !draftMatchesSaved(draft, savedPick, isMlb)) {
+    return "error";
+  }
+  if (locked) {
+    return savedPick ? "saved" : "incomplete";
+  }
+  if (!canSaveDraft(draft, isMlb)) return "incomplete";
+  if (draftMatchesSaved(draft, savedPick, isMlb)) return "saved";
+  return "pending";
+}
+
+function SaveStatusBadge({ state, colors }) {
+  if (!state) return null;
+
+  const configs = {
+    incomplete: {
+      label: i18n.t("tp.pick.statusIncomplete"),
+      color: colors.subtext,
+      icon: "○",
+    },
+    pending: {
+      label: i18n.t("tp.pick.statusPending"),
+      color: "#d97706",
+      icon: "·",
+    },
+    saving: {
+      label: i18n.t("tp.pick.statusSaving"),
+      color: RED,
+      icon: null,
+    },
+    saved: {
+      label: i18n.t("tp.pick.statusSaved"),
+      color: "#16a34a",
+      icon: "✓",
+    },
+    error: {
+      label: i18n.t("tp.pick.statusError"),
+      color: RED,
+      icon: "!",
+    },
+  };
+
+  const cfg = configs[state] || configs.incomplete;
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+      {state === "saving" ? (
+        <ActivityIndicator size="small" color={cfg.color} />
+      ) : cfg.icon ? (
+        <Text style={{ color: cfg.color, fontWeight: "900", fontSize: 12 }}>{cfg.icon}</Text>
+      ) : null}
+      <Text style={{ color: cfg.color, fontWeight: "900", fontSize: 12 }}>{cfg.label}</Text>
+    </View>
+  );
 }
 
 function MatchLockInfo({ slot, locked, nowTick, colors }) {
@@ -227,71 +306,17 @@ function MatchLockInfo({ slot, locked, nowTick, colors }) {
   );
 }
 
-function MatchResultBanner({ slot, league, colors }) {
-  const line = formatResultWinnerLine(slot, league);
-  if (!line) return null;
-
-  return (
-    <View
-      style={{
-        marginBottom: 10,
-        padding: 10,
-        borderRadius: 12,
-        backgroundColor: "rgba(59,130,246,0.10)",
-        borderWidth: 1,
-        borderColor: colors.border,
-      }}
-    >
-      <Text style={{ color: "#2563eb", fontWeight: "900", fontSize: 13 }}>
-        {i18n.t("tp.pick.resultConfirmed", {
-          defaultValue: "Résultat : {{line}}",
-          line,
-        })}
-      </Text>
-    </View>
-  );
-}
-
-function MatchPointsLine({ pickResult, colors }) {
-  const pointsLine = formatPickPoints(pickResult);
-  const winnerCorrect = !!pickResult?.winnerCorrect;
-  const exactScoreCorrect = !!pickResult?.exactScoreCorrect;
-
-  if (!pickResult) {
-    return (
-      <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 8 }}>
-        {i18n.t("tp.pick.noPickForMatch", { defaultValue: "Tu n'as pas participé à ce match." })}
-      </Text>
-    );
-  }
-
-  return (
-    <View style={{ marginTop: 10, gap: 4 }}>
-      <Text style={{ color: colors.text, fontSize: 13, fontWeight: "800" }}>
-        {winnerCorrect
-          ? exactScoreCorrect
-            ? i18n.t("tp.pick.perfectPick", { defaultValue: "Score exact!" })
-            : i18n.t("tp.pick.winnerCorrect", { defaultValue: "Bon gagnant" })
-          : i18n.t("tp.pick.winnerWrong", { defaultValue: "Mauvais gagnant" })}
-        {pointsLine ? ` · ${pointsLine}` : ""}
-      </Text>
-    </View>
-  );
-}
-
 function BundleMatchPickSection({
   slot,
   league,
   draft,
-  savedPick,
-  pickResult,
   onChangeDraft,
-  onSave,
-  saving,
+  saveState = null,
   colors,
   formatTeamLine,
   nowTick,
   scheduleInfo = null,
+  onScoreFocus = null,
 }) {
   const isMlb = league === "MLB";
   const gameId = String(slot?.gameId || "");
@@ -306,7 +331,6 @@ function BundleMatchPickSection({
   const scoreDiff =
     draft.away !== "" && draft.home !== "" ? Math.abs(Number(draft.away) - Number(draft.home)) : null;
   const otTbDisabled = scoreDiff !== null && scoreDiff > 1;
-  const saveEnabled = !locked && !saving && canSaveDraft(draft, isMlb);
 
   return (
     <View
@@ -330,7 +354,7 @@ function BundleMatchPickSection({
         </Text>
         {decided ? (
           <Text style={{ color: "#2563eb", fontWeight: "900", fontSize: 12 }}>
-            {i18n.t("tp.pick.decided", { defaultValue: "Terminé" })}
+            {i18n.t("tp.pick.decided")}
           </Text>
         ) : postponed ? (
           <Text style={{ color: "#d97706", fontWeight: "900", fontSize: 12 }}>
@@ -338,14 +362,15 @@ function BundleMatchPickSection({
           </Text>
         ) : locked ? (
           <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
-            {i18n.t("tp.pick.locked", { defaultValue: "Verrouillé" })}
+            {i18n.t("tp.pick.locked")}
           </Text>
+        ) : saveState ? (
+          <SaveStatusBadge state={saveState} colors={colors} />
         ) : null}
       </View>
 
       {decided ? (
         <>
-          <MatchResultBanner slot={slot} league={league} colors={colors} />
           <View
             style={{
               flexDirection: "row",
@@ -360,11 +385,6 @@ function BundleMatchPickSection({
               <Text style={{ color: colors.text, fontWeight: "900", fontSize: 28 }}>
                 {slot?.officialResult?.awayScore ?? "—"}
               </Text>
-              {savedPick ? (
-                <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                  {i18n.t("tp.pick.yourPick", { defaultValue: "Toi" })}: {draft.away || "—"}
-                </Text>
-              ) : null}
             </View>
 
             <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 20 }}>-</Text>
@@ -375,14 +395,8 @@ function BundleMatchPickSection({
               <Text style={{ color: colors.text, fontWeight: "900", fontSize: 28 }}>
                 {slot?.officialResult?.homeScore ?? "—"}
               </Text>
-              {savedPick ? (
-                <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                  {i18n.t("tp.pick.yourPick", { defaultValue: "Toi" })}: {draft.home || "—"}
-                </Text>
-              ) : null}
             </View>
           </View>
-          <MatchPointsLine pickResult={pickResult} colors={colors} />
         </>
       ) : (
         <>
@@ -419,6 +433,7 @@ function BundleMatchPickSection({
             onChangeText={(txt) => onChangeDraft({ ...draft, away: normalizeScoreInput(txt) })}
             editable={!locked}
             colors={colors}
+            onFocus={onScoreFocus}
           />
         </View>
 
@@ -434,6 +449,7 @@ function BundleMatchPickSection({
             onChangeText={(txt) => onChangeDraft({ ...draft, home: normalizeScoreInput(txt) })}
             editable={!locked}
             colors={colors}
+            onFocus={onScoreFocus}
           />
         </View>
       </View>
@@ -476,28 +492,6 @@ function BundleMatchPickSection({
           })}
         </Text>
       ) : null}
-
-      {!locked ? (
-        <TouchableOpacity
-          onPress={onSave}
-          disabled={!saveEnabled}
-          style={{
-            marginTop: 12,
-            backgroundColor: saveEnabled ? RED : colors.subtext,
-            borderRadius: 12,
-            paddingVertical: 12,
-            alignItems: "center",
-          }}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={{ color: "#fff", fontWeight: "900" }}>
-              {i18n.t("tp.pick.saveMatch", { defaultValue: "Enregistrer ce match" })}
-            </Text>
-          )}
-        </TouchableOpacity>
-      ) : null}
         </>
       )}
     </View>
@@ -514,8 +508,26 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
   const [bundle, setBundle] = useState(null);
   const [entry, setEntry] = useState(null);
   const [draftByGameId, setDraftByGameId] = useState({});
-  const [savingGameId, setSavingGameId] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("idle");
+  const [savingGameIds, setSavingGameIds] = useState([]);
+  const [saveError, setSaveError] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
+  const saveTimerRef = useRef(null);
+  const saveInFlightRef = useRef(false);
+  const pendingAfterFlightRef = useRef(false);
+  const scrollRef = useRef(null);
+
+  const scrollToScoreInput = useCallback((inputRef) => {
+    if (!inputRef || !scrollRef.current?.scrollToFocusedInput) return;
+
+    requestAnimationFrame(() => {
+      try {
+        scrollRef.current.scrollToFocusedInput(inputRef, Platform.OS === "ios" ? 120 : 160);
+      } catch {
+        scrollRef.current?.scrollToEnd?.({ animated: true });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 1000);
@@ -601,7 +613,16 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
       for (const slot of games) {
         const gameId = String(slot.gameId);
         if (saved[gameId]) {
-          next[gameId] = draftFromSavedPick(saved[gameId], isMlb);
+          const fromSaved = draftFromSavedPick(saved[gameId], isMlb);
+          const current = next[gameId];
+          const userIsEditing =
+            current &&
+            canSaveDraft(current, isMlb) &&
+            !draftMatchesSaved(current, saved[gameId], isMlb);
+
+          if (!userIsEditing) {
+            next[gameId] = fromSaved;
+          }
         } else if (!next[gameId]) {
           next[gameId] = emptyDraftPick();
         }
@@ -611,47 +632,151 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     });
   }, [games, entry?.picks, isMlb]);
 
-  async function handleSaveMatch(gameId) {
-    const draft = draftByGameId[gameId];
-    if (!canSaveDraft(draft, isMlb)) return;
+  const showResults = useMemo(() => isBundleDecided(bundle), [bundle]);
 
-    try {
-      setSavingGameId(gameId);
+  const isSlotEditable = useCallback(
+    (slot) => {
+      if (isSlotDecided(slot)) return false;
+      const gameId = String(slot?.gameId || "");
+      const scheduleInfo = scheduleByGameId[gameId] || null;
+      const postponed = isMlb && isMlbGamePostponed(scheduleInfo?.status);
+      if (postponed) return true;
+      return !isSlotLocked(slot, nowTick, { scheduleStatus: scheduleInfo?.status });
+    },
+    [isMlb, nowTick, scheduleByGameId]
+  );
 
-      const fn = functions().httpsCallable("submitTeamPredictionBundleEntry");
+  const buildDirtyPicksPayload = useCallback(() => {
+    const payload = {};
 
-      await fn({
-        bundleId: String(bundleId),
-        picks: {
-          [gameId]: {
-            predictedAwayScore: Number(draft.away),
-            predictedHomeScore: Number(draft.home),
-            predictedOutcome: isMlb ? "FINAL" : draft.outcome,
-          },
-        },
-      });
+    for (const slot of games) {
+      const gameId = String(slot.gameId);
+      if (!isSlotEditable(slot)) continue;
 
-      Alert.alert(
-        i18n.t("tp.pick.savedTitle", { defaultValue: "Prédiction enregistrée" }),
-        i18n.t("tp.pick.savedMatchBody", {
-          defaultValue: "Ta prédiction pour ce match a été sauvegardée.",
-        })
-      );
-    } catch (e) {
-      Alert.alert(
-        i18n.t("common.error", { defaultValue: "Erreur" }),
-        String(e?.message || e)
-      );
-    } finally {
-      setSavingGameId(null);
+      const draft = draftByGameId[gameId] || emptyDraftPick();
+      if (!canSaveDraft(draft, isMlb)) continue;
+
+      const savedPick = entry?.picks?.[gameId];
+      if (draftMatchesSaved(draft, savedPick, isMlb)) continue;
+
+      payload[gameId] = pickPayloadFromDraft(draft, isMlb);
     }
-  }
 
-  const picksCompletedCount = Number(entry?.picksCompletedCount || 0);
-  const gameCount = Number(bundle?.gameCount || games.length || 0);
-  const totalPoints = Number(entry?.totalPoints ?? 0);
-  const showResults = isBundleDecided(bundle);
-  const pickResults = entry?.pickResults || {};
+    return payload;
+  }, [games, draftByGameId, entry?.picks, isMlb, isSlotEditable]);
+
+  const flushSave = useCallback(
+    async (picksPayload) => {
+      const gameIds = Object.keys(picksPayload || {});
+      if (!gameIds.length || !bundleId) return;
+
+      if (saveInFlightRef.current) {
+        pendingAfterFlightRef.current = true;
+        return;
+      }
+
+      saveInFlightRef.current = true;
+      setSaveStatus("saving");
+      setSavingGameIds(gameIds);
+      setSaveError(null);
+
+      try {
+        const fn = functions().httpsCallable("submitTeamPredictionBundleEntry");
+        await fn({
+          bundleId: String(bundleId),
+          picks: picksPayload,
+        });
+        setSaveStatus("saved");
+      } catch (e) {
+        setSaveStatus("error");
+        setSaveError(String(e?.message || e));
+      } finally {
+        saveInFlightRef.current = false;
+        setSavingGameIds([]);
+        if (pendingAfterFlightRef.current) {
+          pendingAfterFlightRef.current = false;
+          const nextPayload = buildDirtyPicksPayload();
+          if (Object.keys(nextPayload).length) {
+            await flushSave(nextPayload);
+          }
+        }
+      }
+    },
+    [bundleId, buildDirtyPicksPayload]
+  );
+
+  useEffect(() => {
+    if (showResults || loading || !games.length) return undefined;
+
+    const payload = buildDirtyPicksPayload();
+    if (!Object.keys(payload).length) return undefined;
+
+    saveTimerRef.current = setTimeout(() => {
+      flushSave(buildDirtyPicksPayload());
+    }, 600);
+
+    return () => {
+      clearTimeout(saveTimerRef.current);
+    };
+  }, [draftByGameId, entry?.picks, games, loading, showResults, buildDirtyPicksPayload, flushSave]);
+
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimerRef.current);
+    },
+    []
+  );
+
+  const progress = useMemo(() => {
+    const editableGames = games.filter((slot) => isSlotEditable(slot));
+    const total = editableGames.length;
+    let saved = 0;
+
+    for (const slot of editableGames) {
+      const gameId = String(slot.gameId);
+      const draft = draftByGameId[gameId] || emptyDraftPick();
+      if (draftMatchesSaved(draft, entry?.picks?.[gameId], isMlb)) {
+        saved += 1;
+      }
+    }
+
+    const dirtyCount = Object.keys(buildDirtyPicksPayload()).length;
+    const saving = saveStatus === "saving" || savingGameIds.length > 0;
+
+    return { total, saved, dirtyCount, saving };
+  }, [
+    games,
+    draftByGameId,
+    entry?.picks,
+    isMlb,
+    isSlotEditable,
+    buildDirtyPicksPayload,
+    saveStatus,
+    savingGameIds,
+  ]);
+
+  const handleRetrySave = useCallback(() => {
+    flushSave(buildDirtyPicksPayload());
+  }, [buildDirtyPicksPayload, flushSave]);
+
+  const bottomBarMessage = useMemo(() => {
+    if (saveStatus === "error") {
+      return i18n.t("tp.pick.saveFailed");
+    }
+    if (progress.saving) {
+      return i18n.t("tp.pick.savingAll");
+    }
+    if (progress.dirtyCount > 0) {
+      return i18n.t("tp.pick.pendingSave");
+    }
+    if (progress.total > 0 && progress.saved === progress.total) {
+      return i18n.t("tp.pick.allSaved");
+    }
+    return i18n.t("tp.pick.progressSaved", {
+      saved: progress.saved,
+      total: progress.total,
+    });
+  }, [saveStatus, progress]);
 
   return (
     <>
@@ -682,7 +807,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                   {showResults
                     ? i18n.t("tp.pick.resultsTitle", { defaultValue: "Résultats du défi" })
                     : i18n.t("tp.pick.screenTitle", {
-                        defaultValue: "Défi - Prédire l'issue du match",
+                        defaultValue: "Prédire l'issue du match",
                       })}
                 </Text>
                 <TouchableOpacity
@@ -701,32 +826,49 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                   <Ionicons name="close" size={22} color={colors.text} />
                 </TouchableOpacity>
               </View>
-
-              <Text style={{ color: colors.subtext, marginTop: 6 }}>
-                {showResults
-                  ? i18n.t("tp.pick.myTotalPoints", {
-                      defaultValue: "Ton total : {{points}} pt(s)",
-                      points: totalPoints,
-                    })
-                  : i18n.t("tp.pick.bundleProgress", {
-                      defaultValue: "{{done}}/{{total}} matchs complétés",
-                      done: picksCompletedCount,
-                      total: gameCount,
-                    })}
-              </Text>
             </View>
 
-            <ScrollView
+            {league === "MLB" && !showResults ? (
+              <NovaCoachPanel
+                key={`nova-tp-${bundleId}`}
+                challengeId={String(bundleId)}
+                domain="tp"
+                sport="MLB"
+                disabled={false}
+              />
+            ) : null}
+
+            <KeyboardAwareScrollView
+              ref={scrollRef}
+              style={{ flex: 1 }}
+              enableOnAndroid
+              enableAutomaticScroll
+              extraScrollHeight={Platform.OS === "ios" ? 120 : 160}
+              extraHeight={Platform.OS === "ios" ? 120 : 160}
+              keyboardOpeningTime={0}
+              keyboardShouldPersistTaps="handled"
+              enableResetScrollToCoords={false}
               contentContainerStyle={{
                 paddingHorizontal: 14,
-                paddingBottom: Math.max(insets.bottom, 20) + 12,
+                paddingBottom: Math.max(insets.bottom, 20) + (showResults ? 12 : 120),
                 gap: 12,
               }}
             >
               {games.map((slot) => {
                 const gameId = String(slot.gameId);
                 const draft = draftByGameId[gameId] || emptyDraftPick();
-                const savedPick = entry?.picks?.[gameId] || null;
+                const decided = isSlotDecided(slot);
+                const editable = isSlotEditable(slot);
+                const locked = !decided && !editable;
+                const cardSaveState = getCardSaveState({
+                  draft,
+                  savedPick: entry?.picks?.[gameId],
+                  isMlb,
+                  locked,
+                  decided,
+                  saving: savingGameIds.includes(gameId),
+                  hasError: saveStatus === "error",
+                });
 
                 return (
                   <BundleMatchPickSection
@@ -734,17 +876,15 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                     slot={slot}
                     league={league}
                     draft={draft}
-                    savedPick={savedPick}
-                    pickResult={pickResults[gameId]}
                     formatTeamLine={formatTeamLine}
                     nowTick={nowTick}
                     onChangeDraft={(nextDraft) =>
                       setDraftByGameId((prev) => ({ ...prev, [gameId]: nextDraft }))
                     }
-                    onSave={() => handleSaveMatch(gameId)}
-                    saving={savingGameId === gameId}
+                    saveState={cardSaveState}
                     colors={colors}
                     scheduleInfo={scheduleByGameId[gameId] || null}
+                    onScoreFocus={scrollToScoreInput}
                   />
                 );
               })}
@@ -761,7 +901,64 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                   })}
                 </Text>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
+
+            {!showResults ? (
+              <View
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  paddingHorizontal: 14,
+                  paddingTop: 10,
+                  paddingBottom: Math.max(insets.bottom, 12),
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                  backgroundColor: colors.background,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14 }}>
+                      {bottomBarMessage}
+                    </Text>
+                    {saveStatus === "error" && saveError ? (
+                      <Text style={{ color: RED, fontSize: 12, fontWeight: "700" }} numberOfLines={2}>
+                        {saveError}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {saveStatus === "error" ? (
+                    <TouchableOpacity
+                      onPress={handleRetrySave}
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 12,
+                        backgroundColor: RED,
+                      }}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "900" }}>
+                        {i18n.t("common.retry", { defaultValue: "Réessayer" })}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : progress.saving ? (
+                    <ActivityIndicator color={RED} />
+                  ) : progress.total > 0 && progress.saved === progress.total ? (
+                    <Text style={{ color: "#16a34a", fontWeight: "900", fontSize: 18 }}>✓</Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
           </View>
         )}
       </View>

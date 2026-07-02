@@ -32,9 +32,16 @@ export {
   transferGroupOwnership,
   updateGroupConfig,
 } from "./groups/groupsManagement.js";
+export { sendGroupMessage } from "./groups/sendGroupMessage.js";
+export { novaCoach } from "./novaCoach.js";
 
 // Nhl Live
 export { updateNhlLiveGamesNow, updateNhlLiveGamesCron} from "./nhlLive.js"
+
+// Mlb Live
+export { updateMlbLiveGamesNow, updateMlbLiveGamesCron } from "./mlb/mlbLive.js";
+export { prefetchMlbBvp } from "./mlb/mlbBvpCallable.js";
+export { prefetchMlbLineups } from "./mlb/mlbLineupsCallable.js";
 
 export { updateNhlStandingsNow, refreshNhlStandings } from "./nhlStandings.js";
 
@@ -63,6 +70,7 @@ export { defisJoin } from "./defis/defisJoin.js";
 
 // Leader board
 export { rebuildLeaderboardSeasonForGroup, rebuildAllLeaderboardsSeason } from "./leaderboard/rebuildLeaderboard.js";
+export { finalizeSeasonCompetitions } from "./leaderboard/finalizeSeasonCompetitions.js";
 
 // Les Ascensions
 export { ascensionsCreate } from "./ascensions/ascensionsCreate.js";
@@ -117,3 +125,7 @@ export { backfillPlayerStatsDenorm } from "./players/playerStatsDenorm.js";
 export { refreshMlbPlayers,refreshMlbPlayersCron } from "./mlbPlayers.js";
 
 export { createDailyFgcAutopilot } from "./autopilot/createDailyFgcAutopilot.js";
+export {
+  disableInactiveAutopilotCron,
+  disableInactiveAutopilotNow,
+} from "./autopilot/disableInactiveAutopilot.js";

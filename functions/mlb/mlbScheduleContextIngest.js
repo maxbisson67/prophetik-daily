@@ -10,6 +10,8 @@ import {
   enrichRawMlbGamePitchers,
   logMlbPitchersForGame,
 } from "./mlbProbablePitchers.js";
+import { isMlbScheduleGameFinal } from "./mlbGameStatus.js";
+import { invalidateMlbBvpCacheForFinalGame } from "./mlbBvpInvalidate.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -285,6 +287,39 @@ async function writeDailyScheduleDocs(games = []) {
   return daysWritten;
 }
 
+async function invalidateBvpForFinalScheduleGames(games = []) {
+  let gamesProcessed = 0;
+  let docsDeleted = 0;
+
+  for (const game of games) {
+    if (!isMlbScheduleGameFinal(game)) continue;
+
+    try {
+      const result = await invalidateMlbBvpCacheForFinalGame(game, {
+        gamePk: game?.gamePk,
+      });
+      if (!result.skipped || result.deleted > 0) {
+        gamesProcessed += 1;
+        docsDeleted += Number(result.deleted) || 0;
+      }
+    } catch (err) {
+      logger.warn("[mlbScheduleWindow] bvp cache invalidation failed", {
+        gamePk: game?.gamePk,
+        error: err?.message || String(err),
+      });
+    }
+  }
+
+  if (gamesProcessed) {
+    logger.info("[mlbScheduleWindow] bvp cache invalidation", {
+      gamesProcessed,
+      docsDeleted,
+    });
+  }
+
+  return { gamesProcessed, docsDeleted };
+}
+
 /* ----------------------------- ingest ----------------------------- */
 
 async function ingestMlbScheduleWindow({ startYmd, endYmd }) {
@@ -300,12 +335,14 @@ async function ingestMlbScheduleWindow({ startYmd, endYmd }) {
 
   const games = await buildEnrichedGames(payload);
   const daysWritten = await writeDailyScheduleDocs(games);
+  const bvpInvalidation = await invalidateBvpForFinalScheduleGames(games);
 
   logger.info("[mlbScheduleWindow] ingest done", {
     startYmd,
     endYmd,
     games: games.length,
     daysWritten,
+    bvpInvalidation,
     ms: Date.now() - t0,
   });
 
@@ -315,6 +352,7 @@ async function ingestMlbScheduleWindow({ startYmd, endYmd }) {
     endYmd,
     games: games.length,
     daysWritten,
+    bvpInvalidation,
   };
 }
 

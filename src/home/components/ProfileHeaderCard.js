@@ -4,12 +4,11 @@ import { View, Text, Image, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
-import ProphetikIcons from "@src/ui/ProphetikIcons";
 import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
 import { useTheme } from "@src/theme/ThemeProvider";
 import StreakHeroCard from "@src/achievements/components/StreakHeroCard";
 
-const ASC4_ICON = require("@src/assets/asc4.png");
+const AVATAR_SIZE = 120;
 
 export default function ProfileHeaderCard({
   colors,
@@ -19,10 +18,6 @@ export default function ProfileHeaderCard({
   jerseyBackUrl,
   displayName,
   onEditAvatar,
-  onCreateDefi,
-  onCreateAscension,
-  onCreateFirstGoal,
-  onOpenPlayerProfile,
   groups = [],
   currentGroupId,
   onSelectGroup,
@@ -32,78 +27,40 @@ export default function ProfileHeaderCard({
   groupSummary = null,
 }) {
   const { isDark } = useTheme();
-  const RED = "#b91c1c";
 
   const avatarFrameBg = isDark ? colors.background : "#f3f4f6";
   const avatarFrameBorder = isDark ? colors.border : "#eee";
-
-  const baseBtn = {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 42,
-  };
-
-  const ctaPrimary = {
-    ...baseBtn,
-    backgroundColor: RED,
-  };
-
-  const ctaOutline = {
-    ...baseBtn,
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: RED,
-  };
-
-  const textPrimary = { color: "#fff", fontWeight: "900" };
-  const textOutline = { color: RED, fontWeight: "900" };
-
   const isJersey = avatarKind === "jersey" && jerseyFrontUrl && jerseyBackUrl;
-
-
-  const AVATAR_SIZE = 160;
 
   return (
     <View
       style={{
-        padding: 14,
+        padding: 12,
         borderWidth: 1,
         borderRadius: 12,
         backgroundColor: colors.card,
         borderColor: colors.border,
       }}
     >
-      {/* Avatar / Jersey */}
-      <View style={{ alignItems: "center", marginBottom: 12 }}>
+      <GroupsToggleRow
+        colors={colors}
+        groups={groups}
+        value={currentGroupId}
+        onChange={onSelectGroup}
+        compact
+      />
+
+      <View style={{ alignItems: "center", marginTop: 12, marginBottom: 8 }}>
         <TouchableOpacity onPress={onEditAvatar} activeOpacity={0.8}>
           {isJersey ? (
-            <View
-              style={{
-                width: 120,
-                height: 120,
-                borderRadius: 20,
-                borderWidth: 3,
-                borderColor: avatarFrameBorder,
-                backgroundColor: avatarFrameBg,
-                overflow: "hidden",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
             <JerseyFlipAvatar
               frontUrl={jerseyFrontUrl}
               backUrl={jerseyBackUrl}
-              size={140}
-              pauseMs={2800}
-              flipDurationMs={1100}
-              backgroundColor={avatarFrameBg}
+              size={AVATAR_SIZE}
+              holdMs={2800}
+              fadeDurationMs={1100}
+              backgroundColor="transparent"
             />
-            </View>
           ) : (
             <Image
               source={
@@ -114,7 +71,7 @@ export default function ProfileHeaderCard({
               style={{
                 width: AVATAR_SIZE,
                 height: AVATAR_SIZE,
-                borderRadius: 60,
+                borderRadius: AVATAR_SIZE / 2,
                 borderWidth: 3,
                 borderColor: avatarFrameBorder,
                 backgroundColor: avatarFrameBg,
@@ -125,12 +82,16 @@ export default function ProfileHeaderCard({
           <View
             style={{
               position: "absolute",
-              bottom: 8,
-              right: 8,
+              bottom: 4,
+              right: 4,
               backgroundColor: colors.card,
               borderRadius: 12,
-              padding: 6,
+              padding: 8,
               elevation: 3,
+              minWidth: 36,
+              minHeight: 36,
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             <Feather name="edit-2" size={16} color={colors.text} />
@@ -149,26 +110,15 @@ export default function ProfileHeaderCard({
         </Text>
       </View>
 
-      <View style={{ marginTop: 10, marginBottom: 4, alignSelf: "stretch" }}>
-        <StreakHeroCard
-          stats={stats}
-          achievements={achievements}
-          onPress={onPressProgression}
-          embedded
-          showBadgesHint={false}
-          groupSummary={groupSummary}
-        />
-      </View>
-
-      {/* Sélecteur de groupe */}
-      <View style={{ alignSelf: "stretch" }}>
-        <GroupsToggleRow
-          colors={colors}
-          groups={groups}
-          value={currentGroupId}
-          onChange={onSelectGroup}
-        />
-      </View>
+      <StreakHeroCard
+        stats={stats}
+        achievements={achievements}
+        onPress={onPressProgression}
+        embedded
+        homeMinimal
+        showBadgesHint={false}
+        groupSummary={groupSummary}
+      />
     </View>
   );
 }

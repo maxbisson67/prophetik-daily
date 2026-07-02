@@ -9,18 +9,12 @@
     Image,
     TouchableOpacity,
     ScrollView,
-    TextInput,
-    KeyboardAvoidingView,
-    Platform,
-    Animated,
-    Keyboard,
   } from 'react-native';
   import { SvgUri } from 'react-native-svg';
   import Toast from 'react-native-toast-message';
   import {
     Stack,
     useLocalSearchParams,
-    useFocusEffect,
     useRouter,
   } from 'expo-router';
   import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,16 +22,23 @@
   import { useAuth } from '@src/auth/SafeAuthProvider';
 
   import { useTheme } from '@src/theme/ThemeProvider';
-  import { useDefiChat } from '@src/defiChat/useDefiChat';
-  import { useUnreadCount } from '@src/defiChat/useUnreadCount';
   import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-  import { useHeaderHeight, HeaderBackButton } from '@react-navigation/elements';
-  import { useSafeAreaInsets } from 'react-native-safe-area-context';
+  import { HeaderBackButton } from '@react-navigation/elements';
   import { DrawerToggleButton } from '@react-navigation/drawer';
 
   // ✅ i18n
   import i18n from '@src/i18n/i18n';
   import Analytics from "@src/services/analytics";
+  import TsParticipantsLeaderboard from "@src/defis/results/TsParticipantsLeaderboard";
+  import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+  import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+  import {
+    buildLeaderboard,
+    emptyLiveStats,
+    normalizeLiveStatsDoc,
+    normPlayerId,
+    resolveTsHideOthersPicks,
+  } from "@src/defis/results/tsResultsUtils";
 
   /* ----------------------------- Utils ----------------------------- */
   const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
@@ -267,43 +268,10 @@
     const [namesMap, setNamesMap] = useState({});
     const [participantInfoMap, setParticipantInfoMap] = useState({});
 
-    const [liveStats, setLiveStats] = useState({
-      playerGoals: {},
-      playerA1: {},
-      playerA2: {},
-      playerAssists: {},
-      playerPoints: {},
-    });
+    const [liveStats, setLiveStats] = useState(emptyLiveStats());
     const [playerMap, setPlayerMap] = useState({});
 
-    // Chat accordéon
-    const [chatCollapsed, setChatCollapsed] = useState(true);
-    const open = useRef(new Animated.Value(0)).current;
-
-    const OPEN_HEIGHT = 360;
-    const headerHeight = useHeaderHeight();
-    const insets = useSafeAreaInsets();
-    const [kbH, setKbH] = useState(0);
-
     const [nhlPlayersReadable, setNhlPlayersReadable] = useState(true);
-
-
-    // 🔵 Chat
-    const { messages, send, busy, markRead, canSend } = useDefiChat(defiId, {
-      pageSize: 50,
-      groupId: group?.id,
-      namesMap,
-      participantInfoMap,
-    });
-
-    // 🔔 Unread count
-    const unread = useUnreadCount(
-      defiId,
-      user?.uid,
-      group?.id
-        ? { useCollectionGroup: true, groupId: group.id }
-        : { useCollectionGroup: false }
-    );
 
     const [showReveal, setShowReveal] = React.useState(false);
     const [celebrateNow, setCelebrateNow] = React.useState(false);
@@ -319,7 +287,14 @@
       return rule === 'split_even' ? Math.floor(pot / n) : pot;
     }
 
-    const goNhlLive = React.useCallback(() => {
+    const goSportLive = React.useCallback(() => {
+      const sport = String(defi?.sport || group?.sport || "NHL").toUpperCase();
+
+      if (sport === "MLB") {
+        router.push("/(drawer)/sports/mlb-live");
+        return;
+      }
+
       const ymd =
         ymdInTorontoFromAny(defi?.firstGameUTC) ||
         ymdInTorontoFromAny(defi?.signupDeadline) ||
@@ -328,9 +303,8 @@
       const focusTeamAbbrs = extractTeamsFromParts(parts, playerMap);
 
       router.push({
-        pathname: "/sports/MatchLiveScreen",
+        pathname: "/(drawer)/sports/nhl-live",
         params: {
-          // optionnel: MatchLiveScreen peut ignorer si non géré
           ymd: ymd || "",
           focusPlayerIds: JSON.stringify(allPickedIds || []),
           focusTeamAbbrs: JSON.stringify(focusTeamAbbrs || []),
@@ -338,7 +312,17 @@
           defiId: String(defi?.id || ""),
         },
       });
-    }, [router, defi?.firstGameUTC, defi?.signupDeadline, defi?.id, parts, playerMap, allPickedIds]);
+    }, [
+      router,
+      defi?.sport,
+      group?.sport,
+      defi?.firstGameUTC,
+      defi?.signupDeadline,
+      defi?.id,
+      parts,
+      playerMap,
+      allPickedIds,
+    ]);
 
 
     const allPickedIds = useMemo(() => {
@@ -354,12 +338,7 @@
   }, [parts]);
 
     /* ----- Leaderboard (mémo) ----- */
-    const leaderboard = useMemo(() => {
-      const rows = [...parts].sort((a, b) => b.livePoints - a.livePoints);
-      if (!rows.length) return [];
-      const top = rows[0].livePoints;
-      return rows.map((r) => ({ ...r, isTiedForFirst: r.livePoints === top }));
-    }, [parts]);
+    const leaderboard = useMemo(() => buildLeaderboard(parts), [parts]);
 
     const chip = statusStyleBase(defi?.status);
 
@@ -447,13 +426,29 @@
       setTimeout(() => setCelebrateNow(false), 2400);
     }, []);
 
+    function resolveGroupFavoriteTeam(groupDoc, sport = "NHL") {
+      const fav = groupDoc?.favoriteTeam;
+      if (!fav?.abbreviation) return null;
+
+      const league = String(fav.sport || sport || "NHL").toUpperCase();
+      const abbr = String(fav.abbreviation).trim().toUpperCase();
+      const base = lookupTeamByAbbr(league, abbr) || {};
+
+      return {
+        ...base,
+        sport: league,
+        abbreviation: abbr,
+        teamId: fav.teamId ?? base.teamId,
+        name: fav.name || base.name || abbr,
+      };
+    }
+
     const headerTitle = React.useMemo(
       () =>
-        defi?.title ||
-        (defi?.type
-          ? `${i18n.t('home.challenge')} ${defi.type}x${defi.type}`
-          : i18n.t('defi.results.header.defaultTitle')),
-      [defi]
+        group?.name ||
+        group?.title ||
+        i18n.t("home.todayChallenge", { defaultValue: "Meilleurs pointeurs" }),
+      [group?.name, group?.title]
     );
 
     const defiSport = React.useMemo(
@@ -461,6 +456,11 @@
       [defi?.sport, group?.sport]
     );
     const isMlbTs = defiSport === "MLB";
+
+    const groupFavoriteTeam = React.useMemo(
+      () => resolveGroupFavoriteTeam(group, defiSport),
+      [group, defiSport]
+    );
 
     // 🔒 Caviardage
     const firstGameDate = React.useMemo(() => {
@@ -480,34 +480,15 @@
       return Date.now() < firstGameDate.getTime();
     }, [firstGameDate]);
 
-    const hideOthersPicks = React.useMemo(() => {
-      const status = String(defi?.status || '').toLowerCase();
-      return status === 'open' && beforeFirstGame;
-    }, [defi?.status, beforeFirstGame]);
+    const hideOthersPicks = React.useMemo(
+      () => resolveTsHideOthersPicks(defi),
+      [defi?.status, defi?.firstGameUTC]
+    );
 
     const revealTimeLabel = React.useMemo(() => {
       if (!firstGameDate) return null;
       return fmtTSLocalHM(firstGameDate);
     }, [firstGameDate]);
-
-    useEffect(() => {
-      if (Platform.OS !== 'android') return;
-      const sh = Keyboard.addListener('keyboardDidShow', (e) =>
-        setKbH(e.endCoordinates?.height ?? 0)
-      );
-      const hd = Keyboard.addListener('keyboardDidHide', () => setKbH(0));
-      return () => {
-        sh.remove();
-        hd.remove();
-      };
-    }, []);
-
-    // Lu quand focus
-    useFocusEffect(
-      React.useCallback(() => {
-        if (defiId) markRead();
-      }, [defiId, markRead])
-    );
 
     // Charger cache noms au boot
     useEffect(() => {
@@ -703,25 +684,9 @@ useEffect(() => {
       const ref = firestore().doc(`defis/${String(defi.id)}/live/stats`);
       const un = ref.onSnapshot((snap) => {
         if (snap.exists) {
-          const d = snap.data() || {};
-          setLiveStats({
-            playerGoals: d.playerGoals || {},
-            playerHits: d.playerHits || d.playerGoals || {},
-            playerRbi: d.playerRbi || d.playerAssists || {},
-            playerHomeRuns: d.playerHomeRuns || {},
-            playerA1: d.playerA1 || {},
-            playerA2: d.playerA2 || {},
-            playerAssists: d.playerAssists || d.assists || {},
-            playerPoints: d.playerPoints || {},
-          });
+          setLiveStats(normalizeLiveStatsDoc(snap.data() || {}));
         } else {
-          setLiveStats({
-            playerGoals: {},
-            playerA1: {},
-            playerA2: {},
-            playerAssists: {},
-            playerPoints: {},
-          });
+          setLiveStats(emptyLiveStats());
         }
       });
       return () => un();
@@ -780,7 +745,31 @@ useEffect(() => {
     ]);
 
     useEffect(() => {
-      if (missingPlayerMeta.length === 0 || !nhlPlayersReadable) return;
+      if (!defi?.id) return;
+
+      const un = firestore()
+        .collection(`defis/${String(defi.id)}/playerPool`)
+        .onSnapshot((snap) => {
+          const updates = {};
+          snap.forEach((docSnap) => {
+            const v = docSnap.data() || {};
+            const pid = normPlayerId(v?.playerId ?? docSnap.id);
+            if (!pid) return;
+            updates[pid] = {
+              fullName: v.fullName || v.skaterFullName || "—",
+              teamAbbr: v.teamAbbr || "",
+            };
+          });
+          if (Object.keys(updates).length) {
+            setPlayerMap((prev) => ({ ...prev, ...updates }));
+          }
+        });
+
+      return () => un();
+    }, [defi?.id]);
+
+    useEffect(() => {
+      if (missingPlayerMeta.length === 0 || !nhlPlayersReadable || isMlbTs) return;
       let cancelled = false;
       (async () => {
         try {
@@ -892,9 +881,9 @@ useEffect(() => {
             headerRight: () => (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
 
-                {/* ✅ Quick link NHL Live */}
+                {/* Quick link sport Live (NHL / MLB) */}
                 <TouchableOpacity
-                  onPress={goNhlLive}
+                  onPress={goSportLive}
                   activeOpacity={0.85}
                   style={{
                     flexDirection: "row",
@@ -909,49 +898,15 @@ useEffect(() => {
                 >
                   <Ionicons name="pulse" size={16} color={colors.text} />
                   <Text style={{ marginLeft: 6, fontWeight: "800", color: colors.text, fontSize: 12 }}>
-                    NHL
+                    {defiSport}
                   </Text>
                 </TouchableOpacity>
-
-                <Ionicons
-                  name="chatbubble-ellipses"
-                  size={18}
-                  color={colors.text}
-                />
-                <View
-                  style={{
-                    minWidth: 18,
-                    height: 18,
-                    marginLeft: 6,
-                    borderRadius: 9,
-                    backgroundColor: unread > 0 ? '#ef4444' : colors.border,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    paddingHorizontal: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: '#fff',
-                      fontSize: 11,
-                      fontWeight: '800',
-                    }}
-                  >
-                    {unread > 99 ? '99+' : unread}
-                  </Text>
-                </View>
               </View>
             ),
           }}
         />
 
-        {/* 🔑 KeyboardAvoidingView au niveau racine */}
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-        >
-          <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
             {/* ====== CONTENU PRINCIPAL ====== */}
             <ScrollView
               style={{ flex: 1, backgroundColor: colors.background }}
@@ -992,22 +947,27 @@ useEffect(() => {
                       flex: 1,
                     }}
                   >
-                    <Image
-                      source={
-                        group?.avatarUrl
-                          ? { uri: group.avatarUrl }
-                          : GROUP_PLACEHOLDER
-                      }
-                      style={{
-                        width: 80,
-                        height: 80,
-                        borderRadius: 20,
-                        marginRight: 10,
-                        backgroundColor: colors.card2,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                      }}
-                    />
+                    <View style={{ marginRight: 10 }}>
+                      {groupFavoriteTeam ? (
+                        <TeamLogoBadge team={groupFavoriteTeam} size={56} colors={colors} />
+                      ) : (
+                        <Image
+                          source={
+                            group?.avatarUrl
+                              ? { uri: group.avatarUrl }
+                              : GROUP_PLACEHOLDER
+                          }
+                          style={{
+                            width: 80,
+                            height: 80,
+                            borderRadius: 20,
+                            backgroundColor: colors.card2,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                          }}
+                        />
+                      )}
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text
                         style={{
@@ -1015,21 +975,13 @@ useEffect(() => {
                           fontSize: 16,
                           color: colors.text,
                         }}
-                        numberOfLines={1}
+                        numberOfLines={2}
                       >
                         {group?.name ||
                           group?.title ||
                           group?.id ||
                           i18n.t('defi.results.header.groupFallback')}
                       </Text>
-                      {!!defi?.title && (
-                        <Text
-                          style={{ color: colors.subtext }}
-                          numberOfLines={1}
-                        >
-                          {defi.title}
-                        </Text>
-                      )}
                     </View>
                   </View>
                   <View
@@ -1084,54 +1036,21 @@ useEffect(() => {
                     </Text>
                   </View>
 
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      alignSelf: 'flex-start',
-                      paddingVertical: 4,
-                      paddingHorizontal: 8,
-                      borderRadius: 10,
-                      backgroundColor: statusStyleBase(defi?.status).bg,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name={statusStyleBase(defi?.status).icon}
-                      size={14}
-                      color={statusStyleBase(defi?.status).fg}
-                    />
-                    <Text
-                      style={{
-                        color: statusStyleBase(defi?.status).fg,
-                        marginLeft: 6,
-                        fontWeight: '700',
-                      }}
-                    >
-                      {statusStyleBase(defi?.status).label}
-                    </Text>
-                  </View>
-
                   <View style={{ marginTop: 8 }}>
-                    <Text style={{ color: colors.subtext }}>
-                      {i18n.t('defi.results.header.startsAt')}{' '}
-                      <Text
-                        style={{
-                          fontWeight: '700',
-                          color: colors.text,
-                        }}
-                      >
-                        {fmtTSLocalHM(defi?.firstGameUTC)}
-                      </Text>
-                    </Text>
-                    <Text style={{ color: colors.subtext }}>
-                      {i18n.t('defi.results.header.scoring')}
+                    <Text style={{ color: colors.subtext, lineHeight: 18 }}>
+                      {isMlbTs
+                        ? i18n.t("defi.results.header.scoringMlb", {
+                            defaultValue:
+                              "Barème : Point produit (RBI) = +1, Coup sûr (H) = +1, Circuit (HR) = bonus +1",
+                          })
+                        : i18n.t("defi.results.header.scoring")}
                     </Text>
                   </View>
                 </View>
               </View>
 
               {/* ====== TABLEAU DES PARTICIPANTS ====== */}
-              <ParticipantsCard
+              <TsParticipantsLeaderboard
                 leaderboard={leaderboard}
                 namesMap={namesMap}
                 participantInfoMap={participantInfoMap}
@@ -1142,95 +1061,11 @@ useEffect(() => {
                 hideOthersPicks={hideOthersPicks}
                 revealTimeLabel={revealTimeLabel}
                 isMlbTs={isMlbTs}
+                sport={defiSport}
+                compact={false}
               />
             </ScrollView>
-
-            {/* ====== CHAT (hors ScrollView) ====== */}
-            <View
-              style={{
-                marginHorizontal: 16,
-                marginBottom: 16 + insets.bottom,
-                paddingBottom:
-                  Platform.OS === 'android' ? Math.max(kbH, 8) : 0,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 12,
-                overflow: 'hidden',
-                backgroundColor: colors.card,
-              }}
-            >
-              {/* Header accordéon */}
-              <TouchableOpacity
-                onPress={() => setChatCollapsed((v) => !v)}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  backgroundColor: colors.card,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <Ionicons
-                    name="chatbubble-ellipses"
-                    size={16}
-                    color={colors.text}
-                  />
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: colors.text,
-                    }}
-                  >
-                    {i18n.t('defi.results.chat.title')}
-                  </Text>
-                  <Text
-                    style={{
-                      color: colors.subtext,
-                      fontSize: 12,
-                    }}
-                  >
-                    {i18n.t('defi.results.chat.count', {
-                      count: messages.length,
-                    })}
-                  </Text>
-                </View>
-                <Ionicons
-                  name={chatCollapsed ? 'chevron-down' : 'chevron-up'}
-                  size={18}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-
-              {/* Corps */}
-              {!chatCollapsed && (
-                <View
-                  style={{
-                    maxHeight: 360,
-                    backgroundColor: colors.card,
-                  }}
-                >
-                  <InlineChat
-                    colors={colors}
-                    messages={messages}
-                    busy={busy}
-                    onSend={send}
-                    canSend={canSend}
-                    namesMap={namesMap}
-                    participantInfoMap={participantInfoMap}
-                  />
-                </View>
-              )}
-            </View>
           </View>
-        </KeyboardAvoidingView>
 
         {/* Toast en haut */}
         <Toast position="top" config={toastConfig} topOffset={60} />
@@ -1238,509 +1073,3 @@ useEffect(() => {
     );
   }
 
-  function InlineChat({
-    colors,
-    messages,
-    onSend,
-    busy,
-    canSend,
-    namesMap,
-    participantInfoMap,
-  }) {
-    const [text, setText] = React.useState('');
-
-    const INPUT_BAR_HEIGHT = 56;
-    const OPEN_HEIGHT = 360;
-
-    const data = React.useMemo(() => {
-      const millis = (v) =>
-        v?.toMillis?.()
-          ? v.toMillis()
-          : v?.toDate?.()
-          ? v.toDate().getTime()
-          : typeof v === 'number'
-          ? v
-          : 0;
-      return [...messages].sort(
-        (a, b) => millis(a?.createdAt) - millis(b?.createdAt)
-      );
-    }, [messages]);
-
-    const scrollRef = React.useRef(null);
-    const atBottomRef = React.useRef(true);
-    const [autoStick, setAutoStick] = React.useState(true);
-
-    const handleScroll = React.useCallback((e) => {
-      const { contentOffset, contentSize, layoutMeasurement } =
-        e.nativeEvent;
-      const dist =
-        contentSize.height -
-        (contentOffset.y + layoutMeasurement.height);
-      const next = dist < 80;
-      if (atBottomRef.current !== next) {
-        atBottomRef.current = next;
-        setAutoStick(next);
-      }
-    }, []);
-
-    const scrollToEnd = React.useCallback((animated = true) => {
-      scrollRef.current?.scrollToEnd?.({ animated });
-    }, []);
-
-    const handleContentSizeChange = React.useCallback(() => {
-      if (autoStick) requestAnimationFrame(() => scrollToEnd(true));
-    }, [autoStick, scrollToEnd]);
-
-    return (
-      <View
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          backgroundColor: colors.card,
-        }}
-      >
-        {/* Liste des messages */}
-        <View style={{ height: OPEN_HEIGHT - INPUT_BAR_HEIGHT }}>
-          <ScrollView
-            ref={scrollRef}
-            contentContainerStyle={{ padding: 12 }}
-            keyboardShouldPersistTaps="always"
-            keyboardDismissMode="interactive"
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-            onScroll={handleScroll}
-            onContentSizeChange={handleContentSizeChange}
-            scrollEventThrottle={16}
-          >
-            {data.length === 0 ? (
-              <Text style={{ color: colors.subtext }}>
-                {i18n.t('defi.results.chat.empty')}
-              </Text>
-            ) : (
-              <View>
-                {data.map((item) => {
-                  if (!item || typeof item !== 'object') return null;
-
-                  const uid = String(item.uid || '');
-                  const name =
-                    namesMap?.[uid] || item.displayName || uid;
-
-                  const info = participantInfoMap?.[uid] || {};
-                  const uri = info.photoURL
-                    ? withCacheBust(info.photoURL, info.version)
-                    : null;
-                  const imgKey = `${uid}:${info.version || 0}`;
-
-                  return (
-                    <View key={item.id} style={{ marginBottom: 10 }}>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          marginBottom: 2,
-                        }}
-                      >
-                        <Image
-                          key={imgKey}
-                          source={uri ? { uri } : AVATAR_PLACEHOLDER}
-                          style={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: 12,
-                            backgroundColor: colors.border,
-                            marginRight: 6,
-                          }}
-                          onError={() => {}}
-                        />
-                        <Text
-                          style={{
-                            fontWeight: '700',
-                            color: colors.text,
-                          }}
-                        >
-                          {name}
-                        </Text>
-                      </View>
-                      <Text style={{ color: colors.text }}>
-                        {String(item.text ?? '')}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-          </ScrollView>
-        </View>
-
-        {/* Barre d'entrée */}
-        <View
-          style={{
-            flexDirection: 'row',
-            padding: 8,
-            gap: 8,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            height: INPUT_BAR_HEIGHT,
-            backgroundColor: colors.card,
-          }}
-        >
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder={i18n.t('defi.results.chat.inputPlaceholder')}
-            placeholderTextColor={colors.subtext}
-            style={{
-              flex: 1,
-              padding: 12,
-              backgroundColor: colors.card2,
-              color: colors.text,
-              borderRadius: 10,
-            }}
-            textAlignVertical="center"
-            returnKeyType="send"
-            underlineColorAndroid="transparent"
-            onSubmitEditing={() => {
-              const t = text.trim();
-              if (!t || busy || !canSend) return;
-              setText('');
-              onSend(t);
-              requestAnimationFrame(() => scrollToEnd(true));
-            }}
-          />
-          <TouchableOpacity
-            onPress={() => {
-              const t = text.trim();
-              if (!t || busy || !canSend) return;
-              setText('');
-              onSend(t);
-              requestAnimationFrame(() => scrollToEnd(true));
-            }}
-            disabled={busy || !text.trim() || !canSend}
-            style={{
-              paddingHorizontal: 14,
-              justifyContent: 'center',
-              borderRadius: 10,
-              backgroundColor:
-                busy || !text.trim() || !canSend
-                  ? colors.border
-                  : colors.primary,
-            }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '800' }}>
-              {i18n.t('defi.results.chat.send')}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  function Avatar({ uri, size = 44 }) {
-    const [ok, setOk] = React.useState(!!uri);
-    const showUri =
-      ok && typeof uri === 'string' && /^https?:\/\//i.test(uri);
-    const { colors } = useTheme();
-
-    return showUri ? (
-      <Image
-        source={{ uri }}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: colors.card2,
-          marginRight: 10,
-        }}
-        onError={() => setOk(false)}
-      />
-    ) : (
-      <Image
-        source={AVATAR_PLACEHOLDER}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: colors.card2,
-          marginRight: 10,
-        }}
-      />
-    );
-  }
-
-  /* Helpers */
-  function normId(v) {
-    if (v == null) return null;
-    const s = String(v).trim();
-    return /^\d+$/.test(s) ? String(Number(s)) : s;
-  }
-
-  function ParticipantsCard({
-    leaderboard,
-    namesMap,
-    participantInfoMap,
-    colors,
-    liveStats,
-    playerMap,
-    currentUid,
-    hideOthersPicks,
-    revealTimeLabel,
-    isMlbTs = false,
-  }) {
-  
-    if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
-      return (
-        <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
-          <Text
-            style={{ color: colors.subtext, textAlign: 'center' }}
-          >
-            {i18n.t('defi.results.participants.empty')}
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View
-        style={{
-          marginHorizontal: 16,
-          marginBottom: 12,
-          padding: 12,
-          borderWidth: 1,
-          borderRadius: 12,
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          elevation: 2,
-          shadowColor: '#000',
-          shadowOpacity: 0.06,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 2 },
-        }}
-      >
-        {/* 🔸 Info caviardage */}
-        {hideOthersPicks && (
-          <View style={{ marginBottom: 8 }}>
-            <Text
-              style={{
-                fontSize: 12,
-                color: colors.subtext,
-                textAlign: 'center',
-              }}
-            >
-              {i18n.t('defi.results.participants.hiddenUntil', {
-                time: revealTimeLabel || '',
-              })}
-            </Text>
-          </View>
-        )}
-
-        {/* 🔸 LÉGENDE */}
-        <View style={{ alignItems: 'center', marginBottom: 8 }}>
-          <Text style={{ fontSize: 12, color: colors.subtext }}>
-            {isMlbTs
-              ? i18n.t("defi.results.participants.legendMlb", {
-                  defaultValue: "H = hits · RBI = points produits · HR = bonus circuit",
-                })
-              : i18n.t('defi.results.participants.legend')}
-          </Text>
-        </View>
-
-  {leaderboard.map((item) => {
-    const info = participantInfoMap[item.uid] || {};
-    const name = namesMap[item.uid] || item.uid;
-    const photo = info.photoURL || null;
-
-    const picks = Array.isArray(item.picks) ? item.picks : [];
-    const rows = [];
-    const seen = new Set();
-
-    for (const p of picks) {
-      const pid = normId(p?.playerId ?? p?.id ?? p?.nhlId ?? p?.player?.id);
-      if (!pid || seen.has(pid)) continue;
-      seen.add(pid);
-
-      const g = isMlbTs
-        ? Number(liveStats.playerHits?.[pid] ?? liveStats.playerGoals?.[pid] ?? 0)
-        : Number(liveStats.playerGoals?.[pid] || 0);
-      const a1 = Number(liveStats.playerA1?.[pid] || 0);
-      const a2 = Number(liveStats.playerA2?.[pid] || 0);
-      const aC = isMlbTs
-        ? Number(liveStats.playerRbi?.[pid] ?? liveStats.playerAssists?.[pid] ?? 0)
-        : Number(liveStats.playerAssists?.[pid] || 0);
-      const hr = isMlbTs ? Number(liveStats.playerHomeRuns?.[pid] || 0) : 0;
-      const ptsFromLive = Number(liveStats.playerPoints?.[pid] || 0);
-
-      const derived = Math.max(0, ptsFromLive - g);
-      const assists = isMlbTs ? aC : Math.max(a1 + a2, aC, derived);
-
-      const points = isMlbTs
-        ? ptsFromLive || g + assists + hr
-        : g + assists;
-
-      rows.push({
-        playerId: pid,
-        playerName:
-          playerMap[pid]?.fullName ?? p?.fullName ?? p?.name ?? 'Joueur',
-        teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? '',
-        goals: g,
-        assists,
-        homeRuns: hr,
-        points,
-      });
-    }
-
-    rows.sort(
-      (a, b) =>
-        Number(b.points || 0) - Number(a.points || 0) ||
-        Number(b.goals || 0) - Number(a.goals || 0) ||
-        a.playerName.localeCompare(b.playerName)
-    );
-
-    // ✅ IMPORTANT: totalPoints DOIT être ici, dans le map()
-    const totalPoints = rows.reduce((s, r) => s + (Number(r.points) || 0), 0);
-
-    const isSelf = currentUid && item.uid === currentUid;
-    const cardBg = isSelf ? colors.card2 : colors.card;
-    const cardBorder = isSelf ? colors.primary : colors.border;
-
-  return (
-    <View
-      key={item.uid}
-      style={{
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-        backgroundColor: isSelf ? colors.card2 : colors.card,
-        borderWidth: 1,
-        borderColor: isSelf ? colors.primary : colors.border, // 🔴 bordure participant courant
-        borderRadius: 12,
-        marginBottom: 12,
-      }}
-    >
-      {/* Header */}
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Avatar uri={photo} size={48} />
-        <View style={{ flex: 1 }}>
-          <Text
-            numberOfLines={1}
-            style={{ fontWeight: "700", color: colors.text }}
-          >
-            {name}
-          </Text>
-        </View>
-
-        {/* totalPoints = livePoints (ou calc si tu veux) */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: 6,
-          }}
-        >
-          <MaterialCommunityIcons
-            name="star-circle"
-            size={22}
-            color={colors.text}
-          />
-          <Text style={{ fontSize: 20, fontWeight: "800", color: colors.text }}>
-            {Number(item.livePoints || 0).toFixed(0)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Rows */}
-      {!hideOthersPicks || isSelf ? (
-        <View style={{ marginTop: 10 }}>
-          {rows.map((row) => {
-            const goals = Number(row.goals) || 0;
-            const assists = Number(row.assists) || 0;
-            const homeRuns = Number(row.homeRuns) || 0;
-            const points = Number(row.points) || (isMlbTs ? goals + assists + homeRuns : goals + assists);
-
-            const statLabel = isMlbTs
-              ? `${goals}-${assists}-${homeRuns}=${points}`
-              : `${goals}-${assists}=${points}`;
-
-            return (
-              <View
-                key={row.playerId}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingVertical: 6,
-                }}
-              >
-                {/* Logo équipe (UNE seule fois) */}
-                <View
-                  style={{
-                    width: 28,
-                    height: 28,
-                    marginRight: 10,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {row.teamAbbr ? (
-                    <SvgUri
-                      uri={teamLogoUrl(row.teamAbbr)}
-                      width={28}
-                      height={28}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: colors.border,
-                      }}
-                    />
-                  )}
-                </View>
-
-                {/* Nom */}
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    flex: 1,
-                    color: colors.text,
-                    fontSize: 14,
-                    fontWeight: "600",
-                    marginRight: 10,
-                  }}
-                >
-                  {row.playerName}
-                </Text>
-
-                {/* Stats à droite */}
-                <Text
-                  style={{
-                    minWidth: 86,
-                    textAlign: "right",
-                    fontWeight: "800",
-                    color: colors.text,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {statLabel}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : (
-        <Text
-          style={{
-            color: colors.subtext,
-            marginTop: 10,
-            fontStyle: "italic",
-          }}
-        >
-          {i18n.t("defi.results.participants.hiddenSelections")}
-        </Text>
-      )}
-    </View>
-  );
-  })}
-      </View>
-    );
-  }

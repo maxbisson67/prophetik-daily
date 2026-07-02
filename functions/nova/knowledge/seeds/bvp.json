@@ -1,0 +1,50 @@
+{
+  "sport": "MLB",
+  "type": "concept",
+  "category": "Matchup Strategy",
+  "key": "bvp",
+  "status": "published",
+  "challengeTypes": ["FGC", "TS"],
+  "translations": {
+    "fr": {
+      "title": "BvP (Batter vs Pitcher)",
+      "shortAnswer": "Le BvP résume l'historique carrière d'un frappeur face à un lanceur précis : présences au bâton (PA), coups sûrs, circuits, RBI et OPS. C'est un repère de matchup, pas une prédiction du prochain match.",
+      "beginnerExplanation": "BvP signifie « batter vs pitcher ». Prophetik affiche les stats carrière cumulées d'un frappeur contre le lanceur partant adverse.\n\nTu verras souvent :\n• PA — présences au bâton\n• H — coups sûrs\n• HR — circuits\n• RBI — points produits\n• OPS — productivité offensive globale\n\nS'il n'y a aucune PA enregistrée, le joueur n'a jamais (ou presque jamais) affronté ce lanceur en saison régulière MLB.",
+      "intermediateExplanation": "Le BvP aide à lire un duel connu : un frappeur qui a bien performé vs ce lanceur sur plusieurs saisons peut être un signal positif. À l'inverse, peu de PA ou de mauvais chiffres suggèrent prudence.\n\nAttention à la taille d'échantillon :\n• 1–9 PA → trop peu pour conclure\n• 10+ PA → historique utilisable comme contexte\n• Même avec un bon BvP, le premier RBI du match reste un événement rare et séquentiel (ordre de frappe, coureurs, etc.)",
+      "expertExplanation": "Le BvP carrière mélange des contextes différents (stade, forme du lanceur, qualité de l'équipe, manches). Les analystes l'utilisent comme prior faible à modérée selon les PA — jamais comme preuve isolée. Croise-le avec platoon, ordre de frappe, ERA du partant et production RBI saisonnière.",
+      "prophetikUse": "Dans le Défi premier point produit, consulte le BvP vs le lanceur partant quand il est affiché sur la carte joueur. Nova ne s'appuie sur le BvP dans son avis que s'il y a plus de 9 présences au bâton en carrière ; sinon elle privilégie les autres facteurs (main du lanceur, place dans l'ordre, RBI saison, runs accordés par l'équipe adverse).",
+      "commonMistakes": [
+        "Sur-interpréter 2–3 PA comme un vrai historique.",
+        "Croire qu'un bon BvP garantit le premier RBI du match.",
+        "Ignorer « pas d'historique » quand PA = 0 — ce n'est pas la même chose qu'un mauvais matchup prouvé."
+      ],
+      "examples": [
+        "12 PA, 4 H, 1 HR, 2 RBI, OPS .950 vs le partant → contexte favorable, échantillon modeste mais utilisable.",
+        "0 PA vs le partant → aucun historique carrière ; base-toi sur platoon, ordre de frappe et stats saison."
+      ]
+    },
+    "en": {
+      "title": "BvP (Batter vs Pitcher)",
+      "shortAnswer": "BvP summarizes a batter's career history against one specific pitcher: plate appearances (PA), hits, home runs, RBI and OPS. It is a matchup reference, not a prediction of the next game.",
+      "beginnerExplanation": "BvP means batter vs pitcher. Prophetik shows career totals for a hitter against the opposing starter.\n\nYou will often see:\n• PA — plate appearances\n• H — hits\n• HR — home runs\n• RBI — runs batted in\n• OPS — overall offensive production\n\nIf there are zero PA, the player has no recorded regular-season MLB history vs that pitcher.",
+      "intermediateExplanation": "BvP helps read a familiar duel: strong career numbers vs this pitcher can be a positive signal. Low PA or weak numbers suggest caution.\n\nWatch sample size:\n• 1–9 PA → too small to conclude\n• 10+ PA → usable history as context\n• Even with good BvP, the first RBI of the game is still a rare, sequential event (lineup spot, runners, etc.)",
+      "expertExplanation": "Career BvP blends many contexts (park, pitcher form, team quality, innings). Analysts treat it as a weak-to-moderate prior depending on PA — never as standalone proof. Combine it with platoon, lineup spot, starter ERA and season RBI production.",
+      "prophetikUse": "In the First Run Challenge, check BvP vs the probable starter when shown on the player card. Nova only weighs BvP in its advice when there are more than 9 career plate appearances; otherwise it focuses on other factors (pitcher handedness, lineup spot, season RBI, opposing team runs allowed per game).",
+      "commonMistakes": [
+        "Over-reading 2–3 PA as meaningful history.",
+        "Assuming strong BvP guarantees the first RBI of the game.",
+        "Treating 'no history' (0 PA) the same as a proven bad matchup."
+      ],
+      "examples": [
+        "12 PA, 4 H, 1 HR, 2 RBI, OPS .950 vs the starter → favorable context, modest but usable sample.",
+        "0 PA vs the starter → no career history; lean on platoon, lineup spot and season stats."
+      ]
+    }
+  },
+  "relatedTopics": ["platoon_advantage", "probable_pitcher", "first_rbi", "ops", "rbi"],
+  "tags": ["bvp", "batter_vs_pitcher", "matchup", "pa", "ops", "mlb", "fgc"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik / MLB Stats API vsPlayerTotal",
+  "version": 1
+}

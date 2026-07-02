@@ -88,6 +88,7 @@ export async function transferGroupOwnershipService({ groupId, newOwnerUid }) {
  */
 export async function updateGroupConfigService({
   groupId,
+  name,
   autopilotEnabled,
   favoriteTeam = null,
   sport,
@@ -101,11 +102,17 @@ export async function updateGroupConfigService({
     ? normalizeGroupFavoriteTeam(sport || favoriteTeam.sport, favoriteTeam)
     : null;
 
-  return call("updateGroupConfig", {
+  const payload = {
     groupId: String(groupId),
     autopilotEnabled,
     favoriteTeam: normalizedFavoriteTeam,
-  });
+  };
+
+  if (name !== undefined) {
+    payload.name = String(name || "").trim();
+  }
+
+  return call("updateGroupConfig", payload);
 }
 
 /**

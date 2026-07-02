@@ -19,7 +19,7 @@ export default function ProgressionLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: i18n.t("progression.title", { defaultValue: "Progression" }),
+          title: i18n.t("tabs.badges", { defaultValue: "Badges" }),
         }}
       />
     </Stack>

@@ -1,30 +1,22 @@
+import { resolveTsLeaderboardStats } from "./tsLeaderboardStats";
+
 export default function normalizeMemberRow(row) {
   const r = row || {};
 
   const fgcPoints = Number(r.fgcPoints ?? r?.families?.fgc?.points ?? 0) || 0;
   const tpPoints = Number(r.tpPoints ?? r?.families?.tp?.points ?? 0) || 0;
-  const tsPoints =
-    Number(
-      r.tsPoints ??
-        r.standardPoints ??
-        r?.families?.ts?.points ??
-        r?.families?.standard?.points ??
-        0
-    ) || 0;
+
+  const tsStats = resolveTsLeaderboardStats(r);
+  const tsPoints = tsStats.points;
+  const tsWins = tsStats.wins;
+  const tsPlays = tsStats.plays;
 
   const pointsTotal =
     Number(r.pointsTotal ?? fgcPoints + tpPoints + tsPoints) || 0;
 
   const fgcWins = Number(r.fgcWins ?? r?.families?.fgc?.wins ?? 0) || 0;
   const tpWins = Number(r.tpWins ?? r?.families?.tp?.wins ?? 0) || 0;
-  const tsWins =
-    Number(
-      r.tsWins ??
-        r.standardWins ??
-        r?.families?.ts?.wins ??
-        r?.families?.standard?.wins ??
-        0
-    ) || 0;
+  const tpExactWins = Number(r.tpExactWins ?? r?.families?.tp?.exacts ?? 0) || 0;
 
   const wins = Number(r.wins ?? fgcWins + tpWins + tsWins) || 0;
   const participations = Number(r.participations ?? 0) || 0;
@@ -43,15 +35,26 @@ export default function normalizeMemberRow(row) {
     fgcPoints,
     tpPoints,
     tsPoints,
+    tsWins,
+    tsPlays,
     pointsTotal,
     fgcWins,
     tpWins,
-    tsWins,
+    tpExactWins,
     wins,
     participations,
     winRate,
     nhlPointsTotal,
     nhlGamesTotal,
     nhlPPG,
+    families: {
+      ...(r.families || {}),
+      ts: {
+        ...(r.families?.ts || r.families?.standard || {}),
+        points: tsPoints,
+        wins: tsWins,
+        plays: tsPlays,
+      },
+    },
   };
 }

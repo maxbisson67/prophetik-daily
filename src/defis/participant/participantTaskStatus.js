@@ -409,3 +409,11 @@ export function formatParticipantCtaLabel(ctaKey) {
       return null;
   }
 }
+
+export function participantTaskNeedsAccueil(task) {
+  if (!task) return false;
+  return (
+    task.state === PARTICIPANT_TASK_STATES.ACTION_REQUIRED ||
+    task.state === PARTICIPANT_TASK_STATES.PARTIAL
+  );
+}

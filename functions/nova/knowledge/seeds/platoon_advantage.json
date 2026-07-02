@@ -1,0 +1,50 @@
+{
+  "sport": "MLB",
+  "type": "concept",
+  "category": "Matchup Strategy",
+  "key": "platoon_advantage",
+  "status": "published",
+  "challengeTypes": ["FGC", "TS"],
+  "translations": {
+    "fr": {
+      "title": "Avantage platoon (gaucher / droitier)",
+      "shortAnswer": "En règle générale, un frappeur performe mieux face à un lanceur de la main opposée. Frappeur droitier vs lanceur gaucher, ou frappeur gaucher vs lanceur droitier → avantage au frappeur. Même main des deux côtés → avantage au lanceur.",
+      "beginnerExplanation": "Voici les quatre cas de base :\n\n• Frappeur droitier vs lanceur gaucher → avantage au frappeur.\n• Frappeur gaucher vs lanceur droitier → avantage au frappeur.\n• Frappeur droitier vs lanceur droitier → avantage au lanceur.\n• Frappeur gaucher vs lanceur gaucher → avantage au lanceur.\n\nC'est ce qu'on appelle le platoon advantage. Les études de sabermétrie montrent qu'un frappeur obtient généralement de meilleurs résultats lorsqu'il affronte un lanceur de la main opposée.",
+      "intermediateExplanation": "Pourquoi la main opposée aide le frappeur ?\n\n• La balle est plus facile à suivre lorsqu'elle arrive de la main opposée.\n• Les balles à effet (slider, curveball, etc.) ont souvent une trajectoire qui se dirige vers le frappeur plutôt que de s'éloigner de lui.\n• L'angle de sortie du lanceur favorise une meilleure lecture du lancer.\n\nCe n'est pas une loi absolue pour chaque présentation au bâton, mais c'est un repère fiable pour lire un matchup.",
+      "expertExplanation": "Le platoon advantage est un prior moyen observé sur de grands échantillons — pas une garantie match par match. Les frappeurs switch (G/D) choisissent généralement la side opposée au lanceur. Les splits carrière LHP/RHP existent, mais en début de saison ou sur petits échantillons ils peuvent tromper. Croise toujours le platoon avec le contexte (ordre de frappe, forme du lanceur, type de lancers).",
+      "prophetikUse": "Dans le Défi premier point produit, regarde la main au bâton de ton joueur et celle du lanceur partant adverse. Un matchup platoon favorable est un point positif dans ton analyse, surtout combiné à la place dans l'ordre de frappe et à la production RBI saisonnière — sans garantir le premier RBI du match.",
+      "commonMistakes": [
+        "Croire que platoon favorable = certitude de produire le premier RBI.",
+        "Ignorer la main du lanceur quand elle est disponible dans le match.",
+        "Confondre frappeur droitier et lanceur droitier : ce sont deux rôles différents au bâton et au monticule."
+      ],
+      "examples": [
+        "Frappeur droitier (RHB) vs lanceur gaucher (LHP) : matchup généralement favorable au frappeur.",
+        "Frappeur gaucher (LHB) vs lanceur gaucher (LHP) : matchup généralement favorable au lanceur."
+      ]
+    },
+    "en": {
+      "title": "Platoon advantage (lefty / righty)",
+      "shortAnswer": "As a rule, a batter performs better against an opposite-handed pitcher. Right-handed batter vs left-handed pitcher, or left-handed batter vs right-handed pitcher → batter advantage. Same-handed matchups → pitcher advantage.",
+      "beginnerExplanation": "The four basic cases:\n\n• Right-handed batter vs left-handed pitcher → batter advantage.\n• Left-handed batter vs right-handed pitcher → batter advantage.\n• Right-handed batter vs right-handed pitcher → pitcher advantage.\n• Left-handed batter vs left-handed pitcher → pitcher advantage.\n\nThis is platoon advantage. Sabermetric research generally shows better hitter results against opposite-handed pitching.",
+      "intermediateExplanation": "Why does the opposite hand help the batter?\n\n• The ball is easier to track when it comes from the opposite side.\n• Breaking balls (slider, curveball, etc.) often break toward the batter rather than away.\n• The pitcher's release angle can be easier to read.\n\nIt is not a guarantee on every plate appearance, but it is a reliable matchup framework.",
+      "expertExplanation": "Platoon advantage is an observed population prior — not a single-game guarantee. Switch hitters usually bat from the opposite side of the pitcher. Career platoon splits exist but can mislead early in the season or on small samples. Always combine platoon with lineup spot, pitcher form and pitch mix.",
+      "prophetikUse": "In the First Run Challenge, compare your batter's handedness with the opposing starter's throwing hand. A favorable platoon matchup supports your pick when combined with lineup spot and season RBI production — it does not guarantee the first RBI of the game.",
+      "commonMistakes": [
+        "Treating a favorable platoon as a sure first-RBI outcome.",
+        "Ignoring the starter's handedness when it is available for the game.",
+        "Mixing up batter side and pitcher side — they are different roles."
+      ],
+      "examples": [
+        "RHB vs LHP: generally a batter-favorable matchup.",
+        "LHB vs LHP: generally a pitcher-favorable matchup."
+      ]
+    }
+  },
+  "relatedTopics": ["probable_pitcher", "first_rbi", "era", "rbi", "bvp"],
+  "tags": ["platoon", "platoon_advantage", "handedness", "gaucher", "droitier", "lhp", "rhp", "mlb", "matchup"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik / sabermetrics consensus",
+  "version": 1
+}

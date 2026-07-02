@@ -31,10 +31,12 @@ import {
 import { setupNotificationsClient } from "@src/lib/push/notifications-setup";
 
 import SplashRingsRotating from "@src/ui/SplashRingsRotating";
+import AppUpdateGate from "@src/components/AppUpdateGate";
 
 import * as SystemUI from "expo-system-ui";
 
 import { initPurchases } from "@src/lib/purchases/initPurchases";
+import { initAppCheck } from "@src/lib/initAppCheck";
 
 import Analytics from "@src/services/analytics";
 
@@ -156,6 +158,14 @@ function NotificationsMount() {
           return;
         }
 
+        if (data.action === "OPEN_DEFI_RESULTS" && data.defiId) {
+          router.push({
+            pathname: `/(drawer)/defis/${data.defiId}/results`,
+            params: { groupId: data.groupId },
+          });
+          return;
+        }
+
         const groupId = data.groupId ? String(data.groupId) : "";
         const openChallengeId = data.openChallengeId
           ? String(data.openChallengeId)
@@ -165,6 +175,19 @@ function NotificationsMount() {
           ? String(data.bundleId)
           : "";
         const kind = data.kind ? String(data.kind).toLowerCase() : "";
+
+        if (groupId && data.action === "OPEN_GROUP_DETAIL") {
+          router.push(`/(drawer)/groups/${groupId}`);
+          return;
+        }
+
+        if (groupId && data.action === "OPEN_LEADERBOARD") {
+          router.push({
+            pathname: "/(drawer)/(tabs)/ClassementScreen",
+            params: { groupId },
+          });
+          return;
+        }
 
         if (
           groupId &&
@@ -305,7 +328,7 @@ function RootLayoutInner() {
         easing: Easing.inOut(Easing.quad),
         useNativeDriver: true,
       }).start(() => setShowAnimatedSplash(false));
-    }, 4200);
+    }, 1950);
 
     return () => clearTimeout(t);
   }, [fade]);
@@ -365,6 +388,7 @@ function RootLayoutInner() {
 
 export default function RootLayout() {
   useEffect(() => {
+    initAppCheck();
     Analytics.logEvent("app_open");
   }, []);
 
@@ -376,7 +400,9 @@ export default function RootLayout() {
             <LanguageProvider>
               <AppVisibilityProvider>
                 <AuthProvider>
-                  <RootLayoutInner />
+                  <AppUpdateGate>
+                    <RootLayoutInner />
+                  </AppUpdateGate>
                 </AuthProvider>
               </AppVisibilityProvider>
             </LanguageProvider>

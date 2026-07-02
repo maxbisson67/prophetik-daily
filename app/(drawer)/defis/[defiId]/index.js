@@ -32,20 +32,20 @@ import { getDefiRules, validatePicks } from "@src/defis/tiersRules";
 
 import PlayerSelectModal from "./components/PlayerSelectModal";
 import PlayerPickerRow from "./components/PlayerPickerRow";
-import MatchupRow from "./components/MatchupRow";
 import DefiHeroCard from "./components/DefiHeroCard";
 import SectionCard from "./components/SectionCard";
 
 import {
   toYMD,
-  ymdCompact,
   fmtTSLocalHM,
   isPast,
   ymdTorontoFromUTC,
-  fmtStartLocalHMFromUTCString,
 } from "./utils/defiFormatters";
 
 import Analytics from "@src/services/analytics";
+import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
+import { useTeamStandingsLookup } from "@src/sports/useTeamStandingsLookup";
+import { enrichMlbPoolPlayers } from "@src/mlb/enrichMlbPoolPlayers";
 
 /* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
@@ -88,25 +88,8 @@ function teamLogo(abbr) {
   return LOGO_MAP[String(abbr || "").toUpperCase()];
 }
 
-import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
-
 function headshotUrlForSport(sport, abbr, playerId) {
   return resolveDefiHeadshotUrl(sport, abbr, playerId);
-}
-
-function getPickPrefix() {
-  const lang = String(i18n.locale || "").toLowerCase();
-  return lang.startsWith("fr") ? "T" : "T";
-}
-
-function fmtTierRequirements(rules) {
-  const prefix = getPickPrefix();
-  const parts = [
-    rules?.T1 ? `${rules.T1} ${prefix}1` : null,
-    rules?.T2 ? `${rules.T2} ${prefix}2` : null,
-    rules?.T3 ? `${rules.T3} ${prefix}3` : null,
-  ].filter(Boolean);
-  return parts.join(", ");
 }
 
 function LoadingOverlay({ visible, text }) {
@@ -148,21 +131,6 @@ function LoadingOverlay({ visible, text }) {
       </View>
     </View>
   );
-}
-
-function groupMatchupsByLocalTime(matchups = []) {
-  const groups = new Map();
-
-  for (const g of matchups) {
-    const t = fmtStartLocalHMFromUTCString(g.startTimeUTC) || "—";
-    if (!groups.has(t)) groups.set(t, []);
-    groups.get(t).push(g);
-  }
-
-  // retourne [{ time, games }]
-  return Array.from(groups.entries())
-    .map(([time, games]) => ({ time, games }))
-    .sort((a, b) => String(a.time).localeCompare(String(b.time)));
 }
 
 function tierKeyOfPlayer(p) {
@@ -232,9 +200,6 @@ export default function DefiParticipationScreen() {
   const [error, setError] = useState(null);
   const [loadingDefi, setLoadingDefi] = useState(true);
 
-  // Matchups enrichis (Firestore)
-  const [matchups, setMatchups] = useState([]);
-
   // playerPool figé
   const [players, setPlayers] = useState([]);
 
@@ -298,23 +263,18 @@ export default function DefiParticipationScreen() {
     [defi?.sport, defi?.poolSport]
   );
 
+  const { formatLine: formatStandingsLine } = useTeamStandingsLookup(
+    defiSport === "MLB" ? "MLB" : null
+  );
+
   const headshotUrl = useCallback(
     (abbr, playerId) => headshotUrlForSport(defiSport, abbr, playerId),
     [defiSport]
   );
 
-  const requirementsText = useMemo(() => (rules ? fmtTierRequirements(rules) : null), [rules]);
-
   useEffect(() => {
     setSelected((prev) => Array.from({ length: maxChoices }, (_, i) => prev?.[i] ?? null));
   }, [maxChoices]);
-
-  useEffect(() => {
-  if (!gameYMD) return;
-  const yyyymmdd = ymdCompact(gameYMD);
-  console.log("[matchups] gameYMD=", gameYMD, "yyyymmdd=", yyyymmdd);
-  
-}, [gameYMD]);
 
   // Participation existante
   useEffect(() => {
@@ -347,70 +307,50 @@ export default function DefiParticipationScreen() {
     })();
   }, [defi?.id, user?.uid, maxChoices]);
 
-  const gameYMD = useMemo(() => toYMD(defi?.gameDate), [defi?.gameDate]);
-
-  // Matchups (Firestore daily)
-  useEffect(() => {
-    if (!gameYMD) return;
-
-    const yyyymmdd = ymdCompact(gameYMD);
-  
-
-    const unsub = firestore()
-      .collection(`nhl_matchups_daily/${yyyymmdd}/games`)
-      .onSnapshot(
-        (snap) => {
-          const list = [];
-          snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-
-          // ✅ Filtre: garder seulement les matchs de la journée du défi (Toronto)
-          const filtered = list.filter((g) => g.startYmdToronto === gameYMD);
-
-          filtered.sort((a, b) => String(a.startTimeUTC || "").localeCompare(String(b.startTimeUTC || "")));
-
-          setMatchups((prev) => (isEqual(prev, filtered) ? prev : filtered));
-        },
-        (e) => setError(e)
-      );
-
-    return () => unsub();
-  }, [gameYMD]);
-
-  const matchupGroups = useMemo(() => groupMatchupsByLocalTime(matchups), [matchups]);
-
-  const rangePct = useMemo(() => {
-    const vals = (matchups || [])
-      .flatMap((g) => [g?.context?.awayCoeff, g?.context?.homeCoeff])
-      .map((c) => Math.abs(((Number(c) || 1) - 1) * 100))
-      .filter((x) => Number.isFinite(x));
-
-    const maxAbs = vals.length ? Math.max(...vals) : 6;
-
-    // clamp 4..10 (ajuste si tu veux)
-    const clamped = Math.max(4, Math.min(10, maxAbs));
-
-    // arrondi au 0.5 pour stabilité visuelle
-    return Math.round(clamped * 2) / 2;
-  }, [matchups]);
-
   // playerPool
   useEffect(() => {
     if (!defi?.id) return;
+
+    let cancelled = false;
+    let enrichGen = 0;
 
     const unsub = firestore()
       .collection(`defis/${defi.id}/playerPool`)
       .orderBy("rank")
       .onSnapshot(
-        (snap) => {
+        async (snap) => {
           const list = [];
           snap.forEach((d) => list.push(d.data()));
-          setPlayers((prev) => (isEqual(prev, list) ? prev : list));
+
+          if (defiSport !== "MLB") {
+            if (!cancelled) {
+              setPlayers((prev) => (isEqual(prev, list) ? prev : list));
+            }
+            return;
+          }
+
+          const seasonId = defi?.poolSeasonId;
+          const myGen = ++enrichGen;
+
+          try {
+            const enriched = await enrichMlbPoolPlayers(list, seasonId);
+            if (cancelled || myGen !== enrichGen) return;
+            setPlayers((prev) => (isEqual(prev, enriched) ? prev : enriched));
+          } catch (e) {
+            if (!cancelled && myGen === enrichGen) {
+              setPlayers((prev) => (isEqual(prev, list) ? prev : list));
+              setError(e);
+            }
+          }
         },
         (e) => setError(e)
       );
 
-    return () => unsub();
-  }, [defi?.id]);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [defi?.id, defi?.poolSeasonId, defiSport]);
 
   const playersSorted = useMemo(() => {
     const arr = Array.isArray(players) ? players.slice() : [];
@@ -456,12 +396,10 @@ export default function DefiParticipationScreen() {
     return isPast(defi.signupDeadline);
   }, [defi]);
 
-  const headerTitle = useMemo(() => {
-    return (
-      defi?.title ||
-      (defi?.type ? `${i18n.t("home.challenge")} ${defi.type}x${defi.type}` : i18n.t("defi.header.defaultTitle"))
-    );
-  }, [defi]);
+  const headerTitle = useMemo(
+    () => i18n.t("defi.header.trioTitle", { defaultValue: "Défi Trio du jour" }),
+    []
+  );
 
   const openPicker = useCallback(
   (index) => {
@@ -580,7 +518,7 @@ export default function DefiParticipationScreen() {
         Alert.alert(
           i18n.t("defi.alerts.successTitle"),
           i18n.t("defi.alerts.successMessage", { potMessage: i18n.t("defi.alerts.successPotMessageSimple") }),
-          [{ text: i18n.t("common.ok"), onPress: () => router.replace("/(drawer)/(tabs)/ChallengesScreen") }]
+          [{ text: i18n.t("common.ok"), onPress: () => router.replace("/(drawer)/(tabs)/AccueilScreen") }]
         );
       } else {
         const reason = res?.error?.reason;
@@ -690,73 +628,13 @@ export default function DefiParticipationScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40, backgroundColor: colors.background }}
         >
-          {/* Infos défi */}
-          <View
-            style={{
-              padding: 12,
-              borderWidth: 1,
-              borderRadius: 12,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            }}
-          >
-            <DefiHeroCard
-              title={defi?.title}
-              type={defi?.type}
-              gameDayStr={gameDayStr || "—"}
-              signupDeadlineStr={defi.signupDeadline ? fmtTSLocalHM(defi.signupDeadline) : null}
-              picksCount={maxChoices}
-              status={defi.status || "—"}
-              locked={locked}
-              pot={defi.pot ?? 0}
-              requirementsText={requirementsText}
-              tiersLegendText={i18n.t("defi.tiers.legend")}
-            />
-          </View>
+          <DefiHeroCard
+            title={i18n.t("defi.infoCard.trioTitle", { defaultValue: "Trio du jour" })}
+            gameDayStr={gameDayStr || "—"}
+            pot={defi.pot ?? 0}
+          />
 
-          {/* Matchs du jour */}
-          <SectionCard title={i18n.t("defi.gamesCard.title")}>
-            {matchups.length === 0 ? (
-              <Text style={{ color: colors.subtext, textAlign: "center" }}>{i18n.t("defi.gamesCard.none")}</Text>
-            ) : (
-              <View style={{ gap: 10 }}>
-                {matchupGroups.map(({ time, games }) => (
-                  <View key={time} style={{ gap: 8 }}>
-                    <View
-                      style={{
-                        paddingVertical: 6,
-                        paddingHorizontal: 10,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        backgroundColor: colors.background,
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      <Text style={{ color: colors.text, fontWeight: "900" }}>{time}</Text>
-                    </View>
-
-                    <View style={{ gap: 10 }}>
-                      {games.map((g, idx) => (
-                        <MatchupRow
-                          key={g.gameId || g.id || `${time}-${idx}`}
-                          g={g}
-                          tierLower={tierLower}
-                          teamLogo={teamLogo}
-                          showTime={false}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </SectionCard>
-
-          {/* Pickers */}
-          <SectionCard title={i18n.t("defi.pickersCard.title")}>
-
-
+          <SectionCard title={null}>
             <View style={{ gap: 10 }}>
               {Array.from({ length: maxChoices }).map((_, i) => (
                 <PlayerPickerRow
@@ -768,6 +646,8 @@ export default function DefiParticipationScreen() {
                   tierLower={tierLower}
                   headshotUrl={headshotUrl}
                   teamLogo={teamLogo}
+                  sport={defiSport}
+                  formatStandingsLine={defiSport === "MLB" ? formatStandingsLine : null}
                 />
               ))}
             </View>
@@ -868,7 +748,9 @@ export default function DefiParticipationScreen() {
         teamLogo={teamLogo}
         headshotUrl={headshotUrl}
         forcedTier={pickerTier}
-
+        pickerSlotIndex={pickerIndex}
+        sport={defiSport}
+        formatStandingsLine={defiSport === "MLB" ? formatStandingsLine : null}
       />
 
       <LoadingOverlay visible={saving} text={i18n.t("defi.actions.primarySaving")} />

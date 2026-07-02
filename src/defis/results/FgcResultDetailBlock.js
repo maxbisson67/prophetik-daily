@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import firestore from "@react-native-firebase/firestore";
 
 import i18n from "@src/i18n/i18n";
+import { useTheme } from "@src/theme/ThemeProvider";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import FgcParticipantsModal from "@src/defis/results/FgcParticipantsModal";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
@@ -13,10 +14,20 @@ import {
   getFgcResultPlayerId,
   getFgcResultPlayerName,
   getFgcResultPrefix,
+  getFgcResultOutcomeLabel,
   getFgcResultTeamAbbr,
 } from "@src/firstGoal/fgcChallengeUtils";
 import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
-import { resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
+import { MATCH_TASK_STATES, resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
+import {
+  RESULTS_ACCENT,
+} from "@src/defis/results/resultsTheme";
+import {
+  formatPickBravoBadgeLabel,
+  getPickBravoHighlightTheme,
+  PickBravoBadge,
+  PickOopsBadge,
+} from "@src/defis/results/PickResultTags";
 
 function safeAbbr(v) {
   const s = String(v || "").trim().toUpperCase();
@@ -76,7 +87,34 @@ function isCorrectPick(entry, winnerPlayerId) {
   return String(entry.playerId) === String(winnerPlayerId);
 }
 
-export default function FgcResultDetailBlock({ item, colors, scheduleStatus = null }) {
+function resolveFgcDefaultPoints(challenge) {
+  return (
+    Number(challenge?.stakePoints ?? challenge?.points ?? challenge?.potJoinIncrement ?? 5) || 5
+  );
+}
+
+function canScoreFgcPick(matchTask, challenge, winnerPlayerId) {
+  const state = matchTask?.state;
+
+  if (state === MATCH_TASK_STATES.NOT_STARTED || state === MATCH_TASK_STATES.POSTPONED) {
+    return false;
+  }
+
+  if (state === MATCH_TASK_STATES.COMPLETED) return true;
+
+  if (state === MATCH_TASK_STATES.IN_PROGRESS && winnerPlayerId) return true;
+
+  const challengeStatus = String(challenge?.status || "").toLowerCase();
+  return ["decided", "closed", "completed"].includes(challengeStatus);
+}
+
+export default function FgcResultDetailBlock({
+  item,
+  colors,
+  scheduleStatus = null,
+  accentColor = RESULTS_ACCENT,
+}) {
+  const { isDark } = useTheme();
   const { user } = useAuth();
   const uid = String(user?.uid || "");
 
@@ -141,6 +179,17 @@ export default function FgcResultDetailBlock({ item, colors, scheduleStatus = nu
   const myTeamAbbr = entryTeamAbbr(myEntry);
   const matchTask = resolveFgcMatchStatus(challenge, { scheduleStatus });
 
+  const pickScored = canScoreFgcPick(matchTask, challenge, winnerPlayerId);
+  const bravoPoints = myPoints > 0 ? myPoints : resolveFgcDefaultPoints(challenge);
+  const bravoLabel =
+    myEntry && myCorrect && pickScored
+      ? formatPickBravoBadgeLabel(bravoPoints, i18n.t.bind(i18n))
+      : null;
+  const showOopsTag = !!myEntry && pickScored && !myCorrect;
+  const bravoHighlightTheme = bravoLabel
+    ? getPickBravoHighlightTheme(isDark, { provisional: false })
+    : null;
+
   return (
     <View style={{ marginTop: 10 }}>
       <MatchupRow
@@ -188,15 +237,15 @@ export default function FgcResultDetailBlock({ item, colors, scheduleStatus = nu
           </View>
         ) : (
           <Text style={{ color: colors.text, fontWeight: "900", marginTop: 2 }}>
-            {i18n.t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" })}
+            {getFgcResultOutcomeLabel(challenge, i18n.t.bind(i18n), matchTask?.state)}
           </Text>
         )}
       </View>
 
       {myEntry ? (
-        <View style={{ marginTop: 10, gap: 4 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
+        <View style={{ marginTop: 10 }}>
+          <View style={bravoLabel ? bravoHighlightTheme?.bandeau : null}>
+            <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}>
               <Text style={{ color: colors.subtext, fontSize: 13 }}>
                 {i18n.t("challenges.myPick", { defaultValue: "Mon choix" })}
                 {": "}
@@ -221,21 +270,17 @@ export default function FgcResultDetailBlock({ item, colors, scheduleStatus = nu
                 {entryPickName(myEntry)}
               </Text>
             </View>
-            <Ionicons
-              name={myCorrect ? "checkmark-circle" : "close-circle"}
-              size={20}
-              color={myCorrect ? "#16a34a" : "#dc2626"}
-              style={{ marginLeft: 8 }}
-            />
-          </View>
 
-          {myCorrect ? (
-            <Text style={{ color: colors.subtext, fontSize: 13 }}>
-              {i18n.t("challenges.myPointsEarned", { defaultValue: "Mes points" })}
-              {": "}
-              <Text style={{ color: colors.text, fontWeight: "900" }}>{myPoints}</Text>
-            </Text>
-          ) : null}
+            {bravoLabel ? (
+              <View style={{ alignItems: "flex-end", marginTop: 8 }}>
+                <PickBravoBadge label={bravoLabel} isDark={isDark} />
+              </View>
+            ) : showOopsTag ? (
+              <View style={{ alignItems: "flex-end", marginTop: 8 }}>
+                <PickOopsBadge isDark={isDark} />
+              </View>
+            ) : null}
+          </View>
         </View>
       ) : (
         <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
@@ -254,7 +299,7 @@ export default function FgcResultDetailBlock({ item, colors, scheduleStatus = nu
             alignSelf: "flex-start",
           }}
         >
-          <Text style={{ color: "#b91c1c", fontWeight: "800", fontSize: 13 }}>
+          <Text style={{ color: accentColor, fontWeight: "800", fontSize: 13 }}>
             {i18n.t("challenges.viewOtherParticipantsPicks", {
               defaultValue: "Voir les choix des autres participants",
             })}
@@ -262,7 +307,7 @@ export default function FgcResultDetailBlock({ item, colors, scheduleStatus = nu
           <Text style={{ color: colors.subtext, fontSize: 13, marginLeft: 6 }}>
             ({entries.length})
           </Text>
-          <Ionicons name="chevron-forward" size={14} color="#b91c1c" style={{ marginLeft: 2 }} />
+          <Ionicons name="chevron-forward" size={14} color={accentColor} style={{ marginLeft: 2 }} />
         </TouchableOpacity>
       ) : loading ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
@@ -277,6 +322,7 @@ export default function FgcResultDetailBlock({ item, colors, scheduleStatus = nu
         entries={entries}
         loading={loading}
         currentUid={uid}
+        matchTask={matchTask}
         colors={colors}
       />
     </View>

@@ -58,6 +58,18 @@ export function getFgcResultPrefix(ch, t) {
   return t("firstGoal.result.prefix", { defaultValue: "Premier but:" });
 }
 
+/** Libellé quand le résultat n'est pas encore connu (pas de joueur gagnant). */
+export function getFgcResultOutcomeLabel(challenge, t, matchState) {
+  if (getFgcResultPlayerName(challenge)) return null;
+
+  const state = String(matchState || "").toLowerCase();
+  if (state === "not_started") {
+    return t("firstGoal.home.upcoming", { defaultValue: "À venir" });
+  }
+
+  return t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" });
+}
+
 export function getFgcLiveNoneText(ch, t) {
   if (isFirstRbiChallenge(ch)) {
     return t("firstGoal.firstRbi.live.noneYet", {

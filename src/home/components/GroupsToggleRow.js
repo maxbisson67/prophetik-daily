@@ -11,6 +11,7 @@ export default function GroupsToggleRow({
   value,       // currentGroupId
   onChange,    // (groupId) => void
   hintKey = "home.selectGroupLabel",
+  compact = false,
 }) {
   const [open, setOpen] = useState(false);
 
@@ -22,8 +23,7 @@ export default function GroupsToggleRow({
   if (!groups?.length) return null;
 
   return (
-    <View style={{ marginTop: 10 }}>
-      {/* Ligne compacte */}
+    <View style={{ marginTop: compact ? 0 : 12, marginBottom: compact ? 12 : 0 }}>
       <TouchableOpacity
         onPress={() => setOpen((v) => !v)}
         activeOpacity={0.85}
@@ -31,23 +31,34 @@ export default function GroupsToggleRow({
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingVertical: 10,
+          paddingVertical: compact ? 12 : 10,
           paddingHorizontal: 12,
           borderRadius: 12,
-          borderWidth: 3,
+          borderWidth: 1,
           borderColor: colors.border,
           backgroundColor: colors.card2,
+          minHeight: 44,
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, paddingRight: 10 }}>
-          <GroupAvatar group={selected} size={26} colors={colors} />
+          <GroupAvatar group={selected} size={compact ? 28 : 26} colors={colors} />
           <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
-            {i18n.t(hintKey, {
-              defaultValue: "Sélectionne un groupe",
-            })}
-          </Text>
-            <Text numberOfLines={1} style={{ color: colors.text, fontSize: 14, fontWeight: "900" }}>
+            {!compact ? (
+              <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
+                {i18n.t(hintKey, {
+                  defaultValue: "Sélectionne un groupe",
+                })}
+              </Text>
+            ) : null}
+            <Text
+              numberOfLines={1}
+              style={{
+                color: colors.text,
+                fontSize: compact ? 16 : 14,
+                fontWeight: "900",
+                marginTop: compact ? 0 : 2,
+              }}
+            >
               {selected?.name || selected?.id || "—"}
             </Text>
           </View>
@@ -87,12 +98,8 @@ export default function GroupsToggleRow({
                   paddingHorizontal: 12,
                   borderTopWidth: 1,
                   borderTopColor: colors.border,
-                      // 🔴 bordure rouge fine
-                  borderWidth: 1,
-                  borderColor: "rgba(185, 28, 28, 0.55)", // #b91c1c avec opacité
-
-   
                   backgroundColor: active ? colors.card2 : colors.card,
+                  minHeight: 44,
                 }}
               >
                 <GroupAvatar group={g} size={28} colors={colors} />

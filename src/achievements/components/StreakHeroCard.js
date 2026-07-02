@@ -94,10 +94,10 @@ function getDashboardTheme(isDark) {
       title: "#F9FAFB",
       subtitle: "rgba(243,244,246,0.55)",
       streak: {
-        icon: "#FB7185",
-        glow: "rgba(239,68,68,0.18)",
+        icon: "#A3E635",
+        glow: "rgba(163,230,53,0.18)",
         value: "#FFFFFF",
-        pillBg: "#DC2626",
+        pillBg: "#65A30D",
         pillText: "#FFFFFF",
       },
       points: {
@@ -114,6 +114,13 @@ function getDashboardTheme(isDark) {
         pillBg: "#7C3AED",
         pillText: "#FFFFFF",
       },
+      competition: {
+        icon: "#34D399",
+        glow: "rgba(52,211,153,0.16)",
+        value: "#6EE7B7",
+        pillBg: "#059669",
+        pillText: "#FFFFFF",
+      },
     };
   }
 
@@ -124,10 +131,10 @@ function getDashboardTheme(isDark) {
     title: "#111827",
     subtitle: "rgba(17,24,39,0.55)",
     streak: {
-      icon: "#DC2626",
-      glow: "rgba(220,38,38,0.12)",
+      icon: "#65A30D",
+      glow: "rgba(101,163,13,0.12)",
       value: "#111827",
-      pillBg: "#DC2626",
+      pillBg: "#65A30D",
       pillText: "#FFFFFF",
     },
     points: {
@@ -144,7 +151,33 @@ function getDashboardTheme(isDark) {
       pillBg: "#7C3AED",
       pillText: "#FFFFFF",
     },
+    competition: {
+      icon: "#059669",
+      glow: "rgba(5,150,105,0.12)",
+      value: "#047857",
+      pillBg: "#059669",
+      pillText: "#FFFFFF",
+    },
   };
+}
+
+function formatCompetitionDaysValue(daysRemaining) {
+  if (daysRemaining == null) return "—";
+  const n = Number(daysRemaining);
+  if (!Number.isFinite(n)) return "—";
+  return String(Math.max(0, n));
+}
+
+function formatConsecutiveParticipationsCount(currentStreak) {
+  const n = Number(currentStreak);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function formatDaysRemainingUnitSuffix(daysRemaining) {
+  if (daysRemaining == null) return null;
+  const n = Number(daysRemaining);
+  if (!Number.isFinite(n)) return null;
+  return i18n.t("progression.statsDaysRemainingUnit", { defaultValue: "j" });
 }
 
 function DashboardIconBadge({ name, color, glow, size = 22 }) {
@@ -171,9 +204,9 @@ function DashboardPill({ label, bg, color }) {
     <View
       style={{
         marginTop: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 4,
         backgroundColor: bg,
       }}
     >
@@ -224,18 +257,20 @@ function DashboardColumn({
       >
         {title}
       </Text>
-      <Text
-        numberOfLines={1}
-        style={{
-          marginTop: 2,
-          color: ui.subtitle,
-          fontWeight: "700",
-          fontSize: 9,
-          letterSpacing: 0.5,
-        }}
-      >
-        {subtitle}
-      </Text>
+      {subtitle ? (
+        <Text
+          numberOfLines={1}
+          style={{
+            marginTop: 2,
+            color: ui.subtitle,
+            fontWeight: "700",
+            fontSize: 9,
+            letterSpacing: 0.5,
+          }}
+        >
+          {subtitle}
+        </Text>
+      ) : null}
       <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 8 }}>
         <Text
           style={{
@@ -263,12 +298,14 @@ function DashboardColumn({
           </Text>
         ) : null}
       </View>
-      <DashboardPill label={pillLabel} bg={columnTheme.pillBg} color={columnTheme.pillText} />
+      {pillLabel ? (
+        <DashboardPill label={pillLabel} bg={columnTheme.pillBg} color={columnTheme.pillText} />
+      ) : null}
     </View>
   );
 }
 
-function PointsDashboardColumn({ columnTheme, ui, loading, pointsTarget, pillLabel }) {
+function PointsDashboardColumn({ columnTheme, ui, loading, pointsTarget }) {
   const target = Math.max(0, Math.round(Number(pointsTarget || 0)));
   const animatedPoints = useAnimatedNumber(target, {
     duration: 1700,
@@ -281,18 +318,18 @@ function PointsDashboardColumn({ columnTheme, ui, loading, pointsTarget, pillLab
       columnTheme={columnTheme}
       ui={ui}
       title={i18n.t("progression.statsPointsTitle", { defaultValue: "POINTS" })}
-      subtitle={i18n.t("progression.statsPointsSubtitle", { defaultValue: "MES POINTS" })}
       value={String(animatedPoints)}
-      pillLabel={pillLabel}
       loading={loading}
+      pillLabel={i18n.t("progression.statsGroupPill", { defaultValue: "GROUPE" })}
     />
   );
 }
 
-function TitleWithLines({ label, palette, style, scale = CARD_SCALE }) {
+function TitleWithLines({ label, palette, style, scale = CARD_SCALE, lineColor = null }) {
+  const line = lineColor || palette.line;
   return (
     <View style={[{ flexDirection: "row", alignItems: "center", gap: sc(8, scale) }, style]}>
-      <View style={{ flex: 1, height: 1, backgroundColor: palette.line }} />
+      <View style={{ flex: 1, height: 1, backgroundColor: line }} />
       <Text
         style={{
           color: palette.ink,
@@ -303,7 +340,7 @@ function TitleWithLines({ label, palette, style, scale = CARD_SCALE }) {
       >
         {label}
       </Text>
-      <View style={{ flex: 1, height: 1, backgroundColor: palette.line }} />
+      <View style={{ flex: 1, height: 1, backgroundColor: line }} />
     </View>
   );
 }
@@ -316,6 +353,7 @@ function StreakCompactBar({
   onPress,
   groupSummary,
   isDark,
+  homeMinimal = false,
 }) {
   const ui = useMemo(() => getDashboardTheme(isDark), [isDark]);
   const showGroupStats = groupSummary?.show === true;
@@ -323,11 +361,21 @@ function StreakCompactBar({
 
   const pointsTarget = Math.round(Number(groupSummary?.myPoints || 0));
   const rankDisplay = formatRankDisplay(groupSummary?.myRank);
+  const daysRemaining = groupSummary?.daysRemaining;
+  const competitionDaysValue = formatCompetitionDaysValue(daysRemaining);
+  const daysRemainingUnitSuffix = formatDaysRemainingUnitSuffix(daysRemaining);
+  const consecutiveParticipationsCount = formatConsecutiveParticipationsCount(currentStreak);
+  const hasActiveStreak = consecutiveParticipationsCount > 0;
 
-  const dayPillLabel =
-    Number(currentStreak || 0) === 1
-      ? i18n.t("progression.statsDayPill", { defaultValue: "JOUR" })
-      : i18n.t("progression.daysLabel", { defaultValue: "JOURS" });
+  const rankTheme = homeMinimal
+    ? {
+        icon: "#3B82F6",
+        glow: "rgba(59,130,246,0.14)",
+        value: isDark ? "#93C5FD" : "#1D4ED8",
+        pillBg: "#3B82F6",
+        pillText: "#FFFFFF",
+      }
+    : ui.rank;
 
   const inner = (
     <View
@@ -340,38 +388,20 @@ function StreakCompactBar({
     >
       <View
         style={{
-          borderWidth: 2,
-          borderColor: ui.border,
+          borderWidth: homeMinimal ? 1 : 2,
+          borderColor: homeMinimal ? ui.divider : ui.border,
           backgroundColor: ui.cardBg,
           borderRadius: 14,
           overflow: "hidden",
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "stretch" }}>
-          {showGroupStats ? (
+          {showGroupStats && !homeMinimal ? (
             <>
               <PointsDashboardColumn
                 columnTheme={ui.points}
                 ui={ui}
                 pointsTarget={pointsTarget}
-                pillLabel={i18n.t("progression.statsPointsPill", { defaultValue: "POINTS" })}
-                loading={loadingGroup}
-              />
-              <View
-                style={{
-                  width: 1,
-                  backgroundColor: ui.divider,
-                  marginVertical: 14,
-                }}
-              />
-              <DashboardColumn
-                icon="podium"
-                columnTheme={ui.rank}
-                ui={ui}
-                title={i18n.t("progression.statsRankTitle", { defaultValue: "RANG" })}
-                subtitle={i18n.t("progression.statsRankSubtitle", { defaultValue: "MA POS." })}
-                value={rankDisplay}
-                pillLabel={i18n.t("progression.statsPositionPill", { defaultValue: "POS." })}
                 loading={loadingGroup}
               />
               <View
@@ -384,16 +414,100 @@ function StreakCompactBar({
             </>
           ) : null}
 
+          {showGroupStats ? (
+            <>
+              <DashboardColumn
+                icon="podium"
+                columnTheme={rankTheme}
+                ui={ui}
+                title={i18n.t("progression.statsRankTitle", { defaultValue: "RANG" })}
+                value={rankDisplay}
+                loading={loadingGroup}
+                pillLabel={i18n.t("progression.statsPositionPill", { defaultValue: "POS." })}
+              />
+              <View
+                style={{
+                  width: 1,
+                  backgroundColor: ui.divider,
+                  marginVertical: homeMinimal ? 12 : 14,
+                }}
+              />
+            </>
+          ) : null}
+
           <DashboardColumn
-            icon="fire"
-            columnTheme={ui.streak}
+            icon="calendar-clock"
+            columnTheme={ui.competition}
             ui={ui}
-            title={i18n.t("progression.statsStreakTitle", { defaultValue: "SÉRIE" })}
-            subtitle={i18n.t("progression.statsStreakSubtitle", { defaultValue: "EN FEU" })}
-            value={String(currentStreak)}
-            pillLabel={dayPillLabel}
+            title={i18n.t("progression.statsDaysRemainingTitle", {
+              defaultValue: "RESTE",
+            })}
+            value={competitionDaysValue}
+            valueSuffix={daysRemainingUnitSuffix}
+            loading={loadingGroup && daysRemaining == null}
+            pillLabel={i18n.t("progression.statsSeasonPill", { defaultValue: "SAISON" })}
           />
         </View>
+
+        {!homeMinimal ? (
+        <View
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: ui.divider,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 6,
+              backgroundColor: hasActiveStreak ? ui.streak.pillBg : ui.streak.glow,
+              borderWidth: 1.5,
+              borderColor: ui.streak.icon,
+              shadowColor: ui.streak.icon,
+              shadowOpacity: hasActiveStreak ? 0.35 : 0.12,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: hasActiveStreak ? 3 : 0,
+            }}
+          >
+            <MaterialCommunityIcons
+              name="fire"
+              size={hasActiveStreak ? 18 : 16}
+              color={hasActiveStreak ? ui.streak.pillText : ui.streak.icon}
+            />
+            <Text
+              style={{
+                color: hasActiveStreak ? ui.streak.pillText : ui.title,
+                fontWeight: "800",
+                fontSize: 11,
+                letterSpacing: 0.2,
+              }}
+            >
+              {i18n.t("progression.consecutiveParticipationsLabel", {
+                defaultValue: "Participations consécutives :",
+              })}
+            </Text>
+            <Text
+              style={{
+                color: hasActiveStreak ? ui.streak.pillText : ui.streak.icon,
+                fontWeight: "900",
+                fontSize: 16,
+                lineHeight: 18,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {consecutiveParticipationsCount}
+            </Text>
+          </View>
+        </View>
+        ) : null}
       </View>
 
       {showBadgesHint ? (
@@ -436,32 +550,49 @@ function StreakHeroCardFull({
   showBadgesHint,
   unlockedCount,
   onPress,
+  frameless = false,
+  themeColors = null,
 }) {
   const cardHeight = sc(148);
   const logoOuter = sc(46);
   const logoInner = sc(38);
+  const neutralBorder = themeColors?.border || palette.divider;
+  const neutralLine = themeColors?.border || palette.divider;
+
+  const cardShellStyle = frameless
+    ? {
+        borderRadius: 14,
+        backgroundColor: palette.bg,
+        overflow: "hidden",
+      }
+    : {
+        borderWidth: Math.max(1, sc(2)),
+        borderColor: palette.border,
+        backgroundColor: palette.bg,
+        padding: sc(5),
+      };
+
+  const cardInnerStyle = frameless
+    ? {
+        minHeight: cardHeight,
+        overflow: "hidden",
+      }
+    : {
+        borderWidth: Math.max(1, sc(2)),
+        borderColor: palette.borderSoft,
+        minHeight: cardHeight,
+        overflow: "hidden",
+      };
 
   const content = (
     <View style={{ paddingTop: sc(22), paddingHorizontal: sc(2) }}>
-      <View
-        style={{
-          borderWidth: Math.max(1, sc(2)),
-          borderColor: palette.border,
-          backgroundColor: palette.bg,
-          padding: sc(5),
-        }}
-      >
-        <View
-          style={{
-            borderWidth: Math.max(1, sc(2)),
-            borderColor: palette.borderSoft,
-            minHeight: cardHeight,
-            overflow: "hidden",
-          }}
-        >
-          {(["tl", "tr", "bl", "br"]).map((corner) => (
-            <CornerBracket key={corner} corner={corner} color={palette.border} scale={CARD_SCALE} />
-          ))}
+      <View style={cardShellStyle}>
+        <View style={cardInnerStyle}>
+          {!frameless
+            ? (["tl", "tr", "bl", "br"]).map((corner) => (
+                <CornerBracket key={corner} corner={corner} color={palette.border} scale={CARD_SCALE} />
+              ))
+            : null}
 
           <View style={{ flexDirection: "row", minHeight: cardHeight }}>
             <View
@@ -489,6 +620,7 @@ function StreakHeroCardFull({
               <TitleWithLines
                 label={i18n.t("progression.streakOnFire", { defaultValue: "SÉRIE EN FEU" })}
                 palette={palette}
+                lineColor={frameless ? neutralLine : null}
               />
 
               <Text
@@ -509,6 +641,7 @@ function StreakHeroCardFull({
                 label={i18n.t("progression.daysLabel", { defaultValue: "JOURS" })}
                 palette={palette}
                 style={{ marginTop: sc(2) }}
+                lineColor={frameless ? neutralLine : null}
               />
             </View>
 
@@ -581,8 +714,8 @@ function StreakHeroCardFull({
           height: logoOuter,
           borderRadius: logoOuter / 2,
           backgroundColor: palette.logoRing,
-          borderWidth: Math.max(1, sc(2)),
-          borderColor: palette.border,
+          borderWidth: frameless ? 1 : Math.max(1, sc(2)),
+          borderColor: frameless ? neutralBorder : palette.border,
           alignItems: "center",
           justifyContent: "center",
           overflow: "hidden",
@@ -631,12 +764,14 @@ export default function StreakHeroCard({
   onPress,
   showBadgesHint = true,
   embedded = false,
+  frameless = false,
+  homeMinimal = false,
   groupSummary = null,
 }) {
   const { isDark, colors } = useTheme();
   const palette = useMemo(
-    () => getPalette(isDark, embedded ? colors.card : null),
-    [isDark, embedded, colors.card]
+    () => getPalette(isDark, embedded || frameless ? colors.card : null),
+    [isDark, embedded, frameless, colors.card]
   );
 
   const stats = normalizeStats(rawStats);
@@ -655,6 +790,7 @@ export default function StreakHeroCard({
         onPress={onPress}
         groupSummary={groupSummary}
         isDark={isDark}
+        homeMinimal={homeMinimal}
       />
     );
   }
@@ -668,6 +804,8 @@ export default function StreakHeroCard({
       showBadgesHint={showBadgesHint}
       unlockedCount={unlockedCount}
       onPress={onPress}
+      frameless={frameless}
+      themeColors={colors}
     />
   );
 }

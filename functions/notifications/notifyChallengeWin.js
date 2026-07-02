@@ -1,7 +1,8 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { sendPushToUsers } from "../utils/pushUtils.js";
-import { buildFgcWinPush, buildTpExactScorePush } from "./challengeWinMessages.js";
+import { buildFgcWinPush, buildTpExactScorePush, buildTsWinPush } from "./challengeWinMessages.js";
+import { NOTIFICATION_PREF_KEYS } from "./notificationPrefs.js";
 
 const db = getFirestore();
 
@@ -77,6 +78,7 @@ export async function notifyFgcWinners({
       },
       channelId: "challenges_v2",
       logTag: "fgcWinPush",
+      notificationPrefKey: NOTIFICATION_PREF_KEYS.FGC_WIN,
     });
 
     if (pushRes?.recipients > 0) {
@@ -149,6 +151,7 @@ export async function notifyTpExactScore({
     },
     channelId: "challenges_v2",
     logTag: "tpExactScorePush",
+    notificationPrefKey: NOTIFICATION_PREF_KEYS.TP_EXACT_SCORE,
   });
 
   if (pushRes?.recipients > 0) {
@@ -168,4 +171,66 @@ export async function notifyTpExactScore({
   });
 
   return { ok: true, sent: pushRes?.recipients > 0 ? 1 : 0 };
+}
+
+export async function notifyTsWinners({ defiId, groupId, winnerUids = [] }) {
+  const did = String(defiId || "").trim();
+  const gid = String(groupId || "").trim();
+  const uids = Array.from(new Set((winnerUids || []).map(String).filter(Boolean))).filter(
+    (uid) => uid.toLowerCase() !== "ai"
+  );
+
+  if (!did || !gid || !uids.length) {
+    return { ok: true, skipped: true, reason: "missing-input" };
+  }
+
+  const pending = [];
+
+  for (const uid of uids) {
+    const partRef = db.doc(`defis/${did}/participations/${uid}`);
+    const partSnap = await partRef.get();
+    if (!partSnap.exists) continue;
+    if (partSnap.data()?.winPushSentAt) continue;
+
+    const lang = await getParticipantLang(uid);
+    pending.push({ uid, lang, partRef });
+  }
+
+  if (!pending.length) {
+    return { ok: true, skipped: true, reason: "already-sent-or-missing" };
+  }
+
+  let sent = 0;
+
+  for (const [lang, rows] of groupPendingByLang(pending).entries()) {
+    const batchUids = rows.map((r) => r.uid);
+    const { title, body } = buildTsWinPush({ lang });
+
+    const pushRes = await sendPushToUsers({
+      uids: batchUids,
+      title,
+      body,
+      data: {
+        action: "OPEN_DEFI_RESULTS",
+        groupId: gid,
+        defiId: did,
+        kind: "ts",
+      },
+      channelId: "challenges_v2",
+      logTag: "tsWinPush",
+      notificationPrefKey: NOTIFICATION_PREF_KEYS.TS_WIN,
+    });
+
+    if (pushRes?.recipients > 0) {
+      await Promise.all(
+        rows.map((row) =>
+          row.partRef.set({ winPushSentAt: FieldValue.serverTimestamp() }, { merge: true })
+        )
+      );
+      sent += batchUids.length;
+    }
+  }
+
+  logger.info("[tsWinPush] done", { defiId: did, groupId: gid, sent });
+  return { ok: true, sent };
 }

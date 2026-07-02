@@ -1,5 +1,6 @@
 import { View, Image } from "react-native";
 import SportGlyph from "@src/sports/SportGlyph";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 
 export default function GroupAvatar({ group, size = 40, colors, style }) {
   const baseStyle = {
@@ -11,6 +12,22 @@ export default function GroupAvatar({ group, size = 40, colors, style }) {
     borderColor: colors?.border || "#e5e7eb",
     overflow: "hidden",
   };
+
+  const favoriteTeam = group?.favoriteTeam;
+  if (favoriteTeam?.teamId || favoriteTeam?.abbreviation) {
+    const logoSize = Math.max(24, Math.round(size * 0.72));
+    return (
+      <View
+        style={[
+          baseStyle,
+          { alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
+          style,
+        ]}
+      >
+        <TeamLogoBadge team={favoriteTeam} size={logoSize} colors={colors} />
+      </View>
+    );
+  }
 
   if (group?.avatarUrl) {
     return (

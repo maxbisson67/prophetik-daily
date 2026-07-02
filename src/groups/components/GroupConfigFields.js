@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { View, Text, Switch } from "react-native";
+import { View, Text, Switch, TextInput } from "react-native";
 import i18n from "@src/i18n/i18n";
 import FavoriteTeamSelector, { favoriteTeamLabel } from "@src/groups/components/FavoriteTeamSelector";
 import { normalizeConfigSport } from "@src/groups/hooks/useTeamsBySport";
@@ -8,6 +8,8 @@ export { favoriteTeamLabel };
 
 export default function GroupConfigFields({
   colors,
+  groupName,
+  onGroupNameChange,
   autopilotEnabled,
   onAutopilotEnabledChange,
   favoriteTeam,
@@ -15,7 +17,6 @@ export default function GroupConfigFields({
   sport = "NHL",
   disabled = false,
   showSectionTitle = true,
-  teamListHeight = 240,
 }) {
   const normalizedSport = normalizeConfigSport(sport) || "NHL";
 
@@ -29,9 +30,37 @@ export default function GroupConfigFields({
   return (
     <View style={{ gap: 12 }}>
       {showSectionTitle ? (
-        <Text style={{ fontWeight: "800", color: colors.text }}>
-          {i18n.t("groups.config.sectionTitle", { defaultValue: "Configuration" })}
-        </Text>
+        <View style={{ padding: 4 }}>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>
+            {i18n.t("groups.config.sectionTitle", { defaultValue: "Configuration" })}
+          </Text>
+        </View>
+      ) : null}
+
+      {onGroupNameChange ? (
+        <View>
+          <Text style={{ fontWeight: "700", color: colors.text, marginBottom: 8 }}>
+            {i18n.t("groups.fieldNameLabel", { defaultValue: "Nom du groupe" })}
+          </Text>
+          <TextInput
+            value={groupName}
+            onChangeText={onGroupNameChange}
+            editable={!disabled}
+            placeholder={i18n.t("groups.fieldNamePlaceholder", {
+              defaultValue: "Ex. Les Snipers du Nord",
+            })}
+            placeholderTextColor={colors.subtext}
+            style={{
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              backgroundColor: colors.background,
+              color: colors.text,
+            }}
+          />
+        </View>
       ) : null}
 
       <View
@@ -71,7 +100,6 @@ export default function GroupConfigFields({
           onChange={onFavoriteTeamChange}
           colors={colors}
           disabled={disabled}
-          listHeight={teamListHeight}
         />
       </View>
     </View>

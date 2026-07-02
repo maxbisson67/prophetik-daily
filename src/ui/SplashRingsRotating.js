@@ -1,9 +1,68 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Animated, Easing, Text, Image } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 const logoPImg = require('@src/assets/logoP.png');
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const LOGO_LETTER_MS = 100; // ~0,9 s pour « Prophetik » (9 lettres)
+const RING_ROTATION_MS = 2800;
+const ORBIT_ICON_SIZE = 28;
+
+function OrbitSportIcon({ center, radius, speed, startDeg, icon, color, t }) {
+  const spin = t.interpolate({
+    inputRange: [0, 1],
+    outputRange: [`${startDeg}deg`, `${startDeg + 360 * speed}deg`],
+  });
+  const upright = t.interpolate({
+    inputRange: [0, 1],
+    outputRange: [`${-startDeg}deg`, `${-(startDeg + 360 * speed)}deg`],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: center,
+        top: center,
+        width: 0,
+        height: 0,
+        transform: [{ rotate: spin }],
+      }}
+    >
+      <Animated.View
+        style={{
+          position: 'absolute',
+          left: radius - ORBIT_ICON_SIZE / 2,
+          top: -ORBIT_ICON_SIZE / 2,
+          width: ORBIT_ICON_SIZE,
+          height: ORBIT_ICON_SIZE,
+          alignItems: 'center',
+          justifyContent: 'center',
+          transform: [{ rotate: upright }],
+        }}
+      >
+        <View
+          style={{
+            position: 'absolute',
+            width: ORBIT_ICON_SIZE + 8,
+            height: ORBIT_ICON_SIZE + 8,
+            borderRadius: (ORBIT_ICON_SIZE + 8) / 2,
+            backgroundColor: '#fff',
+            shadowColor: '#000',
+            shadowOpacity: 0.12,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 2,
+          }}
+        />
+        <MaterialCommunityIcons name={icon} size={ORBIT_ICON_SIZE} color={color} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 export default function SplashRingsRotating({
   size = 260,
@@ -19,7 +78,7 @@ export default function SplashRingsRotating({
   /* ---------- Animation rotation des anneaux ---------- */
   useEffect(() => {
     const loop = Animated.loop(
-      Animated.timing(t, { toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(t, { toValue: 1, duration: RING_ROTATION_MS, easing: Easing.linear, useNativeDriver: true })
     );
     loop.start();
     return () => loop.stop();
@@ -35,7 +94,7 @@ export default function SplashRingsRotating({
       setDisplayText(fullText.slice(0, i + 1));
       i++;
       if (i >= fullText.length) clearInterval(timer);
-    }, 250); // vitesse d’apparition (ms par lettre)
+    }, LOGO_LETTER_MS);
     return () => clearInterval(timer);
   }, []);
 
@@ -51,7 +110,7 @@ export default function SplashRingsRotating({
   const step = ringsCount > 1 ? Math.min(ringGap, available / (ringsCount - 1)) : 0;
   const radii = Array.from({ length: ringsCount }, (_, i) => minRadius + i * step);
   const widths = new Array(radii.length).fill(ringThickness);
-  const speeds = [+0.9, -1.1, +1.3, -1.6, +1.9].slice(0, radii.length);
+  const speeds = [+0.55, -0.65, +0.75, -0.85, +0.95].slice(0, radii.length);
 
   const dash = (radius) => {
     const C = 2 * Math.PI * radius;
@@ -135,6 +194,30 @@ export default function SplashRingsRotating({
           />
         ))}
       </Svg>
+
+      {/* Balle + rondelle en orbite, synchronisées avec les anneaux */}
+      {radii[0] != null ? (
+        <OrbitSportIcon
+          center={r}
+          radius={radii[0]}
+          speed={speeds[0]}
+          startDeg={28}
+          icon="baseball"
+          color="#b91c1c"
+          t={t}
+        />
+      ) : null}
+      {radii[1] != null ? (
+        <OrbitSportIcon
+          center={r}
+          radius={radii[1]}
+          speed={speeds[1]}
+          startDeg={210}
+          icon="hockey-puck"
+          color="#111"
+          t={t}
+        />
+      ) : null}
 
       {/* === Logo P centré et ajusté === */}
       <View

@@ -1,7 +1,9 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { db, toNumber } from "./leaderboard.js";
-import { getCurrentSeasonConfig } from "./currentSeason.js";
+import { resolveCompetitionForGroupCredit } from "./seasonCompetitions.js";
+import { computeMemberSeasonRank } from "./leaderboardRankUtils.js";
+import { notifyLeaderboardRankUpAfterPointsCredit } from "../notifications/notifyLeaderboardRankUp.js";
 
 function dateFromYmdUTC(ymd) {
   const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -44,6 +46,33 @@ function gameDateFromYmd(v) {
   return String(v || "").slice(0, 10);
 }
 
+async function resolveLeaderboardContext({ groupId, gameYmd }) {
+  const gid = String(groupId || "").trim();
+  let sport = "NHL";
+  if (gid) {
+    try {
+      const gSnap = await db.doc(`groups/${gid}`).get();
+      sport = String(gSnap.data()?.sport || "NHL");
+    } catch {
+      // default NHL
+    }
+  }
+
+  const gameDate = gameDateFromYmd(gameYmd);
+  const comp = await resolveCompetitionForGroupCredit({ db, groupId: gid, gameYmd: gameDate });
+  if (!comp?.competitionKey) {
+    return null;
+  }
+
+  return {
+    competitionKey: String(comp.competitionKey),
+    seasonId: String(comp.seasonId || ""),
+    fromYmd: String(comp.fromYmd || ""),
+    toYmd: String(comp.toYmd || ""),
+    gameDate,
+  };
+}
+
 /**
  * Crédite immédiatement les points TP confirmés d'un match au classement saison.
  * Le rebuild nocturne reste la source de vérité pour réconciliation.
@@ -53,6 +82,7 @@ export async function incrementLeaderboardTpSlotPoints({
   uid,
   points,
   won = false,
+  exactScore = false,
   gameYmd,
   recordPlay = false,
 }) {
@@ -68,18 +98,29 @@ export async function incrementLeaderboardTpSlotPoints({
     return { ok: false, reason: "no-op" };
   }
 
-  const season = await getCurrentSeasonConfig(db);
-  const gameDate = gameDateFromYmd(gameYmd);
+  const ctx = await resolveLeaderboardContext({ groupId: gid, gameYmd });
+  if (!ctx) {
+    return { ok: false, reason: "competition-closed" };
+  }
   const weekKey = weekKeyFromGameDate({
-    seasonId: season.seasonId,
-    fromYmd: season.fromYmd,
-    gameDate,
+    seasonId: ctx.competitionKey,
+    fromYmd: ctx.fromYmd,
+    gameDate: ctx.gameDate,
   });
-  const monthKey = monthKeyFromGameDate(gameDate);
+  const monthKey = monthKeyFromGameDate(ctx.gameDate);
 
   const memberRef = db.doc(
-    `groups/${gid}/leaderboards/${season.seasonId}/members/${userId}`
+    `groups/${gid}/leaderboards/${ctx.competitionKey}/members/${userId}`
   );
+
+  const previousRank =
+    pts > 0
+      ? await computeMemberSeasonRank({
+          groupId: gid,
+          seasonId: ctx.competitionKey,
+          uid: userId,
+        })
+      : null;
 
   const update = {
     uid: userId,
@@ -108,6 +149,11 @@ export async function incrementLeaderboardTpSlotPoints({
     update["families.tp.wins"] = FieldValue.increment(1);
   }
 
+  if (exactScore) {
+    update.tpExactWins = FieldValue.increment(1);
+    update["families.tp.exacts"] = FieldValue.increment(1);
+  }
+
   if (recordPlay) {
     update.participations = FieldValue.increment(1);
     update.tpPlays = FieldValue.increment(1);
@@ -116,17 +162,35 @@ export async function incrementLeaderboardTpSlotPoints({
 
   await memberRef.set(update, { merge: true });
 
+  if (pts > 0 && previousRank != null) {
+    try {
+      await notifyLeaderboardRankUpAfterPointsCredit({
+        groupId: gid,
+        seasonId: ctx.competitionKey,
+        uid: userId,
+        previousRank,
+        pointsAdded: pts,
+      });
+    } catch (err) {
+      logger.warn("[leaderboard] rank-up push failed (TP)", {
+        groupId: gid,
+        uid: userId,
+        error: String(err?.message || err),
+      });
+    }
+  }
+
   logger.info("[leaderboard] TP slot points credited live", {
     groupId: gid,
     uid: userId,
     points: pts,
     won,
-    gameDate,
+    gameDate: ctx.gameDate,
     recordPlay,
-    seasonId: season.seasonId,
+    competitionKey: ctx.competitionKey,
   });
 
-  return { ok: true, seasonId: season.seasonId, points: pts };
+  return { ok: true, competitionKey: ctx.competitionKey, points: pts };
 }
 
 function parseFgcLeaderboardPoints(entry = {}, winnersPreviewUids = []) {
@@ -159,18 +223,30 @@ export async function incrementLeaderboardFgcEntry({
     return { ok: false, reason: "invalid-input" };
   }
 
-  const season = await getCurrentSeasonConfig(db);
-  const gameDate = gameDateFromYmd(gameYmd);
+  const ctx = await resolveLeaderboardContext({ groupId: gid, gameYmd });
+  if (!ctx) {
+    return { ok: false, reason: "competition-closed" };
+  }
+
   const weekKey = weekKeyFromGameDate({
-    seasonId: season.seasonId,
-    fromYmd: season.fromYmd,
-    gameDate,
+    seasonId: ctx.competitionKey,
+    fromYmd: ctx.fromYmd,
+    gameDate: ctx.gameDate,
   });
-  const monthKey = monthKeyFromGameDate(gameDate);
+  const monthKey = monthKeyFromGameDate(ctx.gameDate);
 
   const memberRef = db.doc(
-    `groups/${gid}/leaderboards/${season.seasonId}/members/${userId}`
+    `groups/${gid}/leaderboards/${ctx.competitionKey}/members/${userId}`
   );
+
+  const previousRank =
+    pts > 0
+      ? await computeMemberSeasonRank({
+          groupId: gid,
+          seasonId: ctx.competitionKey,
+          uid: userId,
+        })
+      : null;
 
   const update = {
     uid: userId,
@@ -203,16 +279,34 @@ export async function incrementLeaderboardFgcEntry({
 
   await memberRef.set(update, { merge: true });
 
+  if (pts > 0 && previousRank != null) {
+    try {
+      await notifyLeaderboardRankUpAfterPointsCredit({
+        groupId: gid,
+        seasonId: ctx.competitionKey,
+        uid: userId,
+        previousRank,
+        pointsAdded: pts,
+      });
+    } catch (err) {
+      logger.warn("[leaderboard] rank-up push failed (FGC)", {
+        groupId: gid,
+        uid: userId,
+        error: String(err?.message || err),
+      });
+    }
+  }
+
   logger.info("[leaderboard] FGC points credited live", {
     groupId: gid,
     uid: userId,
     points: pts,
     won,
-    gameDate,
-    seasonId: season.seasonId,
+    gameDate: ctx.gameDate,
+    competitionKey: ctx.competitionKey,
   });
 
-  return { ok: true, seasonId: season.seasonId, points: pts };
+  return { ok: true, competitionKey: ctx.competitionKey, points: pts };
 }
 
 export async function applyFgcChallengeLiveLeaderboard({ groupId, challengeId, challenge }) {

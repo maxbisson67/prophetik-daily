@@ -17,6 +17,7 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import functions from "@react-native-firebase/functions";
 import Analytics from "@src/services/analytics";
+import { filterGroupsForManualChallengeCreation } from "@src/groups/groupAutopilotUtils";
 
 /* ---------------- UI bits ---------------- */
 
@@ -257,7 +258,7 @@ export default function CreateFirstGoalModal({
   // ✅ Owner/admin groups based on membership role
   const ownedGroups = useMemo(() => {
     const byId = membershipsByGroupId || {};
-    const list = (groups || []).filter((g) => {
+    const list = filterGroupsForManualChallengeCreation(groups).filter((g) => {
       if (!g) return false;
 
       // group status guard (if your groups docs have it)

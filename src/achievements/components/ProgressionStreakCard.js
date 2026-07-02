@@ -3,7 +3,11 @@ import { View, Text } from "react-native";
 import i18n from "@src/i18n/i18n";
 import StreakHeroCard from "./StreakHeroCard.js";
 import { normalizeStats } from "../progressionUtils.js";
-import { prophetikCardShadow, prophetikSectionCardStyle, PROPHETIK_RED } from "./prophetikCardStyles.js";
+import {
+  prophetikCardShadow,
+  prophetikSectionCardStyle,
+  PROPHETIK_RED,
+} from "./prophetikCardStyles.js";
 
 function getStreakMessage(currentStreak, bestStreak) {
   const cur = Number(currentStreak || 0);
@@ -39,19 +43,27 @@ export default function ProgressionStreakCard({ colors, stats: rawStats, achieve
 
   return (
     <View style={prophetikCardShadow()}>
-      <View style={{ gap: 0 }}>
-        <StreakHeroCard stats={stats} achievements={achievements} showBadgesHint={false} />
+      <View
+        style={[
+          prophetikSectionCardStyle(colors),
+          { overflow: "visible", paddingTop: 24, paddingHorizontal: 8, paddingBottom: 14 },
+        ]}
+      >
+        <StreakHeroCard
+          stats={stats}
+          achievements={achievements}
+          showBadgesHint={false}
+          frameless
+        />
 
         <View
-          style={[
-            prophetikSectionCardStyle(colors),
-            {
-              marginTop: -4,
-              borderTopLeftRadius: 0,
-              borderTopRightRadius: 0,
-              paddingVertical: 12,
-            },
-          ]}
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            marginTop: 8,
+            paddingTop: 12,
+            paddingHorizontal: 6,
+          }}
         >
           <Text
             style={{

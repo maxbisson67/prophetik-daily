@@ -135,12 +135,12 @@ export default function SportsHubScreen({ initialLeague = "NHL", hideSportTabs =
                   defaultValue: "Scores & buts en temps réel",
                 })
               : i18n.t("sports.hub.liveMlb", {
-                  defaultValue: "Bientôt disponible",
+                  defaultValue: "Scores en temps réel",
                 })
           }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/MatchLiveScreen");
-            else router.push("/(drawer)/sports/MlbComingSoon");
+            else router.push("/(drawer)/sports/MlbMatchLiveScreen");
           }}
         />
 

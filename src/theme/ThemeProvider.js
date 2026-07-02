@@ -5,6 +5,7 @@ import { useColorScheme } from "react-native";
 const LightColors = {
   background: "#f8fafc",
   card: "#fff",
+  card2: "#f1f5f9",
   text: "#111827",
   subtext: "#6b7280",
   border: "#e5e7eb",
@@ -15,6 +16,7 @@ const LightColors = {
 const DarkColors = {
   background: "#0b0f13",
   card: "#121820",
+  card2: "#1a2230",
   text: "#e5e7eb",
   subtext: "#9ca3af",
   border: "#1f2937",

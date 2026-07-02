@@ -1,41 +1,103 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
+import { resolveLeaderboardReadKeys, competitionKeyMatchesSport } from "@src/season/seasonCompetitionCore";
 
-export default function useLeaderboardGroupMembers({ groupId, seasonId, enabled }) {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(!!enabled);
+function mergeLeaderboardRows(rowsByKey) {
+  const merged = new Map();
+  for (const rows of Object.values(rowsByKey)) {
+    for (const row of rows || []) {
+      const id = String(row.uid || row.id || "").trim();
+      if (!id) continue;
+      const pts = Number(row.pointsTotal ?? 0) || 0;
+      const prev = merged.get(id);
+      if (!prev || pts >= Number(prev.pointsTotal ?? 0)) {
+        merged.set(id, { ...row, id });
+      }
+    }
+  }
+
+  return Array.from(merged.values()).sort(
+    (a, b) => Number(b.pointsTotal ?? 0) - Number(a.pointsTotal ?? 0)
+  );
+}
+
+export default function useLeaderboardGroupMembers({
+  groupId,
+  seasonId,
+  competitionKey,
+  sport,
+  enabled,
+}) {
+  const leaderboardKey = String(competitionKey || seasonId || "").trim();
+  const sportKeyMatches = !sport || competitionKeyMatchesSport(leaderboardKey, sport);
+  const effectiveEnabled = !!enabled && sportKeyMatches;
+  const readKeys = useMemo(
+    () => resolveLeaderboardReadKeys(leaderboardKey),
+    [leaderboardKey]
+  );
+
+  const [rowsByKey, setRowsByKey] = useState({});
+  const [loading, setLoading] = useState(!!effectiveEnabled);
 
   useEffect(() => {
-    if (!enabled || !seasonId || !groupId) {
-      setRows([]);
+    let alive = true;
+
+    if (!effectiveEnabled || !leaderboardKey || !groupId) {
+      setRowsByKey({});
       setLoading(false);
-      return;
+      return () => {
+        alive = false;
+      };
     }
 
+    setRowsByKey({});
     setLoading(true);
+    const gid = String(groupId);
+    const unsubs = [];
 
-    const base = firestore().collection(
-      `groups/${String(groupId)}/leaderboards/${seasonId}/members`
-    );
-    const q = base.orderBy("pointsTotal", "desc").limit(50);
+    for (const key of readKeys) {
+      const q = firestore()
+        .collection(`groups/${gid}/leaderboards/${key}/members`)
+        .orderBy("pointsTotal", "desc")
+        .limit(50);
 
-    const un = q.onSnapshot(
-      (snap) => {
-        setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setLoading(false);
-      },
-      (err) => {
-        console.log("[LB] ERROR", err?.code, err?.message);
-        setLoading(false);
-      }
-    );
+      unsubs.push(
+        q.onSnapshot(
+          (snap) => {
+            if (!alive) return;
+            setRowsByKey((prev) => ({
+              ...prev,
+              [key]: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+            }));
+            setLoading(false);
+          },
+          (err) => {
+            if (!alive) return;
+            console.log("[LB] ERROR", err?.code, err?.message);
+            setRowsByKey((prev) => ({ ...prev, [key]: [] }));
+            setLoading(false);
+          }
+        )
+      );
+    }
 
     return () => {
-      try {
-        un?.();
-      } catch {}
+      alive = false;
+      unsubs.forEach((u) => {
+        try {
+          u?.();
+        } catch {}
+      });
     };
-  }, [enabled, seasonId, groupId]);
+  }, [effectiveEnabled, leaderboardKey, groupId, readKeys.join("|")]);
+
+  const rows = useMemo(() => {
+    const scoped = {};
+    for (const key of readKeys) {
+      scoped[key] = rowsByKey[key] || [];
+    }
+    return mergeLeaderboardRows(scoped);
+  }, [rowsByKey, readKeys.join("|")]);
 
   return { rows, loading };
 }

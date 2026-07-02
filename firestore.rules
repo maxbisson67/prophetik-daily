@@ -11,6 +11,32 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/group_memberships/$(groupId + '_' + request.auth.uid));
     }
 
+    // Bloque les écritures client sur le chat (messages via Cloud Function sendGroupMessage)
+    function isGroupsMessagePath() {
+      let name = request.resource != null
+        ? request.resource.__name__
+        : (resource != null ? resource.__name__ : '');
+      return name.matches('.*/documents/groups/[^/]+/messages(/.*)?');
+    }
+
+    function isChatRateLimitPath() {
+      let name = request.resource != null
+        ? request.resource.__name__
+        : (resource != null ? resource.__name__ : '');
+      return name.matches('.*/documents/chat_rate_limits/.*');
+    }
+
+    // mlb_bvp: cache BvP (ingest serveur, lecture app)
+    match /mlb_bvp/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // mlb_bvp_invalidation_log: journal invalidation BvP post-match (serveur seulement)
+    match /mlb_bvp_invalidation_log/{docId} {
+      allow read, write: if false;
+    }
+
     // mlb_first_rbi_games: serveur seulement (détection FGC MLB mutualisée)
     match /mlb_first_rbi_games/{gamePk} {
       allow read: if isSignedIn();
@@ -20,6 +46,44 @@ service cloud.firestore {
     // nhl_first_goal_games: serveur seulement (détection FGC NHL mutualisée)
     match /nhl_first_goal_games/{gameId} {
       allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // mlb_live_games: ingest serveur, lecture app (Match Live MLB + TP live)
+    match /mlb_live_games/{gamePk} {
+      allow read: if true;
+      allow write: if false;
+
+      match /scoring_plays/{playId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // nhl_live_games: ingest serveur, lecture app (Match Live NHL + TP live)
+    match /nhl_live_games/{gameId} {
+      allow read: if true;
+      allow write: if false;
+
+      match /goals/{goalId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // live_board_* + live_control: ingest serveur, lecture app (liste Match Live L2)
+    match /live_board_nhl/{ymd} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /live_board_mlb/{ymd} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /live_control/{docId} {
+      allow read: if true;
       allow write: if false;
     }
 
@@ -58,9 +122,51 @@ service cloud.firestore {
       }
     }
 
-    // Lecture/écriture ouvertes (DEV) — juste pour valider que la CLI lit le fichier
+    // Chat groupe — lecture membres, écriture serveur uniquement
+    match /groups/{groupId}/messages/{messageId} {
+      allow read: if isGroupMember(groupId);
+      allow write: if false;
+    }
+
+    match /groups/{groupId}/reads/{uid} {
+      allow read: if isGroupMember(groupId);
+      allow write: if isSignedIn() && request.auth.uid == uid && isGroupMember(groupId);
+    }
+
+    // Rate limit chat — serveur seulement
+    match /chat_rate_limits/{uid} {
+      allow read, write: if false;
+    }
+
+    // Nova — KB lecture auth, écriture serveur ; mémoire/quota/cache/logs serveur
+    match /nova_knowledge/{document=**} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /nova_memory/{uid} {
+      allow read, write: if false;
+    }
+
+    match /nova_quotas/{docId} {
+      allow read, write: if false;
+    }
+
+    match /nova_coach_cache/{docId} {
+      allow read, write: if false;
+    }
+
+    match /nova_coach_logs/{docId} {
+      allow read, write: if false;
+    }
+
+    // Fallback: lecture auth, écriture auth sauf chemins chat verrouillés
+    // (App Check: activer l'enforcement dans la console Firebase pour prod)
     match /{document=**} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && !isGroupsMessagePath()
+        && !isChatRateLimitPath();
     }
   }
 }

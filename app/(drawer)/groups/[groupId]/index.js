@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  Share,
   ScrollView,
   Image,
   Modal,
@@ -43,6 +42,63 @@ import {
 } from '@src/groups/manageGroupService';
 
 /* ----------------------------- Helpers ----------------------------- */
+const RED = '#b91c1c';
+
+function leftAccentCardStyle(colors) {
+  return {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    overflow: 'hidden',
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: RED,
+  };
+}
+
+function fmtDateYmd(ts) {
+  try {
+    const d =
+      ts?.toDate?.() ??
+      (typeof ts === 'number'
+        ? new Date(ts)
+        : ts instanceof Date
+        ? ts
+        : null);
+    if (!d || Number.isNaN(d.getTime())) return null;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  } catch {
+    return null;
+  }
+}
+
+function formatMemberSubtitle({ role, item, group }) {
+  if (role === 'owner') {
+    const date = fmtDateYmd(group?.createdAt);
+    if (date) {
+      return i18n.t('groups.detail.ownerCreatedOn', {
+        date,
+        defaultValue: `Owner, group created on ${date}`,
+      });
+    }
+    return i18n.t('groups.detail.roleOwner', { defaultValue: 'Owner' });
+  }
+
+  const date = fmtDateYmd(item?.joinedAt ?? item?.createdAt);
+  if (date) {
+    return i18n.t('groups.detail.memberSince', {
+      date,
+      defaultValue: `Member since ${date}`,
+    });
+  }
+
+  if (role === 'member') {
+    return i18n.t('groups.detail.roleMember', { defaultValue: 'Member' });
+  }
+
+  return role ? String(role) : null;
+}
+
 function fmtDate(ts) {
   try {
     const d =
@@ -209,7 +265,7 @@ function chooseNameAvatar(profile, membershipItem) {
   return { displayName: name, avatarUrl: avatar };
 }
 
-function MemberRow({ uid, role, item }) {
+function MemberRow({ uid, role, item, group }) {
   const { colors } = useTheme();
   const pubRaw = usePublicProfile(uid);
   const profile = unwrapProfileShape(pubRaw);
@@ -227,6 +283,7 @@ function MemberRow({ uid, role, item }) {
   const fallback = chooseNameAvatar(profile, item);
   const displayName = utilName || fallback.displayName || 'Invité';
   const avatarUrl = utilAvatar || fallback.avatarUrl || null;
+  const subtitle = formatMemberSubtitle({ role, item, group });
 
   return (
     <View
@@ -260,9 +317,9 @@ function MemberRow({ uid, role, item }) {
         <Text style={{ fontWeight: '700', color: colors.text }}>
           {displayName || 'Invité'}
         </Text>
-        {!!role && (
+        {!!subtitle && (
           <Text style={{ color: colors.subtext, fontSize: 12 }}>
-            {String(role)}
+            {subtitle}
           </Text>
         )}
       </View>
@@ -305,9 +362,12 @@ export default function GroupDetailScreen() {
   // Transfer ownership modal
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  const [draftFavoriteTeam, setDraftFavoriteTeam] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
+      setDraftFavoriteTeam(null);
+
       const onBeforeRemove = (e) => {
         e.preventDefault();
         r.replace('/(drawer)/(tabs)/GroupsScreen');
@@ -412,25 +472,7 @@ export default function GroupDetailScreen() {
     (m) => m.uidNorm !== 'ai'
   );
 
-  const name = group?.name;
   const codeInvitation = group?.codeInvitation;
-
-  const inviteMessage = i18n.t('groups.detail.shareInviteMessage', {
-    name: name || id,
-    code: codeInvitation ?? '—',
-    id: group?.id || id,
-  });
-
-  const onShareInvite = async () => {
-    try {
-      await Share.share({ message: inviteMessage });
-    } catch (e) {
-      Alert.alert(
-        i18n.t('groups.detail.shareErrorTitle'),
-        String(e?.message ?? e)
-      );
-    }
-  };
 
   const effectivePrice = getGroupEffectivePrice(group);
 
@@ -610,6 +652,7 @@ export default function GroupDetailScreen() {
               name: group.name || group.title || `ID: ${group.id || id}`,
               avatarUrl: group.avatarUrl || null,
               status: group.status || null,
+              autopilotEnabled: group.autopilotEnabled !== false,
             },
           ]
         : [],
@@ -703,14 +746,9 @@ export default function GroupDetailScreen() {
     );
   }
 
-  const avatarCtaLabel = isOwner
-      ? i18n.t('groups.detail.avatarEdit'):'';
-
-  const shareCtaLabel = codeInvitation
-    ? i18n.t('groups.detail.actionShareInviteWithCode', {
-        code: codeInvitation,
-      })
-    : i18n.t('groups.detail.actionShareInvite');
+  const displayFavoriteTeam = isOwner
+    ? draftFavoriteTeam ?? group?.favoriteTeam ?? null
+    : group?.favoriteTeam ?? null;
 
   return (
     <>
@@ -821,23 +859,10 @@ export default function GroupDetailScreen() {
           style={{ flex: 1 }}
         >
           {/* Carte Avatar de groupe */}
-          <View
-            style={{
-              padding: 14,
-              borderWidth: 1,
-              borderRadius: 12,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              elevation: 3,
-              shadowColor: '#000',
-              shadowOpacity: 0.08,
-              shadowRadius: 6,
-              shadowOffset: { width: 0, height: 3 },
-            }}
-          >
+          <View style={leftAccentCardStyle(colors)}>
             <View style={{ alignItems: 'center' }}>
               <GroupAvatar
-                group={group}
+                group={{ ...group, favoriteTeam: displayFavoriteTeam }}
                 size={120}
                 colors={colors}
                 style={{
@@ -858,105 +883,17 @@ export default function GroupDetailScreen() {
                   i18n.t('groups.detail.headerFallback')}
               </Text>
             </View>
-
-            <View style={{ marginTop: 12 }}>
-              {isOwner ? (
-                <TouchableOpacity
-                  onPress={() =>
-                    r.push({
-                      pathname: '/avatars/GroupAvatarsScreen',
-                      params: { groupId: group.id },
-                    })
-                  }
-                  style={{
-                    backgroundColor: colors.primary,
-                    paddingVertical: 12,
-                    paddingHorizontal: 20,
-                    borderRadius: 10,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    elevation: 2,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '900' }}>
-                    {avatarCtaLabel}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <View
-                  style={{
-                    backgroundColor: colors.card2,
-                    paddingVertical: 12,
-                    borderRadius: 10,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: colors.subtext, fontWeight: '700' }}>
-                    {i18n.t('groups.detail.ownerOnlyAvatar')}
-                  </Text>
-                </View>
-              )}
-            </View>
           </View>
 
-          <GroupConfigSection group={group} isOwner={isOwner} colors={colors} />
-
-        {/* Détails */}
-        <View
-          style={{
-            padding: 12,
-            borderWidth: 1,
-            borderRadius: 12,
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          }}
-        >
-          <Text
-            style={{
-              fontWeight: "800",
-              marginBottom: 4,
-              textAlign: "center",
-              color: colors.text,
-            }}
-          >
-            {i18n.t("groups.detail.sectionDetails")}
-          </Text>
-
-          <DetailRow colors={colors} label={i18n.t("groups.detail.groupType")}>
-            {group?.isPrivate ? i18n.t("groups.detail.private") : i18n.t("groups.detail.public")}
-          </DetailRow>
-
-          {!!codeInvitation && (
-            <View style={{ marginTop: 10 }}>
-              <InviteQrCard
-                code={codeInvitation}
-                groupName={group?.name || group?.title || "Prophetik"}
-                colors={colors}
-              />
-            </View>
-          )}
-
-          <DetailRow colors={colors} label={i18n.t("groups.detail.createdAt")}>
-            {fmtDate(group?.createdAt)}
-          </DetailRow>
-
-          {!!group?.signupDeadline && (
-            <DetailRow colors={colors} label={i18n.t("groups.detail.signupUntil")}>
-              {fmtDate(group.signupDeadline)}
-            </DetailRow>
-          )}
-        </View>
+          <GroupConfigSection
+            group={group}
+            isOwner={isOwner}
+            colors={colors}
+            onFavoriteTeamDraftChange={isOwner ? setDraftFavoriteTeam : undefined}
+          />
 
           {/* Membres */}
-          <View
-            style={{
-              padding: 12,
-              borderWidth: 1,
-              borderRadius: 12,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            }}
-          >
+          <View style={leftAccentCardStyle(colors)}>
             <View style={{ padding: 4 }}>
               <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
                 {i18n.t('groups.detail.membersSection')}
@@ -974,61 +911,37 @@ export default function GroupDetailScreen() {
                   uid={m.uidNorm}
                   role={m.role}
                   item={m}
+                  group={group}
                 />
               ))
             )}
           </View>
 
-          {/* Actions */}
-          <View
-            style={{
-              padding: 12,
-              borderWidth: 1,
-              borderRadius: 12,
-              gap: 8,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              style={{
-                fontWeight: '700',
-                textAlign: 'center',
-                color: colors.text,
-              }}
-            >
-              {i18n.t('groups.detail.actionsSection')}
-            </Text>
+        {(!!codeInvitation || !!group?.signupDeadline) && (
+        <View style={leftAccentCardStyle(colors)}>
+          {!!codeInvitation && (
+            <InviteQrCard
+              code={codeInvitation}
+              groupName={group?.name || group?.title || "Prophetik"}
+              colors={colors}
+            />
+          )}
 
-            <TouchableOpacity
-              onPress={() => setOpenCreate(true)}
-              style={{
-                backgroundColor: colors.primary,
-                padding: 14,
-                borderRadius: 10,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700' }}>
-                {i18n.t('groups.detail.actionCreateChallenge')}
-              </Text>
-            </TouchableOpacity>
+          {!!group?.signupDeadline && (
+            <DetailRow colors={colors} label={i18n.t("groups.detail.signupUntil")}>
+              {fmtDate(group.signupDeadline)}
+            </DetailRow>
+          )}
+        </View>
+        )}
 
-            <TouchableOpacity
-              onPress={onShareInvite}
-              style={{
-                backgroundColor: colors.card2,
-                padding: 14,
-                borderRadius: 10,
-                alignItems: 'center',
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Text style={{ fontWeight: '600', color: colors.text }}>
-                {shareCtaLabel}
+          {/* Options de partage */}
+          <View style={[leftAccentCardStyle(colors), { gap: 8 }]}>
+            <View style={{ padding: 4 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
+                {i18n.t('groups.detail.actionsSection')}
               </Text>
-            </TouchableOpacity>
+            </View>
 
         
             {/* Quitter (member) / Quitter (owner -> archive) */}

@@ -1,22 +1,31 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, Image } from "react-native";
+import { useRouter } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import FgcResultDetailBlock from "@src/defis/results/FgcResultDetailBlock";
 import TpResultDetailBlock from "@src/defis/results/TpResultDetailBlock";
+import TsResultDetailBlock from "@src/defis/results/TsResultDetailBlock";
+import ResultsAccueilTodoLink from "@src/defis/results/ResultsAccueilTodoLink";
+import { navigateToAccueilChallenge } from "@src/defis/results/navigateToMesResultats";
 import {
   isHistoryResultItem,
-  resolveChallengeDisplayStatus,
 } from "@src/defis/results/challengeResultsModel";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
-import { isTpResultsViewStatus } from "@src/defis/results/navigateToMesResultats";
 import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
-import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
 import {
-  formatParticipantCtaLabel,
+  participantTaskNeedsAccueil,
   resolveParticipantTaskStatusForItem,
 } from "@src/defis/participant/participantTaskStatus";
-import { resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
+import DefiTypeLeading, { resolveDefiItemSport } from "@src/home/components/DefiTypeLeading";
+import DefiSectionIntroBand from "@src/home/components/DefiSectionIntroBand";
+import {
+  RESULTS_ACCENT,
+  RESULTS_ACCENT_DARK,
+  RESULTS_ACCENT_MUTED,
+  RESULTS_ACCENT_DIVIDER,
+  RESULTS_ACCENT_DIVIDER_STRONG,
+} from "@src/defis/results/resultsTheme";
 
 function initialsFrom(nameOrEmail = "") {
   const s = String(nameOrEmail).trim();
@@ -24,26 +33,6 @@ function initialsFrom(nameOrEmail = "") {
   const parts = s.replace(/\s+/g, " ").split(" ");
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function fmtHM(v) {
-  try {
-    if (!v) return "—";
-    const d =
-      typeof v?.toDate === "function"
-        ? v.toDate()
-        : v instanceof Date
-        ? v
-        : new Date(v);
-
-    if (!d || Number.isNaN(d.getTime())) return "—";
-
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
-  } catch {
-    return "—";
-  }
 }
 
 function safeText(v) {
@@ -105,12 +94,6 @@ function AvatarBubble({ uri, name, size = 22, colors }) {
   );
 }
 
-function cardAccent(kind) {
-  if (kind === "fgc") return "🏒";
-  if (kind === "tp") return "🏆";
-  return "🎯";
-}
-
 function cardTypeTitle(item) {
   if (item?.kind === "fgc") {
     return getFgcTitle(item?.raw || {}, i18n.t.bind(i18n));
@@ -118,11 +101,12 @@ function cardTypeTitle(item) {
   if (item?.kind === "tp") {
     return i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" });
   }
-  return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
+  return i18n.t("home.todayChallenge", { defaultValue: "Meilleurs pointeurs" });
 }
 
-const RED = "#b91c1c";
-const RED_BOTTOM = "#991b1b";
+const HOME_ACCENT = "#b91c1c";
+const HOME_ACCENT_DARK = "#991b1b";
+const HOME_ACCENT_MUTED = "rgba(239,68,68,0.22)";
 
 const ChallengeItemCard = React.memo(function ChallengeItemCard({
   item,
@@ -133,13 +117,19 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
   scheduleByChallengeId = {},
   scheduleByGameId = {},
   onOpen,
+  accentColor = HOME_ACCENT,
+  accentColorDark = HOME_ACCENT_DARK,
+  accentMuted = HOME_ACCENT_MUTED,
+  dividerColor = "rgba(239,68,68,0.24)",
+  dividerColorStrong = "rgba(239,68,68,0.32)",
+  introBandVariant = "home",
 }) {
+  const router = useRouter();
   const scheduleInfo = scheduleByChallengeId?.[item.id] || null;
-  const displayStatus = resolveChallengeDisplayStatus(item, {
-    scheduleStatus: scheduleInfo?.status,
-  });
   const payout = getTotalPayout(item.raw);
   const tpEntry = item.kind === "tp" ? participationMaps?.tp?.[item.id] : null;
+  const tsEntry = item.kind === "ts" ? participationMaps?.ts?.[item.id] : null;
+  const tsHasPicks = Array.isArray(tsEntry?.picks) && tsEntry.picks.length > 0;
 
   const participantTask = resolveParticipantTaskStatusForItem(item, {
     isToday,
@@ -152,33 +142,16 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
     scheduleStatus: scheduleInfo?.status,
   });
 
-  const hasInlineResultsDetail =
-    (item.kind === "tp" && item.subtype === "bundle") ||
-    (showPastSummary && item.kind === "fgc");
+  const showAccueilTodoLink =
+    isToday && participantTaskNeedsAccueil(participantTask) && !!item?.id && !!item?.kind;
 
-  const showParticipantPrimaryCta =
-    isToday && (participantTask.showPrimaryCta || participantTask.showModifyCta);
-
-  const showLegacyResultsCta = !hasInlineResultsDetail && !showParticipantPrimaryCta;
-
-  const participantPrimaryLabel = formatParticipantCtaLabel(
-    participantTask.showPrimaryCta ? participantTask.ctaKey : null
-  );
-  const participantModifyLabel = formatParticipantCtaLabel(
-    participantTask.showModifyCta ? "modify" : null
-  );
-
-  const openCtaLabel = (() => {
-    if (item.kind === "tp") {
-      return isTpResultsViewStatus(displayStatus) || isHistoryResultItem(item)
-        ? i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" })
-        : i18n.t("challenges.openChallenge", { defaultValue: "Ouvrir" });
-    }
-    if (item.kind === "fgc") {
-      return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
-    }
-    return i18n.t("challenges.seeResults", { defaultValue: "Voir les résultats" });
-  })();
+  const onGoToAccueilDefi = () => {
+    navigateToAccueilChallenge(router, {
+      groupId: item?.groupId || item?.raw?.groupId,
+      challengeId: item.id,
+      kind: item.kind,
+    });
+  };
 
   const renderWinnersBlock = () => {
     const winnerUids = getWinnerUids(item.raw);
@@ -253,80 +226,80 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
   };
 
   return (
-    <View style={{ paddingVertical: 10 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
-          <Text style={{ fontSize: 18, marginRight: 8 }}>{cardAccent(item.kind)}</Text>
-          <Text
-            style={{
-              fontWeight: "900",
-              fontSize: 16,
-              color: colors.text,
-              flex: 1,
-            }}
-            numberOfLines={1}
-          >
-            {cardTypeTitle(item)}
-          </Text>
+    <View style={{ paddingBottom: 4 }}>
+      <DefiSectionIntroBand bleedTop={false} variant={introBandVariant}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
+            <DefiTypeLeading
+              kind={item.kind}
+              sport={resolveDefiItemSport(item)}
+              colors={colors}
+              glyphSize={22}
+            />
+            <Text
+              style={{
+                fontWeight: "900",
+                fontSize: 16,
+                color: colors.text,
+                flex: 1,
+              }}
+              numberOfLines={2}
+            >
+              {cardTypeTitle(item)}
+            </Text>
+          </View>
+
+          {item.kind === "fgc" || item.kind === "tp" || item.kind === "ts" ? (
+            <ParticipantTaskStatusChip task={participantTask} colors={colors} />
+          ) : null}
         </View>
+      </DefiSectionIntroBand>
 
-        {item.kind === "fgc" || item.kind === "tp" ? (
-          <ParticipantTaskStatusChip task={participantTask} colors={colors} />
-        ) : null}
-      </View>
-
-        <View style={{ marginTop: 10 }}>
-        {item.kind === "fgc" && showPastSummary ? (
+      <View>
+        {item.kind === "fgc" ? (
           <FgcResultDetailBlock
             item={item}
             colors={colors}
             scheduleStatus={scheduleInfo?.status}
+            accentColor={accentColor}
           />
-        ) : item.kind === "fgc" && isToday && !showPastSummary ? (
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-            }}
-          >
-            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}>
-              {safeText(item.raw?.awayAbbr)} @ {safeText(item.raw?.homeAbbr)}
-            </Text>
-            <MatchTaskStatusChip
-              task={resolveFgcMatchStatus(item.raw, { scheduleStatus: scheduleInfo?.status })}
-              colors={colors}
-              compact
-            />
-          </View>
         ) : item.kind === "tp" && item.subtype === "bundle" ? (
           <TpResultDetailBlock
             item={item}
             colors={colors}
             myEntry={tpEntry}
-            showLiveScores={!showPastSummary}
+            showLiveScores
             scheduleByGameId={scheduleByGameId}
+            accentColor={accentColor}
+            dividerColor={dividerColor}
+            dividerColorStrong={dividerColorStrong}
           />
         ) : item.kind === "tp" ? (
             <Text style={{ color: colors.text, fontWeight: "900" }}>
             {safeText(item.raw?.awayAbbr)} @ {safeText(item.raw?.homeAbbr)}
             </Text>
+        ) : item.kind === "ts" ? (
+          <TsResultDetailBlock
+            item={item}
+            colors={colors}
+            myEntry={tsEntry}
+            compact
+            onOpenFullResults={() =>
+              onOpen(item, isToday, participantTask, { forceResults: true })
+            }
+          />
         ) : null}
-        </View>
+      </View>
 
-      {isToday && !showPastSummary && displayStatus === "open" ? (
-        <View style={{ marginTop: 8 }}>
-          <Text style={{ color: colors.subtext, fontSize: 13 }}>
-            {i18n.t("challenges.signupDeadlineLabel", { defaultValue: "Heure limite" })}:{" "}
-            <Text style={{ color: colors.text, fontWeight: "900" }}>
-              {fmtHM(item.signupDeadline)}
-            </Text>
-          </Text>
-        </View>
+      {showAccueilTodoLink ? (
+        <ResultsAccueilTodoLink
+          colors={colors}
+          accentColor={accentColor}
+          onPress={onGoToAccueilDefi}
+        />
       ) : null}
 
-        {showPastSummary && item.kind !== "tp" && item.kind !== "fgc" ? (
+      {showPastSummary && item.kind !== "tp" && item.kind !== "fgc" && item.kind !== "ts" ? (
         <>
             {!hasNoWinner(item) ? (
             <View
@@ -346,78 +319,10 @@ const ChallengeItemCard = React.memo(function ChallengeItemCard({
             </View>
             ) : null}
 
-            {renderWinnersBlock(item)}
+            {renderWinnersBlock()}
         </>
         ) : null}
-
-        {showParticipantPrimaryCta ? (
-          <View style={{ marginTop: 12, gap: 8 }}>
-            {participantTask.showPrimaryCta && participantPrimaryLabel ? (
-              <TouchableOpacity
-                onPress={() => onOpen(item, isToday, participantTask)}
-                activeOpacity={0.9}
-                style={{
-                  width: "100%",
-                  paddingVertical: 10,
-                  borderRadius: 12,
-                  alignItems: "center",
-                  backgroundColor: "#b91c1c",
-                }}
-              >
-                <Text style={{ color: "#fff", fontWeight: "900" }}>{participantPrimaryLabel}</Text>
-              </TouchableOpacity>
-            ) : null}
-
-            {participantTask.showModifyCta &&
-            participantModifyLabel &&
-            !participantTask.showPrimaryCta ? (
-              <TouchableOpacity
-                onPress={() => onOpen(item, isToday, participantTask)}
-                activeOpacity={0.9}
-                style={{
-                  width: "100%",
-                  paddingVertical: 10,
-                  borderRadius: 12,
-                  alignItems: "center",
-                  backgroundColor: colors.card2,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text style={{ color: colors.text, fontWeight: "900" }}>
-                  {participantModifyLabel}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : null}
-
-        {showLegacyResultsCta ? (
-          <View style={{ marginTop: 12 }}>
-            <TouchableOpacity
-              onPress={() => onOpen(item, isToday, participantTask)}
-              style={{
-                width: "100%",
-                paddingVertical: 10,
-                borderRadius: 12,
-                alignItems: "center",
-                backgroundColor: isToday ? "#b91c1c" : colors.card2,
-                borderWidth: isToday ? 0 : 1,
-                borderColor: isToday ? "transparent" : colors.border,
-              }}
-            >
-              <Text
-                style={{
-                  color: isToday ? "#fff" : colors.text,
-                  fontWeight: "900",
-                }}
-              >
-                {openCtaLabel}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-            </View>
+    </View>
   );
 });
 
@@ -430,44 +335,18 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
   scheduleByGameId = {},
   onOpen,
   getTodayKey,
+  accentColor = RESULTS_ACCENT,
+  accentColorDark = RESULTS_ACCENT_DARK,
+  accentMuted = RESULTS_ACCENT_MUTED,
+  dividerColor = RESULTS_ACCENT_DIVIDER,
+  dividerColorStrong = RESULTS_ACCENT_DIVIDER_STRONG,
+  introBandVariant = "results",
 }) {
   const isToday = section.key === getTodayKey();
-  const hasActiveTodayItems =
-    isToday &&
-    section.data.some(
-      (item) =>
-        !isHistoryResultItem(item, {
-          scheduleStatus: scheduleByChallengeId?.[item.id]?.status,
-        })
-    );
-  const hasFinishedTodayItems =
-    isToday &&
-    section.data.some((item) =>
-      isHistoryResultItem(item, {
-        scheduleStatus: scheduleByChallengeId?.[item.id]?.status,
-      })
-    );
 
-  const sectionSubtitle = (() => {
-    if (!isToday) {
-      return i18n.t("challenges.pastDaySummary", {
-        defaultValue: "Résultats des défis de cette journée",
-      });
-    }
-    if (hasActiveTodayItems && hasFinishedTodayItems) {
-      return i18n.t("challenges.todayMixedSummary", {
-        defaultValue: "Défis et résultats du jour",
-      });
-    }
-    if (hasActiveTodayItems) {
-      return i18n.t("challenges.todayDaySummary", {
-        defaultValue: "Défis disponibles aujourd’hui",
-      });
-    }
-    return i18n.t("challenges.pastDaySummary", {
-      defaultValue: "Résultats des défis de cette journée",
-    });
-  })();
+  const sectionSubtitle = i18n.t("challenges.pastDaySummary", {
+    defaultValue: "Résultats des défis de cette journée",
+  });
 
   return (
     <View
@@ -476,9 +355,9 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
         borderWidth: 1,
         borderColor: colors.border,
         borderLeftWidth: 4,
-        borderLeftColor: RED,
+        borderLeftColor: accentColor,
         borderBottomWidth: 3,
-        borderBottomColor: RED_BOTTOM,
+        borderBottomColor: accentColorDark,
         borderRadius: 16,
         backgroundColor: colors.card,
         overflow: "hidden",
@@ -502,8 +381,13 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
       </View>
 
       <View style={{ paddingHorizontal: 12, paddingBottom: 6 }}>
-        {section.data.map((item, index) => (
+        {section.data.map((item, index) => {
+          const prevKind = index > 0 ? section.data[index - 1]?.kind : null;
+          const kindChanged = prevKind && prevKind !== item.kind;
+
+          return (
           <View key={`${item.kind}-${item.id}`}>
+            {kindChanged ? <View style={{ height: 4 }} /> : null}
             <ChallengeItemCard
               item={item}
               isToday={isToday}
@@ -513,13 +397,19 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
               scheduleByChallengeId={scheduleByChallengeId}
               scheduleByGameId={scheduleByGameId}
               onOpen={onOpen}
+              accentColor={accentColor}
+              accentColorDark={accentColorDark}
+              accentMuted={accentMuted}
+              introBandVariant={introBandVariant}
+              dividerColor={dividerColor}
+              dividerColorStrong={dividerColorStrong}
             />
 
             {index < section.data.length - 1 ? (
             <View
                 style={{
                 height: 4,
-                backgroundColor: "rgba(239,68,68,0.22)",
+                backgroundColor: accentMuted,
                 marginTop: 10,
                 marginBottom: 8,
                 marginHorizontal: 2,
@@ -527,10 +417,12 @@ const ChallengeDayCard = React.memo(function ChallengeDayCard({
             />
             ) : null}
           </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
 });
 
+export { ChallengeItemCard };
 export default ChallengeDayCard;

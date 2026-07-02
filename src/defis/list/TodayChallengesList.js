@@ -36,7 +36,7 @@ function titleForItem(item) {
   if (item.kind === "tp") {
     return i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" });
   }
-  return i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" });
+  return i18n.t("home.todayChallenge", { defaultValue: "Meilleurs pointeurs" });
 }
 
 function typeOrder(kind) {

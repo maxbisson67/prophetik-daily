@@ -1,6 +1,6 @@
 // src/ui/NovaBubble.js
 import React, { useMemo } from "react";
-import { View, Text, Image } from "react-native";
+import { View, Text, Image, ScrollView } from "react-native";
 import { useTheme } from "@src/theme/ThemeProvider";
 
 /**
@@ -19,6 +19,8 @@ import { useTheme } from "@src/theme/ThemeProvider";
  */
 export default function NovaBubble({
   variant = "neutral",
+  imageSource = null,
+  layout = "default",
   title,
   body,
   style,
@@ -26,10 +28,20 @@ export default function NovaBubble({
   imageStyle,
   titleStyle,
   bodyStyle,
+  bodyScrollMaxHeight,
 }) {
   const { colors } = useTheme();
+  const isCoachLayout = layout === "coach";
+  const coachImageSize = 209;
+  const coachLeftSlotWidth = 108;
+  const coachImageShiftLeft = 32;
+  const coachBubbleOverlap = 56;
+  const coachBubbleMarginLeft =
+    -coachBubbleOverlap + Math.round(coachImageSize * 0.3);
 
   const source = useMemo(() => {
+    if (imageSource) return imageSource;
+
     switch (String(variant || "neutral")) {
       case "groups":
         return require("@src/assets/nova/nova_groups.png");
@@ -47,7 +59,135 @@ export default function NovaBubble({
       default:
         return require("@src/assets/nova/nova_neutral.png");
     }
-  }, [variant]);
+  }, [variant, imageSource]);
+
+  if (isCoachLayout) {
+    return (
+      <View
+        style={[
+          {
+            flexDirection: "row",
+            alignItems: "flex-end",
+            flexWrap: "nowrap",
+            width: "100%",
+            marginTop: 8,
+          },
+          style,
+        ]}
+      >
+        <View
+          style={{
+            width: coachLeftSlotWidth,
+            height: coachImageSize,
+            overflow: "visible",
+            flexShrink: 0,
+          }}
+        >
+          <Image
+            source={source}
+            resizeMode="contain"
+            style={[
+              {
+                width: coachImageSize,
+                height: coachImageSize,
+                marginLeft: -coachImageShiftLeft,
+                zIndex: 2,
+              },
+              imageStyle,
+            ]}
+          />
+        </View>
+
+        <View
+          style={[
+            {
+              flex: 1,
+              minWidth: 0,
+              marginLeft: coachBubbleMarginLeft,
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card2,
+              position: "relative",
+              zIndex: 1,
+            },
+            bubbleStyle,
+          ]}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: 16,
+              top: 22,
+              width: 14,
+              height: 14,
+              backgroundColor: colors.card2,
+              borderLeftWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: colors.border,
+              transform: [{ rotate: "45deg" }],
+            }}
+          />
+
+          {!!title && (
+            <Text
+              style={[
+                {
+                  color: colors.text,
+                  fontWeight: "900",
+                  fontSize: 13,
+                  marginBottom: 4,
+                },
+                titleStyle,
+              ]}
+            >
+              {title}
+            </Text>
+          )}
+
+          {!!body &&
+            (bodyScrollMaxHeight ? (
+              <ScrollView
+                style={{ maxHeight: bodyScrollMaxHeight }}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text
+                  style={[
+                    {
+                      color: colors.subtext,
+                      fontWeight: "700",
+                      fontSize: 12,
+                      lineHeight: 16,
+                    },
+                    bodyStyle,
+                  ]}
+                >
+                  {body}
+                </Text>
+              </ScrollView>
+            ) : (
+              <Text
+                style={[
+                  {
+                    color: colors.subtext,
+                    fontWeight: "700",
+                    fontSize: 12,
+                    lineHeight: 16,
+                  },
+                  bodyStyle,
+                ]}
+              >
+                {body}
+              </Text>
+            ))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -60,7 +200,6 @@ export default function NovaBubble({
         style,
       ]}
     >
-      {/* ✅ UNE SEULE image Nova */}
       <Image
         source={source}
         resizeMode="contain"
@@ -73,7 +212,6 @@ export default function NovaBubble({
         ]}
       />
 
-      {/* Bulle */}
       <View
         style={[
           {
@@ -89,7 +227,6 @@ export default function NovaBubble({
           bubbleStyle,
         ]}
       >
-        {/* petit “pointeur” de bulle */}
         <View
           style={{
             position: "absolute",
@@ -102,6 +239,7 @@ export default function NovaBubble({
             borderBottomWidth: 1,
             borderColor: colors.border,
             transform: [{ rotate: "45deg" }],
+            zIndex: 0,
           }}
         />
 
@@ -121,21 +259,43 @@ export default function NovaBubble({
           </Text>
         )}
 
-        {!!body && (
-          <Text
-            style={[
-              {
-                color: colors.subtext,
-                fontWeight: "700",
-                fontSize: 12,
-                lineHeight: 16,
-              },
-              bodyStyle,
-            ]}
-          >
-            {body}
-          </Text>
-        )}
+        {!!body &&
+          (bodyScrollMaxHeight ? (
+            <ScrollView
+              style={{ maxHeight: bodyScrollMaxHeight }}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text
+                style={[
+                  {
+                    color: colors.subtext,
+                    fontWeight: "700",
+                    fontSize: 12,
+                    lineHeight: 16,
+                  },
+                  bodyStyle,
+                ]}
+              >
+                {body}
+              </Text>
+            </ScrollView>
+          ) : (
+            <Text
+              style={[
+                {
+                  color: colors.subtext,
+                  fontWeight: "700",
+                  fontSize: 12,
+                  lineHeight: 16,
+                },
+                bodyStyle,
+              ]}
+            >
+              {body}
+            </Text>
+          ))}
       </View>
     </View>
   );

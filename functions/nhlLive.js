@@ -3,8 +3,64 @@ import { onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db, FieldValue, logger, apiWebSchedule, apiWebPbp } from "./utils.js";
 import { todayAppYmd, addDaysToYmd } from "./ProphetikDate.js";
+import {
+  isRecentlyFinal,
+  isWithinPregameWindow,
+  parseStartMs,
+  shallowFieldsEqual,
+} from "./shared/liveIngestCostUtils.js";
+import {
+  LIVE_LEAGUES,
+  computeNhlDayMode,
+  logLiveControlDecision,
+  readLiveControl,
+  shouldRefreshModeCheck,
+  shouldRunHeavyIngest,
+  writeLiveControl,
+} from "./shared/liveControl.js";
+import {
+  buildNhlBoardEntryFromSchedule,
+  compactNhlBoardEntry,
+  upsertLiveBoard,
+} from "./shared/liveBoard.js";
 
 const NHL_HEADSHOT_SEASON = "20242025";
+
+const NHL_LIVE_DOC_COMPARE_KEYS = [
+  "homeAbbr",
+  "awayAbbr",
+  "homeScore",
+  "awayScore",
+  "state",
+  "isLive",
+  "isFinal",
+  "period",
+  "periodType",
+  "timeRemaining",
+  "secondsRemaining",
+  "clockRunning",
+  "inIntermission",
+  "displayPeriod",
+  "maxPeriods",
+];
+
+function shouldPollNhlGame(g = {}, existingDoc = null, nowMs = Date.now()) {
+  const state = String(g.gameState || g.gameScheduleState || "").toUpperCase();
+
+  if (["LIVE", "CRIT", "STARTED"].includes(state)) return true;
+
+  if (["FINAL", "OFF"].includes(state)) {
+    const finalizedAt = Number(existingDoc?.finalizedAt || 0);
+    if (!finalizedAt) return true;
+    return isRecentlyFinal(finalizedAt, nowMs);
+  }
+
+  const startMs = parseStartMs(g.startTimeUTC || g.startTimeUtc);
+  if (isWithinPregameWindow(startMs, nowMs)) return true;
+  if (startMs && nowMs >= startMs && nowMs <= startMs + 30 * 60 * 1000) return true;
+
+  return false;
+}
 
 // ---------- Helpers ----------
 function normTeamAbbr(raw) {
@@ -103,26 +159,74 @@ function isGoalPlay(play) {
 }
 
 // ---------- Main ----------
-async function runUpdateNhlLiveGames(forYmd) {
+async function runUpdateNhlLiveGames(forYmd, options = {}) {
+  const { forceRun = false, source = "cron" } = options;
   const ymd =
     typeof forYmd === "string" && forYmd.length >= 10 ? forYmd.slice(0, 10) : todayAppYmd();
 
-  logger.info("[updateNhlLiveGames] tick", { ymd, forYmd });
+  const nowMs = Date.now();
+  const league = LIVE_LEAGUES.NHL;
 
-  const resolvePlayer = createPlayerResolver();
+  const stats = {
+    ymd,
+    source,
+    games: 0,
+    polled: 0,
+    skipped: 0,
+    unchanged: 0,
+    written: 0,
+    mode: null,
+    skippedHeavy: false,
+    skippedModeCheck: false,
+  };
+
+  const control = await readLiveControl(league, ymd);
+  if (!shouldRefreshModeCheck({ control, nowMs, forceRun })) {
+    stats.skippedModeCheck = true;
+    stats.mode = control?.mode || null;
+    logLiveControlDecision(league, ymd, { action: "skip_mode_check", mode: stats.mode, source });
+    return stats;
+  }
+
+  logger.info("[updateNhlLiveGames] tick", { ymd, forYmd, source, forceRun });
 
   let sched;
   try {
     sched = await apiWebSchedule(ymd);
   } catch (e) {
     logger.error("[updateNhlLiveGames] apiWebSchedule failed", { ymd, error: e?.message || String(e) });
-    return;
+    return stats;
   }
 
   const day = Array.isArray(sched?.gameWeek) ? sched.gameWeek.find((d) => d?.date === ymd) : null;
   const games = day ? day.games || [] : Array.isArray(sched?.games) ? sched.games : [];
 
-  logger.info("[updateNhlLiveGames] games found", { ymd, count: games.length });
+  stats.games = games.length;
+  const mode = computeNhlDayMode(games, nowMs);
+  stats.mode = mode;
+
+  await writeLiveControl(league, ymd, {
+    mode,
+    lastModeCheckAt: nowMs,
+    gamesOnSchedule: games.length,
+    source,
+  });
+
+  if (!shouldRunHeavyIngest({ mode, lastHeavyRunAt: control?.lastHeavyRunAt, nowMs, forceRun })) {
+    stats.skippedHeavy = true;
+    logLiveControlDecision(league, ymd, {
+      action: "skip_heavy",
+      mode,
+      source,
+      games: games.length,
+    });
+    return stats;
+  }
+
+  const resolvePlayer = createPlayerResolver();
+  const boardGames = [];
+
+  logger.info("[updateNhlLiveGames] games found", { ymd, count: games.length, mode });
 
   for (const g of games) {
     const gameId = String(g?.id || "");
@@ -131,6 +235,19 @@ async function runUpdateNhlLiveGames(forYmd) {
     const gameRef = db.collection("nhl_live_games").doc(gameId);
 
     try {
+      const existingSnap = await gameRef.get();
+      const existing = existingSnap.exists ? existingSnap.data() || {} : null;
+
+      if (!shouldPollNhlGame(g, existing, nowMs)) {
+        stats.skipped += 1;
+        boardGames.push(
+          compactNhlBoardEntry(existing || buildNhlBoardEntryFromSchedule(g, ymd), gameId)
+        );
+        continue;
+      }
+
+      stats.polled += 1;
+
       const homeAbbr = normTeamAbbr(g.homeTeam?.abbrev || g.homeTeamAbbrev || g.homeTeam);
       const awayAbbr = normTeamAbbr(g.awayTeam?.abbrev || g.awayTeamAbbrev || g.awayTeam);
 
@@ -163,27 +280,6 @@ async function runUpdateNhlLiveGames(forYmd) {
         if (typeof schedClock.running === "boolean") schedClockRunning = schedClock.running;
         if (typeof schedClock.inIntermission === "boolean") schedInIntermission = schedClock.inIntermission;
       }
-
-      // Write base (IMPORTANT: write BOTH ymd and date for compatibility)
-      const baseUpdate = {
-        gameId,
-        ymd,       // ✅ new
-        date: ymd, // ✅ legacy compatibility
-        homeAbbr,
-        awayAbbr,
-        homeScore,
-        awayScore,
-        startTimeUTC: g.startTimeUTC || g.startTimeUtc || null,
-        state,
-        isLive,
-        isFinal,
-        period: schedPeriod,
-        periodType: schedPeriodType,
-        venue: g.venue?.default || g.venueName || null,
-        updatedAt: FieldValue.serverTimestamp(),
-      };
-
-      await gameRef.set(baseUpdate, { merge: true });
 
       // PBP for live/final
       let pbp = null;
@@ -256,33 +352,50 @@ async function runUpdateNhlLiveGames(forYmd) {
         finalPeriodType = pbpPeriodType ?? schedPeriodType ?? null;
       }
 
-      const clockPatch = {
-        updatedAt: FieldValue.serverTimestamp(),
-      };
-      if (finalPeriod !== null) clockPatch.period = finalPeriod;
-      if (finalPeriodType !== null) clockPatch.periodType = finalPeriodType;
-
-      if (timeRemaining !== null) clockPatch.timeRemaining = timeRemaining;
-      if (secondsRemaining !== null) clockPatch.secondsRemaining = secondsRemaining;
-      if (clockRunning !== null) clockPatch.clockRunning = clockRunning;
-      if (inIntermission !== null) clockPatch.inIntermission = inIntermission;
-      if (displayPeriod !== null) clockPatch.displayPeriod = displayPeriod;
-      if (maxPeriods !== null) clockPatch.maxPeriods = maxPeriods;
-
-      await gameRef.set(clockPatch, { merge: true });
-
-      logger.info("[updateNhlLiveGames] clock-update", {
+      const docPatch = {
         gameId,
+        ymd,
+        date: ymd,
+        homeAbbr,
+        awayAbbr,
+        homeScore,
+        awayScore,
+        startTimeUTC: g.startTimeUTC || g.startTimeUtc || null,
         state,
-        timeRemaining,
-        secondsRemaining,
-        clockRunning,
-        inIntermission,
-        displayPeriod,
-        maxPeriods,
-        period: finalPeriod,
-        periodType: finalPeriodType,
-      });
+        isLive,
+        isFinal,
+        period: finalPeriod ?? schedPeriod ?? null,
+        periodType: finalPeriodType ?? schedPeriodType ?? null,
+        venue: g.venue?.default || g.venueName || null,
+      };
+
+      if (timeRemaining !== null) docPatch.timeRemaining = timeRemaining;
+      if (secondsRemaining !== null) docPatch.secondsRemaining = secondsRemaining;
+      if (clockRunning !== null) docPatch.clockRunning = clockRunning;
+      if (inIntermission !== null) docPatch.inIntermission = inIntermission;
+      if (displayPeriod !== null) docPatch.displayPeriod = displayPeriod;
+      if (maxPeriods !== null) docPatch.maxPeriods = maxPeriods;
+
+      if (isFinal && !existing?.finalizedAt) {
+        docPatch.finalizedAt = nowMs;
+      } else if (existing?.finalizedAt) {
+        docPatch.finalizedAt = existing.finalizedAt;
+      }
+
+      if (existing && shallowFieldsEqual(existing, docPatch, NHL_LIVE_DOC_COMPARE_KEYS)) {
+        stats.unchanged += 1;
+      } else {
+        await gameRef.set(
+          {
+            ...docPatch,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        stats.written += 1;
+      }
+
+      boardGames.push(compactNhlBoardEntry({ ...(existing || {}), ...docPatch }, gameId));
 
       // No goals if not live/final
       if (!isLive && !isFinal) continue;
@@ -422,11 +535,29 @@ async function runUpdateNhlLiveGames(forYmd) {
       }
     } catch (err) {
       logger.error("[updateNhlLiveGames] game failed", { gameId, error: err?.message || String(err) });
+      boardGames.push(buildNhlBoardEntryFromSchedule(g, ymd));
       continue;
     }
   }
 
-  logger.info("[updateNhlLiveGames] done", { ymd });
+  try {
+    await upsertLiveBoard(league, ymd, boardGames);
+  } catch (err) {
+    logger.warn("[updateNhlLiveGames] live board upsert failed", {
+      ymd,
+      error: err?.message || String(err),
+    });
+  }
+
+  await writeLiveControl(league, ymd, {
+    mode,
+    lastHeavyRunAt: nowMs,
+    lastHeavyStats: stats,
+    boardGameCount: boardGames.length,
+  });
+
+  logger.info("[updateNhlLiveGames] done", stats);
+  return stats;
 }
 
 // ---------- Exports ----------
@@ -436,8 +567,8 @@ export const updateNhlLiveGamesNow = onCall({ region: "us-central1" }, async (re
       ? request.data.date.slice(0, 10)
       : null;
 
-  await runUpdateNhlLiveGames(ymd);
-  return { ok: true, ymd: ymd || todayAppYmd() };
+  const stats = await runUpdateNhlLiveGames(ymd, { forceRun: true, source: "callable" });
+  return { ok: true, ymd: ymd || todayAppYmd(), stats };
 });
 
 export const updateNhlLiveGamesCron = onSchedule(
@@ -452,9 +583,9 @@ export const updateNhlLiveGamesCron = onSchedule(
 
     if (hour < 3) {
       const yesterdayYmd = addDaysToYmd(todayYmd, -1);
-      await runUpdateNhlLiveGames(yesterdayYmd);
+      await runUpdateNhlLiveGames(yesterdayYmd, { source: "cron" });
     }
 
-    await runUpdateNhlLiveGames(todayYmd);
+    await runUpdateNhlLiveGames(todayYmd, { source: "cron" });
   }
 );

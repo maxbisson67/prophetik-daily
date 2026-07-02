@@ -121,6 +121,55 @@ export function getPlayerSeasonStatLines(player, league, seasonPair) {
   return lines;
 }
 
+export function getFgcPlayerStatChips(player, league, seasonPair) {
+  const L = String(league || "NHL").toUpperCase();
+  const stats = getSeasonStats(player?.statsBySeason, seasonPair?.current);
+  if (!stats || typeof stats !== "object") return [];
+
+  if (L === "MLB") {
+    if (!hasMlbStats(stats)) return [];
+    const chips = [];
+    const rbi = Number(stats.rbi);
+    const hr = Number(stats.homeRuns);
+    const gp = Number(stats.gamesPlayed);
+    if (Number.isFinite(rbi)) chips.push({ key: "rbi", value: String(rbi), label: "RBI" });
+    if (Number.isFinite(hr)) chips.push({ key: "hr", value: String(hr), label: "HR" });
+    if (stats.battingAverage) chips.push({ key: "avg", value: String(stats.battingAverage), label: "AVG" });
+    else if (stats.ops) chips.push({ key: "ops", value: String(stats.ops), label: "OPS" });
+    if (gp > 0) chips.push({ key: "gp", value: String(gp), label: "GP" });
+    return chips;
+  }
+
+  if (!hasNhlStats(stats)) return [];
+
+  const g = Number(stats.goals) || 0;
+  const a = Number(stats.assists) || 0;
+  const pts = Number(stats.points) || g + a;
+  const gp = Number(stats.gamesPlayed) || 0;
+  const chips = [
+    { key: "g", value: String(g), label: "G" },
+    { key: "a", value: String(a), label: "A" },
+    { key: "pts", value: String(pts), label: "PTS" },
+  ];
+  if (gp > 0) chips.push({ key: "gp", value: String(gp), label: "GP" });
+  return chips;
+}
+
+export function getFgcPlayerPreviousSeasonLine(player, league, seasonPair) {
+  const L = String(league || "NHL").toUpperCase();
+  const previousId = seasonPair?.previous;
+  if (!previousId) return null;
+  const stats = getSeasonStats(player?.statsBySeason, previousId);
+  const formatLine = L === "MLB" ? formatMlbStatsLine : formatNhlStatsLine;
+  const line = formatLine(stats);
+  if (!line) return null;
+  return {
+    seasonId: String(previousId),
+    label: formatSeasonLabel(L, previousId),
+    line,
+  };
+}
+
 export function getPlayerSortValue(player, league, seasonPair) {
   const L = String(league || "NHL").toUpperCase();
   const statsBySeason = player?.statsBySeason || {};

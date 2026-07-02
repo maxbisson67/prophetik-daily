@@ -1,5 +1,7 @@
 import * as logger from "firebase-functions/logger";
 import { sendPushToGroup } from "../utils/pushUtils.js";
+import { pushTitleWithGroup } from "../groups/groupDisplayUtils.js";
+import { NOTIFICATION_PREF_KEYS } from "../notifications/notificationPrefs.js";
 
 const FGC_LABEL_BY_SPORT = {
   MLB: "Premier point produit",
@@ -24,12 +26,19 @@ function challengeLabel(challenge, sport) {
   return null;
 }
 
-export function buildAutopilotNotificationPayload({ groupId, sport, createdChallenges, gameYmd }) {
+export function buildAutopilotNotificationPayload({
+  groupId,
+  groupName,
+  sport,
+  createdChallenges,
+  gameYmd,
+}) {
   const items = Array.isArray(createdChallenges) ? createdChallenges.filter(Boolean) : [];
   if (!items.length) return null;
 
   const labels = items.map((c) => challengeLabel(c, sport)).filter(Boolean);
-  const title = items.length === 1 ? "Nouveau défi disponible" : "Nouveaux défis disponibles";
+  const titleBase = items.length === 1 ? "Nouveau défi disponible" : "Nouveaux défis disponibles";
+  const title = pushTitleWithGroup(titleBase, groupName);
   const summary = labels.length ? labels.join(" • ") : "De nouveaux défis";
   const body = `${summary} • Fais tes choix avant le début des matchs.`;
 
@@ -62,12 +71,14 @@ export function buildAutopilotNotificationPayload({ groupId, sport, createdChall
 
 export async function notifyGroupOfAutopilotChallenges({
   groupId,
+  groupName,
   sport,
   createdChallenges,
   gameYmd,
 }) {
   const payload = buildAutopilotNotificationPayload({
     groupId,
+    groupName,
     sport,
     createdChallenges,
     gameYmd,
@@ -86,6 +97,7 @@ export async function notifyGroupOfAutopilotChallenges({
       data: payload.data,
       channelId: "challenges_v2",
       logTag: "groupAutopilot",
+      notificationPrefKey: NOTIFICATION_PREF_KEYS.MORNING_CHALLENGES,
     });
 
     logger.info("[GROUP AUTOPILOT] push done", {

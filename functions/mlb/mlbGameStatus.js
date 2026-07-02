@@ -46,3 +46,13 @@ export function isMlbScheduleGameSelectable(game = {}) {
   if (isMlbGamePostponed(game?.status || {})) return false;
   return true;
 }
+
+export function isMlbScheduleGameFinal(game = {}) {
+  if (isMlbGamePostponed(game?.status || {})) return false;
+
+  const abstract = String(game?.status?.abstractGameState || "").toLowerCase();
+  const detailed = String(game?.status?.detailedState || "").toLowerCase();
+  const coded = String(game?.status?.statusCode || "").toLowerCase();
+
+  return abstract === "final" || detailed.includes("final") || coded === "f";
+}

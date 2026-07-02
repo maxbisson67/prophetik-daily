@@ -12,6 +12,8 @@ const MLB_STANDINGS_URL = "https://statsapi.mlb.com/api/v1/standings";
 const MLB_SPORT_ID = 1;
 const MLB_LEAGUE_IDS = [103, 104]; // AL, NL
 
+import { resolveMlbAbbrFromTeam } from "./mlbTeamAbbr.js";
+
 function getCurrentSeason(date = new Date()) {
   return String(date.getUTCFullYear());
 }
@@ -114,13 +116,7 @@ function normalizeTeamRecord(teamRecord) {
     team: {
       id: teamId,
       name: toStr(team?.name, ""),
-      abbreviation: toStr(
-        team?.abbreviation ||
-          team?.teamCode ||
-          team?.fileCode ||
-          team?.clubName,
-        ""
-      ),
+      abbreviation: resolveMlbAbbrFromTeam(team),
       link: toStr(team?.link, ""),
       logo: teamId ? `https://www.mlbstatic.com/team-logos/${teamId}.svg` : null,
     },

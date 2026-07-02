@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, ScrollView } from 'react-native';
 import { Stack } from 'expo-router';
 import { useTheme } from '@src/theme/ThemeProvider';
 import { useLanguage } from '@src/i18n/LanguageProvider';
 import i18n from '@src/i18n/i18n';
 import crashlytics from '@react-native-firebase/crashlytics';
 import * as Application from 'expo-application';
+import NotificationPrefsSection from '@src/notifications/NotificationPrefsSection';
 
 export default function SettingsScreen() {
   const { mode, setMode, colors } = useTheme();
@@ -45,7 +46,10 @@ export default function SettingsScreen() {
     <>
       <Stack.Screen options={{ title: i18n.t('settings.title') }} />
 
-      <View style={{ flex: 1, padding: 16, backgroundColor: colors.background }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      >
         <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 12 }}>
           {i18n.t('settings.appearance')}
         </Text>
@@ -73,6 +77,12 @@ export default function SettingsScreen() {
         <Item label="Français" selected={lang === 'fr'} onPress={() => setLang('fr')} />
         <Item label="English" selected={lang === 'en'} onPress={() => setLang('en')} />
 
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800', marginVertical: 16 }}>
+          {i18n.t('settings.notifications.title', { defaultValue: 'Notifications' })}
+        </Text>
+
+        <NotificationPrefsSection colors={colors} />
+
         <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800', marginTop: 24, marginBottom: 12 }}>
           Version
         </Text>
@@ -93,7 +103,7 @@ export default function SettingsScreen() {
             {Platform.OS === 'android' ? 'Version code' : 'Build number'}: {buildVersion}
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </>
   );
 }

@@ -1,0 +1,55 @@
+{
+  "sport": "MLB",
+  "type": "concept",
+  "category": "Challenge Strategy",
+  "key": "fgc_away_first_inning",
+  "status": "published",
+  "challengeTypes": ["FGC"],
+  "translations": {
+    "fr": {
+      "title": "Visiteur et ordre de frappe — haut de la 1re manche",
+      "shortAnswer": "Quand tu choisis un joueur de l'équipe visiteuse, son équipe frappe en premier (haut de la 1re). Ce n'est pas un avantage automatique : tout dépend de sa place dans l'ordre de frappe et des chemins possibles pour produire le premier RBI.",
+      "beginnerExplanation": "En haut de la 1re manche, les bases sont vides au premier passage au bâton. Le premier frappeur ne peut produire un RBI que avec un circuit (personne à faire avancer). Le deuxième frappeur a un peu plus de possibilités si le leadoff a atteint une base (simple, walk, etc.). Les frappeurs 3, 4 et 5 sont souvent les plus intéressants parce qu'ils peuvent produire avec des coureurs déjà en place.",
+      "intermediateExplanation": "Frapper en premier dans le match ≠ meilleure probabilité de premier RBI. Le leadoff doit soit frapper un circuit, soit espérer qu'un coéquipier produise avant lui — ce qui ne peut pas arriver en haut de 1re. Le deuxième trou du lineup cumule le leadoff plus ses propres options (circuit ou coup productif). Le cœur d'ordre (3-4-5) maximise les chances si 1-2 mettent des coureurs en jeu. Pèse le pouvoir du bâton (HR) contre la place dans l'ordre.",
+      "expertExplanation": "Le premier RBI est un événement séquentiel : probabilité = P(m séquences offensives avant la mienne) × P(RBI | ma place, bases). En haut de 1re visiteur, la place dans l'ordre structure fortement les chemins RBI (solo HR vs RBI sur coup). La variance reste élevée — même un 4e frappeur peut rester sur le banc si l'équipe ne bat pas assez de monde avant lui.",
+      "prophetikUse": "Dans le Défi premier point produit, si ton joueur est visiteur, demande-toi : bat-il assez tôt dans l'ordre pour voir des coureurs en 1re manche ? Un power batteur en 4e peut valoir plus qu'un leadoff contact. Nova t'aide à croiser place dans l'ordre, pouvoir (HR/RBI) et matchup lanceur.",
+      "commonMistakes": [
+        "Croire que visiteur = avantage parce que l'équipe frappe en premier.",
+        "Choisir le leadoff uniquement parce qu'il bat en premier dans le match.",
+        "Ignorer que sans coureurs, seul le circuit produit un RBI au premier passage.",
+        "Oublier que le cœur d'ordre (3-4-5) concentre souvent les premières opportunités productives."
+      ],
+      "examples": [
+        "Leadoff visiteur : profil circuit ou vitesse utile, mais RBI limité aux HR en bases vides.",
+        "3e ou 4e frappeur visiteur avec HR saison solide : profil classique si 1-2 atteignent les buts.",
+        "Joueur domicile : même logique en bas de 1re, mais seulement si le visiteur n'a pas déjà produit en haut de 1re."
+      ]
+    },
+    "en": {
+      "title": "Away team and lineup spot — top of the 1st",
+      "shortAnswer": "When you pick a player from the visiting team, they bat first (top of the 1st). That is not an automatic edge: first-RBI paths depend heavily on lineup spot and how runners reach base.",
+      "beginnerExplanation": "At the top of the 1st, bases are empty for the leadoff hitter. The #1 hitter can only drive in the first RBI with a home run. The #2 hitter has slightly more paths if the leadoff reaches base. Hitters batting 3rd, 4th and 5th are often the sweet spot because teammates ahead can put runners on base first.",
+      "intermediateExplanation": "Batting first in the game ≠ best first-RBI odds. A leadoff hitter needs a solo HR or must wait for someone else to drive in a run—which cannot happen before their first plate appearance in the top of the 1st. The #2 spot adds the leadoff's on-base paths plus their own (HR or hit). Heart-of-the-order hitters (3–5) maximize RBI chances if 1–2 reach base. Balance raw power (HR) with lineup spot.",
+      "expertExplanation": "First RBI is sequential: probability depends on offensive sequences before your pick's plate appearance and RBI paths given base state. In the away top of the 1st, lineup spot strongly shapes RBI paths (solo HR vs run-scoring hit). High variance remains—even a cleanup hitter may not bat if the top of the order goes quickly.",
+      "prophetikUse": "In the First Run Challenge, if your player is on the road, ask: will they bat high enough in the order to see baserunners in the 1st? A power bat in the cleanup spot may beat a contact leadoff. Nova helps you combine lineup spot, power (HR/RBI) and pitching matchup.",
+      "commonMistakes": [
+        "Assuming away team = advantage because they bat first.",
+        "Picking the leadoff hitter only because they bat first in the game.",
+        "Ignoring that with empty bases, only a home run produces an RBI on the first trip.",
+        "Overlooking that spots 3–5 often see the first productive RBI chances."
+      ],
+      "examples": [
+        "Away leadoff: HR or speed profile, but RBI paths mostly solo HR with empty bases.",
+        "Away #3 or #4 with solid season HR: classic profile if 1–2 reach base.",
+        "Home hitter: same empty-base logic in the bottom of the 1st, but only if the visitor did not already produce in the top of the 1st."
+      ]
+    }
+  },
+  "relatedTopics": ["first_rbi", "rbi", "platoon_advantage"],
+  "tags": ["first_rbi", "mlb", "fgc", "lineup", "away", "visiteur", "ordre_de_frappe", "intermediate"],
+  "difficulty": "intermediate",
+  "confidence": "high",
+  "sourceName": "Prophetik Editorial",
+  "sourceUrl": null,
+  "version": 1
+}

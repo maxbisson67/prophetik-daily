@@ -11,6 +11,8 @@ const db = getFirestore();
 const storage = getStorage();
 const bucket = storage.bucket();
 
+const SUPPORTED_JERSEY_SPORTS = new Set(["hockey", "baseball"]);
+
 function normalizeName(value) {
   return String(value || "")
     .trim()
@@ -292,8 +294,11 @@ export const generateUserJersey = onCall(
     }
 
     const sport = String(jersey.sport || "").toLowerCase();
-    if (sport !== "hockey") {
-      throw new HttpsError("failed-precondition", "Seul le hockey est supporté pour l'instant.");
+    if (!SUPPORTED_JERSEY_SPORTS.has(sport)) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Sport non supporté pour les jerseys: ${sport || "?"}. Sports permis: hockey, baseball.`
+      );
     }
 
     const frontPath = String(jersey.templateFrontPath || "").trim();

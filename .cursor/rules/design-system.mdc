@@ -1,0 +1,64 @@
+---
+description: Design system Prophetik Daily — couleurs, espacements, typo, accessibilité, composants RN
+globs: "{app,src}/**/*.{js,jsx,tsx}"
+alwaysApply: false
+---
+
+# Design system — Prophetik Daily (React Native)
+
+## Composants à réutiliser (ne pas dupliquer)
+
+- Cartes / sections : `src/achievements/components/prophetikCardStyles.js` (`prophetikLeftAccentCardStyle`, `prophetikCardShadow`, `ProphetikProgressBar`, `HOME_SPACING`)
+- Thème : `useTheme()` depuis `src/theme/ThemeProvider.js` — `colors.background`, `colors.card`, `colors.text`, `colors.subtext`, `colors.border`, `colors.primary`
+- Rouge marque : `PROPHETIK_RED` (`#b91c1c`) — préférer à une nouvelle constante locale `RED`
+- CTA défi participant : `src/defis/participant/participantCtaStyles.js` (`PARTICIPANT_PRIMARY_CTA`, `PARTICIPANT_MODIFY_CTA`)
+- Bandeau section défi : `src/home/components/DefiSectionIntroBand.js` — **ne pas renforcer** ; garder discret
+- En-tête accueil : `ProfileHeaderCard`, `StreakHeroCard`, `GroupsToggleRow`
+- Item défi : `DefiListItem`, `DefiTypeLeading`, `ParticipantTaskStatusChip`
+- Icônes : `ProphetikIcons`, `SportGlyph`, `TeamLogoBadge`
+- Nova : `src/ui/NovaGuide.js`, `NovaBubble.js` — accent violet **uniquement** pour Nova
+
+## Palette sémantique (peu de couleurs visibles à la fois)
+
+| Rôle | Usage | Référence |
+|------|--------|-----------|
+| Rouge | Actions prioritaires, CTA principal | `#b91c1c` / `colors.primary` |
+| Vert | Progression, succès | `#22c55e` |
+| Bleu | Information neutre | `#3b82f6` |
+| Jaune | Récompenses, crédits | tokens à centraliser si absent |
+| Violet | **Nova uniquement** | pas pour les défis génériques |
+
+Ne pas ajouter de couleur hardcodée sans motif sémantique clair.
+
+## Bordures et surfaces
+
+- Préférer **espacement + surfaces + contraste** aux contours multiples
+- Éviter empiler `borderWidth` + `borderLeftWidth` + `borderBottomWidth` sur la même carte
+- `prophetikSectionCardStyle` : accent gauche OK ; ne pas ajouter d'autres bordures décoratives
+
+## Grille d'espacement (multiples de 4)
+
+Utiliser : **4, 8, 12, 16, 20, 24** — pas de valeurs arbitraires (ex. 10, 14, 18).
+
+```javascript
+// ❌ padding: 14, marginBottom: 10
+// ✅ padding: 12 ou 16, marginBottom: 8 ou 12
+```
+
+## Typographie
+
+- **Chiffres > libellés** : stats en `fontWeight: "800"`/`"900"`, libellés en `colors.subtext`, taille inférieure
+- Hiérarchie : titre → stat → description → secondaire (décroissant en taille et contraste)
+- Titres défi / match / CTA = éléments les plus visibles sur une carte défi
+
+## Accessibilité
+
+- Touch targets ≥ **44px** (`minHeight` / `paddingVertical` sur `TouchableOpacity`)
+- Contraste WCAG AA : texte principal sur `colors.card`, secondaire via `colors.subtext`
+- État jamais **uniquement** par couleur : ajouter icône, label ou forme (`ParticipantTaskStatusChip`, chips texte)
+
+## North star — écran Aujourd'hui (`AccueilScreen`)
+
+En moins de 5 s, l'utilisateur doit comprendre : groupe actif, avancement saison, défis restants, prochaine action.
+
+Avant de modifier l'accueil : lire le skill `.cursor/skills/design-system/SKILL.md` et produire une analyse, pas de code direct.

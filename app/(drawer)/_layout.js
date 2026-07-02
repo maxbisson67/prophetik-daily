@@ -38,7 +38,10 @@ function getHeaderTitle(route) {
     case "ClassementScreen":
       return i18n.t("tabs.leaderboard", { defaultValue: "Classement" });
 
-    case "BadgesScreen":
+    case "LiveScreen":
+      return i18n.t("tabs.matchLive", { defaultValue: "En direct" });
+
+    case "progression/index":
       return i18n.t("tabs.badges", { defaultValue: "Badges" });
 
     case "GroupsScreen":
@@ -273,6 +276,15 @@ function CustomDrawerContent(props) {
         )}
       />
 
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t("tabs.matchLive", { defaultValue: "En direct" })}
+        onPress={() => goTab("LiveScreen")}
+        icon={({ size }) => (
+          <MaterialCommunityIcons name="broadcast" size={size} color={colors.text} />
+        )}
+      />
+
       <Separator />
 
       <SectionLabel>
@@ -285,6 +297,15 @@ function CustomDrawerContent(props) {
         onPress={() => closeAndPush("/(drawer)/profile")}
         icon={({ size }) => (
           <Ionicons name="person-circle-outline" size={size} color={colors.text} />
+        )}
+      />
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t("tabs.badges", { defaultValue: "Badges" })}
+        onPress={() => closeAndPush("/(drawer)/progression")}
+        icon={({ size }) => (
+          <Ionicons name="ribbon-outline" size={size} color={colors.text} />
         )}
       />
 
@@ -329,15 +350,6 @@ function CustomDrawerContent(props) {
         onPress={() => closeAndPush("/(drawer)/settings")}
         icon={({ size }) => (
           <Ionicons name="settings-outline" size={size} color={colors.text} />
-        )}
-      />
-
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t("tabs.help", { defaultValue: "Aide" })}
-        onPress={() => closeAndPush("/(drawer)/howitworks")}
-        icon={({ size }) => (
-          <Ionicons name="help-circle-outline" size={size} color={colors.text} />
         )}
       />
 

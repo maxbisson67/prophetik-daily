@@ -19,8 +19,14 @@ import TeamPredictionBundleHomeCard from "@src/defis/TeamPredictionBundleHomeCar
 import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
 import { listenRNFB } from "@src/home/firestoreListen";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
+import { PARTICIPANT_MODIFY_CTA, PARTICIPANT_PRIMARY_CTA } from "@src/defis/participant/participantCtaStyles";
+import { resolveTpSlotMatchStatus } from "@src/defis/match/matchTaskStatus";
+import TpMatchMetaColumn from "@src/defis/TpMatchMetaColumn";
+import { buildTpBundleTabProgress } from "@src/defis/tpTabProgress";
+import TpHomePredictionRow from "@src/defis/TpHomePredictionRow";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+import { getSlotLockedAt } from "@src/defis/tpDeadlineHelpers";
 import {
   getProphetikBusinessYmdCompact,
   getPreviousProphetikBusinessYmdCompact,
@@ -73,21 +79,6 @@ function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function formatTpPickLine(entry, league = "NHL") {
-  const away = entry?.predictedAwayScore;
-  const home = entry?.predictedHomeScore;
-  const score = `${away}-${home}`;
-  const outcome = safeAbbr(entry?.predictedOutcome);
-  const lg = String(league || "NHL").toUpperCase();
-
-  if (lg === "MLB" || outcome === "FINAL") return score;
-  if (outcome === "REG" || outcome === "OT" || outcome === "TB") {
-    return `${score} (${outcome})`;
-  }
-
-  return score;
-}
-
 function isChallengeStillActive(status) {
   const st = String(status || "").toLowerCase();
   return ["open", "locked", "live", "pending", "awaiting_result"].includes(st);
@@ -119,101 +110,51 @@ function shouldKeepVisible(challenge, businessYmdCompact) {
 
 /* ---------------- UI subcomponents ---------------- */
 
-function InfoBubbleTP({ colors }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <View
-      style={{
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.card2,
-        marginBottom: 10,
-        overflow: "hidden",
-      }}
-    >
-      <TouchableOpacity
-        onPress={() => setOpen((v) => !v)}
-        activeOpacity={0.85}
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-          <MaterialCommunityIcons
-            name="information-outline"
-            size={18}
-            color={colors.subtext}
-            style={{ marginTop: 1 }}
-          />
-          <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8, flex: 1 }}>
-            {i18n.t("tp.home.infoTitle", {
-              defaultValue: "Comment fonctionne ce défi?",
-            })}
-          </Text>
-        </View>
-
-        <MaterialCommunityIcons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={22}
-          color={colors.subtext}
-        />
-      </TouchableOpacity>
-
-      {open ? (
-        <View
-          style={{
-            paddingHorizontal: 12,
-            paddingBottom: 12,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-          }}
-        >
-          <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
-            {i18n.t("tp.home.infoBody", {
-              defaultValue:
-                "Choisis le pointage des confrontations proposées et cumule des points pour chaque bonne prédiction. Avec la bonne prédiction du pointage, cumule encore plus de points.",
-            })}
-          </Text>
-          <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
-            {i18n.t("tp.home.infoLockHint", {
-              defaultValue:
-                "Chaque match se verrouille 5 minutes avant le début. Tu peux compléter tes prédictions progressivement.",
-            })}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors }) {
+function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors, prominent = false }) {
   const away = safeAbbr(awayAbbr);
   const home = safeAbbr(homeAbbr);
   const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
   const awayTeam = lookupTeamByAbbr(league, away);
   const homeTeam = lookupTeamByAbbr(league, home);
+  const logoSize = prominent ? 28 : 22;
+  const abbrSize = prominent ? 16 : undefined;
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <TeamLogoBadge team={awayTeam} size={22} colors={colors} />
-      <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
+      <TeamLogoBadge team={awayTeam} size={logoSize} colors={colors} />
+      <Text
+        style={{
+          color: colors.text,
+          fontWeight: "900",
+          marginLeft: 8,
+          fontSize: abbrSize,
+        }}
+      >
         {away || "—"}
       </Text>
 
-      <Text style={{ color: colors.subtext, marginHorizontal: 10, fontWeight: "900" }}>
+      <Text
+        style={{
+          color: colors.subtext,
+          marginHorizontal: 10,
+          fontWeight: "900",
+          fontSize: abbrSize,
+        }}
+      >
         @
       </Text>
 
-      <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>
+      <Text
+        style={{
+          color: colors.text,
+          fontWeight: "900",
+          marginRight: 8,
+          fontSize: abbrSize,
+        }}
+      >
         {home || "—"}
       </Text>
-      <TeamLogoBadge team={homeTeam} size={22} colors={colors} />
+      <TeamLogoBadge team={homeTeam} size={logoSize} colors={colors} />
     </View>
   );
 }
@@ -264,8 +205,10 @@ export default function TeamPredictionHomeSection({
   currentGroupId = null,
   currentSport = "NHL",
   hintBundleId = null,
+  listenersEnabled = true,
   onHasChallengeChange,
   onCanCreateBundleChange,
+  onUserParticipatedChange,
 }) {
   const router = useRouter();
   const { user, authReady } = useAuth();
@@ -314,6 +257,44 @@ export default function TeamPredictionHomeSection({
 
   const hasAnyTpContent = !!bundle || legacyItems.length > 0;
 
+  const tpProgress = useMemo(() => {
+    if (bundle) {
+      const games = Array.isArray(bundle.games) ? bundle.games : [];
+      return buildTpBundleTabProgress({
+        games,
+        picks: bundleEntry?.picks || {},
+        picksCompletedCount: bundleEntry?.picksCompletedCount,
+        scheduleByGameId,
+      });
+    }
+
+    const total = legacyItems.length;
+    if (!total) return { done: 0, total: 0 };
+
+    const done = legacyItems.filter((ch) => !!myEntries[ch.id]).length;
+    let progress = { done, total };
+
+    if (progress.total <= 0 || progress.done >= progress.total) {
+      return progress;
+    }
+
+    const allLegacyExpired = legacyItems.every((ch) => {
+      const deadline = getDeadline(ch);
+      return deadline ? Date.now() >= deadline.getTime() : false;
+    });
+
+    if (allLegacyExpired) {
+      return { ...progress, expired: true };
+    }
+
+    return progress;
+  }, [bundle, bundleEntry, legacyItems, myEntries, scheduleByGameId]);
+
+  useEffect(() => {
+    if (typeof onUserParticipatedChange !== "function") return;
+    onUserParticipatedChange(tpProgress);
+  }, [tpProgress, onUserParticipatedChange]);
+
   useEffect(() => {
     if (typeof onHasChallengeChange === "function") {
       onHasChallengeChange(hasAnyTpContent);
@@ -324,7 +305,7 @@ export default function TeamPredictionHomeSection({
     if (typeof onCanCreateBundleChange === "function") {
       onCanCreateBundleChange(!bundle);
     }
-  }, [bundle, onCanCreateBundleChange]);
+  }, [bundle, onCanCreateBundleChange, currentGroupId, sportLeague]);
 
   /* ---------------- Bundles ---------------- */
 
@@ -332,13 +313,16 @@ export default function TeamPredictionHomeSection({
     const gid = String(currentGroupId || "").trim();
     const uid = String(user?.uid || "").trim();
 
-    if (!authReady || !gid || !uid) {
+    if (!listenersEnabled || !authReady || !gid || !uid) {
       if (authReady && !uid) {
         setBundle(null);
         setBundleEntry(null);
       }
       return;
     }
+
+    setBundle(null);
+    setBundleEntry(null);
 
     let cancelled = false;
 
@@ -434,40 +418,11 @@ export default function TeamPredictionHomeSection({
         `tpb:hint:${hintId}`,
         (err) => {
           console.log("[TeamPredictionHomeSection] bundle hint error", hintId, err?.message || err);
-        }
+        },
+        { screen: "AccueilScreen" }
       );
       unsubs.push(unsubHint);
     }
-
-    const queryRef = firestore()
-      .collection("team_prediction_bundles")
-      .where("groupId", "==", gid);
-
-    const unsubQuery = listenRNFB(
-      queryRef,
-      (snap) => {
-        if (cancelled) return;
-
-        const rows = (snap?.docs || [])
-          .map((d) => ({ id: d.id, ...(d?.data?.() || d?.data || {}) }))
-          .filter((b) => String(b?.league || sportLeague).toUpperCase() === sportLeague);
-
-        const best = pickTodayHomeBundle(rows, businessToday);
-        setBundle(best);
-        if (best) {
-          console.log("[TeamPredictionHomeSection] query bundle", {
-            groupId: gid,
-            selectedId: best.id,
-          });
-        }
-      },
-      `tpb:query:${gid}`,
-      (err) => {
-        console.log("[TeamPredictionHomeSection] bundle query error", err?.message || err);
-      }
-    );
-
-    unsubs.push(unsubQuery);
 
     return () => {
       cancelled = true;
@@ -477,7 +432,7 @@ export default function TeamPredictionHomeSection({
         } catch {}
       });
     };
-  }, [authReady, user?.uid, currentGroupId, sportLeague, hintBundleId]);
+  }, [listenersEnabled, authReady, user?.uid, currentGroupId, sportLeague, hintBundleId]);
 
   useEffect(() => {
     if (!user?.uid || !bundle?.id) {
@@ -655,8 +610,6 @@ export default function TeamPredictionHomeSection({
     return (
       <>
         <View style={{ marginBottom: 14 }}>
-          <InfoBubbleTP colors={colors} />
-
           <View
             style={{
               padding: 12,
@@ -680,8 +633,6 @@ export default function TeamPredictionHomeSection({
   return (
     <>
       <View style={{ marginBottom: 14 }}>
-        <InfoBubbleTP colors={colors} />
-
         <View style={{ gap: 10 }}>
           {bundle ? (
             <TeamPredictionBundleHomeCard
@@ -735,8 +686,9 @@ export default function TeamPredictionHomeSection({
               });
             };
 
-            const awayTeam = lookupTeamByAbbr(challengeLeague, awayAbbr);
-            const homeTeam = lookupTeamByAbbr(challengeLeague, homeAbbr);
+            const matchTask = resolveTpSlotMatchStatus(ch, {
+              scheduleStatus: scheduleInfo?.status,
+            });
 
             return (
               <View
@@ -749,10 +701,34 @@ export default function TeamPredictionHomeSection({
                   backgroundColor: colors.card,
                 }}
               >
-                <MatchupRow
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <MatchupRow
+                      awayAbbr={awayAbbr}
+                      homeAbbr={homeAbbr}
+                      sport={challengeLeague}
+                      colors={colors}
+                      prominent
+                    />
+                  </View>
+
+                  <TpMatchMetaColumn colors={colors} matchTask={matchTask} />
+                </View>
+
+                <TpHomePredictionRow
+                  pick={entry}
                   awayAbbr={awayAbbr}
                   homeAbbr={homeAbbr}
-                  sport={challengeLeague}
+                  league={challengeLeague}
+                  lockDeadline={getSlotLockedAt(ch) || deadline}
                   colors={colors}
                 />
 
@@ -771,57 +747,26 @@ export default function TeamPredictionHomeSection({
                   </Text>
                 </View>
 
-                {entry ? (
-                  <View
-                    style={{
-                      marginTop: 8,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                      {i18n.t("tp.home.myPick", { defaultValue: "Ton choix" })}
-                      {": "}
-                    </Text>
-
-                    <TeamLogoBadge team={awayTeam} size={18} colors={colors} />
-
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: "900",
-                        fontSize: 13,
-                        marginHorizontal: 6,
-                      }}
-                    >
-                      {formatTpPickLine(entry, challengeLeague)}
-                    </Text>
-
-                    <TeamLogoBadge team={homeTeam} size={18} colors={colors} />
-                  </View>
-                ) : null}
-
                 <View style={{ marginTop: 12, gap: 10 }}>
-                  {locked ? (
-                    <ResultsTabHint colors={colors} />
-                  ) : (
+                  <ResultsTabHint colors={colors} groupId={currentGroupId} />
+
+                  {!locked ? (
                     <TouchableOpacity
                       onPress={onPressPrimary}
                       activeOpacity={0.9}
-                      style={{
-                        width: "100%",
-                        paddingVertical: 10,
-                        borderRadius: 12,
-                        alignItems: "center",
-                        backgroundColor: "#b91c1c",
-                      }}
+                      style={
+                        hasEntry ? PARTICIPANT_MODIFY_CTA.button : PARTICIPANT_PRIMARY_CTA.button
+                      }
                     >
-                      <Text style={{ color: "#fff", fontWeight: "900" }}>
+                      <Text
+                        style={
+                          hasEntry ? PARTICIPANT_MODIFY_CTA.text : PARTICIPANT_PRIMARY_CTA.text
+                        }
+                      >
                         {ctaLabel}
                       </Text>
                     </TouchableOpacity>
-                  )}
+                  ) : null}
                 </View>
               </View>
             );

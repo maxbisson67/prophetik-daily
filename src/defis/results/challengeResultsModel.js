@@ -79,6 +79,11 @@ function tpBundleHasDecidedSlot(item) {
   return games.some((g) => normalizeStatus(g?.status) === "decided");
 }
 
+function tsDefiFirstGameStarted(item, nowMs = Date.now()) {
+  const firstGame = toDateAny(item?.firstGameUTC ?? item?.raw?.firstGameUTC);
+  return !!firstGame && firstGame.getTime() <= nowMs;
+}
+
 /** Afficher un défi passé dans Mes résultats (hors « Aujourd'hui »). */
 export function shouldShowPastDayResultItem(item, options = {}) {
   const displayStatus = resolveChallengeDisplayStatus(item, options);
@@ -89,6 +94,11 @@ export function shouldShowPastDayResultItem(item, options = {}) {
   if (item?.kind === "tp" && item?.subtype === "bundle") {
     if (!tpBundleHasDecidedSlot(item)) return false;
     return ["partial", "locked", "live", "pending"].includes(displayStatus);
+  }
+
+  if (item?.kind === "ts") {
+    if (["live", "awaiting_result"].includes(displayStatus)) return true;
+    if (tsDefiFirstGameStarted(item)) return true;
   }
 
   return false;

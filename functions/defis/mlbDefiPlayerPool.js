@@ -5,9 +5,28 @@ import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
 import { getMlbCurrentSeason } from "../players/seasonHelpers.js";
 import { buildEmptyMlbPitcher } from "../mlb/mlbProbablePitchers.js";
+import { bvpDocId, compactBvpForClient, resolveBvpStatsBatch } from "../mlb/mlbBvpStats.js";
 
-const POOL_SIZE = 150;
+const MAX_POOL_SIZE = 500;
 const GETALL_CHUNK = 400;
+
+function normalizeBattingAverageFromStats(d = {}) {
+  const raw = String(d.battingAverage ?? d.avg ?? "").trim();
+  if (raw && raw !== "0" && raw !== ".000") {
+    if (raw.startsWith(".")) return raw;
+    const n = num(raw);
+    if (n > 0 && n < 1) return n.toFixed(3).replace(/^0(?=\.)/, "");
+    if (n >= 1 && n <= 1000) return (n / 1000).toFixed(3).replace(/^0(?=\.)/, "");
+  }
+
+  const atBats = num(d.atBats, 0);
+  const hits = num(d.hits, 0);
+  if (atBats > 0) {
+    return (hits / atBats).toFixed(3).replace(/^0(?=\.)/, "");
+  }
+
+  return ".000";
+}
 
 function ymdCompact(ymd) {
   return String(ymd || "").replaceAll("-", "");
@@ -54,11 +73,17 @@ export async function loadMlbOpponentPitchersByTeam(gameDateYmd) {
     map.set(awayAbbr, {
       opponentTeamAbbr: homeAbbr,
       opponentProbablePitcher: homePitcher,
+      awayAbbr,
+      homeAbbr,
+      isHome: false,
     });
 
     map.set(homeAbbr, {
       opponentTeamAbbr: awayAbbr,
       opponentProbablePitcher: awayPitcher,
+      awayAbbr,
+      homeAbbr,
+      isHome: true,
     });
   });
 
@@ -117,6 +142,9 @@ export async function buildMlbDefiPlayerPool({
         injury: p.injury || null,
         opponentTeamAbbr: opponent?.opponentTeamAbbr || null,
         opponentProbablePitcher: opponent?.opponentProbablePitcher || buildEmptyMlbPitcher(),
+        awayAbbr: opponent?.awayAbbr || null,
+        homeAbbr: opponent?.homeAbbr || null,
+        isHome: opponent?.isHome ?? null,
       });
     });
   }
@@ -139,15 +167,19 @@ export async function buildMlbDefiPlayerPool({
       const hits = num(d.hits, 0);
       const homeRuns = num(d.homeRuns, 0);
       const gamesPlayed = num(d.gamesPlayed, 0);
+      const atBats = num(d.atBats, 0);
       const points = hits + rbi + homeRuns;
+      const battingAverage = normalizeBattingAverageFromStats(d);
 
       statsMap.set(pid, {
         runs,
         rbi,
         hits,
         homeRuns,
+        atBats,
         gamesPlayed,
         points,
+        battingAverage,
         pointsPerGame: gamesPlayed > 0 ? points / gamesPlayed : 0,
       });
     }
@@ -160,8 +192,10 @@ export async function buildMlbDefiPlayerPool({
       goals: num(st.hits, 0),
       assists: num(st.rbi, 0),
       hits: num(st.hits, 0),
+      atBats: num(st.atBats, 0),
       rbi: num(st.rbi, 0),
       homeRuns: num(st.homeRuns, 0),
+      battingAverage: String(st.battingAverage ?? ".000"),
       points: num(st.points, 0),
       gamesPlayed: num(st.gamesPlayed, 0),
       pointsPerGame: num(st.pointsPerGame, 0),
@@ -178,25 +212,62 @@ export async function buildMlbDefiPlayerPool({
     return String(a.fullName || "").localeCompare(String(b.fullName || ""));
   });
 
-  const top = merged.slice(0, POOL_SIZE);
+  const top =
+    merged.length > MAX_POOL_SIZE ? merged.slice(0, MAX_POOL_SIZE) : merged;
+
+  const bvpPairs = top
+    .map((p) => {
+      const pitcherId = p.opponentProbablePitcher?.id;
+      if (!pitcherId) return null;
+      return {
+        batterId: p.playerId,
+        pitcherId: String(pitcherId),
+        batterName: p.fullName,
+        pitcherName: p.opponentProbablePitcher?.name || null,
+      };
+    })
+    .filter(Boolean);
+
+  const bvpMap = bvpPairs.length
+    ? await resolveBvpStatsBatch(bvpPairs, { maxConcurrency: 10 })
+    : new Map();
+
+  const topWithBvp = top.map((p) => {
+    const pitcherId = p.opponentProbablePitcher?.id;
+    if (!pitcherId) {
+      return { ...p, bvpVsOpposingStarter: null };
+    }
+    const row = bvpMap.get(bvpDocId(p.playerId, String(pitcherId)));
+    return {
+      ...p,
+      bvpVsOpposingStarter: compactBvpForClient(row),
+    };
+  });
+
   const batch = db.batch();
   const poolColl = db.collection(`defis/${defiId}/playerPool`);
   const nowTs = FieldValue.serverTimestamp();
 
-  top.forEach((p, idx) => {
+  topWithBvp.forEach((p, idx) => {
     batch.set(poolColl.doc(String(p.playerId)), {
       playerId: String(p.playerId),
       fullName: p.fullName || "",
       teamAbbr: p.teamAbbr || null,
       opponentTeamAbbr: p.opponentTeamAbbr || null,
       opponentProbablePitcher: p.opponentProbablePitcher || buildEmptyMlbPitcher(),
+      bvpVsOpposingStarter: p.bvpVsOpposingStarter || null,
+      awayAbbr: p.awayAbbr || null,
+      homeAbbr: p.homeAbbr || null,
+      isHome: p.isHome ?? null,
       positionCode: p.positionCode || null,
       injury: p.injury || null,
       goals: num(p.goals, 0),
       assists: num(p.assists, 0),
       hits: num(p.hits, 0),
+      atBats: num(p.atBats, 0),
       rbi: num(p.rbi, 0),
       homeRuns: num(p.homeRuns, 0),
+      battingAverage: String(p.battingAverage ?? ".000"),
       points: num(p.points, 0),
       gamesPlayed: num(p.gamesPlayed, 0),
       pointsPerGame: num(p.pointsPerGame, 0),
@@ -218,7 +289,7 @@ export async function buildMlbDefiPlayerPool({
   await defiRef.set(
     {
       poolStatus: "ready",
-      poolSize: top.length,
+      poolSize: topWithBvp.length,
       poolSport: "MLB",
       updatedAt: FieldValue.serverTimestamp(),
     },
@@ -228,9 +299,10 @@ export async function buildMlbDefiPlayerPool({
   logger.info("[onDefiCreated] MLB pool ready", {
     defiId,
     gameDateYmd,
-    poolSize: top.length,
+    poolSize: topWithBvp.length,
     teams: teams.length,
+    bvpResolved: bvpMap.size,
   });
 
-  return { ok: true, poolSize: top.length };
+  return { ok: true, poolSize: topWithBvp.length };
 }

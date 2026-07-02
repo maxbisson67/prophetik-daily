@@ -1,20 +1,17 @@
 // AccueilScreen.js — ASC7-only + “3 façons de jouer” centré + kicker italique + CTA détails ascension
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import i18n from "@src/i18n/i18n";
 import {
   View,
   Text,
   ActivityIndicator,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   Alert,
+  Platform,
 } from "react-native";
-
-import useAppUpdateCheck, {
-  APP_UPDATE_BANNER_ENABLED,
-} from "@src/hooks/useAppUpdateCheck";
-import ProphetikUpdateBanner from "@src/home/components/ProphetikUpdateBanner";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { useIsFocused, useFocusEffect } from "@react-navigation/native";
 
 import CreateTeamPredictionModal from "@src/defis/CreateTeamPredictionModal";
 
@@ -23,7 +20,7 @@ import TeamPredictionHomeSection from "@src/defis/TeamPredictionHomeSection";
 import CreateFirstGoalModal from "@src/firstGoal/CreateFirstGoalModal";
 import FirstGoalHomeSection from "@src/firstGoal/FirstGoalHomeSection";
 
-import { friendlyError, readPointsBalanceAny, isAscensionDefi } from "@src/home/homeUtils";
+import { friendlyError, readPointsBalanceAny, isAscensionDefi, isTsDefi, isTsDefiForHomeToday, getSignupDeadlineOrFallback, isSignupDeadlinePassed } from "@src/home/homeUtils";
 import useMeDoc from "@src/home/hooks/useMeDoc";
 
 // UI
@@ -37,7 +34,7 @@ import AscensionProgressModal from "@src/ascensions/components/AscensionProgress
 import AscensionHomeCard from "@src/ascensions/components/AscensionHomeCard";
 
 
-import { useRouter, Stack, useLocalSearchParams } from "expo-router";
+import { useRouter, Stack, useLocalSearchParams, useSegments } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -46,12 +43,29 @@ import CreateDefiModal from "../defis/CreateDefiModal";
 import CreateAscensionModal from "@src/ascensions/CreateAscensionModal";
 
 import useEntitlement from "../subscriptions/useEntitlement";
-import useCurrentSeason from "@src/hooks/useCurrentSeason";
+import useLeaderboardCompetitionKey from "@src/hooks/useLeaderboardCompetitionKey";
 import useGroupLeaderboardSummary from "@src/leaderboard/useGroupLeaderboardSummary";
-import SportGlyph from "@src/sports/SportGlyph";
+import DefiTypeLeading from "@src/home/components/DefiTypeLeading";
+import DefiSectionIntroBand from "@src/home/components/DefiSectionIntroBand";
+import DefiChallengeInfoBubble from "@src/home/components/DefiChallengeInfoBubble";
+import HomeDefisToggle, {
+  areAllHomeDefisComplete,
+  countCompletedHomeDefis,
+} from "@src/home/components/HomeDefisToggle";
+import DailyDefisProgress from "@src/home/components/DailyDefisProgress";
+import GroupChatSection from "@src/home/components/GroupChatSection";
+import { openMesResultatsTab } from "@src/defis/results/navigateToMesResultats";
 import { BADGES_TAB_HREF } from "@src/achievements/screens/ProgressionScreen";
 
 import { listenRNFB } from "@src/dev/fsListen";
+import { useMyGroups } from "@src/groups/MyGroupsProvider";
+import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
+import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
+import {
+  PROPHETIK_RED,
+  prophetikCardShadow,
+  prophetikLeftAccentCardStyle,
+} from "@src/achievements/components/prophetikCardStyles";
 
 /* ----------------------------- Helpers UI ----------------------------- */
 
@@ -62,7 +76,7 @@ function Chip({ bg, fg, icon, label }) {
         flexDirection: "row",
         alignItems: "center",
         paddingVertical: 4,
-        paddingHorizontal: 10,
+        paddingHorizontal: 12,
         borderRadius: 999,
         backgroundColor: bg,
         borderWidth: 1,
@@ -79,22 +93,23 @@ function SectionHeader({
   colors,
   icon,
   leftIcon,
-  kicker, // ✅ italique au-dessus du titre
+  kicker,
   title,
   subtitle,
   rightAction,
   flat = false,
+  compact = false,
 }) {
   return (
     <View
       style={[
         {
-          padding: 12,
+          padding: compact ? 0 : 12,
           borderRadius: 16,
-          borderWidth: 1,
+          borderWidth: compact ? 0 : 1,
           borderColor: colors.border,
           backgroundColor: colors.card,
-          marginBottom: 8,
+          marginBottom: compact ? 0 : 8,
         },
         flat && {
           backgroundColor: "transparent",
@@ -107,36 +122,52 @@ function SectionHeader({
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 1 }}>
           {leftIcon ? (
-            <View style={{ marginRight: 10 }}>{leftIcon}</View>
+            <View style={{ marginRight: compact ? 8 : 10 }}>{leftIcon}</View>
           ) : icon ? (
             <View
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 12,
+                width: compact ? 28 : 36,
+                height: compact ? 28 : 36,
+                borderRadius: compact ? 8 : 12,
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: colors.card2,
                 borderWidth: 1,
                 borderColor: colors.border,
-                marginRight: 10,
+                marginRight: compact ? 8 : 10,
               }}
             >
-              <MaterialCommunityIcons name={icon} size={18} color={colors.text} />
+              <MaterialCommunityIcons name={icon} size={compact ? 14 : 18} color={colors.text} />
             </View>
           ) : null}
 
           <View style={{ flexShrink: 1 }}>
             {kicker ? (
-              <Text style={{ color: colors.subtext, fontStyle: "italic", fontWeight: "700", marginBottom: 2 }}>
+              <Text
+                style={{
+                  color: colors.subtext,
+                  fontStyle: "italic",
+                  fontWeight: "700",
+                  fontSize: compact ? 11 : 12,
+                  marginBottom: 2,
+                }}
+              >
                 {kicker}
               </Text>
             ) : null}
 
-            <Text style={{ color: colors.text, fontSize: 16, fontWeight: "900" }}>{title}</Text>
+            <Text
+              style={{
+                color: compact ? colors.subtext : colors.text,
+                fontSize: compact ? 12 : 16,
+                fontWeight: compact ? "800" : "900",
+              }}
+            >
+              {title}
+            </Text>
 
-            {subtitle ? (
-              <Text style={{ color: colors.subtext, marginTop: 2 }} numberOfLines={2}>
+            {subtitle && !compact ? (
+              <Text style={{ color: colors.subtext, marginTop: 2, fontSize: 12 }} numberOfLines={2}>
                 {subtitle}
               </Text>
             ) : null}
@@ -144,40 +175,12 @@ function SectionHeader({
         </View>
 
         {/* ✅ évite que le bouton “Créer” sorte de la carte */}
-        <View style={{ flexShrink: 0, alignItems: "flex-end", justifyContent: "center", marginLeft: 10 }}>
+        <View style={{ flexShrink: 0, alignItems: "flex-end", justifyContent: "center", marginLeft: 12 }}>
           {rightAction}
         </View>
       </View>
     </View>
   );
-}
-
-function cardShadow() {
-  return {
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  };
-}
-
-const RED = "#b91c1c";
-const RED_BOTTOM = "#991b1b";
-
-function sectionCardStyle(colors, accent = RED) {
-  return {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-    padding: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: accent,
-    borderBottomWidth: 3,
-    borderBottomColor: RED_BOTTOM,
-  };
 }
 
 function SectionCreateAction({ onPress, label = "Créer" }) {
@@ -186,10 +189,12 @@ function SectionCreateAction({ onPress, label = "Créer" }) {
       onPress={onPress}
       activeOpacity={0.85}
       style={{
-        backgroundColor: RED,
+        backgroundColor: PROPHETIK_RED,
         paddingHorizontal: 12,
-        paddingVertical: 7,
+        paddingVertical: 8,
         borderRadius: 999,
+        minHeight: 44,
+        justifyContent: "center",
       }}
     >
       <Text style={{ color: "#fff", fontWeight: "900", fontSize: 12 }}>{label}</Text>
@@ -197,35 +202,6 @@ function SectionCreateAction({ onPress, label = "Créer" }) {
   );
 }
 
-function ProgressBar({ value, max, colors }) {
-  const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
-
-  return (
-    <View style={{ marginTop: 10 }}>
-      <View
-        style={{
-          height: 12,
-          borderRadius: 999,
-          backgroundColor: colors.card2,
-          borderWidth: 1,
-          borderColor: colors.border,
-          overflow: "hidden",
-        }}
-      >
-        <View style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: RED }} />
-      </View>
-
-      {/* ✅ sans “Base / Sommet” */}
-      <View style={{ marginTop: 6, alignItems: "center" }}>
-        <Text style={{ color: colors.subtext, fontWeight: "900" }}>
-          {value} / {max} {i18n.t("ascensions.labels.challenges", { defaultValue: "challenges" })}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-/** ✅ Mini-banner ASC7-only (si tu veux en haut de la home) */
 function AscensionJackpotBannerASC7({ colors, asc7InProgress, pointsBonisTotal, onPressDetails }) {
   if (!asc7InProgress) return null;
 
@@ -376,59 +352,93 @@ function InfoBubbleAscension({ colors }) {
   );
 }
 
-function isTsDefi(item) {
-  const typeNum = Number(item?.type);
-  return (
-    (typeNum >= 1 && typeNum <= 7)
-  )
-}
 
 
 /* =========================
    SCREEN
 ========================= */
 
+function isDefiPickerRoute(segments) {
+  const path = (segments || []).map(String).join("/");
+  return (
+    path.includes("team-prediction") ||
+    path.includes("first-goal") ||
+    /defis\/[^/]+/.test(path)
+  );
+}
+
 export default function AccueilScreen() {
   const { user, authReady } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
+  const segments = useSegments();
+  const skipDefiTabResetRef = useRef(false);
+  const { isActive: appActive } = useAppVisibilitySafe();
+  const listenersEnabled = isFocused && appActive;
+  const homeScrollRef = useRef(null);
+  const bindHomeScrollRef = useCallback((ref) => {
+    homeScrollRef.current = ref;
+  }, []);
+
+  const {
+    readableGroupIds: groupIds,
+    groupsMeta,
+    userGroups,
+    loading: loadingGroups,
+    error: groupsError,
+  } = useMyGroups();
 
   const { tier: userTier } = useEntitlement(user?.uid);
   const tierLower = String(userTier || "free").toLowerCase();
-
-  const [groupIds, setGroupIds] = useState([]);
-  const [loadingGroups, setLoadingGroups] = useState(true);
 
   const [activeDefis, setActiveDefis] = useState([]);
   const [loadingDefis, setLoadingDefis] = useState(true);
 
   const [error, setError] = useState(null);
 
-  const [groupsMeta, setGroupsMeta] = useState({});
-  const groupMetaUnsubs = useRef(new Map());
+  const { selectedGroupId: currentGroupId, setSelectedGroupId } = useSelectedGroup();
 
-  const [currentGroupId, setCurrentGroupId] = useState(null);
+  const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
+  const currentSport = String(currentGroupMeta?.sport || currentGroupMeta?.league || "NHL").toUpperCase();
 
-  const groupsAttachedForUidRef = useRef(null);
-
-  const { season } = useCurrentSeason();
-  const seasonId = season?.seasonId;
+  const {
+    competitionKey,
+    daysRemaining,
+    competitionLabel,
+    loading: loadingCompetition,
+  } = useLeaderboardCompetitionKey({
+    sport: currentSport,
+    enabled: listenersEnabled && !!currentGroupId,
+  });
 
   const groupLeaderboardSummary = useGroupLeaderboardSummary({
     groupId: currentGroupId,
-    seasonId,
+    competitionKey,
+    sport: currentSport,
     uid: user?.uid,
+    enabled: listenersEnabled && !!currentGroupId && !!competitionKey,
   });
 
   const streakGroupSummary = useMemo(
     () => ({
-      show: !!(currentGroupId && seasonId && user?.uid),
-      loading: groupLeaderboardSummary.loading,
+      show: !!(currentGroupId && competitionKey && user?.uid),
+      loading: groupLeaderboardSummary.loading || loadingCompetition,
       myPoints: groupLeaderboardSummary.myPoints,
       myRank: groupLeaderboardSummary.myRank,
       totalMembers: groupLeaderboardSummary.totalMembers,
+      daysRemaining,
+      competitionLabel,
     }),
-    [currentGroupId, seasonId, user?.uid, groupLeaderboardSummary]
+    [
+      currentGroupId,
+      competitionKey,
+      user?.uid,
+      groupLeaderboardSummary,
+      daysRemaining,
+      competitionLabel,
+      loadingCompetition,
+    ]
   );
   
 
@@ -441,23 +451,37 @@ export default function AccueilScreen() {
 
   const [loadingAsc7Member, setLoadingAsc7Member] = useState(false);
 
-  const {
-    loading: loadingAppUpdate,
-    updateAvailable,
-    forceUpdate,
-    message: updateMessage,
-    currentVersion,
-    latestVersion,
-    storeUrl,
-  } = useAppUpdateCheck();
-
-const [hideUpdateBanner, setHideUpdateBanner] = useState(false);
-
 const [showTeamPredictionModal, setShowTeamPredictionModal] = useState(false);
 
 const [hasTeamPredictionForGroup, setHasTeamPredictionForGroup] = useState(false);
 const [canCreateTpBundle, setCanCreateTpBundle] = useState(true);
 const [tpBundleHintId, setTpBundleHintId] = useState(null);
+const [fgcHintChallengeId, setFgcHintChallengeId] = useState(null);
+const [tsHintDefiId, setTsHintDefiId] = useState(null);
+const [selectedDefiTab, setSelectedDefiTab] = useState("fgc");
+const handledAccueilOpenRef = useRef("");
+
+  useEffect(() => {
+    if (!isFocused && isDefiPickerRoute(segments)) {
+      skipDefiTabResetRef.current = true;
+    }
+  }, [isFocused, segments]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (skipDefiTabResetRef.current) {
+        skipDefiTabResetRef.current = false;
+        return;
+      }
+      const openId = String(params?.openChallengeId || "").trim();
+      const kind = String(params?.kind || params?.defiTab || "").trim().toLowerCase();
+      if (openId && kind) return;
+      setSelectedDefiTab("fgc");
+    }, [params?.openChallengeId, params?.kind, params?.defiTab])
+  );
+
+const [fgcProgress, setFgcProgress] = useState({ done: 0, total: 0 });
+const [tpProgress, setTpProgress] = useState({ done: 0, total: 0 });
 
 const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   
@@ -471,27 +495,19 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
 
   // Reset auth/day
   useEffect(() => {
-    setGroupIds([]);
     setActiveDefis([]);
     setError(null);
-    setLoadingGroups(!!(authReady && user?.uid));
     setLoadingDefis(!!(authReady && user?.uid));
-    setGroupsMeta({});
-    setCurrentGroupId(null);
     setMyParticipationsByDefiId({});
-
-    for (const [, un] of groupMetaUnsubs.current) {
-      try {
-        un?.();
-      } catch {}
-    }
-    groupMetaUnsubs.current.clear();
-
-    groupsAttachedForUidRef.current = null;
   }, [authReady, user?.uid, dayTick]);
 
   // Participant doc
-  const { meDoc, error: meError } = useMeDoc({ authReady, uid: user?.uid, dayTick });
+  const { meDoc, error: meError } = useMeDoc({
+    authReady,
+    uid: user?.uid,
+    dayTick,
+    enabled: listenersEnabled,
+  });
 
   const avatarKind = meDoc?.avatarKind || null;
 
@@ -499,190 +515,11 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   const jerseyBackUrl = meDoc?.jerseyBackUrl || null;
 
   // Derived
-  const combinedError = error || meError;
-  const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
-  const currentSport = String(currentGroupMeta?.sport || "NHL").toUpperCase();
-
-console.log("[HOME GROUP]", {
-
-  currentGroupId,
-
-  groupName: currentGroupMeta?.name,
-
-  sport: currentSport,
-
-});
-
-
-  // Groups list
-  useEffect(() => {
-    setError(null);
-
-    if (!authReady || !user?.uid) {
-      groupsAttachedForUidRef.current = null;
-      setGroupIds([]);
-      setLoadingGroups(false);
-      return;
-    }
-
-    if (groupsAttachedForUidRef.current === user.uid) {
-      setLoadingGroups(false);
-      return;
-    }
-
-    groupsAttachedForUidRef.current = user.uid;
-    setLoadingGroups(true);
-
-    const qByUid = firestore().collection("group_memberships").where("uid", "==", user.uid);
-    const qByPid = firestore().collection("group_memberships").where("participantId", "==", user.uid);
-    const qOwnerCreated = firestore().collection("groups").where("createdBy", "==", user.uid);
-    const qOwnerOwnerId = firestore().collection("groups").where("ownerId", "==", user.uid);
-
-    let rowsByUid = [];
-    let rowsByPid = [];
-    let rowsOwnerCreated = [];
-    let rowsOwnerOwnerId = [];
-
-    const recompute = () => {
-      const memberships = [...rowsByUid, ...rowsByPid].filter((m) => {
-        const st = String(m?.status || "").toLowerCase();
-        if (st) return ["open", "active", "approved"].includes(st);
-        return m?.active !== false;
-      });
-
-      const gidsFromMemberships = memberships.map((m) => m.groupId).filter(Boolean);
-      const gidsFromOwner = [...rowsOwnerCreated, ...rowsOwnerOwnerId].map((g) => g.id).filter(Boolean);
-      const unionSorted = Array.from(new Set([...gidsFromMemberships, ...gidsFromOwner])).sort();
-
-      setGroupIds(unionSorted);
-      setLoadingGroups(false);
-    };
-
-    const un1 = listenRNFB(
-      qByUid,
-      (snap) => {
-        rowsByUid = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      "group_memberships:uid",
-      (e) => {
-        setLoadingGroups(false);
-        setError(e);
-      },
-      { logAttach: true }
-    );
-
-    const un2 = listenRNFB(
-      qByPid,
-      (snap) => {
-        rowsByPid = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      "group_memberships:participantId",
-      (e) => {
-        setLoadingGroups(false);
-        setError(e);
-      },
-      { logAttach: true }
-    );
-
-    const un3 = listenRNFB(
-      qOwnerCreated,
-      (snap) => {
-        rowsOwnerCreated = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      "groups:createdBy",
-      (e) => {
-        setLoadingGroups(false);
-        setError(e);
-      },
-      { logAttach: true }
-    );
-
-    const un4 = listenRNFB(
-      qOwnerOwnerId,
-      (snap) => {
-        rowsOwnerOwnerId = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      "groups:ownerId",
-      (e) => {
-        setLoadingGroups(false);
-        setError(e);
-      },
-      { logAttach: true }
-    );
-
-    return () => {
-      try { un1?.(); } catch {}
-      try { un2?.(); } catch {}
-      try { un3?.(); } catch {}
-      try { un4?.(); } catch {}
-    };
-  }, [authReady, user?.uid, dayTick]);
-
-  // Groups meta
-  useEffect(() => {
-    if (!authReady || !user?.uid) return;
-
-    for (const [gid, un] of groupMetaUnsubs.current) {
-      if (!groupIds.includes(gid)) {
-        try { un?.(); } catch {}
-        groupMetaUnsubs.current.delete(gid);
-      }
-    }
-
-    groupIds.forEach((gid) => {
-      if (groupMetaUnsubs.current.has(gid)) return;
-
-      const ref = firestore().collection("groups").doc(gid);
-      const un = listenRNFB(
-        ref,
-        (snap) => {
-          const data = snap?.data?.() || {};
-          setGroupsMeta((prev) => ({
-            ...prev,
-            [gid]: {
-              id: gid,
-              name: data.name || data.title || gid,
-              avatarUrl: data.avatarUrl || null,
-              favoriteTeam: data.favoriteTeam || null,
-              ownerId: data.ownerId || null,
-              createdBy: data.createdBy || null,
-              status: data.status || null,
-              sport: String(data.sport || data.league || "NHL").toUpperCase(),
-              tpBonus: Number(data.tpBonus ?? 0),
-            },
-          }));
-        },
-        `groups:meta:${gid}`,
-        (e) => setError(e),
-        { logAttach: true }
-      );
-
-      groupMetaUnsubs.current.set(gid, un);
-    });
-  }, [authReady, user?.uid, groupIds.join("|")]);
-
-  // current group
-  const readableGroupIds = useMemo(() => groupIds.filter((gid) => !!groupsMeta[gid]), [groupIds, groupsMeta]);
-  useEffect(() => {
-    if (!authReady || !user?.uid) return;
-
-    const fav = meDoc?.favoriteGroupId || null;
-    if (currentGroupId && readableGroupIds.includes(currentGroupId)) return;
-
-    let next = null;
-    if (fav && readableGroupIds.includes(fav)) next = fav;
-    else if (readableGroupIds.length >= 1) next = readableGroupIds[0];
-
-    setCurrentGroupId(next);
-  }, [authReady, user?.uid, meDoc?.favoriteGroupId, readableGroupIds, currentGroupId]);
+  const combinedError = error || meError || groupsError;
 
   // active defis
   useEffect(() => {
-    if (!authReady || !user?.uid || !currentGroupId || !currentGroupMeta) {
+    if (!listenersEnabled || !authReady || !user?.uid || !currentGroupId || !currentGroupMeta) {
       setActiveDefis([]);
       setLoadingDefis(false);
       return;
@@ -752,7 +589,7 @@ console.log("[HOME GROUP]", {
         setLoadingDefis(false);
         setError(e);
       },
-      { logAttach: true }
+      { screen: "AccueilScreen" }
     );
 
     return () => {
@@ -760,7 +597,7 @@ console.log("[HOME GROUP]", {
         un?.();
       } catch {}
     };
-  }, [authReady, user?.uid, currentGroupId, currentGroupMeta?.id, currentSport]);
+  }, [listenersEnabled, authReady, user?.uid, currentGroupId, currentGroupMeta?.id, currentSport]);
 
 useEffect(() => {
 
@@ -771,31 +608,79 @@ useEffect(() => {
   setHasFirstGoalForGroup(false);
 
   setHasTeamPredictionForGroup(false);
-  setCanCreateTpBundle(false);
+  setCanCreateTpBundle(true);
   setTpBundleHintId(null);
+  setFgcHintChallengeId(null);
+  setTsHintDefiId(null);
+  setFgcProgress({ done: 0, total: 0 });
+  setTpProgress({ done: 0, total: 0 });
 
 }, [currentGroupId, currentSport]);
 
   const normalDefisBase = useMemo(() => {
     const rows = Array.isArray(activeDefis) ? activeDefis : [];
-    return rows.filter((d) => !isAscensionDefi?.(d));
+    return rows.filter((d) => !isAscensionDefi?.(d) && isTsDefiForHomeToday(d));
   }, [activeDefis]);
 
   const hasTsForGroup = useMemo(() => {
     return (normalDefisBase || []).some((d) => isTsDefi(d));
   }, [normalDefisBase]);
 
+  const tsParticipated = useMemo(() => {
+    return (normalDefisBase || []).some((d) => {
+      const participation = myParticipationsByDefiId[String(d.id)];
+      return !!participation;
+    });
+  }, [normalDefisBase, myParticipationsByDefiId]);
+
+  const defiCompletionByTab = useMemo(
+    () => {
+      const tsDefi = (normalDefisBase || []).find((d) => isTsDefi(d));
+      const tsDone = tsParticipated ? 1 : 0;
+      const tsDeadline = getSignupDeadlineOrFallback(tsDefi);
+      const tsExpired = tsDone < 1 && isSignupDeadlinePassed(tsDeadline);
+
+      return {
+        fgc: hasFirstGoalForGroup ? fgcProgress : { done: 0, total: 0 },
+        tp: tpProgress,
+        ts: hasTsForGroup
+          ? { done: tsDone, total: 1, ...(tsExpired ? { expired: true } : {}) }
+          : { done: 0, total: 0 },
+      };
+    },
+    [fgcProgress, hasFirstGoalForGroup, tpProgress, tsParticipated, hasTsForGroup, normalDefisBase]
+  );
+
+  const allDailyDefisEnrolled = useMemo(
+    () => areAllHomeDefisComplete(defiCompletionByTab),
+    [defiCompletionByTab]
+  );
+
+  const dailyDefisCompletedCount = useMemo(
+    () => countCompletedHomeDefis(defiCompletionByTab),
+    [defiCompletionByTab]
+  );
+
   const normalDefis = useMemo(() => {
-    return (normalDefisBase || []).map((defi) => ({
+    const hintId = String(tsHintDefiId || "").trim();
+    const rows = (normalDefisBase || []).map((defi) => ({
       ...defi,
       myParticipation: myParticipationsByDefiId[String(defi.id)] || null,
     }));
-  }, [normalDefisBase, myParticipationsByDefiId]);
+
+    if (!hintId) return rows;
+
+    return [...rows].sort((a, b) => {
+      const aHint = String(a.id) === hintId;
+      const bHint = String(b.id) === hintId;
+      if (aHint === bHint) return 0;
+      return aHint ? -1 : 1;
+    });
+  }, [normalDefisBase, myParticipationsByDefiId, tsHintDefiId]);
 
   // Les participations du user  // Les participations TS du user
   useEffect(() => {
-    if (!authReady || !user?.uid) {
-      setMyParticipationsByDefiId({});
+    if (!listenersEnabled || !authReady || !user?.uid) {
       return;
     }
 
@@ -860,6 +745,7 @@ useEffect(() => {
       });
     };
   }, [
+    listenersEnabled,
     authReady,
     user?.uid,
     JSON.stringify(
@@ -890,25 +776,6 @@ const avatarUrl =
 
 
 
-
-  const userGroups = useMemo(
-    () =>
-      groupIds.map((gid) => {
-        const meta = groupsMeta[gid] || {};
-        return {
-          id: gid,
-          name: meta.name || gid,
-          status: meta.status || null,
-          avatarUrl: meta.avatarUrl || null,
-          favoriteTeam: meta.favoriteTeam || null,
-          ownerId: meta.ownerId || null,
-          createdBy: meta.createdBy || null,
-          sport: String(meta.sport || "NHL").toUpperCase(),
-          tpBonus: Number(meta.tpBonus ?? 0),
-        };
-      }),
-    [groupIds.join("|"), JSON.stringify(groupsMeta)]
-  );
 
   const favoriteGroupId = meDoc?.favoriteGroupId || null;
 
@@ -955,16 +822,39 @@ const avatarUrl =
 
 
   function onSelectGroup(gid) {
-    setCurrentGroupId(String(gid));
+    setSelectedGroupId(String(gid));
   }
 
   useEffect(() => {
     const raw = params?.groupId;
     const gid = Array.isArray(raw) ? raw[0] : raw;
     if (!gid) return;
-    if (!readableGroupIds.includes(String(gid))) return;
-    setCurrentGroupId(String(gid));
-  }, [params?.groupId, readableGroupIds.join("|")]);
+    if (!groupIds.includes(String(gid))) return;
+    setSelectedGroupId(String(gid));
+  }, [params?.groupId, groupIds.join("|"), setSelectedGroupId]);
+
+  useEffect(() => {
+    const openId = String(params?.openChallengeId || "").trim();
+    const kind = String(params?.kind || params?.defiTab || "").trim().toLowerCase();
+    if (!openId && !kind) return;
+
+    const key = `${openId}:${kind}`;
+    if (handledAccueilOpenRef.current === key) return;
+    handledAccueilOpenRef.current = key;
+
+    if (kind === "fgc" || kind === "tp" || kind === "ts") {
+      setSelectedDefiTab(kind);
+    }
+    if (kind === "tp" && openId) {
+      setTpBundleHintId(openId);
+    }
+    if (kind === "fgc" && openId) {
+      setFgcHintChallengeId(openId);
+    }
+    if (kind === "ts" && openId) {
+      setTsHintDefiId(openId);
+    }
+  }, [params?.openChallengeId, params?.kind, params?.defiTab]);
 
   const onPressCreateTeamPrediction = () => {
   requireGroupOrExplain({ onOk: () => setShowTeamPredictionModal(true) });
@@ -982,7 +872,10 @@ const avatarUrl =
         initialGroupId={currentGroupId || favoriteGroupId}
         initialSport={currentSport}
         league={currentSport}
-        onCreated={() => setShowFirstGoalModal(false)}
+        onCreated={() => {
+          setShowFirstGoalModal(false);
+          setHasFirstGoalForGroup(true);
+        }}
       />
 
       <CreateTeamPredictionModal
@@ -1032,12 +925,20 @@ const avatarUrl =
             </Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
-
-
+          <KeyboardAwareScrollView
+            style={{ flex: 1 }}
+            innerRef={bindHomeScrollRef}
+            contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 80 }}
+            keyboardShouldPersistTaps="handled"
+            enableOnAndroid
+            enableAutomaticScroll
+            extraScrollHeight={100}
+            extraHeight={Platform.OS === "ios" ? 100 : 80}
+            keyboardOpeningTime={0}
+          >
             {/* Header profil */}
-            <View style={[cardShadow()]}>
-              <View style={sectionCardStyle(colors, RED)}>
+            <View style={[prophetikCardShadow()]}>
+              <View style={prophetikLeftAccentCardStyle(colors, PROPHETIK_RED)}>
               <ProfileHeaderCard
                 colors={colors}
                 avatarKind={avatarKind}
@@ -1059,132 +960,190 @@ const avatarUrl =
               </View>
             </View>
 
-            {APP_UPDATE_BANNER_ENABLED &&
-            !loadingAppUpdate &&
-            updateAvailable &&
-            !hideUpdateBanner ? (
-              <ProphetikUpdateBanner
-                colors={colors}
-                visible={true}
-                message={updateMessage}
-                currentVersion={currentVersion}
-                latestVersion={latestVersion}
-                storeUrl={storeUrl}
-                forceUpdate={forceUpdate}
-                onDismiss={() => setHideUpdateBanner(true)}
-              />
+            {allDailyDefisEnrolled ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => openMesResultatsTab(router, { groupId: currentGroupId })}
+                style={{
+                  marginTop: 2,
+                  marginBottom: 2,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: 6,
+                  backgroundColor: "rgba(22,163,74,0.12)",
+                  borderWidth: 1,
+                  borderColor: "rgba(22,163,74,0.35)",
+                  width: "100%",
+                  maxWidth: 420,
+                  alignSelf: "center",
+                }}
+              >
+                <Text style={{ color: "#16a34a", fontWeight: "900", fontSize: 13, textAlign: "center" }}>
+                  {i18n.t("home.dailyDefisAllEnrolled", {
+                    defaultValue: "Bravo, tu es inscrit à tous les défis!",
+                  })}
+                </Text>
+                <Text
+                  style={{
+                    color: "#16a34a",
+                    fontSize: 12,
+                    lineHeight: 17,
+                    textAlign: "center",
+                    marginTop: 4,
+                    fontWeight: "600",
+                  }}
+                >
+                  {i18n.t("home.dailyDefisResultsHintPrefix", {
+                    defaultValue: "Regarde tes performances dans l'onglet ",
+                  })}
+                  <Text style={{ textDecorationLine: "underline", fontWeight: "900" }}>
+                    {i18n.t("tabs.challenges", { defaultValue: "Mes résultats" })}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
             ) : null}
 
-            {/* ✅ “Trois façons…” entre Profil et First Goal + centré */}
-            <View style={{ marginTop: 2, marginBottom: 2, alignItems: "center" }}>
-              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18, textAlign: "center" }}>
-                {i18n.t("home.threeWays", { defaultValue: "Trois façons de jouer sur Prophetik" })}
-              </Text>
-              <Text style={{ color: colors.subtext, marginTop: 4, textAlign: "center" }}>
-                {i18n.t("home.threeWaysSub", { defaultValue: "Choisis ton style aujourd’hui." })}
-              </Text>
-            </View>
+            <View style={[prophetikCardShadow()]}>
+              <View style={prophetikLeftAccentCardStyle(colors, PROPHETIK_RED)}>
+                <HomeDefisToggle
+                  title={i18n.t("home.dailyDefisTitle")}
+                  headerBleed={12}
+                  accentColor={PROPHETIK_RED}
+                  neutralHeader
+                  value={selectedDefiTab}
+                  onChange={setSelectedDefiTab}
+                  colors={colors}
+                  completedByTab={defiCompletionByTab}
+                />
 
-            {/* 1) First goal */}
-            <View style={[cardShadow()]}>
-              <View style={sectionCardStyle(colors, RED)}>
-                <SectionHeader
-                  flat
-                  colors={colors}
-                  kicker={i18n.t("home.way1", { defaultValue: "Première façon de jouer" })}
-                  title={
-                    currentSport === "MLB"
-                      ? i18n.t("firstGoal.firstRbi.title", { defaultValue: "Premier point produit" })
-                      : i18n.t("firstGoal.home.title")
-                  }
-                  leftIcon={<SportGlyph sport={currentSport} colors={colors} size={28} />}
-                  rightAction={
-                    isCurrentGroupOwner && !hasFirstGoalForGroup ? (
-                      <SectionCreateAction
-                        onPress={onPressCreateFirstGoal}
-                        label={i18n.t("common.create")}
-                      />
-                    ) : null
-                  }
-                />
-               <FirstGoalHomeSection
-                  groups={userGroups}
-                  currentGroupId={currentGroupId}
-                  currentSport={currentSport}
-                  colors={colors}
-                  onHasChallengeChange={setHasFirstGoalForGroup}
-                />
+                <DailyDefisProgress completedCount={dailyDefisCompletedCount} colors={colors} />
+
+                <View style={selectedDefiTab === "fgc" ? undefined : { display: "none" }}>
+                  <DefiSectionIntroBand>
+                    <SectionHeader
+                      flat
+                      compact
+                      colors={colors}
+                      title={
+                        currentSport === "MLB"
+                          ? i18n.t("firstGoal.firstRbi.title", { defaultValue: "Premier point produit" })
+                          : i18n.t("firstGoal.home.title")
+                      }
+                      leftIcon={<DefiTypeLeading kind="fgc" sport={currentSport} colors={colors} glyphSize={20} />}
+                      rightAction={
+                        isCurrentGroupOwner && !hasFirstGoalForGroup ? (
+                          <SectionCreateAction
+                            onPress={onPressCreateFirstGoal}
+                            label={i18n.t("common.create")}
+                          />
+                        ) : null
+                      }
+                    />
+                    <DefiChallengeInfoBubble kind="fgc" colors={colors} inIntroBand />
+                  </DefiSectionIntroBand>
+                  <FirstGoalHomeSection
+                    groups={userGroups}
+                    currentGroupId={currentGroupId}
+                    currentSport={currentSport}
+                    colors={colors}
+                    listenersEnabled={listenersEnabled}
+                    hintChallengeId={fgcHintChallengeId}
+                    onHasChallengeChange={setHasFirstGoalForGroup}
+                    onUserParticipatedChange={setFgcProgress}
+                  />
+                </View>
+
+                <View style={selectedDefiTab === "tp" ? undefined : { display: "none" }}>
+                  <DefiSectionIntroBand>
+                    <SectionHeader
+                      flat
+                      compact
+                      colors={colors}
+                      leftIcon={<DefiTypeLeading kind="tp" sport={currentSport} colors={colors} glyphSize={20} />}
+                      title={i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" })}
+                      rightAction={
+                        isCurrentGroupOwner && canCreateTpBundle ? (
+                          <SectionCreateAction
+                            onPress={onPressCreateTeamPrediction}
+                            label={i18n.t("common.create", { defaultValue: "Créer" })}
+                          />
+                        ) : null
+                      }
+                    />
+                    <DefiChallengeInfoBubble kind="tp" colors={colors} inIntroBand />
+                  </DefiSectionIntroBand>
+                  <TeamPredictionHomeSection
+                    groups={userGroups}
+                    colors={colors}
+                    currentGroupId={currentGroupId}
+                    currentSport={currentSport}
+                    listenersEnabled={listenersEnabled}
+                    hintBundleId={tpBundleHintId}
+                    onHasChallengeChange={setHasTeamPredictionForGroup}
+                    onCanCreateBundleChange={setCanCreateTpBundle}
+                    onUserParticipatedChange={setTpProgress}
+                  />
+                </View>
+
+                <View style={selectedDefiTab === "ts" ? undefined : { display: "none" }}>
+                  <DefiSectionIntroBand>
+                    <SectionHeader
+                      flat
+                      compact
+                      colors={colors}
+                      leftIcon={<DefiTypeLeading kind="ts" sport={currentSport} colors={colors} glyphSize={20} />}
+                      title={i18n.t("home.todayChallenge", { defaultValue: "Le trio du jour" })}
+                      rightAction={
+                        isCurrentGroupOwner && !hasTsForGroup ? (
+                          <SectionCreateAction
+                            onPress={onPressCreateDefi}
+                            label={i18n.t("common.create")}
+                          />
+                        ) : null
+                      }
+                    />
+                    <DefiChallengeInfoBubble kind="ts" colors={colors} inIntroBand />
+                  </DefiSectionIntroBand>
+                  <DefiListSection
+                    hideHeader
+                    colors={colors}
+                    loadingGroups={loadingGroups}
+                    loadingDefis={loadingDefis}
+                    groupIds={groupIds}
+                    currentSport={currentSport}
+                    activeDefis={normalDefis}
+                    groupsMeta={groupsMeta}
+                    tierLower={tierLower}
+                    onOpenDefi={(defiId) => router.push("/(drawer)/defis/" + defiId)}
+                    onUpgrade={() => router.push("/(drawer)/subscriptions")}
+                  />
+                </View>
               </View>
             </View>
 
-            <View style={[cardShadow()]}>
-              <View style={sectionCardStyle(colors, RED)}>
-                <SectionHeader
-                  flat
-                  colors={colors}
-                  kicker={i18n.t("home.way2", { defaultValue: "Deuxième façon de jouer" })}
-                  leftIcon={<SportGlyph sport={currentSport} colors={colors} size={28} />}
-                  title={i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" })}
-                  subtitle={i18n.t("tp.home.subtitleEmpty", {
-                    defaultValue: "Choisis le gagnant et le pointage exact.",
-                  })}
-                  rightAction={
-                    isCurrentGroupOwner && canCreateTpBundle ? (
-                      <SectionCreateAction
-                        onPress={onPressCreateTeamPrediction}
-                        label={i18n.t("common.create", { defaultValue: "Créer" })}
-                      />
-                    ) : null
-                  }
-                />
-
-                <TeamPredictionHomeSection
-                  groups={userGroups}
-                  colors={colors}
-                  currentGroupId={currentGroupId}
-                  currentSport={currentSport}
-                  hintBundleId={tpBundleHintId}
-                  onHasChallengeChange={setHasTeamPredictionForGroup}
-                  onCanCreateBundleChange={setCanCreateTpBundle}
-                />
+            {currentGroupId ? (
+              <View style={[prophetikCardShadow()]}>
+                <View style={prophetikLeftAccentCardStyle(colors, PROPHETIK_RED)}>
+                  <GroupChatSection
+                    groupId={currentGroupId}
+                    groupName={currentGroupMeta?.name || currentGroupMeta?.title || null}
+                    colors={colors}
+                    onInputFocus={() => {
+                      requestAnimationFrame(() => {
+                        const scroll = homeScrollRef.current;
+                        if (typeof scroll?.scrollToEnd === "function") {
+                          scroll.scrollToEnd({ animated: true });
+                          return;
+                        }
+                        scroll?.getScrollResponder?.()?.scrollToEnd?.({ animated: true });
+                      });
+                    }}
+                  />
+                </View>
               </View>
-            </View>
+            ) : null}
 
-            {/* 2) Défis du jour */}
-            <View style={[cardShadow()]}>
-              <View style={sectionCardStyle(colors, RED)}>
-                <SectionHeader
-                  flat
-                  colors={colors}
-                  kicker={i18n.t("home.way3", { defaultValue: "Troisième façon de jouer" })}
-                  leftIcon={<SportGlyph sport={currentSport} colors={colors} size={28} />}
-                  title={i18n.t("home.todayChallenge", { defaultValue: "Mes défis du jour" })}
-                  rightAction={
-                    isCurrentGroupOwner && !hasTsForGroup ? (
-                      <SectionCreateAction
-                        onPress={onPressCreateDefi}
-                        label={i18n.t("common.create")}
-                      />
-                    ) : null
-                  }
-                />
-                <DefiListSection
-                  hideHeader
-                  colors={colors}
-                  loadingGroups={loadingGroups}
-                  loadingDefis={loadingDefis}
-                  groupIds={groupIds}
-                  currentSport={currentSport}
-                  activeDefis={normalDefis}
-                  groupsMeta={groupsMeta}
-                  tierLower={tierLower}
-                  onOpenDefi={(defiId) => router.push("/(drawer)/defis/" + defiId)}
-                  onUpgrade={() => router.push("/(drawer)/subscriptions")}
-                />
-              </View>
-            </View>
-
-          </ScrollView>
+          </KeyboardAwareScrollView>
         )}
       </View>
     </>

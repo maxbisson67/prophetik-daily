@@ -1,0 +1,51 @@
+{
+  "sport": "NHL",
+  "type": "concept",
+  "category": "Challenge Rules",
+  "key": "first_goal",
+  "status": "published",
+  "challengeTypes": ["FGC"],
+  "translations": {
+    "fr": {
+      "title": "Le premier but du match",
+      "shortAnswer": "Dans le Défi premier but, tu dois prédire quel joueur marquera le premier but du match. Le bon choix dépend du talent offensif, du temps de glace, du rôle en avantage numérique et du contexte du match.",
+      "beginnerExplanation": "Le premier but est souvent marqué par un joueur offensif qui joue beaucoup et participe aux situations spéciales. Regarde qui produit des points régulièrement et qui joue avec des coéquipiers créatifs.",
+      "intermediateExplanation": "Au-delà du talent brut, le premier but favorise les joueurs avec un bon temps de glace en attaque, une utilisation en avantage numérique et un historique de production récente. Le contexte du match (rivalité, back-to-back) peut aussi influencer le rythme du début de partie.",
+      "expertExplanation": "Modéliser le premier but implique la probabilité qu'une ligne donnée obtienne la première occasion de qualité, pas seulement la moyenne de buts par match. La variance est élevée : même un profil optimal peut rester silencieux.",
+      "prophetikUse": "Dans le Défi premier but, compare les joueurs disponibles sur leur production récente, leur rôle et leur équipe. Nova t'aide à réfléchir — ton choix final reste le tien.",
+      "commonMistakes": [
+        "Choisir uniquement la plus grande star sans regarder le matchup.",
+        "Ignorer le statut de blessure ou de disponibilité.",
+        "Oublier qu'un joueur peut être excellent sur la saison mais moins utilisé ce soir."
+      ],
+      "examples": [
+        "Un centre de première ligne avec fort temps de glace et production régulière est un profil classique à considérer.",
+        "Un joueur en bonne séquence récente peut mériter autant d'attention qu'une vedette en baisse de forme."
+      ]
+    },
+    "en": {
+      "title": "The first goal of the game",
+      "shortAnswer": "In the First Run Challenge, you predict which player will score the first goal. Strong picks usually combine offensive skill, ice time, power-play usage and game context.",
+      "beginnerExplanation": "First goals are often scored by offensive players who play a lot and take part in special teams. Look for players who produce points consistently and play with creative linemates.",
+      "intermediateExplanation": "Beyond raw talent, first-goal probability favors players with strong offensive ice time, power-play deployment and recent production. Game context such as rivalry or fatigue can also shape early-game pace.",
+      "expertExplanation": "Modeling a first goal is about the chance a line generates the first quality chance, not just season-long goal rates. Variance is high—even optimal profiles can stay quiet.",
+      "prophetikUse": "In the First Run Challenge, compare available players by recent production, role and team context. Nova helps you think it through—your final pick is still yours.",
+      "commonMistakes": [
+        "Picking only the biggest star without reading the matchup.",
+        "Ignoring injury or availability status.",
+        "Assuming season-long excellence guarantees an early-game role tonight."
+      ],
+      "examples": [
+        "A top-line center with heavy ice time and steady production is a classic profile to consider.",
+        "A player on a hot streak may deserve as much attention as a star in a slump."
+      ]
+    }
+  },
+  "relatedTopics": ["points_per_game", "power_play"],
+  "tags": ["first_goal", "nhl", "fgc", "beginner"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik Editorial",
+  "sourceUrl": null,
+  "version": 1
+}

@@ -1,4 +1,3 @@
-import * as Localization from "expo-localization";
 import { I18n } from "i18n-js";
 
 import enRaw from "./en.json";
@@ -10,9 +9,8 @@ const fr = frRaw?.default ?? frRaw;
 const i18n = new I18n({ en, fr });
 i18n.enableFallback = true;
 
-const rawLocale = Localization.locale ?? Localization.locales?.[0] ?? "fr";
-const shortLocale = rawLocale.split?.("-")?.[0] ?? "fr";
-i18n.locale = shortLocale;
+// FR par défaut; LanguageProvider applique la préférence sauvegardée (appLang).
+i18n.locale = "fr";
 
 console.log("EN groups keys:", Object.keys(en?.groups ?? {}));
 console.log("EN groups.defi keys:", Object.keys(en?.groups?.defi ?? {}));

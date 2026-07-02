@@ -226,7 +226,7 @@ export function useTeamsBySport(sport) {
 
   const teams = useMemo(() => {
     if (liveTeams.length) return liveTeams;
-    return getFallbackTeams(normalizedSport);
+    return dedupeTeams(getFallbackTeams(normalizedSport));
   }, [liveTeams, normalizedSport]);
 
   const usingFallback = !loading && liveTeams.length === 0;

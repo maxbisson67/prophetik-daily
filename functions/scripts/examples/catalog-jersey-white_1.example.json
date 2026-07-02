@@ -1,0 +1,64 @@
+{
+  "_id": "white_1",
+  "active": true,
+  "sort": 2,
+  "sport": "hockey",
+  "name": "Blanc",
+  "previewFrontUrl": "https://firebasestorage.googleapis.com/v0/b/capitaine.firebasestorage.app/o/jerseys%2Fhockey%2Fwhite_1_front.png?alt=media&token=24382af3-9ed9-47a5-9092-96984e75ee8a",
+  "previewBackUrl": "https://firebasestorage.googleapis.com/v0/b/capitaine.firebasestorage.app/o/jerseys%2Fhockey%2Fwhite_1_back.png?alt=media&token=73f05b8b-c849-4663-8b01-88431daf6871",
+  "templateFrontPath": "jerseys/hockey/white_1_front.png",
+  "templateBackPath": "jerseys/hockey/white_1_back.png",
+  "templateProfilePath": "jerseys/hockey/white_1_front.png",
+  "colors": {
+    "primary": "#f3f4f6",
+    "accent": "#ef4444",
+    "text": "#111111"
+  },
+  "frontZones": {
+    "logo": {
+      "x": 325,
+      "y": 300,
+      "width": 196,
+      "height": 196,
+      "variant": "dark"
+    },
+    "captainLetter": {
+      "x": 500,
+      "y": 155,
+      "fontSize": 58,
+      "color": "#111111"
+    },
+    "assistantLetter": {
+      "x": 500,
+      "y": 155,
+      "fontSize": 58,
+      "color": "#111111"
+    },
+    "badges": {
+      "x": 150,
+      "y": 185,
+      "lineHeight": 36,
+      "fontSize": 24,
+      "color": "#111111"
+    }
+  },
+  "textZones": {
+    "backName": {
+      "x": 325,
+      "y": 210,
+      "maxWidth": 260,
+      "fontSize": 46,
+      "color": "#111111",
+      "strokeColor": "#ffffff",
+      "strokeWidth": 4
+    },
+    "backNumber": {
+      "x": 325,
+      "y": 330,
+      "fontSize": 140,
+      "color": "#111111",
+      "strokeColor": "#ffffff",
+      "strokeWidth": 10
+    }
+  }
+}

@@ -50,3 +50,12 @@ export function parseAutopilotEnabled(raw, { defaultValue = false } = {}) {
   }
   return raw;
 }
+
+export function parseGroupName(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const name = String(raw || "").trim();
+  if (!name) {
+    throw new HttpsError("invalid-argument", "Missing name");
+  }
+  return name;
+}

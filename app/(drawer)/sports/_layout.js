@@ -43,6 +43,7 @@ export default function SportsLayout() {
         }}
       />
       <Stack.Screen name="MatchLiveScreen" options={{ title: "Match Live" }} />
+      <Stack.Screen name="MlbMatchLiveScreen" options={{ title: "Match Live MLB" }} />
       <Stack.Screen name="NhlStandingsScreen" options={{ title: "Classement NHL" }} />
       <Stack.Screen name="NhlScheduleScreen" options={{ title: "Calendrier" }} />
       <Stack.Screen name="MlbComingSoon" options={{ title: "MLB" }} />

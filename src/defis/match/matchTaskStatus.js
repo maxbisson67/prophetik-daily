@@ -12,46 +12,101 @@ function normalizeStatus(st) {
   return String(st || "").toLowerCase().trim();
 }
 
+function toDateAny(v) {
+  if (!v) return null;
+  try {
+    if (typeof v?.toDate === "function") return v.toDate();
+    if (v instanceof Date) return v;
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+
+function isGameStartedByTime(startTimeUTC, nowMs = Date.now()) {
+  const start = toDateAny(startTimeUTC);
+  return !!start && nowMs >= start.getTime();
+}
+
+function isScheduleFinal(scheduleStatus) {
+  if (!scheduleStatus) return false;
+  const abstract = String(scheduleStatus?.abstractGameState || "").toLowerCase();
+  if (abstract === "final") return true;
+  const state = String(scheduleStatus?.state || scheduleStatus?.gameState || "").toLowerCase();
+  return state === "final" || state === "off";
+}
+
+function isScheduleLive(scheduleStatus) {
+  if (!scheduleStatus) return false;
+  const abstract = String(scheduleStatus?.abstractGameState || "").toLowerCase();
+  if (abstract === "live") return true;
+  if (scheduleStatus?.isLive === true) return true;
+  const state = String(scheduleStatus?.state || scheduleStatus?.gameState || "").toLowerCase();
+  return state === "live" || state === "crit";
+}
+
 function buildMatchTaskResult(state) {
   return { state };
 }
 
-/** Statut sportif d'un slot TP : tout l'avant-match (open + locked) → non débuté. */
-export function resolveTpSlotMatchStatus(slot, options = {}) {
-  if (isMlbGamePostponed(options?.scheduleStatus)) {
-    return buildMatchTaskResult(MATCH_TASK_STATES.POSTPONED);
+function resolveMatchPhaseFromSignals({
+  scheduleStatus,
+  entityStatus,
+  gameStartTimeUTC,
+  nowMs = Date.now(),
+}) {
+  if (isMlbGamePostponed(scheduleStatus)) {
+    return MATCH_TASK_STATES.POSTPONED;
   }
 
-  const st = normalizeStatus(slot?.status || "open");
+  if (isScheduleFinal(scheduleStatus)) {
+    return MATCH_TASK_STATES.COMPLETED;
+  }
 
-  if (st === "decided" || st === "closed") {
-    return buildMatchTaskResult(MATCH_TASK_STATES.COMPLETED);
+  if (isScheduleLive(scheduleStatus)) {
+    return MATCH_TASK_STATES.IN_PROGRESS;
+  }
+
+  const st = normalizeStatus(entityStatus || "open");
+
+  if (["decided", "closed", "completed"].includes(st)) {
+    return MATCH_TASK_STATES.COMPLETED;
   }
 
   if (st === "live" || st === "pending") {
-    return buildMatchTaskResult(MATCH_TASK_STATES.IN_PROGRESS);
+    return MATCH_TASK_STATES.IN_PROGRESS;
   }
 
-  return buildMatchTaskResult(MATCH_TASK_STATES.NOT_STARTED);
+  if (isGameStartedByTime(gameStartTimeUTC, nowMs)) {
+    return MATCH_TASK_STATES.IN_PROGRESS;
+  }
+
+  return MATCH_TASK_STATES.NOT_STARTED;
+}
+
+/** Statut sportif d'un slot TP : calendrier + heure de début + statut slot. */
+export function resolveTpSlotMatchStatus(slot, options = {}) {
+  return buildMatchTaskResult(
+    resolveMatchPhaseFromSignals({
+      scheduleStatus: options?.scheduleStatus,
+      entityStatus: slot?.status,
+      gameStartTimeUTC: slot?.gameStartTimeUTC ?? options?.gameStartTimeUTC,
+      nowMs: options?.nowMs,
+    })
+  );
 }
 
 /** Statut sportif d'un défi FGC (match unique). */
 export function resolveFgcMatchStatus(challenge, options = {}) {
-  if (isMlbGamePostponed(options?.scheduleStatus)) {
-    return buildMatchTaskResult(MATCH_TASK_STATES.POSTPONED);
-  }
-
-  const st = normalizeStatus(challenge?.status ?? options?.status);
-
-  if (["decided", "closed", "completed"].includes(st)) {
-    return buildMatchTaskResult(MATCH_TASK_STATES.COMPLETED);
-  }
-
-  if (st === "live" || st === "pending") {
-    return buildMatchTaskResult(MATCH_TASK_STATES.IN_PROGRESS);
-  }
-
-  return buildMatchTaskResult(MATCH_TASK_STATES.NOT_STARTED);
+  return buildMatchTaskResult(
+    resolveMatchPhaseFromSignals({
+      scheduleStatus: options?.scheduleStatus,
+      entityStatus: challenge?.status ?? options?.status,
+      gameStartTimeUTC: challenge?.gameStartTimeUTC ?? options?.gameStartTimeUTC,
+      nowMs: options?.nowMs,
+    })
+  );
 }
 
 export function getMatchTaskStatusUi(state) {
@@ -103,4 +158,15 @@ export function formatMatchTaskLabel(task) {
     default:
       return i18n.t("match.unknown", { defaultValue: "—" });
   }
+}
+
+/** Heure de début TP : optionnellement masquée une fois le match commencé. */
+export function shouldShowTpStartTimeLabel(
+  startTimeLabel,
+  matchTask,
+  { hideWhenStarted = false } = {}
+) {
+  if (!startTimeLabel) return false;
+  if (!hideWhenStarted) return true;
+  return matchTask?.state === MATCH_TASK_STATES.NOT_STARTED;
 }

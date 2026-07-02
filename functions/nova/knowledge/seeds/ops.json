@@ -1,0 +1,63 @@
+{
+  "sport": "MLB",
+  "type": "statistic",
+  "category": "Advanced Stats",
+  "key": "ops",
+  "status": "published",
+  "challengeTypes": ["FGC", "TS"],
+  "translations": {
+    "fr": {
+      "title": "OPS (On-Base Plus Slugging)",
+      "shortAnswer": "L'OPS combine la capacité d'un joueur à atteindre les buts (OBP) et sa puissance au bâton (SLG). Plus l'OPS est élevé, plus le frappeur est généralement dangereux offensivement.",
+      "beginnerExplanation": "Un bon frappeur ne fait pas seulement des coups sûrs : il réussit aussi à se rendre sur les buts grâce aux buts sur balles et frappe parfois pour des doubles, triples ou circuits. L'OPS résume ces qualités dans une seule statistique facile à comparer entre les joueurs.",
+      "intermediateExplanation": "L'OPS additionne le pourcentage de présence sur les buts (OBP) et le pourcentage de puissance (SLG). Il offre une meilleure vue d'ensemble que la moyenne au bâton puisqu'il récompense à la fois la discipline au marbre et la qualité des contacts.",
+      "expertExplanation": "Bien que l'OPS soit largement utilisé pour évaluer la production offensive, il accorde le même poids à l'OBP et au SLG, alors que l'OBP est généralement plus prédictif des points marqués. Les analystes avancés utilisent souvent le wOBA ou le wRC+ pour une mesure plus précise de la valeur offensive.",
+      "prophetikUse": "L'OPS est une excellente statistique pour comparer rapidement plusieurs frappeurs avant de faire un choix. Dans le Défi premier point produit et Le Trio du jour, un joueur affichant un OPS élevé possède généralement un meilleur potentiel offensif, surtout lorsqu'il affronte un lanceur favorable.",
+      "commonMistakes": [
+        "Croire que l'OPS est simplement une moyenne au bâton améliorée.",
+        "Comparer des OPS sans tenir compte de la période analysée ou du nombre de présences au bâton.",
+        "Choisir uniquement selon l'OPS sans considérer le lanceur adverse, le stade ou les performances récentes."
+      ],
+      "examples": [
+        "Un frappeur avec un OPS de .980 est généralement considéré parmi les meilleurs frappeurs de la ligue.",
+        "Deux joueurs affichent une moyenne au bâton similaire de .280, mais celui avec un OPS de .920 est habituellement plus dangereux offensivement que celui avec un OPS de .740."
+      ]
+    },
+    "en": {
+      "title": "OPS (On-Base Plus Slugging)",
+      "shortAnswer": "OPS combines a player's ability to reach base (OBP) with their power hitting (SLG). A higher OPS generally indicates a more dangerous hitter.",
+      "beginnerExplanation": "A good hitter does more than collect hits. They also reach base with walks and hit for extra bases. OPS combines these offensive skills into one easy-to-understand statistic.",
+      "intermediateExplanation": "OPS is the sum of On-Base Percentage (OBP) and Slugging Percentage (SLG). It provides a broader measure of offensive value than batting average because it rewards both getting on base and hitting for power.",
+      "expertExplanation": "OPS is widely used but gives equal weight to OBP and SLG, even though OBP tends to correlate more strongly with run scoring. Advanced analysts often prefer wOBA or wRC+ when evaluating offensive performance.",
+      "prophetikUse": "OPS is an excellent statistic for comparing hitters before making a prediction. In the First Run Challenge and Today's Trio, players with strong OPS values are often among the best offensive selections, especially against favorable pitching matchups.",
+      "commonMistakes": [
+        "Thinking OPS is simply an improved batting average.",
+        "Comparing OPS values without considering sample size or time period.",
+        "Ignoring pitching matchups, ballpark effects and recent performance."
+      ],
+      "examples": [
+        "A hitter with a .980 OPS is usually considered one of the league's elite offensive players.",
+        "Two hitters both bat .280, but the one with a .920 OPS is generally much more dangerous than the one with a .740 OPS."
+      ]
+    }
+  },
+  "relatedTopics": [
+    "obp",
+    "slugging_percentage",
+    "batting_average",
+    "woba",
+    "wrc_plus"
+  ],
+  "tags": [
+    "batting",
+    "advanced_stats",
+    "offense",
+    "ops",
+    "mlb"
+  ],
+  "difficulty": "intermediate",
+  "confidence": "high",
+  "sourceName": "MLB Glossary",
+  "sourceUrl": "https://www.mlb.com/glossary/standard-stats/on-base-plus-slugging",
+  "version": 1
+}

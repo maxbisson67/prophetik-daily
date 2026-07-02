@@ -11,6 +11,10 @@ import { runIngestStatsForDate } from "./ingest.js";
 // 🔁 Date/fuseau centralisés
 import { APP_TZ, appYmd, addDaysToYmd, formatDebug } from "./ProphetikDate.js";
 import { recordParticipantProgressionSafe } from "./achievements/achievementService.js";
+import { notifyTsWinners } from "./notifications/notifyChallengeWin.js";
+import { computeMemberSeasonRank } from "./leaderboard/leaderboardRankUtils.js";
+import { notifyLeaderboardRankUpAfterPointsCredit } from "./notifications/notifyLeaderboardRankUp.js";
+import { resolveCompetitionForGroupCredit } from "./leaderboard/currentSeason.js";
 
 /* ------------------------- Admin init ------------------------- */
 if (getApps().length === 0) initializeApp();
@@ -253,6 +257,35 @@ export const finalizeDefiWinners = onSchedule(
 
       const eligibleParts = partsAll; // humains + Nova
 
+      const preGroupId = String(d.groupId || "");
+      const defiGameYmd = String(d.gameDate || d.gameYmd || todayYmd).slice(0, 10);
+      const competition = preGroupId
+        ? await resolveCompetitionForGroupCredit({ db, groupId: preGroupId, gameYmd: defiGameYmd })
+        : null;
+      const competitionKey = competition
+        ? String(competition.competitionKey)
+        : null;
+
+      const rankBeforeByUid = {};
+      if (preGroupId && eligibleParts.length && competition) {
+        for (const p of eligibleParts) {
+          try {
+            rankBeforeByUid[p.uid] = await computeMemberSeasonRank({
+              groupId: preGroupId,
+              seasonId: competitionKey,
+              uid: p.uid,
+            });
+          } catch (e) {
+            logger.warn("finalizeDefiWinners: rank snapshot failed", {
+              defiId,
+              groupId: preGroupId,
+              uid: p.uid,
+              error: String(e?.message || e),
+            });
+          }
+        }
+      }
+
       const txResult = await db.runTransaction(async (tx) => {
         const dRef = db.collection("defis").doc(defiId);
 
@@ -373,22 +406,24 @@ export const finalizeDefiWinners = onSchedule(
         const typeKey = ensureTypeKey(cur.type);
 
         // leaderboards
-        const lbMemberRefs = eligibleParts.map((p) =>
-          db
-            .collection("groups")
-            .doc(groupId)
-            .collection("leaderboards")
-            .doc(String(seasonId))
-            .collection("members")
-            .doc(String(p.uid))
-        );
+        let prevByUid = {};
+        if (competitionKey) {
+          const lbMemberRefs = eligibleParts.map((p) =>
+            db
+              .collection("groups")
+              .doc(groupId)
+              .collection("leaderboards")
+              .doc(String(competitionKey))
+              .collection("members")
+              .doc(String(p.uid))
+          );
 
-        const lbMemberSnaps = await Promise.all(lbMemberRefs.map((ref) => tx.get(ref)));
-        const prevByUid = {};
-        lbMemberSnaps.forEach((s, idx) => {
-          const uid = String(eligibleParts[idx]?.uid);
-          prevByUid[uid] = s.exists ? (s.data() || {}) : {};
-        });
+          const lbMemberSnaps = await Promise.all(lbMemberRefs.map((ref) => tx.get(ref)));
+          lbMemberSnaps.forEach((s, idx) => {
+            const uid = String(eligibleParts[idx]?.uid);
+            prevByUid[uid] = s.exists ? (s.data() || {}) : {};
+          });
+        }
 
         // ✅ Ascension progress reads (cycle doc + member docs) AVANT writes
         const ascKey = cur?.ascension?.key ? String(cur.ascension.key).toUpperCase() : null;
@@ -439,7 +474,7 @@ export const finalizeDefiWinners = onSchedule(
             winnerShares,
             completedAt: cur.completedAt || FieldValue.serverTimestamp(),
             payoutAppliedAt: FieldValue.serverTimestamp(),
-            payoutAppliedTo: `groups/{groupId}/leaderboards/{seasonId}/members`,
+            payoutAppliedTo: `groups/{groupId}/leaderboards/{competitionKey}/members`,
             payoutAppliedVersion: PAYOUT_APPLIED_VERSION,
             ...(bonusPerWinner > 0
               ? {
@@ -487,7 +522,8 @@ export const finalizeDefiWinners = onSchedule(
         }
 
         // 3) Leaderboard season members
-        for (const p of eligibleParts) {
+        if (competitionKey) {
+          for (const p of eligibleParts) {
           const uid = String(p.uid);
           const isWinner = winners.includes(uid);
 
@@ -499,7 +535,7 @@ export const finalizeDefiWinners = onSchedule(
             .collection("groups")
             .doc(groupId)
             .collection("leaderboards")
-            .doc(String(seasonId))
+            .doc(String(competitionKey))
             .collection("members")
             .doc(uid);
 
@@ -527,6 +563,16 @@ export const finalizeDefiWinners = onSchedule(
             pointsTotal: prevTypePoints + (addPoints > 0 ? addPoints : 0),
           };
 
+          const prevTsFamily =
+            prev.families && typeof prev.families.ts === "object" ? prev.families.ts : {};
+          const prevTsPoints = readNumberSafe(prev.tsPoints ?? prevTsFamily.points, 0);
+          const prevTsWins = readNumberSafe(prev.tsWins ?? prevTsFamily.wins, 0);
+          const prevTsPlays = readNumberSafe(prev.tsPlays ?? prevTsFamily.plays, 0);
+
+          const nextTsPlays = prevTsPlays + 1;
+          const nextTsWins = prevTsWins + (isWinner ? 1 : 0);
+          const nextTsPoints = prevTsPoints + (addPoints > 0 ? addPoints : 0);
+
           tx.set(
             memberRef,
             {
@@ -536,11 +582,18 @@ export const finalizeDefiWinners = onSchedule(
               wins: nextWins,
               winRate: nextWinRate,
               winsByType,
+              tsPoints: nextTsPoints,
+              tsWins: nextTsWins,
+              tsPlays: nextTsPlays,
+              "families.ts.plays": nextTsPlays,
+              "families.ts.wins": nextTsWins,
+              "families.ts.points": nextTsPoints,
               updatedAt: FieldValue.serverTimestamp(),
               createdAt: prev.createdAt || FieldValue.serverTimestamp(),
             },
             { merge: true }
           );
+          }
         }
 
         // 3.5) ✅ Ascension progress (winners only) -> ascension_cycles/{cycleId}/members/{uid}
@@ -626,15 +679,17 @@ export const finalizeDefiWinners = onSchedule(
         }
 
         // 4) Dirty flag group
-        tx.set(
-          db.collection("groups").doc(groupId),
-          {
-            leaderboardSeasonDirty: true,
-            leaderboardSeasonDirtyAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
+        if (competitionKey) {
+          tx.set(
+            db.collection("groups").doc(groupId),
+            {
+              leaderboardSeasonDirty: true,
+              leaderboardSeasonDirtyAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
 
         return {
           applied: true,
@@ -667,6 +722,65 @@ export const finalizeDefiWinners = onSchedule(
             isCorrectPrediction: winnerSet.has(uid),
             tsPoints: p.livePoints,
           });
+        }
+      }
+
+      if (txResult?.finalized && txResult?.groupId && Number(d.type) === 3) {
+        const humanWinners = (txResult.progressionContext?.winners || [])
+          .map(String)
+          .filter((uid) => uid && uid.toLowerCase() !== "ai");
+
+        if (humanWinners.length) {
+          try {
+            await notifyTsWinners({
+              defiId,
+              groupId: txResult.groupId,
+              winnerUids: humanWinners,
+            });
+          } catch (e) {
+            logger.warn("finalizeDefiWinners: ts win push failed", {
+              defiId,
+              groupId: txResult.groupId,
+              error: String(e?.message || e),
+            });
+          }
+        }
+      }
+
+      if (
+        txResult?.applied &&
+        !txResult?.skippedAlreadyApplied &&
+        txResult?.groupId &&
+        !txResult?.cancelled &&
+        competition &&
+        competitionKey &&
+        eligibleParts.length
+      ) {
+        for (const p of eligibleParts) {
+          try {
+            const partSnap = await docSnap.ref.collection("participations").doc(p.uid).get();
+            const partData = partSnap.data() || {};
+            const payout = Number(partData.payout || 0);
+            const bonus = Number(partData.bonus || 0);
+            const pointsAdded = payout + bonus;
+
+            if (pointsAdded <= 0) continue;
+
+            await notifyLeaderboardRankUpAfterPointsCredit({
+              groupId: txResult.groupId,
+              seasonId: competitionKey,
+              uid: p.uid,
+              previousRank: rankBeforeByUid[p.uid],
+              pointsAdded,
+            });
+          } catch (e) {
+            logger.warn("finalizeDefiWinners: rank-up push failed", {
+              defiId,
+              groupId: txResult.groupId,
+              uid: p.uid,
+              error: String(e?.message || e),
+            });
+          }
         }
       }
 

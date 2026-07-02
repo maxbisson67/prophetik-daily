@@ -16,7 +16,7 @@ import {
   normalizeStats,
 } from "@src/achievements/progressionUtils";
 
-export const BADGES_TAB_HREF = "/(drawer)/(tabs)/BadgesScreen";
+export const BADGES_TAB_HREF = "/(drawer)/progression";
 
 export default function ProgressionScreen({
   title = i18n.t("tabs.badges", { defaultValue: "Badges" }),
@@ -98,11 +98,11 @@ export default function ProgressionScreen({
           achievements={achievements}
         />
 
+        <ProgressionCareerSection colors={colors} stats={stats} />
+
         <ProgressionStreakCard colors={colors} stats={stats} achievements={achievements} />
 
         <ProgressionNextGoalCard colors={colors} nextGoal={nextGoal} />
-
-        <ProgressionCareerSection colors={colors} stats={stats} />
 
         <BadgesGrid stats={stats} achievements={achievements} colors={colors} />
       </ScrollView>

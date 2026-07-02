@@ -1,0 +1,64 @@
+{
+  "_id": "red_1",
+  "active": true,
+  "sort": 3,
+  "sport": "hockey",
+  "name": "Rouge",
+  "previewFrontUrl": null,
+  "previewBackUrl": null,
+  "templateFrontPath": "jerseys/hockey/red_1_front.png",
+  "templateBackPath": "jerseys/hockey/red_1_back.png",
+  "templateProfilePath": "jerseys/hockey/red_1_front.png",
+  "colors": {
+    "primary": "#b91c1c",
+    "accent": "#ef4444",
+    "text": "#ffffff"
+  },
+  "frontZones": {
+    "logo": {
+      "x": 325,
+      "y": 300,
+      "width": 196,
+      "height": 196,
+      "variant": "light"
+    },
+    "captainLetter": {
+      "x": 500,
+      "y": 155,
+      "fontSize": 58,
+      "color": "#ffffff"
+    },
+    "assistantLetter": {
+      "x": 500,
+      "y": 155,
+      "fontSize": 58,
+      "color": "#ffffff"
+    },
+    "badges": {
+      "x": 150,
+      "y": 185,
+      "lineHeight": 36,
+      "fontSize": 24,
+      "color": "#ffffff"
+    }
+  },
+  "textZones": {
+    "backName": {
+      "x": 325,
+      "y": 210,
+      "maxWidth": 260,
+      "fontSize": 46,
+      "color": "#ffffff",
+      "strokeColor": "#111111",
+      "strokeWidth": 4
+    },
+    "backNumber": {
+      "x": 325,
+      "y": 330,
+      "fontSize": 140,
+      "color": "#ffffff",
+      "strokeColor": "#111111",
+      "strokeWidth": 8
+    }
+  }
+}

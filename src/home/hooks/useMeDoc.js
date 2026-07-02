@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
 import { listenRNFB } from "../firestoreListen";
 
-export default function useMeDoc({ authReady, uid, dayTick }) {
+export default function useMeDoc({ authReady, uid, dayTick, enabled = true }) {
   const [meDoc, setMeDoc] = useState(null);
   const [loadingMe, setLoadingMe] = useState(true);
   const [error, setError] = useState(null);
@@ -13,17 +13,15 @@ export default function useMeDoc({ authReady, uid, dayTick }) {
   useEffect(() => {
     setError(null);
 
-    if (!authReady || !uid) {
-      setMeDoc(null);
+    if (!enabled || !authReady || !uid) {
       setLoadingMe(false);
-      try { subRef.current?.(); } catch {}
+      try {
+        subRef.current?.();
+      } catch {}
       subRef.current = null;
-      return;
-    }
-
-    // déjà attaché
-    if (subRef.current) {
-      setLoadingMe(false);
+      if (!authReady || !uid) {
+        setMeDoc(null);
+      }
       return;
     }
 
@@ -40,14 +38,17 @@ export default function useMeDoc({ authReady, uid, dayTick }) {
       (e) => {
         setError(e);
         setLoadingMe(false);
-      }
+      },
+      { screen: "useMeDoc" }
     );
 
     return () => {
-      try { subRef.current?.(); } catch {}
+      try {
+        subRef.current?.();
+      } catch {}
       subRef.current = null;
     };
-  }, [authReady, uid, dayTick]);
+  }, [enabled, authReady, uid, dayTick]);
 
   return { meDoc, loadingMe, error };
 }

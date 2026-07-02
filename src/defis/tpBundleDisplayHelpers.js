@@ -179,6 +179,27 @@ export function formatPickPoints(pickResult) {
   return `+${pts} pt${pts > 1 ? "s" : ""}`;
 }
 
+export function formatTpBravoBadgeLabel(resolved, bundle, t, { provisional = false } = {}) {
+  if (!resolved?.winnerCorrect) return null;
+
+  const pts = Number(resolved?.points ?? resolved?.payout ?? 0);
+  if (!Number.isFinite(pts) || pts <= 0) return null;
+
+  const isProvisional = provisional || resolved?.provisional === true;
+
+  if (isProvisional) {
+    return t("challenges.tpPointsInSight", {
+      defaultValue: "{{points}} points en vue",
+      points: pts,
+    });
+  }
+
+  return t("challenges.tpBravoWonPoints", {
+    defaultValue: "Bravo, tu as gagné {{points}} points",
+    points: pts,
+  });
+}
+
 export function getSlotOfficialScores(slot) {
   const official = slot?.officialResult || {};
   return {

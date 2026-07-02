@@ -1,7 +1,11 @@
 import { buildEmptyMlbPitcher } from "../mlb/mlbProbablePitchers.js";
+import { fetchMlbLiveFeed } from "../mlb/mlbLiveFeed.js";
+import {
+  extractMlbOfficialResultFromLiveDoc,
+  isMlbLiveDocFinal,
+} from "../mlb/mlbLiveGamesSchema.js";
 
-const MLB_LIVE_FEED_URL = (gamePk) =>
-  `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+export { fetchMlbLiveFeed };
 
 export const TP_DEFAULT_SCORING = {
   winnerBasePoints: 3,
@@ -200,17 +204,10 @@ export function extractNhlOfficialResult(game = {}, challenge = {}) {
   };
 }
 
-export async function fetchMlbLiveFeed(gamePk) {
-  const url = MLB_LIVE_FEED_URL(gamePk);
-  const res = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": "prophetik/1.0" },
-  });
-
-  if (!res.ok) {
-    throw new Error(`MLB live feed failed ${res.status}`);
-  }
-
-  return res.json();
+export async function loadMlbLiveGameDoc(db, gameId) {
+  const snap = await db.doc(`mlb_live_games/${String(gameId)}`).get();
+  if (!snap.exists) return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 function teamAbbrFromNode(node) {
@@ -231,6 +228,12 @@ export function isMlbLiveGameFinal(liveFeed = {}) {
     inningState === "final"
   );
 }
+
+export function extractMlbOfficialResultFromDoc(doc = {}, challenge = {}) {
+  return extractMlbOfficialResultFromLiveDoc(doc, challenge);
+}
+
+export { isMlbLiveDocFinal };
 
 export function extractMlbOfficialResult(liveFeed = {}, challenge = {}) {
   const linescore = liveFeed?.liveData?.linescore || {};

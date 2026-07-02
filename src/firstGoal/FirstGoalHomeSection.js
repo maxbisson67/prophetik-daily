@@ -1,5 +1,5 @@
 // src/firstGoal/FirstGoalHomeSection.js
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,10 +15,7 @@ import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
 import {
-  getFgcResultPlayerName,
-  getFgcResultTeamAbbr,
   getFgcTitle,
-  getFgcResultPrefix,
   getFgcMode,
 } from "@src/firstGoal/fgcChallengeUtils";
 import { isFgcChallengeParticipationOpen } from "@src/firstGoal/fgcGameScheduleUtils";
@@ -29,20 +26,22 @@ import {
   formatParticipantCtaLabel,
   resolveParticipantTaskStatus,
 } from "@src/defis/participant/participantTaskStatus";
+import { PARTICIPANT_MODIFY_CTA, PARTICIPANT_PRIMARY_CTA } from "@src/defis/participant/participantCtaStyles";
 import { resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
+import {
+  getProphetikBusinessYmd,
+} from "@src/lib/prophetikBusinessDate";
+import {
+  fgcHomeYmdCandidates,
+  hasFgcForBusinessToday,
+  normalizeFgcGameYmd,
+  shouldShowFgcOnHome,
+} from "@src/firstGoal/fgcHomeVisibility";
 
 function chunk(arr, size = 10) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
-}
-
-function todayYmdLocal() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function toDateAny(ts) {
@@ -100,7 +99,7 @@ function listenMyPickForChallenge({ challengeId, uid, onData, onError }) {
   return ref.onSnapshot(
     (snap) => {
       const data = snap?.exists ? snap.data() || null : null;
-      const hasPick = !!data?.playerId;
+      const hasPick = !!String(data?.playerId || "").trim();
 
       onData?.({
         exists: !!snap?.exists,
@@ -116,93 +115,51 @@ function listenMyPickForChallenge({ challengeId, uid, onData, onError }) {
 
 /* ------------------------------ UI subcomponents --------------------------- */
 
-function InfoBubbleFGC({ colors }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <View
-      style={{
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.card2,
-        marginBottom: 10,
-        overflow: "hidden",
-      }}
-    >
-      <TouchableOpacity
-        onPress={() => setOpen((v) => !v)}
-        activeOpacity={0.85}
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-          <MaterialCommunityIcons
-            name="information-outline"
-            size={18}
-            color={colors.subtext}
-            style={{ marginTop: 1 }}
-          />
-          <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8, flex: 1 }}>
-            {i18n.t("firstGoal.home.infoTitle", { defaultValue: "C’est quoi ce défi?" })}
-          </Text>
-        </View>
-
-        <MaterialCommunityIcons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={22}
-          color={colors.subtext}
-        />
-      </TouchableOpacity>
-
-      {open ? (
-        <View
-          style={{
-            paddingHorizontal: 12,
-            paddingBottom: 12,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-          }}
-        >
-          <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>
-            {i18n.t("firstGoal.home.infoBody", {
-              defaultValue:
-                "• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 5 points seront alloués à celui qui a prédit le bon joueur.",
-            })}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors }) {
+function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors, prominent = false }) {
   const away = safeAbbr(awayAbbr);
   const home = safeAbbr(homeAbbr);
   const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
   const awayTeam = lookupTeamByAbbr(league, away);
   const homeTeam = lookupTeamByAbbr(league, home);
+  const logoSize = prominent ? 28 : 22;
+  const abbrSize = prominent ? 16 : undefined;
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <TeamLogoBadge team={awayTeam} size={22} colors={colors} />
-      <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8 }}>
+      <TeamLogoBadge team={awayTeam} size={logoSize} colors={colors} />
+      <Text
+        style={{
+          color: colors.text,
+          fontWeight: "900",
+          marginLeft: 8,
+          fontSize: abbrSize,
+        }}
+      >
         {away || "—"}
       </Text>
 
-      <Text style={{ color: colors.subtext, marginHorizontal: 10, fontWeight: "900" }}>
+      <Text
+        style={{
+          color: colors.subtext,
+          marginHorizontal: 10,
+          fontWeight: "900",
+          fontSize: abbrSize,
+        }}
+      >
         @
       </Text>
 
-      <Text style={{ color: colors.text, fontWeight: "900", marginRight: 8 }}>
+      <Text
+        style={{
+          color: colors.text,
+          fontWeight: "900",
+          marginRight: 8,
+          fontSize: abbrSize,
+        }}
+      >
         {home || "—"}
       </Text>
-      <TeamLogoBadge team={homeTeam} size={22} colors={colors} />
+      <TeamLogoBadge team={homeTeam} size={logoSize} colors={colors} />
     </View>
   );
 }
@@ -214,7 +171,10 @@ export default function FirstGoalHomeSection({
   colors,
   currentGroupId = null,
   currentSport = "NHL",
+  listenersEnabled = true,
+  hintChallengeId = null,
   onHasChallengeChange,
+  onUserParticipatedChange,
 }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -230,136 +190,158 @@ export default function FirstGoalHomeSection({
       .filter(Boolean);
   }, [groups, sportLeague]);
 
-  const [items, setItems] = useState([]);
+  const [allChallenges, setAllChallenges] = useState([]);
   const [loading, setLoading] = useState(false);
   const [myPickByChallengeId, setMyPickByChallengeId] = useState({});
-  const gameSchedulesByChallengeId = useFgcGameSchedules(items.slice(0, 6));
 
-  const mergeAndSet = useCallback((mapById) => {
-    const list = Array.from(mapById.values());
+  const prophetikDay = getProphetikBusinessYmd();
+  const ymdCandidates = useMemo(() => fgcHomeYmdCandidates(), [prophetikDay]);
+  const ymdCandidateSet = useMemo(() => new Set(ymdCandidates), [ymdCandidates]);
+
+  const items = useMemo(() => {
+    const list = (allChallenges || []).filter((ch) =>
+      shouldShowFgcOnHome(ch, prophetikDay, ymdCandidateSet)
+    );
+    const hintId = String(hintChallengeId || "").trim();
 
     const weight = (st) =>
-      st === "open" ? 0 : st === "locked" ? 1 : st === "pending" ? 2 : st === "decided" ? 3 : 4;
+      st === "open"
+        ? 0
+        : st === "locked"
+          ? 1
+          : st === "pending"
+            ? 2
+            : st === "decided"
+              ? 3
+              : 4;
 
     list.sort((a, b) => {
+      if (hintId) {
+        const aHint = String(a?.id || "") === hintId;
+        const bHint = String(b?.id || "") === hintId;
+        if (aHint !== bHint) return aHint ? -1 : 1;
+      }
+
       const wa = weight(String(a.status || "").toLowerCase());
       const wb = weight(String(b.status || "").toLowerCase());
       if (wa !== wb) return wa - wb;
 
-      const ta = a.gameStartTimeUTC?.toDate?.() ? a.gameStartTimeUTC.toDate().getTime() : 0;
-      const tb = b.gameStartTimeUTC?.toDate?.() ? b.gameStartTimeUTC.toDate().getTime() : 0;
+      const ta = a.gameStartTimeUTC?.toDate?.()
+        ? a.gameStartTimeUTC.toDate().getTime()
+        : 0;
+      const tb = b.gameStartTimeUTC?.toDate?.()
+        ? b.gameStartTimeUTC.toDate().getTime()
+        : 0;
       return ta - tb;
     });
 
-    setItems(list);
-    setLoading(false);
-  }, []);
+    return list;
+  }, [allChallenges, prophetikDay, ymdCandidateSet, hintChallengeId]);
+
+  const gameSchedulesByChallengeId = useFgcGameSchedules(items.slice(0, 6));
 
   useEffect(() => {
     if (typeof onHasChallengeChange !== "function") return;
-    onHasChallengeChange(items.length > 0);
-  }, [items.length, onHasChallengeChange]);
+
+    const hasTodayChallenge = (allChallenges || []).some((ch) =>
+      hasFgcForBusinessToday(ch, prophetikDay, ymdCandidateSet, sportLeague)
+    );
+
+    onHasChallengeChange(hasTodayChallenge);
+  }, [allChallenges, onHasChallengeChange, prophetikDay, sportLeague, ymdCandidateSet]);
+
+  const fgcTabProgress = useMemo(() => {
+    const todayChallenges = (allChallenges || []).filter((ch) =>
+      hasFgcForBusinessToday(ch, prophetikDay, ymdCandidateSet, sportLeague)
+    );
+
+    if (!todayChallenges.length) return { done: 0, total: 0 };
+
+    const done = todayChallenges.some((ch) => {
+      const challengeId = String(ch?.id || "").trim();
+      return !!myPickByChallengeId?.[challengeId]?.hasPick;
+    })
+      ? 1
+      : 0;
+
+    const expired =
+      done < 1 &&
+      todayChallenges.every((ch) => {
+        const deadline = getSignupDeadline(ch);
+        return deadline ? Date.now() >= deadline.getTime() : false;
+      });
+
+    return { done, total: 1, ...(expired ? { expired: true } : {}) };
+  }, [allChallenges, myPickByChallengeId, prophetikDay, sportLeague, ymdCandidateSet]);
+
+  useEffect(() => {
+    if (typeof onUserParticipatedChange !== "function") return;
+    onUserParticipatedChange(fgcTabProgress);
+  }, [fgcTabProgress, onUserParticipatedChange]);
 
   useEffect(() => {
     const gid = String(currentGroupId || "").trim();
     const targetGroupIds = gid ? [gid] : groupIds;
 
-    if (!targetGroupIds.length) {
-      setItems([]);
+    if (!listenersEnabled || !targetGroupIds.length) {
+      if (!listenersEnabled) return;
+      setAllChallenges([]);
       setLoading(false);
       return;
     }
 
+    setAllChallenges([]);
     setLoading(true);
-
-    const ymd = todayYmdLocal();
 
     const unsubs = [];
     const mapById = new Map();
-    const chunkDocIds = new Map();
+    const listenerKeys = new Map();
 
-    const makeQuery = (ids) => {
-      const base = firestore()
-        .collection("first_goal_challenges")
-        .where("league", "==", sportLeague)
-        .where("type", "==", "first_goal")
-        .where("gameYmd", "==", ymd);
-
-      if (ids.length === 1) return base.where("groupId", "==", String(ids[0]));
-      return base.where("groupId", "in", ids);
+    const syncChallenges = () => {
+      setAllChallenges(Array.from(mapById.values()));
+      setLoading(false);
     };
-
-    console.log("[HOME FGC QUERY]", {
-      currentSport: sportLeague,
-      gameYmd: ymd,
-      targetGroupIds,
-    });
 
     const idsChunks = gid ? [targetGroupIds] : chunk(targetGroupIds, 10);
 
     idsChunks.forEach((ids) => {
-      const chunkKey = ids.join(",");
-      const q = makeQuery(ids);
+      ymdCandidates.forEach((gameYmd) => {
+        const listenerKey = `${ids.join(",")}|${gameYmd}`;
+        const base = firestore()
+          .collection("first_goal_challenges")
+          .where("groupId", ids.length === 1 ? "==" : "in", ids.length === 1 ? String(ids[0]) : ids)
+          .where("gameYmd", "==", gameYmd)
+          .where("league", "==", sportLeague)
+          .where("type", "==", "first_goal");
 
-      const unsub = q.onSnapshot(
-        (snap) => {
-          const nextIds = new Set(snap.docs.map((d) => d.id));
-          const prevIds = chunkDocIds.get(chunkKey) || new Set();
+        const unsub = base.onSnapshot(
+          (snap) => {
+            const nextIds = new Set(snap.docs.map((d) => d.id));
+            const prevIds = listenerKeys.get(listenerKey) || new Set();
 
-          prevIds.forEach((docId) => {
-            if (!nextIds.has(docId)) mapById.delete(docId);
-          });
+            prevIds.forEach((docId) => {
+              if (!nextIds.has(docId)) mapById.delete(docId);
+            });
 
-          snap.docs.forEach((d) => {
-            const data = d.data() || {};
-            const league = String(data.league || sportLeague).toUpperCase();
-            if (league === sportLeague) {
-              mapById.set(d.id, { id: d.id, ...data });
-            } else {
-              mapById.delete(d.id);
-            }
-          });
+            snap.docs.forEach((d) => {
+              mapById.set(d.id, { id: d.id, ...(d.data() || {}) });
+            });
 
-          const merged = Array.from(mapById.values()).filter(
-            (ch) => String(ch?.league || sportLeague).toUpperCase() === sportLeague
-          );
+            listenerKeys.set(listenerKey, nextIds);
+            syncChallenges();
+          },
+          (err) => {
+            console.log(
+              "[FirstGoalHomeSection] error",
+              String(err?.code || ""),
+              err?.message || String(err)
+            );
+            setLoading(false);
+          }
+        );
 
-          console.log(
-            "[HOME FGC RAW]",
-            snap.docs.map((d) => ({
-              id: d.id,
-              league: d.data()?.league,
-              fgcMode: d.data()?.fgcMode,
-              gameId: d.data()?.gameId,
-              status: d.data()?.status,
-            }))
-          );
-          console.log(
-            "[HOME FGC FILTERED]",
-            sportLeague,
-            merged.map((ch) => ({
-              id: ch.id,
-              league: ch.league,
-              fgcMode: getFgcMode(ch),
-              gameId: ch.gameId,
-              status: ch.status,
-            }))
-          );
-
-          chunkDocIds.set(chunkKey, nextIds);
-          mergeAndSet(mapById);
-        },
-        (err) => {
-          console.log(
-            "[FirstGoalHomeSection] error",
-            String(err?.code || ""),
-            err?.message || String(err)
-          );
-          setLoading(false);
-        }
-      );
-
-      unsubs.push(unsub);
+        unsubs.push(unsub);
+      });
     });
 
     return () => {
@@ -369,22 +351,22 @@ export default function FirstGoalHomeSection({
         } catch {}
       });
     };
-  }, [groupIds.join("|"), currentGroupId, mergeAndSet, sportLeague]);
+  }, [listenersEnabled, groupIds.join("|"), currentGroupId, sportLeague, ymdCandidates.join("|")]);
 
   useEffect(() => {
-    const visibleChallengeIds = items
-      .slice(0, 6)
+    const challengeIds = (allChallenges || [])
       .map((ch) => String(ch?.id || "").trim())
       .filter(Boolean);
 
-    if (!user?.uid || !visibleChallengeIds.length) {
+    if (!listenersEnabled || !user?.uid || !challengeIds.length) {
+      if (!listenersEnabled) return;
       setMyPickByChallengeId({});
       return;
     }
 
     const unsubs = [];
 
-    visibleChallengeIds.forEach((challengeId) => {
+    challengeIds.forEach((challengeId) => {
       const unsub = listenMyPickForChallenge({
         challengeId,
         uid: String(user.uid),
@@ -424,7 +406,7 @@ export default function FirstGoalHomeSection({
         } catch {}
       });
     };
-  }, [items, user?.uid]);
+  }, [listenersEnabled, allChallenges, user?.uid]);
 
   return (
     <>
@@ -434,8 +416,6 @@ export default function FirstGoalHomeSection({
             <ActivityIndicator size="small" color={colors.subtext} />
           </View>
         ) : null}
-
-        <InfoBubbleFGC colors={colors} />
 
         {items.length === 0 ? (
           <View
@@ -470,6 +450,8 @@ export default function FirstGoalHomeSection({
               const deadlinePassed = deadline ? Date.now() >= deadline.getTime() : false;
 
               const challengeId = String(ch?.id || "").trim();
+              const isHintedChallenge =
+                !!hintChallengeId && challengeId === String(hintChallengeId).trim();
               const myPick = myPickByChallengeId?.[challengeId]?.data || null;
               const hasMyPick = !!myPickByChallengeId?.[challengeId]?.hasPick;
 
@@ -506,8 +488,6 @@ export default function FirstGoalHomeSection({
 
               const isDecided =
                 (st === "decided" || st === "closed") && !participation.showPostponed;
-              const resultPlayerName = isDecided ? getFgcResultPlayerName(ch) : null;
-              const resultTeamAbbr = isDecided ? getFgcResultTeamAbbr(ch) : "";
 
               const participantTask = resolveParticipantTaskStatus(
                 {
@@ -566,8 +546,8 @@ export default function FirstGoalHomeSection({
                   style={{
                     padding: 12,
                     borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: colors.border,
+                    borderWidth: isHintedChallenge ? 2 : 1,
+                    borderColor: isHintedChallenge ? "#b91c1c" : colors.border,
                     backgroundColor: colors.card,
                   }}
                 >
@@ -580,8 +560,30 @@ export default function FirstGoalHomeSection({
                       marginBottom: 8,
                     }}
                   >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <MatchupRow
+                        awayAbbr={awayAbbr}
+                        homeAbbr={homeAbbr}
+                        sport={challengeLeague}
+                        colors={colors}
+                        prominent
+                      />
+                    </View>
+
+                    <MatchTaskStatusChip task={matchTask} colors={colors} compact />
+                  </View>
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      marginBottom: 8,
+                    }}
+                  >
                     <Text
-                      style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}
+                      style={{ color: colors.text, fontWeight: "900", fontSize: 17, flex: 1 }}
                       numberOfLines={2}
                     >
                       {getFgcTitle(ch, i18n.t.bind(i18n))}
@@ -596,30 +598,31 @@ export default function FirstGoalHomeSection({
                     ) : null}
                   </View>
 
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <MatchupRow
-                        awayAbbr={awayAbbr}
-                        homeAbbr={homeAbbr}
-                        sport={challengeLeague}
-                        colors={colors}
-                      />
+                  {!(deadlinePassed || isDecided) && !participation.showPostponed ? (
+                    <View style={{ marginTop: 12, gap: 8 }}>
+                      {showPrimaryCta ? (
+                        <TouchableOpacity
+                          onPress={onPressCta}
+                          activeOpacity={0.9}
+                          style={PARTICIPANT_PRIMARY_CTA.button}
+                        >
+                          <Text style={PARTICIPANT_PRIMARY_CTA.text}>{ctaLabel}</Text>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      {showModifyCta ? (
+                        <TouchableOpacity
+                          onPress={onPressCta}
+                          activeOpacity={0.9}
+                          style={PARTICIPANT_MODIFY_CTA.button}
+                        >
+                          <Text style={PARTICIPANT_MODIFY_CTA.text}>{ctaLabel}</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
+                  ) : null}
 
-                    {!isDecided ? (
-                      <MatchTaskStatusChip task={matchTask} colors={colors} compact />
-                    ) : null}
-                  </View>
-
-                  <Text style={{ color: colors.subtext, marginTop: 10, fontSize: 13 }}>
+                  <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 12 }}>
                     {participation.showPostponed ? (
                       <>
                         {i18n.t("firstGoal.home.gameStatus", {
@@ -657,22 +660,6 @@ export default function FirstGoalHomeSection({
                     </Text>
                   </View>
 
-                  {isDecided ? (
-                    resultPlayerName ? (
-                      <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
-                        {getFgcResultPrefix(ch, i18n.t.bind(i18n))}{" "}
-                        <Text style={{ color: colors.text, fontWeight: "900" }}>
-                          {resultPlayerName}
-                        </Text>
-                        {resultTeamAbbr ? ` (${resultTeamAbbr})` : ""}
-                      </Text>
-                    ) : (
-                      <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
-                        {i18n.t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" })}
-                      </Text>
-                    )
-                  ) : null}
-
                   {hasMyPick ? (
                     <View
                       style={{
@@ -683,7 +670,7 @@ export default function FirstGoalHomeSection({
                       }}
                     >
                       <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                        {i18n.t("firstGoal.home.myPick", { defaultValue: "Ton choix" })}
+                        {i18n.t("firstGoal.home.myPrediction", { defaultValue: "Ma prédiction" })}
                         {": "}
                       </Text>
 
@@ -708,52 +695,10 @@ export default function FirstGoalHomeSection({
                     </View>
                   ) : null}
 
-                  <View style={{ marginTop: 12, gap: 10 }}>
-                    {deadlinePassed && !participation.showPostponed ? (
-                      <ResultsTabHint colors={colors} />
-                    ) : (
-                      <>
-                        {showPrimaryCta ? (
-                          <TouchableOpacity
-                            onPress={onPressCta}
-                            activeOpacity={0.9}
-                            style={{
-                              width: "100%",
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                              alignItems: "center",
-                              backgroundColor: "#b91c1c",
-                            }}
-                          >
-                            <Text style={{ color: "#fff", fontWeight: "900" }}>{ctaLabel}</Text>
-                          </TouchableOpacity>
-                        ) : null}
-
-                        {showModifyCta ? (
-                          <TouchableOpacity
-                            onPress={onPressCta}
-                            activeOpacity={0.9}
-                            style={{
-                              width: "100%",
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                              alignItems: "center",
-                              backgroundColor: colors.card2,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                            }}
-                          >
-                            <Text style={{ color: colors.text, fontWeight: "900" }}>
-                              {ctaLabel}
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
-
-                        {!showPrimaryCta && !showModifyCta && st !== "open" && !participation.showPostponed ? (
-                          <ResultsTabHint colors={colors} />
-                        ) : null}
-                      </>
-                    )}
+                  <View style={{ marginTop: 8, gap: 8 }}>
+                    {!participation.showPostponed ? (
+                      <ResultsTabHint colors={colors} groupId={currentGroupId} />
+                    ) : null}
                   </View>
                 </View>
               );

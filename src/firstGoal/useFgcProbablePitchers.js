@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
 import { mlbScheduleGameDocPath } from "@src/mlb/mlbScheduleClient";
+import { normalizeMlbPitcherId } from "@src/mlb/loadMlbBvpForPlayers";
+import { mergeProbablePitcherRecords } from "@src/mlb/fgcBvpUtils";
+
+function hasPitcherId(pitcher) {
+  return !!normalizeMlbPitcherId(pitcher);
+}
 
 export default function useFgcProbablePitchers(challenge) {
   const league = String(challenge?.league || "NHL").toUpperCase();
@@ -10,58 +16,51 @@ export default function useFgcProbablePitchers(challenge) {
 
   const [schedulePitchers, setSchedulePitchers] = useState(null);
 
-  const challengeHasPitcherNames =
-    !!challenge?.awayProbablePitcher?.name || !!challenge?.homeProbablePitcher?.name;
+  const needsSchedulePitchers =
+    isMlb &&
+    schedulePath &&
+    (!hasPitcherId(challenge?.awayProbablePitcher) ||
+      !hasPitcherId(challenge?.homeProbablePitcher) ||
+      !String(challenge?.awayProbablePitcher?.name || "").trim() ||
+      !String(challenge?.homeProbablePitcher?.name || "").trim());
 
   useEffect(() => {
-    if (!isMlb || challengeHasPitcherNames) {
+    if (!needsSchedulePitchers || !schedulePath) {
       setSchedulePitchers(null);
       return undefined;
     }
 
-    if (!schedulePath) {
-      setSchedulePitchers(null);
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    firestore()
+    const unsub = firestore()
       .doc(schedulePath)
-      .get()
-      .then((snap) => {
-        if (cancelled || !snap.exists) return;
-        const data = snap.data() || {};
-        setSchedulePitchers({
-          away: data.awayProbablePitcher || null,
-          home: data.homeProbablePitcher || null,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) setSchedulePitchers(null);
-      });
+      .onSnapshot(
+        (snap) => {
+          if (!snap.exists) {
+            setSchedulePitchers(null);
+            return;
+          }
+          const data = snap.data() || {};
+          setSchedulePitchers({
+            away: data.awayProbablePitcher || null,
+            home: data.homeProbablePitcher || null,
+          });
+        },
+        () => {
+          setSchedulePitchers(null);
+        }
+      );
 
     return () => {
-      cancelled = true;
+      try {
+        unsub();
+      } catch {}
     };
-  }, [isMlb, challengeHasPitcherNames, schedulePath]);
+  }, [needsSchedulePitchers, schedulePath]);
 
-  return useMemo(() => {
-    const away =
-      (challenge?.awayProbablePitcher?.name ? challenge.awayProbablePitcher : null) ||
-      schedulePitchers?.away ||
-      challenge?.awayProbablePitcher ||
-      null;
-    const home =
-      (challenge?.homeProbablePitcher?.name ? challenge.homeProbablePitcher : null) ||
-      schedulePitchers?.home ||
-      challenge?.homeProbablePitcher ||
-      null;
-
-    return { away, home };
-  }, [
-    challenge?.awayProbablePitcher,
-    challenge?.homeProbablePitcher,
-    schedulePitchers,
-  ]);
+  return useMemo(
+    () => ({
+      away: mergeProbablePitcherRecords(challenge?.awayProbablePitcher, schedulePitchers?.away),
+      home: mergeProbablePitcherRecords(challenge?.homeProbablePitcher, schedulePitchers?.home),
+    }),
+    [challenge?.awayProbablePitcher, challenge?.homeProbablePitcher, schedulePitchers]
+  );
 }

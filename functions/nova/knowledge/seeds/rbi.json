@@ -1,0 +1,51 @@
+{
+  "sport": "MLB",
+  "type": "statistic",
+  "category": "Standard Stats",
+  "key": "rbi",
+  "status": "published",
+  "challengeTypes": ["FGC", "TS"],
+  "translations": {
+    "fr": {
+      "title": "RBI (Points produits)",
+      "shortAnswer": "Un RBI (Run Batted In) compte le nombre de points marqués grâce au coup d'un frappeur. Si un joueur fait frapper un coéquipier qui marque, il reçoit un RBI.",
+      "beginnerExplanation": "Quand un frappeur réussit un coup qui permet à un coureur de marquer un point, le frappeur reçoit un RBI. Un simple avec les bases pleines peut donner plusieurs RBI, tandis qu'un circuit avec un coureur sur les buts en donne aussi plusieurs.",
+      "intermediateExplanation": "Le RBI mesure la contribution offensive directe d'un frappeur au marquage. Il ne compte pas les points marqués sur erreur défensive ni sur un but sur balles avec les bases pleines (sauf dans certains cas de retrait forcé). C'est une statistique utile pour repérer les frappeurs qui produisent des points pour leur équipe.",
+      "expertExplanation": "Le RBI dépend fortement du contexte d'équipe (joueurs sur les buts, ordre de frappe) et peut surévaluer un frappeur bien entouré. Les analystes le complètent souvent avec des mesures de contexte comme le wRC+ ou les opportunités de coureurs en position de marquer.",
+      "prophetikUse": "Dans le Défi premier point produit, tu dois prédire le joueur qui produira le premier RBI du match. Regarde les frappeurs offensifs qui jouent tôt dans l'ordre de frappe, qui affichent de bons RBI saisonniers et qui affrontent un lanceur favorable.",
+      "commonMistakes": [
+        "Confondre RBI et points marqués (runs) par un joueur.",
+        "Choisir seulement selon le total saisonnier sans regarder le lanceur adverse.",
+        "Ignorer la position dans l'ordre de frappe et les coéquipiers qui peuvent être sur les buts."
+      ],
+      "examples": [
+        "Un frappeur frappe un simple avec un coureur au troisième but : il obtient 1 RBI.",
+        "Un circuit avec deux coureurs sur les buts donne 3 RBI au frappeur."
+      ]
+    },
+    "en": {
+      "title": "RBI (Runs Batted In)",
+      "shortAnswer": "An RBI (Run Batted In) credits a batter when a run scores because of their plate appearance. If a hitter drives in a teammate, they receive an RBI.",
+      "beginnerExplanation": "When a batter gets a hit or productive out that allows a runner to score, the batter earns an RBI. A single with the bases loaded can drive in multiple runs, and a home run with runners on base does the same.",
+      "intermediateExplanation": "RBI measures a hitter's direct offensive contribution to run scoring. It does not credit runs scored on errors or on a bases-loaded walk (except in some force-out situations). It helps identify hitters who produce runs for their team.",
+      "expertExplanation": "RBI depends heavily on team context (runners on base, lineup spot) and can overrate well-supported hitters. Analysts often complement it with context-adjusted metrics such as wRC+ or opportunities with runners in scoring position.",
+      "prophetikUse": "In the First Run Challenge, you predict the player who will record the first RBI of the game. Look for offensive hitters batting near the top of the order, with solid season RBI totals and a favorable pitching matchup.",
+      "commonMistakes": [
+        "Confusing RBI with runs scored by the batter themselves.",
+        "Picking only by season RBI totals without reading the pitching matchup.",
+        "Ignoring lineup spot and which teammates are likely to reach base."
+      ],
+      "examples": [
+        "A batter hits a single with a runner on third and earns 1 RBI.",
+        "A home run with two runners on base gives the batter 3 RBI."
+      ]
+    }
+  },
+  "relatedTopics": ["first_rbi", "ops", "batting_average"],
+  "tags": ["rbi", "mlb", "offense", "standard_stats", "point_produit"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "MLB Glossary",
+  "sourceUrl": "https://www.mlb.com/glossary/standard-stats/runs-batted-in",
+  "version": 1
+}

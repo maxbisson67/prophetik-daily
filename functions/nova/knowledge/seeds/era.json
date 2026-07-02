@@ -1,0 +1,51 @@
+{
+  "sport": "MLB",
+  "type": "statistic",
+  "category": "Pitching Stats",
+  "key": "era",
+  "status": "published",
+  "challengeTypes": ["FGC", "TP"],
+  "translations": {
+    "fr": {
+      "title": "ERA (Average Earned Run Average)",
+      "shortAnswer": "L'ERA mesure le nombre moyen de points mérités qu'un lanceur accorde par neuf manches lancées. Plus l'ERA est bas, plus le lanceur est généralement efficace.",
+      "beginnerExplanation": "Si un lanceur affiche un ERA de 3.50, cela signifie qu'il accorde en moyenne 3,5 points mérités pour neuf manches complètes. C'est une statistique simple pour comparer l'efficacité des lanceurs.",
+      "intermediateExplanation": "L'ERA ne compte que les points mérités (earned runs), pas ceux attribués sur erreur défensive. Elle permet de comparer des lanceurs même s'ils n'ont pas le même nombre de manches lancées.",
+      "expertExplanation": "L'ERA dépend du contexte (parc, défense, bullpen). Pour une analyse plus fine, les analystes utilisent souvent le FIP ou le xERA, qui isolent mieux la performance du lanceur.",
+      "prophetikUse": "Dans le Défi premier point produit, l'ERA du lanceur adverse indique à quel point il peut limiter les frappeurs tôt dans le match. Dans Prédire l'issue du match, l'ERA aide aussi à estimer le total de points.",
+      "commonMistakes": [
+        "Comparer des ERA sans tenir compte du nombre de manches lancées.",
+        "Ignorer le contexte du parc ou la qualité de la défensive.",
+        "Oublier que le bullpen influence aussi le score final."
+      ],
+      "examples": [
+        "Un ERA de 2.80 est généralement excellent pour un lanceur partant.",
+        "Un ERA au-dessus de 5.00 suggère souvent des difficultés sur la colline."
+      ]
+    },
+    "en": {
+      "title": "ERA (Earned Run Average)",
+      "shortAnswer": "ERA measures the average number of earned runs a pitcher allows per nine innings. A lower ERA generally indicates a more effective pitcher.",
+      "beginnerExplanation": "If a pitcher has a 3.50 ERA, they allow about 3.5 earned runs per nine innings on average. It is a simple way to compare pitching effectiveness.",
+      "intermediateExplanation": "ERA counts only earned runs, not runs scored due to defensive errors. It standardizes performance across different innings totals.",
+      "expertExplanation": "ERA is context-dependent (ballpark, defense, bullpen). Advanced analysts often prefer FIP or xERA for a cleaner measure of pitching skill.",
+      "prophetikUse": "In the First Run Challenge, the opposing starter's ERA shows how well they may limit hitters early. In Predict the Game Outcome, ERA also helps estimate total runs.",
+      "commonMistakes": [
+        "Comparing ERAs without considering innings pitched.",
+        "Ignoring ballpark and defensive context.",
+        "Forgetting that the bullpen also affects the final score."
+      ],
+      "examples": [
+        "A 2.80 ERA is generally excellent for a starting pitcher.",
+        "An ERA above 5.00 often signals pitching struggles."
+      ]
+    }
+  },
+  "relatedTopics": ["probable_pitcher", "whip", "tp_scoring", "first_rbi"],
+  "tags": ["era", "pitching", "mlb", "tp", "fgc", "lanceur"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "MLB Glossary",
+  "sourceUrl": "https://www.mlb.com/glossary/standard-stats/earned-run-average",
+  "version": 1
+}

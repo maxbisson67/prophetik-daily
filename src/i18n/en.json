@@ -2,6 +2,13 @@
   "app": {
     "name": "Prophetik"
   },
+  "appUpdate": {
+    "requiredTitle": "Update required",
+    "requiredBody": "This version of Prophetik is no longer supported. Install the latest version to continue.",
+    "versionLine": "Installed version: {{current}} • Minimum required: {{minimum}}",
+    "cta": "Update",
+    "missingStoreUrl": "Store link unavailable at the moment."
+  },
 
   "common": {
     "unknownError": "Unknown error",
@@ -26,7 +33,8 @@
     "participate": "Join",
     "participants": "participant(s)",
     "participant": "Participant",
-    "me": "You"
+    "me": "You",
+    "close": "Close"
   },
   "errors": {
     "firestorePermission": "Access denied by Firestore rules."
@@ -229,9 +237,21 @@
     "activeChallenges": "Active challenges",
     "unknownGroup": "Group",
     "totalPot": "Potential Winnings",
-    "todayChallenge": "Top scores Challenges",
+    "todayChallenge": "The daily trio",
+    "tsSubtitle": "Pick the 3 players who will score the most points.",
     "todayChallengeInfoTitle": "What is the top scores challenge?",
     "todayChallengeInfoBody": "Each top scores challenge asks you to pick a certain number of players based on the format (e.g., 2x2, 3x3). Your players earn real points based on their performance, and the highest total wins the challenge.",
+    "tsInfoTitle": "How this challenge works",
+    "tsInfoFunctioningTitle": "How it works",
+    "tsInfoFunctioning1": "Outpick your friends by selecting 3 players playing today.",
+    "tsInfoFunctioning2": "The participant(s) with the most combined points share the pot.",
+    "tsInfoFunctioning3": "The pot grows by 3 points for each entry.",
+    "tsInfoScoringTitle": "How to score points",
+    "tsInfoScoringMlb": "Baseball: 1 point per hit, 1 point per RBI, and a 1-point bonus for a home run.",
+    "tsInfoScoringNhl": "Hockey: 1 point per goal and 1 point per assist.",
+    "tsPickOnePlayerTitle": "Pick 1 player",
+    "tsPickPlayersTitle": "Pick {{count}} players",
+    "tsMyPrediction": "My prediction",
     "create":"Create",
     "challenge": "Challenge",
     "challengeDate": "NHL date",
@@ -247,8 +267,30 @@
     "upgradeCta": "See plans",
     "launchAscension":"Start an Ascension",
     "participate":"Participate",
-    "resultsTabHint": "View results in the {{tab}} tab.",
+    "resultsTabHintPrefix": "View results in the ",
+    "resultsTabHintLink": "My results",
+    "resultsTabHintSuffix": " tab.",
     "selectGroupLabel": "Select a group to view its challenges",
+    "dailyDefisTitle": "Take on today's challenges",
+    "dailyDefisProgressTitle": "My daily challenge progress",
+    "groupChatTitle": "Group chat",
+    "groupChatUnavailable": "Chat unavailable for this group.",
+    "dailyDefisAllEnrolled": "Nice work — you're signed up for all of today's challenges!",
+    "dailyDefisResultsHintPrefix": "Check your performance in the ",
+    "defiTab1": "Challenge 1",
+    "defiTab2": "Challenge 2",
+    "defiTab3": "Challenge 3",
+    "defiTabTodo": "To do",
+    "defiTabExpired": "Expired",
+    "defiTabExpiredMatches": {
+      "one": "{{count}} expired",
+      "other": "{{count}} expired"
+    },
+    "dailyDefisProgress": "{{count}} / {{total}} challenges completed",
+    "nextActionLabel": "Next action",
+    "nextActionCta": "Continue",
+    "nextActionCtaScroll": "View challenge",
+    "nextActionHint": "Shows the challenge you still need to complete",
     "threeWays":"Three ways to play on Prophetik",
     "threeWaysSub":"Choose your style today.",
     "way1": "1st way to play",
@@ -313,7 +355,9 @@
       "viewParticipants": "View participants",
       "viewPicks": "View picks",
       "noWinner": "No winner",
-      "infoTitle":"How does this challenge work?",
+      "upcoming": "Upcoming",
+      "myPrediction": "My prediction",
+      "infoTitle": "How this challenge works",
       "infoBody":"• Choose the player who will score the first goal or first run batted in of the game.\n• 5 points are awarded to the participant who correctly predicts the scorer."
     },
     "create":{
@@ -349,6 +393,13 @@
         "chooseOne": "Choose the player who will score the first goal",
         "chooseOneMlb": "Choose the player who will produce the first run",
         "sortedByStats": "Sorted by current season stats",
+        "sortedByLineup": "Sorted by batting order",
+        "lineupOrder": "#{{slot}} hitter",
+        "lineupOrderPrevious": "#{{slot}} hitter (last game)",
+        "notInLineup": "Not in lineup",
+        "lineupPending": "Batting order TBD",
+        "sortedByLineupPrevious": "Last game's order (provisional)",
+        "lineupPreviousNotice": "Order based on each team's last game — updates when MLB publishes today's lineup.",
         "injury": {
           "out": "Out",
           "dayToDay": "Day-to-day",
@@ -384,6 +435,7 @@
      },
     "firstRbi": {
       "title": "First run batted in",
+      "subtitle": "Who will drive in the first run in this game?",
       "resultPrefix": "First run batted in:",
       "live": {
         "noneYet": "No run batted in yet.",
@@ -470,6 +522,10 @@
 
         "membersSection": "Group members",
         "noMembers": "No members.",
+        "memberSince": "Member since {{date}}",
+        "ownerCreatedOn": "Owner, group created on {{date}}",
+        "roleOwner": "Owner",
+        "roleMember": "Member",
 
         "actionsSection": "Actions",
         "actionCreateChallenge": "Create a challenge",
@@ -533,6 +589,7 @@
         "save": "Save",
         "saveErrorTitle": "Save failed",
         "pickFavoriteTeam": "Choose a team",
+        "selectTeam": "Select",
         "noTeamsAvailable": "No teams available right now.",
         "loadingTeams": "Loading teams…",
         "teamsLoadError": "Could not load teams. Check your connection.",
@@ -614,7 +671,7 @@
             "cameraGrant": "Allow"
           },
            "invite": {
-            "title": "Invite with a QR code",
+            "title": "Sharing options",
             "subtitle": "A member can scan this QR to join without typing the code.",
             "copy": "Copy",
             "copied": "Copied",
@@ -728,6 +785,7 @@
           },
         "header": {
             "defaultTitle": "Challenge",
+            "trioTitle": "Daily Trio Challenge",
             "errorTitle": "Error",
             "notFoundTitle": "Challenge not found"
         },
@@ -750,14 +808,27 @@
             "title": "Select a player",
             "close": "Close",
             "searchPlaceholder": "Search a player…",
-            "emptyChoice": "Choose a player…"
+            "emptyChoice": "Choose a player…",
+            "choiceHint": "Pick {{index}}: {{hint}}",
+            "hintTop10": "Select a player from the following 10 options. Points shown for each player are the sum of hits (H), runs batted in (RBI), and home runs (HR).",
+            "hintOpen": "Select a player from the following options. Points shown for each player are the sum of hits (H), runs batted in (RBI), and home runs (HR).",
+            "sortPoints": "Points",
+            "sortHits": "Hits",
+            "sortRbi": "RBI",
+            "sortHr": "HR",
+            "statPoints": "PTS",
+            "statHits": "H",
+            "statRbi": "RBI",
+            "statHr": "HR"
         },
         "seasonToggle": {
             "current": "Season {{id}}",
             "previous": "Season {{id}}"
         },
         "infoCard": {
+            "trioTitle": "Daily trio",
             "nhlDate": "NHL date",
+            "mlbDate": "MLB date",
             "signupDeadline": "Signup deadline:",
             "firstGameUtc": "First game (UTC):",
             "choicesCount": "Number of picks:",
@@ -766,8 +837,14 @@
             "potLabel": "Prize pool",
             "pot": "{{count}} point(s)"
         },
+        "participationTab": {
+            "picks": "My selections",
+            "games": "Today's games"
+        },
         "gamesCard": {
             "title": "Today’s NHL games",
+            "titleNhl": "Today’s NHL games",
+            "titleMlb": "Today’s MLB games",
             "none": "No games found.",
             "time": "Time",
             "away": "Away",
@@ -822,7 +899,8 @@
             "groupFallback": "Group",
             "pot": "Prize pool of {{count}} points",
             "startsAt": "Starts at",
-            "scoring": "Scoring: Goal = +1 • Assist = +1"
+            "scoring": "Scoring: Goal = +1 • Assist = +1",
+            "scoringMlb": "Scoring: Run batted in (RBI) = +1, Hit (H) = +1, Home run (HR) = bonus +1"
             },
             "status": {
             "open": "Open",
@@ -915,6 +993,34 @@
       "ot": "Overtime",
       "so": "Shootout",
       "unknown": "Unknown"
+    },
+    "mlb": {
+      "noGames": "No games scheduled for today.",
+      "scoringPlays": "Scoring plays",
+      "loadingPlays": "Loading plays…",
+      "noScoringPlays": "No scoring plays yet.",
+      "postponed": "Postponed",
+      "inningTop": "Top {{inning}}",
+      "inningBottom": "Bottom {{inning}}",
+      "inningHeader": "{{label}}",
+      "rbi": "{{count}} RBI",
+      "homeRun": "HR",
+      "single": "Single",
+      "double": "Double",
+      "triple": "Triple",
+      "sacFly": "Sac fly",
+      "sacBunt": "Sac bunt",
+      "fieldError": "Field error",
+      "wildPitch": "Wild pitch",
+      "passedBall": "Passed ball",
+      "balk": "Balk",
+      "hitByPitch": "HBP",
+      "groundRuleDouble": "Ground-rule double",
+      "eventFallback": "Scoring play",
+      "ballsShort": "B",
+      "strikesShort": "S",
+      "outsShort": "O",
+      "runnersOnBase": "{{count}} runner(s)"
     }
   },
   "settings": {
@@ -925,7 +1031,21 @@
         "light": "Light",
         "dark": "Dark"
     },
-    "language": "Language"
+    "language": "Language",
+    "notifications": {
+        "title": "Notifications",
+        "loginRequired": "Sign in to manage your notifications.",
+        "morningChallenges": "Morning challenge alerts",
+        "morningChallengesHint": "When autopilot creates the day's challenges in your groups.",
+        "tpExactScore": "Predict match outcomes",
+        "tpExactScoreHint": "When you predict the exact final score of a game.",
+        "tsWin": "The daily trio",
+        "tsWinHint": "When you win the daily Trio challenge.",
+        "fgcWin": "Correct player (first run / goal)",
+        "fgcWinHint": "When you pick the right player in the first run or goal challenge.",
+        "leaderboardRankUp": "Leaderboard progress",
+        "leaderboardRankUpHint": "When you move up in your group's season standings."
+    }
  },
 
  "boutique": {
@@ -1266,11 +1386,18 @@
     },
     "career": {
       "title": "My Prophetik career",
+      "groupActivity": "ACTIVITY",
+      "groupPredictions": "PREDICTIONS",
+      "groupRecords": "RECORDS",
       "participations": "Challenges played",
+      "tpMatchOutcome": "Predict match outcome",
+      "exactScore": "Exact score",
       "correctPredictions": "Correct predictions",
-      "bestStreak": "Best streak",
+      "bestStreak": "Best streak (days)",
       "tsFivePointNights": "5+ pt nights",
       "fgcWins": "FGC wins",
+      "fgcWinsSup": "st",
+      "fgcWinsSuffix": "goal scorer or first RBI won",
       "exactScores": "Exact scores"
     },
     "displaySections": {
@@ -1289,9 +1416,18 @@
     "statsPointsSubtitle": "MY POINTS",
     "statsRankTitle": "RANK",
     "statsRankSubtitle": "MY POS.",
+    "statsDaysRemainingTitle": "LEFT",
+    "statsDaysRemainingUnit": "d",
+    "consecutiveParticipationsLabel": "Consecutive participations:",
+    "consecutiveParticipationsTag": "Consecutive participations: {{count}}",
+    "competitionDaysRemaining_one": "1 day left",
+    "competitionDaysRemaining_other": "{{count}} days left",
+    "competitionDaysRemaining_zero": "Last day",
     "statsDayPill": "DAY",
+    "statsGroupPill": "GROUP",
     "statsPointsPill": "POINTS",
     "statsPositionPill": "POS.",
+    "statsSeasonPill": "SEASON",
     "statsFooterPrefix": "Keep it up!",
     "statsFooterEmphasis": "Beat your best streak!",
     "days": "{{count}} d",
@@ -1486,18 +1622,35 @@
     "seasonLine": "Season {{seasonId}} · {{from}} → {{to}}",
 
     "selectGroupLabel": "Select a group to view the leaderboard",
+    "selectCompetitionLabel": "Competition",
+    "competitionDateLine": "{{from}} → {{to}}",
+    "competitionPhase": {
+      "regular": "Regular season",
+      "playoffs": "Playoffs"
+    },
+    "competitionStatus": {
+      "active": "In progress",
+      "finalized": "Completed",
+      "upcoming": "Upcoming"
+    },
+    "competitionNotStarted": "Not started yet",
 
     "sections": {
       "topScorers": "Top scorers",
+      "fgcMlb": "First run scored",
+      "fgcNhl": "First goal",
       "fgc": "Predict the first goal",
-      "tp": "Predict the match",
-      "ts": "Predict the best players"
+      "tp": "Predict the match outcome",
+      "ts": "Daily trio"
     },
 
     "columns": {
       "player": "Player",
       "total": "Total",
       "points": "Points",
+      "successes": "Successes",
+      "exacts": "Exact scores",
+      "victories": "Wins",
       "correctPicks": "Correct picks",
       "shareFgc": "% of personal total (FGC)",
       "shareTp": "% of personal total (TP)",
@@ -1506,9 +1659,11 @@
 
     "challenge": {
       "noStats": {
+        "fgcMlb": "No first run scored data for this competition.",
+        "fgcNhl": "No first goal data for this competition.",
         "fgc": "No Predict the first goal data for this season.",
-        "tp": "No Predict the match data for this season.",
-        "ts": "No Predict the best players data for this season."
+        "tp": "No match outcome data for this competition.",
+        "ts": "No daily trio data for this competition."
       }
     },
 
@@ -1527,6 +1682,13 @@
 
     "empty": {
       "noGroups": "You don’t have any groups yet."
+    },
+
+    "champions": {
+      "title": "Season champions",
+      "current": "Completed competition",
+      "past": "Past competition",
+      "points": "{{count}} pts"
     },
 
     "upgradeCta": {
@@ -1660,11 +1822,17 @@
     "todayDaySummary": "Challenges available today",
     "todayMixedSummary": "Today's challenges and results",
     "pastDaySummary": "Results for this day",
+    "dailyDefisTitle": "Today's challenge results",
+    "resultsContextTitle": "Viewing results",
+    "resultsContextHint": "You're on My results. To join today's challenges, go to the Home tab.",
     "todayCompactSummary": "{{joined}} / {{total}} challenges joined today",
     "goToAccueil": "Join today's challenges",
+    "goToAccueilDefi": "Participate in Today",
     "loginToSee": "Log in to see your challenges.",
     "loadingChallenges": "Loading challenges…",
     "noChallenges": "No challenges to display.",
+    "selectDayLabel": "Select a day",
+    "noDefiForSelectedDay": "No challenge for this day.",
     "seeResults": "See results",
     "openChallenge": "Open",
     "viewParticipants": "View participants",
@@ -1684,7 +1852,26 @@
     "matchCountShort": "{{count}} game(s)",
     "signupDeadlineShort": "Deadline",
     "noPickForMatch": "No prediction",
+    "bravoPoints": "Great job! {{points}} points",
+    "tpPointsInSight": "{{points}} points in sight",
+    "tpBravoWonPoints": "Great job! You won {{points}} points",
+    "oopsPoints": "Oops, 0 points",
     "pointsShort": "pt(s)",
+    "tsLiveYourScore": "Your score",
+    "tsLiveRankSuffix": "",
+    "tsLiveNoPicks": "You did not join this challenge.",
+    "tsLiveTop": "Leaderboard",
+    "tsLiveYou": "You",
+    "tsLiveSeeFull": "See full leaderboard",
+    "tsLiveLeaderSingle": "{{name}} is currently leading with {{scoreLabel}}.",
+    "tsLiveLeaderYou": "You are currently leading with {{scoreLabel}}.",
+    "tsLiveLeaderTie": "It's a fierce race with a tie at the top.",
+    "tsLiveLeaderScore": "{{score}} points",
+    "pointCount_one": "{{count}} point",
+    "pointCount_other": "{{count}} points",
+    "tsWinnerSingle": "{{name}} won this challenge with {{scoreLabel}} and earns {{payoutLabel}}",
+    "tsWinnerMultiple_one": "Fierce competition! Multiple winners share {{share}} point each",
+    "tsWinnerMultiple_other": "Fierce competition! Multiple winners share {{share}} points each",
     "status": {
       "active": "Active",
       "awaiting": "In progress",
@@ -1715,27 +1902,69 @@
     "home": {
       "title": "Predict match outcomes",
       "subtitleEmpty": "Pick the winner and exact score.",
-      "infoTitle": "How does this challenge work?",
+      "empty": "No match prediction challenge available today in your groups.",
+      "infoTitle": "How this challenge works",
       "infoBody": "Pick the scores for the matchups offered and earn points for each correct prediction. Predict the exact score correctly to earn even more points.",
       "infoLockHint": "Each match locks 5 minutes before puck/ball drop. You can complete your predictions one match at a time.",
       "participateBeforePrefix": "Participate before",
       "nextLockMatch": "Next lock: Match {{n}}",
       "nextLockMatchWithMatchup": "Next lock: Match {{n}} · {{matchup}}",
       "predictionsClosed": "Predictions closed",
+      "postponed": "Postponed",
+      "postponedParticipate": "Game postponed — you can still participate",
+      "gameStatus": "Game status",
       "bundleTitle": "{{count}} game(s) to predict",
       "myTotalPoints": "Your total: {{points}} pt(s)",
       "myPickShort": "You",
       "seeResults": "See results",
       "viewResults": "See results",
       "viewMyPicks": "View my picks",
+      "modifyTeam": "Edit my pick",
       "modifyTeams": "Edit my picks",
       "resultsAvailable": "Results available",
       "bundleProgress": "{{done}}/{{total}} predictions completed",
-      "viewPredictions": "View predictions"
+      "viewPredictions": "View predictions",
+      "myPrediction": "My prediction",
+      "predictionTodo": "To do",
+      "predictionTodoBefore": "Due before {{time}}",
+      "predictionWin": "Win",
+      "predictionWinBy": "Win by",
+      "predictionAgainst": "vs"
     },
     "pick": {
       "lockAt": "Locks at {{time}}",
-      "lockCountdown": "{{time}} left to save this match"
+      "lockCountdown": "{{time}} left to save this match",
+      "resultConfirmed": "Result: {{line}}",
+      "noPickForMatch": "You did not participate in this game.",
+      "perfectPick": "Exact score!",
+      "winnerCorrect": "Correct winner",
+      "winnerWrong": "Wrong winner",
+      "matchSlot": "Game {{n}}",
+      "decided": "Final",
+      "locked": "Locked",
+      "yourPick": "You",
+      "postponedHint": "Game postponed — prediction still open",
+      "tieNotAllowed": "The score cannot be tied.",
+      "saveMatch": "Save this game",
+      "modifyPick": "Modify my pick",
+      "savedTitle": "Prediction saved",
+      "savedMatchBody": "Your prediction for this game has been saved.",
+      "notFound": "TP challenge not found.",
+      "resultsTitle": "Challenge results",
+      "screenTitle": "Predict the outcome",
+      "myTotalPoints": "Your total: {{points}} pt(s)",
+      "bundleProgress": "{{done}}/{{total}} games completed",
+      "summaryHintMvp": "3 pts for the correct winner, +3 pts for the exact score.",
+      "statusIncomplete": "Incomplete",
+      "statusPending": "Pending…",
+      "statusSaving": "Saving…",
+      "statusSaved": "Saved",
+      "statusError": "Error",
+      "saveFailed": "Save failed",
+      "savingAll": "Saving…",
+      "pendingSave": "Save pending…",
+      "allSaved": "All saved ✓",
+      "progressSaved": "{{saved}}/{{total}} games saved"
     },
     "live": {
       "title": "Predict match outcomes"
@@ -1743,9 +1972,13 @@
     "results": {
       "officialScore": "Result",
       "liveScore": "Live",
+      "liveScoreLine": "Live score",
       "predictionLine": "Prediction",
+      "myGuess": "My guess",
       "unconfirmedPoints": "{{points}} unconfirmed pt(s)",
       "noPoints": "0 pt",
+      "bravoPoints": "Great job! {{points}} points",
+      "oopsPoints": "Oops, 0 points",
       "provisionalHint": "Provisional points based on the current score",
       "myTotalPoints": "My points: {{points}} pt(s)",
       "participantsModalSubtitle": "{{count}} game(s) · ranked by points",
@@ -1866,8 +2099,79 @@
         "body": "Everything is set. You can now launch the Ascension."
       }
     } 
+  },
+
+  "mlb": {
+    "bvp": {
+      "careerLine": "vs {{pitcher}}: {{pa}} PA · {{hits}} H · {{hr}} HR · {{rbi}} RBI · OPS {{ops}}",
+      "shortLine": "{{pa}} PA · {{hits}} H · {{hr}} HR · OPS {{ops}}",
+      "noSample": "vs {{pitcher}}: no history",
+      "noSampleShort": "No history vs this pitcher",
+      "teamNoSample": "No career MLB plate appearances vs {{pitcher}} for this team's hitters."
+    }
+  },
+
+  "novaCoach": {
+    "panelTitle": "Nova Coach",
+    "panelHint": "Ask a question about your predictions",
+    "playerModalTitle": "Nova's take",
+    "playerAdviceButton": "Nova's take",
+    "selectQuestion": "Pick a question",
+    "playerModalSubtitle": "Personalized analysis for your pick",
+    "customQuestion": "Custom question",
+    "sectionPlayerAdvice": "Advice for this player",
+    "sectionPlayerAdviceHint": "Personalized analysis · AI",
+    "singleAdviceButton": "Get Nova's advice",
+    "singleAdviceHint": "Full analysis for this pick",
+    "adviceComplete": "End of analysis",
+    "adviceScrollHint": "Scroll to read the full analysis",
+    "learnDrawerTitle": "Learn the basics",
+    "learnDrawerHint": "{{count}} topics · instant answers",
+    "sectionLearn": "Learn",
+    "sectionLearnHint": "Instant answers · knowledge base",
+    "sectionStrategy": "Strategies",
+    "sectionStrategyHint": "Personalized analysis · AI",
+    "badgeKb": "Instant",
+    "badgeLlm": "AI analysis",
+    "lineupSlotShort": "#{{slot}}",
+    "thinking": "Nova is analyzing…",
+    "placeholder": "Ask Nova a question…",
+    "ask": "Ask Nova",
+    "title": "Nova",
+    "learningTitle": "Learn more",
+    "teamFormHeader": "Verified team form:",
+    "teamForm": {
+      "record": "• Record:",
+      "streak": "• Streak:",
+      "lastTen": "• Last 10:",
+      "split": "• Split:",
+      "offenseDefense": "• Offense/defense:"
+    },
+    "suggest": {
+      "compare": "Help me compare two players for this game",
+      "risk": "What risks should I consider for this matchup?",
+      "firstGoal": "What makes a good profile to score the first goal?",
+      "rbi": "What is an RBI?",
+      "ops": "What is OPS?",
+      "era": "What is ERA?",
+      "learnPlatoon": "What is platoon advantage (lefty / righty matchups)?",
+      "learnBvp": "What is BvP (batter vs pitcher history)?",
+      "learnLineupBasics": "Lineup order and first RBI: how does it work?",
+      "fgcPlayerAdvice": "Analyze this batter for the game's first RBI: opposing starter (ERA and handedness), lineup spot, season RBI, opposing team runs allowed per game, and career BvP only if more than 9 plate appearances. Give a clear synthesis with key risks.",
+      "playerAdvice": "Give your full advice on this player for this challenge.",
+      "tpMatch1": "Help me predict game 1",
+      "tpTeamRecord": "How do I read team record and recent form?",
+      "tpScoring": "How does scoring work?",
+      "tpPitcher": "How do I use the probable starter?",
+      "tpEra": "What is ERA?"
+    },
+    "quota": "You've reached the Nova coaching limit for this month.",
+    "notConfigured": "Nova isn't configured on the server (OpenAI sk-… key required).",
+    "openAiQuota": "OpenAI quota exceeded. Check billing at platform.openai.com.",
+    "modelError": "Nova couldn't reach OpenAI. Check the API key and novaCoach deployment.",
+    "empty": "Nova couldn't find an answer for this question.",
+    "error": "Nova couldn't respond. Try again in a moment.",
+    "devError": "Nova ({{key}}) — retry or check Cloud Functions logs."
   }
 }
-
-
   

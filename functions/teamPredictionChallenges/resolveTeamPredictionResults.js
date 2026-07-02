@@ -3,10 +3,9 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import {
-  extractMlbOfficialResult,
+  extractMlbOfficialResultFromDoc,
   extractNhlOfficialResult,
-  fetchMlbLiveFeed,
-  isMlbLiveGameFinal,
+  isMlbLiveDocFinal,
   isNhlLiveGameFinal,
   normalizeLeague,
 } from "./tpGameSources.js";
@@ -52,18 +51,28 @@ export const resolveTeamPredictionResults = onSchedule(
         let officialResult = null;
 
         if (league === "MLB") {
-          const liveFeed = await fetchMlbLiveFeed(gameId);
+          const gameSnap = await db.doc(`mlb_live_games/${gameId}`).get();
 
-          if (!isMlbLiveGameFinal(liveFeed)) {
-            logger.info("[TP resolve] skip MLB not final", {
+          if (!gameSnap.exists) {
+            logger.info("[TP resolve] skip missing MLB live game", {
               challengeId: doc.id,
               gameId,
-              abstractGameState: liveFeed?.gameData?.status?.abstractGameState ?? null,
             });
             continue;
           }
 
-          officialResult = extractMlbOfficialResult(liveFeed, ch);
+          const game = gameSnap.data() || {};
+
+          if (!isMlbLiveDocFinal(game)) {
+            logger.info("[TP resolve] skip MLB not final", {
+              challengeId: doc.id,
+              gameId,
+              abstractGameState: game?.abstractGameState ?? null,
+            });
+            continue;
+          }
+
+          officialResult = extractMlbOfficialResultFromDoc(game, ch);
         } else {
           const gameSnap = await db.doc(`nhl_live_games/${gameId}`).get();
 

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Image,
   FlatList,
 } from "react-native";
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
@@ -25,11 +24,22 @@ import useFgcProbablePitchers from "@src/firstGoal/useFgcProbablePitchers";
 import useFgcGameSchedules from "@src/firstGoal/useFgcGameSchedules";
 import { isMlbGamePostponed } from "@src/firstGoal/fgcGameScheduleUtils";
 import { loadFgcPlayersProgressive } from "@src/players/loadFgcPlayersWithSeasonStats";
+import { enrichPlayersWithMlbBvp, normalizeMlbPitcherId } from "@src/mlb/loadMlbBvpForPlayers";
+import { resolveFgcProbablePitchersForBvp } from "@src/mlb/fgcBvpUtils";
 import {
-  getPlayerSeasonStatLines,
-  getPlayerSortValue,
-} from "@src/players/seasonStatsHelpers";
-import { getInjuryDisplay, isPlayerUnavailable } from "@src/players/injuryDisplayHelpers";
+  enrichPlayersWithMlbLineups,
+  hasUsableMlbLineups,
+  hasLineupDataForTeam,
+  isOfficialMlbLineup,
+  isProvisionalMlbLineup,
+  lineupSlotForPlayer,
+  loadMlbGameLineups,
+} from "@src/mlb/loadMlbGameLineups";
+import FgcPlayerPickCard from "@src/firstGoal/FgcPlayerPickCard";
+import { shouldShowMlbBvpLine } from "@src/mlb/MlbDefiPlayerMeta";
+import { isPlayerUnavailable } from "@src/players/injuryDisplayHelpers";
+import { getPlayerSortValue } from "@src/players/seasonStatsHelpers";
+import NovaCoachPlayerModal from "@src/nova/NovaCoachPlayerModal";
 
 /* ---------------- helpers ---------------- */
 
@@ -45,15 +55,6 @@ function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-function initials(name) {
-  const s = String(name || "").trim();
-  if (!s) return "?";
-  const parts = s.split(/\s+/).filter(Boolean);
-  const a = parts[0]?.[0] || "";
-  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
-  return (a + b).toUpperCase();
-}
-
 function fmtHmLocal(date) {
   if (!date) return null;
   const d = date instanceof Date ? date : toDateSafe(date);
@@ -61,6 +62,19 @@ function fmtHmLocal(date) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+function lineupBeforeYmd(challenge) {
+  const ymd = String(challenge?.gameYmd || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+
+  const start = toDateSafe(challenge?.gameStartTimeUTC);
+  if (!start) return null;
+
+  const y = start.getUTCFullYear();
+  const m = String(start.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(start.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function byFullName(a, b) {
@@ -131,137 +145,6 @@ function TopBar({ title, subtitle, onBack, onClose, colors }) {
   );
 }
 
-const PlayerRow = React.memo(function PlayerRow({
-  item,
-  disabled,
-  locked,
-  onPick,
-  colors,
-  selectedPlayerId,
-  league,
-  seasonPair,
-}) {
-  const uri = item.headshotUrl || item.headshot || null;
-  const name = item.fullName || item.name || item.id;
-
-  const injuryInfo = getInjuryDisplay(item?.injury);
-  const isPicked = !!(
-    selectedPlayerId &&
-    (String(selectedPlayerId) === String(item?.id) ||
-      String(selectedPlayerId) === String(item?.playerId))
-  );
-  const statLines = getPlayerSeasonStatLines(item, league, seasonPair);
-
-  return (
-    <TouchableOpacity
-      onPress={() => onPick(item)}
-      disabled={disabled}
-      activeOpacity={0.85}
-      style={{
-        padding: 12,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: isPicked ? colors.primary : colors.border,
-        backgroundColor: isPicked ? colors.card2 : colors.card,
-        opacity: disabled ? 0.55 : 1,
-        flexDirection: "row",
-        alignItems: "flex-start",
-        gap: 12,
-      }}
-    >
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          overflow: "hidden",
-          backgroundColor: colors.card2,
-          borderWidth: 1,
-          borderColor: colors.border,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {uri ? (
-          <Image source={{ uri }} style={{ width: 44, height: 44 }} resizeMode="cover" />
-        ) : (
-          <Text style={{ color: colors.text, fontWeight: "900" }}>{initials(name)}</Text>
-        )}
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={{ fontWeight: "900", color: colors.text, flex: 1 }} numberOfLines={1}>
-            {name}
-          </Text>
-
-          {injuryInfo?.showIcon ? (
-            <Ionicons
-              name="medkit"
-              size={14}
-              color={
-                injuryInfo.tone === "danger"
-                  ? colors.danger || "#E53935"
-                  : colors.warning || "#FB8C00"
-              }
-            />
-          ) : null}
-
-          {isPicked ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
-        </View>
-
-        {item?.positionCode ? (
-          <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2, fontWeight: "700" }}>
-            {item.positionCode}
-          </Text>
-        ) : isPicked ? (
-          <Text
-            style={{
-              color: colors.danger || "#E53935",
-              fontSize: 12,
-              marginTop: 2,
-              fontWeight: "800",
-            }}
-          >
-            {i18n.t("firstGoal.pick.mySelection", { defaultValue: "Ma sélection" })}
-          </Text>
-        ) : null}
-
-        {injuryInfo ? (
-          <Text
-            style={{
-              color:
-                injuryInfo.tone === "danger"
-                  ? colors.danger || "#E53935"
-                  : colors.warning || "#FB8C00",
-              fontSize: 11,
-              marginTop: 3,
-              fontWeight: "700",
-            }}
-            numberOfLines={2}
-          >
-            {injuryInfo.label}
-            {injuryInfo.short ? ` · ${injuryInfo.short}` : ""}
-          </Text>
-        ) : null}
-
-        {statLines.map((s) => (
-          <View key={s.seasonId} style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 4 }}>
-            <Text style={{ color: colors.text, fontSize: 12, fontWeight: "800" }}>{s.label}</Text>
-            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "600" }}> · {s.line}</Text>
-          </View>
-        ))}
-      </View>
-
-      {locked ? null : isPicked ? null : (
-        <View style={{ paddingTop: 4 }}>
-          <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-});
-
 async function buildIdentityForEntry(user) {
   const uid = String(user?.uid || "");
   if (!uid) return { displayName: "Invité", avatarUrl: null };
@@ -308,22 +191,28 @@ export default function FirstGoalPickScreen() {
 
   const [challenge, setChallenge] = useState(null);
   const [players, setPlayers] = useState([]);
+  const [bvpByPlayerId, setBvpByPlayerId] = useState({});
+  const [bvpPitcherByPlayerId, setBvpPitcherByPlayerId] = useState({});
+  const [mlbLineups, setMlbLineups] = useState(null);
   const [entry, setEntry] = useState(null);
   const [seasonPair, setSeasonPair] = useState(null);
 
   const [loadingChallenge, setLoadingChallenge] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [novaModalPlayer, setNovaModalPlayer] = useState(null);
 
   const cid = String(challengeId || "");
   const [selectedTeam, setSelectedTeam] = useState("");
   const initialTeamSetRef = useRef(false);
+  const bvpRunIdRef = useRef(0);
 
   useEffect(() => {
     setChallenge(null);
     setPlayers([]);
     setEntry(null);
     setSeasonPair(null);
+    setMlbLineups(null);
     setSelectedTeam("");
     initialTeamSetRef.current = false;
     setLoadingChallenge(true);
@@ -437,6 +326,158 @@ export default function FirstGoalPickScreen() {
   const scheduleInfo = challenge ? scheduleByChallengeId[String(challenge.id || "")] : null;
   const isPostponed = isMlbGamePostponed(scheduleInfo?.status);
 
+  useEffect(() => {
+    if (getFgcLeague(challenge) !== "MLB") {
+      setMlbLineups(null);
+      return undefined;
+    }
+
+    const gamePk = String(challenge?.gamePk || challenge?.gameId || "").trim();
+    if (!gamePk) {
+      setMlbLineups(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let pollTimer = null;
+
+    const refreshLineups = async () => {
+      try {
+        const lineups = await loadMlbGameLineups(gamePk, {
+          awayAbbr: safeAbbr(challenge?.awayAbbr),
+          homeAbbr: safeAbbr(challenge?.homeAbbr),
+          beforeYmd: lineupBeforeYmd(challenge),
+        });
+        if (cancelled) return { loaded: false, official: false };
+        if (hasUsableMlbLineups(lineups)) {
+          setMlbLineups(lineups);
+          return { loaded: true, official: isOfficialMlbLineup(lineups) };
+        }
+        setMlbLineups(null);
+        return { loaded: false, official: false };
+      } catch (e) {
+        if (!cancelled) setMlbLineups(null);
+        console.log("[FirstGoalPick] lineup load error", e?.message || e);
+        return { loaded: false, official: false };
+      }
+    };
+
+    (async () => {
+      const result = await refreshLineups();
+      if (cancelled || result.official) return;
+
+      pollTimer = setInterval(async () => {
+        const next = await refreshLineups();
+        if (next.official && pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }, 90 * 1000);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  }, [
+    challenge?.league,
+    challenge?.gamePk,
+    challenge?.gameId,
+    challenge?.fgcMode,
+    challenge?.awayAbbr,
+    challenge?.homeAbbr,
+    challenge?.gameYmd,
+    challenge?.gameStartTimeUTC,
+  ]);
+
+  useEffect(() => {
+    if (getFgcLeague(challenge) !== "MLB" || !players.length) {
+      setBvpByPlayerId({});
+      setBvpPitcherByPlayerId({});
+      return undefined;
+    }
+
+    const awayAbbr = safeAbbr(challenge?.awayAbbr);
+    const homeAbbr = safeAbbr(challenge?.homeAbbr);
+
+    let cancelled = false;
+    const runId = ++bvpRunIdRef.current;
+
+    (async () => {
+      try {
+        const { matchups } = await resolveFgcProbablePitchersForBvp(challenge, probablePitchers);
+        if (cancelled || runId !== bvpRunIdRef.current) return;
+
+        const hasAnyPitcher = matchups.some((m) => normalizeMlbPitcherId(m.pitcher));
+        if (!hasAnyPitcher) {
+          if (__DEV__) {
+            console.log("[FirstGoalPick] BvP skipped — no probable pitcher id", {
+              matchups: matchups.map((m) => ({
+                team: m.teamAbbr,
+                pitcher: m.pitcher,
+              })),
+            });
+          }
+          return;
+        }
+
+        const nextBvp = {};
+        const nextPitcher = {};
+
+        for (const { teamAbbr, pitcher } of matchups) {
+          const pitcherId = normalizeMlbPitcherId(pitcher);
+          if (!pitcherId || !teamAbbr) continue;
+
+          const subset = players.filter((p) => safeAbbr(p?.teamAbbr) === teamAbbr);
+          if (!subset.length) continue;
+
+          const enriched = await enrichPlayersWithMlbBvp(subset, pitcher);
+          for (const p of enriched) {
+            const id = String(p?.playerId ?? p?.id ?? "");
+            if (!id) continue;
+            nextBvp[id] = p.bvpVsOpposingStarter ?? null;
+            nextPitcher[id] = pitcher;
+          }
+        }
+
+        if (cancelled || runId !== bvpRunIdRef.current) return;
+        const withSample = Object.values(nextBvp).filter((r) => r?.hasSample).length;
+        if (__DEV__) {
+          console.log("[FirstGoalPick] bvp enrich done", {
+            players: Object.keys(nextBvp).length,
+            withSample,
+            matchups: matchups.map((m) => ({
+              team: m.teamAbbr,
+              pitcherId: normalizeMlbPitcherId(m.pitcher),
+              pitcherName: m.pitcher?.name ?? null,
+            })),
+          });
+        }
+        setBvpByPlayerId(nextBvp);
+        setBvpPitcherByPlayerId(nextPitcher);
+      } catch (e) {
+        console.log("[FirstGoalPick] bvp enrich error", e?.message || e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    challenge,
+    challenge?.league,
+    challenge?.awayAbbr,
+    challenge?.homeAbbr,
+    challenge?.gameYmd,
+    challenge?.gamePk,
+    challenge?.gameId,
+    players,
+    probablePitchers?.home?.id,
+    probablePitchers?.away?.id,
+    probablePitchers?.home?.name,
+    probablePitchers?.away?.name,
+  ]);
+
   const derived = useMemo(() => {
     const st = String(challenge?.status || "").toLowerCase();
     const league = getFgcLeague(challenge);
@@ -538,13 +579,25 @@ export default function FirstGoalPickScreen() {
   const loading = loadingChallenge && !challenge;
 
   const activeSeasonPair = seasonPair || { current: "", previous: "" };
+  const lineupsAvailable = derived.league === "MLB" && hasUsableMlbLineups(mlbLineups);
+  const lineupsProvisional = derived.league === "MLB" && isProvisionalMlbLineup(mlbLineups);
+
+  const displayPlayers = useMemo(() => {
+    if (!lineupsAvailable || !players.length) return players;
+    return enrichPlayersWithMlbLineups(
+      players,
+      mlbLineups,
+      safeAbbr(challenge?.homeAbbr),
+      safeAbbr(challenge?.awayAbbr)
+    );
+  }, [players, mlbLineups, lineupsAvailable, challenge?.homeAbbr, challenge?.awayAbbr]);
 
   const filteredPlayers = useMemo(() => {
     const t = safeAbbr(selectedTeam);
     const pickedId = entry?.playerId ? String(entry.playerId) : "";
     const league = derived.league;
 
-    const base = t ? players.filter((p) => safeAbbr(p?.teamAbbr) === t) : [...players];
+    const base = t ? displayPlayers.filter((p) => safeAbbr(p?.teamAbbr) === t) : [...displayPlayers];
 
     base.sort((a, b) => {
       const aPicked =
@@ -553,6 +606,12 @@ export default function FirstGoalPickScreen() {
         pickedId && (String(b?.id) === pickedId || String(b?.playerId) === pickedId);
       if (aPicked && !bPicked) return -1;
       if (!aPicked && bPicked) return 1;
+
+      if (lineupsAvailable) {
+        const aSlot = a?.lineupSlot != null ? Number(a.lineupSlot) : 999;
+        const bSlot = b?.lineupSlot != null ? Number(b.lineupSlot) : 999;
+        if (aSlot !== bSlot) return aSlot - bSlot;
+      }
 
       const statDiff =
         getPlayerSortValue(b, league, activeSeasonPair) -
@@ -567,7 +626,45 @@ export default function FirstGoalPickScreen() {
     });
 
     return base;
-  }, [players, selectedTeam, entry?.playerId, derived.league, activeSeasonPair]);
+  }, [
+    displayPlayers,
+    selectedTeam,
+    entry?.playerId,
+    derived.league,
+    activeSeasonPair,
+    lineupsAvailable,
+  ]);
+
+  const selectedTeamBvpNotice = useMemo(() => {
+    if (derived.league !== "MLB") return null;
+
+    const teamAbbr = safeAbbr(selectedTeam);
+    if (!teamAbbr) return null;
+
+    const teamPlayers = players.filter((p) => safeAbbr(p?.teamAbbr) === teamAbbr);
+    if (!teamPlayers.length) return null;
+
+    let loaded = 0;
+    let withSample = 0;
+    let pitcherName = "";
+
+    for (const p of teamPlayers) {
+      const pid = String(p?.playerId ?? p?.id ?? "");
+      if (!pid) continue;
+      const bvp = bvpByPlayerId[pid];
+      if (bvp == null) continue;
+      loaded += 1;
+      if (shouldShowMlbBvpLine(bvp)) withSample += 1;
+      if (!pitcherName) {
+        pitcherName =
+          String(bvpPitcherByPlayerId[pid]?.name || bvp?.pitcherName || "").trim();
+      }
+    }
+
+    if (loaded === 0 || withSample > 0 || !pitcherName) return null;
+
+    return { pitcherName };
+  }, [derived.league, selectedTeam, players, bvpByPlayerId, bvpPitcherByPlayerId]);
 
   const goBackOrHome = useCallback(() => {
     if (router.canGoBack?.()) router.back();
@@ -643,19 +740,64 @@ export default function FirstGoalPickScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item }) => (
-      <PlayerRow
-        item={item}
-        disabled={derived.locked || saving}
-        locked={derived.locked}
-        onPick={pickPlayer}
-        colors={colors}
-        selectedPlayerId={entry?.playerId}
-        league={derived.league}
-        seasonPair={activeSeasonPair}
-      />
-    ),
-    [derived.locked, derived.league, saving, pickPlayer, colors, entry?.playerId, activeSeasonPair, lang]
+    ({ item }) => {
+      const pid = String(item?.playerId ?? item?.id ?? "");
+      const showNova =
+        (derived.league === "NHL" || derived.league === "MLB") && !derived.locked;
+
+      const homeAbbr = safeAbbr(challenge?.homeAbbr);
+      const awayAbbr = safeAbbr(challenge?.awayAbbr);
+      const lineupSlot =
+        lineupsAvailable && mlbLineups
+          ? lineupSlotForPlayer(mlbLineups, item, homeAbbr, awayAbbr) ??
+            item?.lineupSlot ??
+            null
+          : item?.lineupSlot ?? null;
+
+      return (
+        <FgcPlayerPickCard
+          item={{
+            ...item,
+            lineupSlot,
+            bvpVsOpposingStarter: bvpByPlayerId[pid] || null,
+            opposingPitcherForBvp: bvpPitcherByPlayerId[pid] || null,
+          }}
+          disabled={derived.locked || saving}
+          locked={derived.locked}
+          onPick={pickPlayer}
+          onNovaPress={setNovaModalPlayer}
+          showNovaButton={showNova}
+          colors={colors}
+          selectedPlayerId={entry?.playerId}
+          league={derived.league}
+          seasonPair={activeSeasonPair}
+          lineupsAvailable={lineupsAvailable}
+          lineupSideAvailable={hasLineupDataForTeam(
+            mlbLineups,
+            item.teamAbbr,
+            challenge?.homeAbbr,
+            challenge?.awayAbbr
+          )}
+          lineupsProvisional={lineupsProvisional}
+        />
+      );
+    },
+    [
+      derived.locked,
+      derived.league,
+      saving,
+      pickPlayer,
+      colors,
+      entry?.playerId,
+      activeSeasonPair,
+      bvpByPlayerId,
+      bvpPitcherByPlayerId,
+      lineupsAvailable,
+      lineupsProvisional,
+      mlbLineups,
+      challenge?.homeAbbr,
+      challenge?.awayAbbr,
+    ]
   );
 
   const ItemSeparator = useCallback(() => <View style={{ height: 10 }} />, []);
@@ -668,43 +810,74 @@ export default function FirstGoalPickScreen() {
           paddingTop: 10,
           paddingBottom: 8,
           backgroundColor: colors.background,
+          gap: 8,
         }}
       >
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+        {!lineupsProvisional ? (
+          <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "600" }}>
+            {lineupsAvailable
+              ? i18n.t("firstGoal.pick.sortedByLineup", {
+                  defaultValue: "Triés par ordre de frappe",
+                })
+              : i18n.t("firstGoal.pick.sortedByStats", {
+                  defaultValue: "Triés par stats saison en cours",
+                })}
+          </Text>
+        ) : null}
+
+        {lineupsProvisional ? (
           <View
             style={{
-              paddingVertical: 4,
+              alignSelf: "flex-start",
+              paddingVertical: 6,
               paddingHorizontal: 10,
-              borderRadius: 999,
+              borderRadius: 10,
               borderWidth: 1,
               borderColor: colors.border,
-              backgroundColor: colors.card,
+              backgroundColor: colors.card2,
             }}
           >
-            <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
-              {i18n.t("firstGoal.pick.participants", { defaultValue: "Participants" })}:{" "}
-              {Number(challenge?.participantsCount || 0)}
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 11,
+                fontWeight: "700",
+                lineHeight: 16,
+              }}
+            >
+              {i18n.t("firstGoal.pick.lineupPreviousNotice", {
+                defaultValue:
+                  "Ordre basé sur le dernier match de chaque équipe — sera mis à jour dès publication par la MLB.",
+              })}
             </Text>
           </View>
+        ) : null}
 
-          {derived.startHm ? (
-            <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "700" }}>
-              {i18n.t("firstGoal.pick.startsAt", { defaultValue: "Début" })}: {derived.startHm}
-            </Text>
-          ) : null}
-        </View>
-
-        <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "600", marginTop: 6 }}>
-          {i18n.t("firstGoal.pick.sortedByStats", {
-            defaultValue: "Triés par stats saison en cours",
-          })}
-        </Text>
+        {selectedTeamBvpNotice ? (
+          <Text
+            style={{
+              color: colors.subtext,
+              fontSize: 11,
+              fontWeight: "700",
+              marginTop: 8,
+              lineHeight: 16,
+            }}
+          >
+            {i18n.t("mlb.bvp.teamNoSample", {
+              defaultValue:
+                "Aucun face-à-face en carrière MLB vs {{pitcher}} pour les frappeurs de cette équipe.",
+              pitcher: selectedTeamBvpNotice.pitcherName,
+            })}
+          </Text>
+        ) : null}
       </View>
     );
   }, [
     colors,
-    derived.startHm,
-    challenge?.participantsCount,
+    derived.league,
+    lineupsAvailable,
+    lineupsProvisional,
+    selectedTeamBvpNotice,
     lang,
   ]);
 
@@ -806,6 +979,34 @@ export default function FirstGoalPickScreen() {
               </View>
             )
           }
+        />
+
+        <NovaCoachPlayerModal
+          visible={!!novaModalPlayer}
+          onClose={() => setNovaModalPlayer(null)}
+          player={
+            novaModalPlayer
+              ? {
+                  ...novaModalPlayer,
+                  lineupSlot:
+                    lineupsAvailable && mlbLineups
+                      ? lineupSlotForPlayer(
+                          mlbLineups,
+                          novaModalPlayer,
+                          safeAbbr(challenge?.homeAbbr),
+                          safeAbbr(challenge?.awayAbbr)
+                        )
+                      : novaModalPlayer?.lineupSlot ?? null,
+                }
+              : null
+          }
+          challengeId={String(challenge.id)}
+          sport={derived.league}
+          gameId={challenge?.gamePk ?? challenge?.gameId ?? challenge?.mlbGameId ?? null}
+          probablePitchers={probablePitchers}
+          homeAbbr={challenge?.homeAbbr}
+          awayAbbr={challenge?.awayAbbr}
+          disabled={derived.locked || saving}
         />
       </SafeAreaView>
     </>

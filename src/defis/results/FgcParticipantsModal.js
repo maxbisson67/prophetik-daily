@@ -14,6 +14,7 @@ import {
   getFgcResultPlayerId,
   getFgcResultPlayerName,
   getFgcResultPrefix,
+  getFgcResultOutcomeLabel,
   getFgcResultTeamAbbr,
   getFgcTitle,
 } from "@src/firstGoal/fgcChallengeUtils";
@@ -39,6 +40,7 @@ export default function FgcParticipantsModal({
   entries = [],
   loading = false,
   currentUid = "",
+  matchTask = null,
   colors,
 }) {
   const winnerPlayerId = getFgcResultPlayerId(challenge);
@@ -74,7 +76,11 @@ export default function FgcParticipantsModal({
                   ? `${getFgcResultPrefix(challenge, i18n.t.bind(i18n))} ${winnerName}${
                       winnerTeam ? ` (${winnerTeam})` : ""
                     }`
-                  : i18n.t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" })}
+                  : getFgcResultOutcomeLabel(
+                      challenge,
+                      i18n.t.bind(i18n),
+                      matchTask?.state
+                    )}
               </Text>
             </View>
 

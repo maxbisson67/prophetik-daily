@@ -4,8 +4,8 @@ import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
 import { buildMlbDefiPlayerPool } from "./mlbDefiPlayerPool.js";
 
-// ✅ pool figé du défi
-const POOL_SIZE = 150;
+// ✅ pool figé du défi — T3 inclut tous les joueurs éligibles (cap sécurité)
+const MAX_POOL_SIZE = 500;
 
 // Firestore getAll limite pratique: on chunk à 400-500
 const GETALL_CHUNK = 400;
@@ -529,7 +529,8 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
       return String(a.fullName || "").localeCompare(String(b.fullName || ""));
     });
 
-    const top = merged.slice(0, POOL_SIZE);
+    const top =
+      merged.length > MAX_POOL_SIZE ? merged.slice(0, MAX_POOL_SIZE) : merged;
 
     // 5) write pool
     const batch = db.batch();

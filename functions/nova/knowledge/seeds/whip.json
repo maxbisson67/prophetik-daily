@@ -1,0 +1,49 @@
+{
+  "sport": "MLB",
+  "type": "statistic",
+  "category": "Pitching Stats",
+  "key": "whip",
+  "status": "published",
+  "challengeTypes": ["TP"],
+  "translations": {
+    "fr": {
+      "title": "WHIP (Walks + Hits per Inning Pitched)",
+      "shortAnswer": "Le WHIP indique combien de coureurs un lanceur laisse atteindre les buts (hits + buts sur balles) par manche lancée. Plus il est bas, mieux c'est.",
+      "beginnerExplanation": "Un WHIP de 1.20 signifie qu'en moyenne le lanceur laisse environ 1,2 coureur par manche via des coups sûrs ou des buts sur balles. C'est un bon indicateur de contrôle.",
+      "intermediateExplanation": "Le WHIP complète l'ERA : un lanceur peut avoir un ERA correct mais un WHIP élevé s'il se sort de situations difficiles. Un WHIP bas suggère qu'il laisse peu d'occasions aux frappeurs.",
+      "expertExplanation": "Le WHIP ne distingue pas la qualité des contacts (hard hit vs weak contact). Il reste très utile comme mesure rapide de domination au monticule.",
+      "prophetikUse": "Dans Prédire l'issue du match, combine l'ERA et le WHIP du lanceur partant pour évaluer si le match pourrait être offensif ou serré.",
+      "commonMistakes": [
+        "Utiliser le WHIP seul sans regarder l'ERA.",
+        "Oublier que le lanceur partant ne lance pas toujours la partie complète."
+      ],
+      "examples": [
+        "Un WHIP sous 1.10 est généralement très bon au niveau MLB.",
+        "Un WHIP au-dessus de 1.50 indique souvent beaucoup de coureurs sur les buts."
+      ]
+    },
+    "en": {
+      "title": "WHIP (Walks + Hits per Inning Pitched)",
+      "shortAnswer": "WHIP shows how many baserunners a pitcher allows (hits plus walks) per inning. Lower is better.",
+      "beginnerExplanation": "A 1.20 WHIP means the pitcher allows about 1.2 baserunners per inning via hits or walks. It is a quick control indicator.",
+      "intermediateExplanation": "WHIP complements ERA: a pitcher may survive trouble with a decent ERA but a high WHIP signals many scoring chances allowed.",
+      "expertExplanation": "WHIP does not measure contact quality, but it remains a fast read on how often a pitcher puts runners on base.",
+      "prophetikUse": "In Predict the Game Outcome, combine ERA and WHIP to gauge whether a game might be high-scoring or tight.",
+      "commonMistakes": [
+        "Using WHIP alone without ERA.",
+        "Forgetting the starter may not pitch the full game."
+      ],
+      "examples": [
+        "A WHIP under 1.10 is generally excellent in MLB.",
+        "A WHIP above 1.50 often means lots of baserunners."
+      ]
+    }
+  },
+  "relatedTopics": ["era", "probable_pitcher"],
+  "tags": ["whip", "pitching", "mlb", "tp"],
+  "difficulty": "intermediate",
+  "confidence": "high",
+  "sourceName": "MLB Glossary",
+  "sourceUrl": "https://www.mlb.com/glossary/standard-stats/whip",
+  "version": 1
+}

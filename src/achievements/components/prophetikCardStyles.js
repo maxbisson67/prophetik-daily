@@ -3,6 +3,16 @@ import { View } from "react-native";
 export const PROPHETIK_RED = "#b91c1c";
 export const PROPHETIK_RED_BOTTOM = "#991b1b";
 
+/** Grille d'espacement accueil — multiples de 4 */
+export const HOME_SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+};
+
 export function prophetikCardShadow() {
   return {
     shadowColor: "#000",
@@ -10,6 +20,18 @@ export function prophetikCardShadow() {
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
+  };
+}
+
+/** Accent gauche seul — écran Aujourd'hui, Classement */
+export function prophetikLeftAccentCardStyle(colors, accent = PROPHETIK_RED) {
+  return {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    overflow: "hidden",
+    padding: HOME_SPACING.md,
+    borderLeftWidth: 4,
+    borderLeftColor: accent,
   };
 }
 

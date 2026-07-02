@@ -5,10 +5,8 @@ import { View, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
-import TeamLogoBadge from "@src/sports/TeamLogoBadge";
-import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
-import { getEarliestOpenSlot, isSlotLocked } from "@src/defis/tpDeadlineHelpers";
+import { getEarliestOpenSlot, getSlotLockedAt, isSlotLocked, fmtTimeShort } from "@src/defis/tpDeadlineHelpers";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
 import {
   formatPickPoints,
@@ -20,12 +18,14 @@ import {
 } from "@src/defis/tpBundleDisplayHelpers";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
 import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
-import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import { resolveTpSlotMatchStatus, shouldShowTpStartTimeLabel } from "@src/defis/match/matchTaskStatus";
+import TpMatchMetaColumn from "@src/defis/TpMatchMetaColumn";
 import {
   formatParticipantCtaLabel,
   resolveParticipantTaskStatus,
 } from "@src/defis/participant/participantTaskStatus";
-import { resolveTpSlotMatchStatus } from "@src/defis/match/matchTaskStatus";
+import { PARTICIPANT_MODIFY_CTA, PARTICIPANT_PRIMARY_CTA } from "@src/defis/participant/participantCtaStyles";
+import TpHomePredictionRow, { isCompleteTpPick } from "@src/defis/TpHomePredictionRow";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
@@ -39,57 +39,78 @@ function PostponedLabel({ colors }) {
   );
 }
 
-function BundleMatchRow({ slot, slotIndex, league, pick, pickResult, colors, scheduleInfo = null }) {
+function BundleMatchRow({ slot, league, pick, pickResult, colors, scheduleInfo = null, hideResults = false }) {
   const awayAbbr = safeAbbr(slot?.awayAbbr);
   const homeAbbr = safeAbbr(slot?.homeAbbr);
-  const awayTeam = lookupTeamByAbbr(league, awayAbbr);
-  const homeTeam = lookupTeamByAbbr(league, homeAbbr);
   const pickLine = formatTpPickLine(pick, league);
   const slotDecided = isSlotDecided(slot);
   const postponed = league === "MLB" && isMlbGamePostponed(scheduleInfo?.status);
   const matchTask = resolveTpSlotMatchStatus(slot, { scheduleStatus: scheduleInfo?.status });
   const officialLine = slotDecided ? formatResultWinnerLine(slot, league) : null;
   const pointsLine = slotDecided ? formatPickPoints(pickResult) : null;
-  const slotLabel = Number(slot?.slot) > 0 ? Number(slot.slot) : slotIndex;
+  const hasPick = isCompleteTpPick(pick);
+  const startTimeLabel = hasPick
+    ? fmtTimeShort(
+        slot?.gameStartTimeUTC ?? scheduleInfo?.startTimeUTC ?? scheduleInfo?.gameDate ?? null
+      )
+    : null;
+  const showStartTime = shouldShowTpStartTimeLabel(startTimeLabel, matchTask);
 
   return (
     <View
       style={{
-        paddingVertical: 8,
+        paddingVertical: 6,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 5,
+        }}
+      >
         <Text
           style={{
-            marginRight: 6,
-            color: colors.subtext,
+            flex: 1,
+            minWidth: 0,
+            color: colors.text,
             fontWeight: "900",
-            fontSize: 12,
-            width: 14,
-            textAlign: "center",
+            fontSize: 14,
           }}
+          numberOfLines={1}
         >
-          {slotLabel}
+          {awayAbbr} @ {homeAbbr}
         </Text>
 
-        <TeamLogoBadge team={awayTeam} size={18} colors={colors} />
-        <Text style={{ color: colors.text, fontWeight: "900", marginHorizontal: 6, fontSize: 13 }}>
-          {awayAbbr}
-        </Text>
-        <Text style={{ color: colors.subtext, fontWeight: "900" }}>@</Text>
-        <Text style={{ color: colors.text, fontWeight: "900", marginHorizontal: 6, fontSize: 13 }}>
-          {homeAbbr}
-        </Text>
-        <TeamLogoBadge team={homeTeam} size={18} colors={colors} />
-
-        <View style={{ flex: 1 }} />
-
-        <MatchTaskStatusChip task={matchTask} colors={colors} compact />
+        <TpMatchMetaColumn
+          colors={colors}
+          startTimeLabel={startTimeLabel}
+          showStartTime={showStartTime}
+          matchTask={matchTask}
+        />
       </View>
 
-      {slotDecided && officialLine ? (
+      {hideResults ? (
+        postponed ? (
+          <View style={{ alignItems: "center" }}>
+            <PostponedLabel colors={colors} />
+          </View>
+        ) : (
+          <TpHomePredictionRow
+            variant="scoreGrid"
+            pick={pick}
+            awayAbbr={awayAbbr}
+            homeAbbr={homeAbbr}
+            league={league}
+            lockDeadline={getSlotLockedAt(slot)}
+            colors={colors}
+          />
+        )
+      ) : slotDecided && officialLine ? (
         <View style={{ alignItems: "flex-end", marginTop: 4 }}>
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>{officialLine}</Text>
           {pickLine ? (
@@ -205,6 +226,11 @@ export default function TeamPredictionBundleHomeCard({
       ? i18n.t("tp.home.modifyTeams", { defaultValue: "Modifier mes équipes" })
       : i18n.t("common.participate", { defaultValue: "Participer" }));
 
+  const showPrimaryCta =
+    showParticipateCta && participantTask.showPrimaryCta;
+  const showModifyCta =
+    showParticipateCta && participantTask.showModifyCta && !participantTask.showPrimaryCta;
+
   const onPressCta = () => {
     const challengeId = String(bundle?.id || "").trim();
     if (!challengeId) return;
@@ -246,31 +272,20 @@ export default function TeamPredictionBundleHomeCard({
         ) : null}
       </View>
 
-      {games.map((slot, index) => (
+      {games.map((slot) => (
         <BundleMatchRow
           key={String(slot.gameId)}
           slot={slot}
-          slotIndex={index + 1}
           league={league}
           pick={picks[String(slot.gameId)]}
           pickResult={pickResults[String(slot.gameId)]}
           colors={colors}
           scheduleInfo={scheduleByGameId[String(slot.gameId)] || null}
+          hideResults
         />
       ))}
 
-      {bundleDecided ? (
-        <Text style={{ color: colors.text, marginTop: 10, fontSize: 13, fontWeight: "900" }}>
-          {entry
-            ? i18n.t("tp.home.myTotalPoints", {
-                defaultValue: "Ton total : {{points}} pt(s)",
-                points: totalPoints,
-              })
-            : i18n.t("tp.home.resultsAvailable", {
-                defaultValue: "Résultats disponibles",
-              })}
-        </Text>
-      ) : (
+      {!bundleDecided ? (
         <TpHomeDeadlineBlock
           locked={deadlineLocked}
           deadline={deadline}
@@ -278,7 +293,7 @@ export default function TeamPredictionBundleHomeCard({
           postponed={hasOpenPostponedSlot && locked}
           colors={colors}
         />
-      )}
+      ) : null}
 
       {!bundleDecided && participantTask.state === "done_waiting" && picksCompletedCount > 0 ? (
         <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
@@ -299,39 +314,31 @@ export default function TeamPredictionBundleHomeCard({
       </View>
 
       <View style={{ marginTop: 12, gap: 10 }}>
+        <ResultsTabHint colors={colors} groupId={groupId} />
+
         {showParticipateCta ? (
-          <TouchableOpacity
-            onPress={onPressCta}
-            activeOpacity={0.9}
-            style={{
-              width: "100%",
-              paddingVertical: 10,
-              borderRadius: 12,
-              alignItems: "center",
-              backgroundColor:
-                participantTask.showPrimaryCta || !participantTask.showModifyCta
-                  ? "#b91c1c"
-                  : colors.card2,
-              borderWidth:
-                participantTask.showModifyCta && !participantTask.showPrimaryCta ? 1 : 0,
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  participantTask.showPrimaryCta || !participantTask.showModifyCta
-                    ? "#fff"
-                    : colors.text,
-                fontWeight: "900",
-              }}
-            >
-              {ctaLabel}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <ResultsTabHint colors={colors} />
-        )}
+          <>
+            {showPrimaryCta ? (
+              <TouchableOpacity
+                onPress={onPressCta}
+                activeOpacity={0.9}
+                style={PARTICIPANT_PRIMARY_CTA.button}
+              >
+                <Text style={PARTICIPANT_PRIMARY_CTA.text}>{ctaLabel}</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {showModifyCta ? (
+              <TouchableOpacity
+                onPress={onPressCta}
+                activeOpacity={0.9}
+                style={PARTICIPANT_MODIFY_CTA.button}
+              >
+                <Text style={PARTICIPANT_MODIFY_CTA.text}>{ctaLabel}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        ) : null}
       </View>
     </View>
   );

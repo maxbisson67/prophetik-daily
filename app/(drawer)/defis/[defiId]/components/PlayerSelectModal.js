@@ -4,11 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   Modal,
   FlatList,
-  KeyboardAvoidingView,
-  Keyboard,
   Platform,
   TouchableOpacity,
   Image,
@@ -16,34 +13,31 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
-import { formatMlbOpponentPitcherLine } from "@src/mlb/mlbPitcherDisplayHelpers";
+import {
+  isMlbDefiPlayer,
+  MlbOpponentMatchupLine,
+  MlbProbablePitcherLine,
+  MlbBvpLine,
+  resolveMlbOpponentAbbr,
+} from "@src/mlb/MlbDefiPlayerMeta";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 
 import TeamMetaBadge from "./TeamMetaBadge"; // ✅ Rank: 2ième, +/-: 28
 
-function TierBadge({ tier }) {
-  const { colors } = useTheme();
-  const t = String(tier || "T3").toUpperCase();
-  const styles =
-    {
-      T1: { bg: "rgba(245,158,11,0.14)", border: "rgba(245,158,11,0.35)", fg: "#b45309" },
-      T2: { bg: "rgba(59,130,246,0.14)", border: "rgba(59,130,246,0.35)", fg: "#1d4ed8" },
-      T3: { bg: "rgba(107,114,128,0.14)", border: colors.border, fg: colors.subtext },
-    }[t] || { bg: "rgba(107,114,128,0.14)", border: colors.border, fg: colors.subtext };
+function PlayerTeamLogo({ teamAbbr, sport, teamLogo, colors, size = 18 }) {
+  const abbr = String(teamAbbr || "").toUpperCase();
+  if (!abbr) return null;
 
-  return (
-    <View
-      style={{
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 999,
-        backgroundColor: styles.bg,
-        borderWidth: 1,
-        borderColor: styles.border,
-      }}
-    >
-      <Text style={{ fontSize: 12, fontWeight: "800", color: styles.fg, lineHeight: 14 }}>{t}</Text>
-    </View>
-  );
+  if (String(sport || "").toUpperCase() === "MLB") {
+    return <TeamLogoBadge team={lookupTeamByAbbr("MLB", abbr)} size={size} colors={colors} />;
+  }
+
+  if (!teamLogo) return null;
+  const src = teamLogo(abbr);
+  if (!src) return null;
+
+  return <Image source={src} style={{ width: size, height: size }} resizeMode="contain" />;
 }
 
 function InjuryIcon({ injury, size = 16 }) {
@@ -81,6 +75,12 @@ function shortPlayerName(fullName = "") {
   return `${first.slice(0, 1).toUpperCase()}. ${last}`;
 }
 
+function mlbPointsValue(p) {
+  const stored = num(p?.points);
+  if (stored > 0) return stored;
+  return num(p?.hits) + num(p?.rbi) + num(p?.homeRuns);
+}
+
 export default function PlayerSelectModal({
   visible,
   onClose,
@@ -91,75 +91,82 @@ export default function PlayerSelectModal({
   teamLogo,
   headshotUrl,
   forcedTier = null,
+  pickerSlotIndex = 0,
+  sport = "NHL",
+  formatStandingsLine = null,
 }) {
   const { colors } = useTheme();
-
-  const [q, setQ] = useState("");
-  const [kbHeight, setKbHeight] = useState(0);
-
-  const [tierFilter, setTierFilter] = useState("T1");
-  const [sortKey, setSortKey] = useState("points"); // points | ppg
 
   const tier = String(tierLower || "free").toLowerCase();
   const isVip = tier === "vip";
   const isPro = tier === "pro" || isVip;
-  const isFree = !isPro; // ✅ FREE = pas pro/vip
+  const isFree = !isPro;
+  const isMlbSport = String(sport || "").toUpperCase() === "MLB";
+  const defaultSortKey = "points";
 
+  const [tierFilter, setTierFilter] = useState("T1");
+  const [sortKey, setSortKey] = useState(defaultSortKey);
 
   useEffect(() => {
     if (!visible) return;
 
-    setQ("");
-    setSortKey("points");
+    setSortKey(defaultSortKey);
 
     const ft = String(forcedTier || "").toUpperCase();
     if (ft === "T1" || ft === "T2" || ft === "T3") {
-        setTierFilter(ft);
+      setTierFilter(ft);
     } else {
-        setTierFilter("T1"); // fallback
+      setTierFilter("T1");
     }
-    }, [visible, forcedTier]);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => setKbHeight(e.endCoordinates?.height ?? 0)
-    );
-    const hideSub = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => setKbHeight(0)
-    );
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  }, [visible, forcedTier, defaultSortKey]);
 
   const chosenSet = useMemo(() => new Set((alreadyChosenIds || []).map((x) => String(x))), [
     JSON.stringify(alreadyChosenIds || []),
   ]);
 
-  // ✅ en FREE, on force l’affichage à "points" (au cas où)
   useEffect(() => {
-    if (isFree && sortKey === "ppg") setSortKey("points");
-  }, [isFree, sortKey]);
+    if (!isMlbSport && isFree && sortKey === "ppg") setSortKey("points");
+  }, [isMlbSport, isFree, sortKey]);
 
   function getStatLabel() {
+    if (isMlbSport) {
+      if (sortKey === "hits") {
+        return i18n.t("defi.playerSelect.statHits", { defaultValue: "H" });
+      }
+      if (sortKey === "rbi") {
+        return i18n.t("defi.playerSelect.statRbi", { defaultValue: "RBI" });
+      }
+      if (sortKey === "hr") {
+        return i18n.t("defi.playerSelect.statHr", { defaultValue: "HR" });
+      }
+      return i18n.t("defi.playerSelect.statPoints", { defaultValue: "PTS" });
+    }
     if (sortKey === "ppg" && !isFree) return "PPG";
     return "PTS";
   }
 
   function getStatValue(p) {
+    if (isMlbSport) {
+      if (sortKey === "hits") return String(Math.round(num(p?.hits)));
+      if (sortKey === "rbi") return String(Math.round(num(p?.rbi)));
+      if (sortKey === "hr") return String(Math.round(num(p?.homeRuns)));
+      return String(Math.round(mlbPointsValue(p)));
+    }
     if (sortKey === "ppg" && !isFree) return num(p?.pointsPerGame).toFixed(2);
     return String(Math.round(num(p?.points)));
   }
 
   function sortComparator(a, b) {
-    // ✅ points | ppg
+    if (isMlbSport) {
+      if (sortKey === "hits") return num(b.hits) - num(a.hits);
+      if (sortKey === "rbi") return num(b.rbi) - num(a.rbi);
+      if (sortKey === "hr") return num(b.homeRuns) - num(a.homeRuns);
+      if (sortKey === "points") return mlbPointsValue(b) - mlbPointsValue(a);
+    }
+
     if (sortKey === "points") return num(b.points) - num(a.points);
     if (sortKey === "ppg" && !isFree) return num(b.pointsPerGame) - num(a.pointsPerGame);
 
-    // fallback rank
     const ra = num(a.rank ?? 999999);
     const rb = num(b.rank ?? 999999);
     if (ra !== rb) return ra - rb;
@@ -168,23 +175,54 @@ export default function PlayerSelectModal({
 
   const filtered = useMemo(() => {
     const base = Array.isArray(options) ? options.slice() : [];
-    const qq = q.trim().toLowerCase();
-    let list = base;
-
-    if (qq) {
-      list = list.filter((p) => {
-        const name = String(p.fullName || p.skaterFullName || "").toLowerCase();
-        const team = String(p.teamAbbr || "").toLowerCase();
-        return name.includes(qq) || team.includes(qq);
-      });
-    }
-
-    list = list.filter((p) => String(p.tier || "").toUpperCase() === tierFilter);
+    let list = base.filter((p) => String(p.tier || "").toUpperCase() === tierFilter);
     list.sort(sortComparator);
     return list;
-  }, [q, options, tierFilter, sortKey, isFree]);
+  }, [options, tierFilter, sortKey, isFree, isMlbSport]);
 
-  const keyboardVerticalOffset = Platform.select({ ios: 64, android: 0 });
+  const mlbSortTabs = useMemo(
+    () => [
+      {
+        value: "points",
+        label: i18n.t("defi.playerSelect.sortPoints", { defaultValue: "Points" }),
+      },
+      {
+        value: "hits",
+        label: i18n.t("defi.playerSelect.sortHits", { defaultValue: "Hits" }),
+      },
+      {
+        value: "rbi",
+        label: i18n.t("defi.playerSelect.sortRbi", { defaultValue: "RBI" }),
+      },
+      {
+        value: "hr",
+        label: i18n.t("defi.playerSelect.sortHr", { defaultValue: "HR" }),
+      },
+    ],
+    []
+  );
+
+  const mlbSelectionHint = useMemo(() => {
+    if (!isMlbSport) return null;
+
+    const tier = String(forcedTier || tierFilter || "").toUpperCase();
+    const hintBody =
+      tier === "T3"
+        ? i18n.t("defi.playerSelect.hintOpen", {
+            defaultValue:
+              "Sélectionne un joueur parmi les choix suivants. Les points affichés pour un joueur correspondent à la somme des coups sûrs (HITS), des points produits (RBI) et des coups de circuit (HR).",
+          })
+        : i18n.t("defi.playerSelect.hintTop10", {
+            defaultValue:
+              "Sélectionne un joueur parmi les 10 choix suivants. Les points affichés pour un joueur correspondent à la somme des coups sûrs (HITS), des points produits (RBI) et des coups de circuit (HR).",
+          });
+
+    return i18n.t("defi.playerSelect.choiceHint", {
+      index: Number(pickerSlotIndex) + 1,
+      hint: hintBody,
+      defaultValue: `Choix ${Number(pickerSlotIndex) + 1} : ${hintBody}`,
+    });
+  }, [isMlbSport, forcedTier, tierFilter, pickerSlotIndex]);
 
   function Chip({ label, active, onPress, locked }) {
     const tierStyles = {
@@ -250,11 +288,7 @@ export default function PlayerSelectModal({
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={{ flex: 1, justifyContent: "flex-end" }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={keyboardVerticalOffset}
-      >
+      <View style={{ flex: 1, justifyContent: "flex-end" }}>
         <View
           style={{
             backgroundColor: colors.card,
@@ -285,49 +319,78 @@ export default function PlayerSelectModal({
             </TouchableOpacity>
           </View>
 
-          {/* Search */}
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder={i18n.t("defi.playerSelect.searchPlaceholder", { defaultValue: "Rechercher un joueur…" })}
-            placeholderTextColor={colors.subtext}
-            style={{
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 12,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              marginBottom: 10,
-              backgroundColor: colors.background,
-              color: colors.text,
-              fontWeight: "600",
-            }}
-          />
+          {mlbSelectionHint ? (
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 13,
+                lineHeight: 18,
+                marginBottom: 10,
+              }}
+            >
+              {mlbSelectionHint}
+            </Text>
+          ) : null}
 
           {/* Filters */}
           <View style={{ gap: 10, marginBottom: 10 }}>
-         
-            {forcedTier ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 12 }}>
-                    {i18n.t("defi.playerSelect.tierLocked", { defaultValue: "Tier :" })}
-                    </Text>
-                    <TierBadge tier={forcedTier} />
-             </View>
-            ) : null}
-
-      
-
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              <Chip label="Points" active={sortKey === "points"} onPress={() => setSortKey("points")} />
-              {!isFree ? (
-                <Chip
-                  label="Points par partie"
-                  active={sortKey === "ppg"}
-                  onPress={() => setSortKey("ppg")}
-                  locked={!isPro}
-                />
-              ) : null}
+              {isMlbSport ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flex: 1,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    backgroundColor: colors.card2,
+                  }}
+                >
+                  {mlbSortTabs.map((tab) => {
+                    const active = sortKey === tab.value;
+
+                    return (
+                      <TouchableOpacity
+                        key={tab.value}
+                        onPress={() => setSortKey(tab.value)}
+                        activeOpacity={0.85}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          paddingHorizontal: 4,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: active ? colors.primary : "transparent",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: active ? "#fff" : colors.subtext,
+                            fontWeight: "900",
+                            fontSize: 11,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {tab.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <>
+                  <Chip label="Points" active={sortKey === "points"} onPress={() => setSortKey("points")} />
+                  {!isFree ? (
+                    <Chip
+                      label="Points par partie"
+                      active={sortKey === "ppg"}
+                      onPress={() => setSortKey("ppg")}
+                      locked={!isPro}
+                    />
+                  ) : null}
+                </>
+              )}
             </View>
           </View>
 
@@ -336,7 +399,7 @@ export default function PlayerSelectModal({
             data={filtered}
             keyExtractor={(item, idx) => String(item?.playerId ?? item?.id ?? `player-${idx}`)}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: kbHeight + 24 }}
+            contentContainerStyle={{ paddingBottom: 24 }}
             initialNumToRender={20}
             maxToRenderPerBatch={20}
             updateCellsBatchingPeriod={50}
@@ -348,12 +411,18 @@ export default function PlayerSelectModal({
 
               const team = String(item?.teamAbbr || "").toUpperCase();
               const opp = String(item?.matchup?.opponentAbbr || "").toUpperCase();
+              const isMlb = isMlbDefiPlayer(item, sport);
+              const oppAbbr = resolveMlbOpponentAbbr(item);
 
               const injuryStatus = String(item?.injury?.status || "").toLowerCase();
               const isOut = injuryStatus === "out";
 
               const oppRankOverall = item?.matchup?.oppRankOverall;
               const oppGoalDifferential = item?.matchup?.oppGoalDifferential;
+
+              const displayName = isMlb
+                ? String(item?.fullName || "—").trim() || "—"
+                : shortPlayerName(item?.fullName);
 
               return (
                 <TouchableOpacity
@@ -371,63 +440,94 @@ export default function PlayerSelectModal({
                     opacity: isChosen ? 0.45 : 1,
                   }}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Avatar player={item} size={36} style={{ marginRight: 10 }} />
+                  <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                    <Avatar player={item} size={isMlb ? 42 : 36} style={{ marginRight: 10 }} />
 
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      {/* Ligne 1: Tier + Nom + injury + logos (matchup caché en FREE) */}
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 }}>
-                        <TierBadge tier={item?.tier} />
+                    <View style={{ flex: 1, minWidth: 0, gap: isMlb ? 6 : 0 }}>
+                      {isMlb ? (
+                        <>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <PlayerTeamLogo
+                              teamAbbr={team}
+                              sport={sport}
+                              teamLogo={teamLogo}
+                              colors={colors}
+                              size={18}
+                            />
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                fontSize: 16,
+                                fontWeight: "800",
+                                color: isOut ? colors.subtext : colors.text,
+                                flexShrink: 1,
+                              }}
+                            >
+                              {displayName}
+                            </Text>
+                            <InjuryIcon injury={item?.injury} size={16} />
+                          </View>
 
-                        <Text
-                          numberOfLines={1}
-                          style={{
-                            fontSize: 16,
-                            fontWeight: "800",
-                            color: isOut ? colors.subtext : colors.text,
-                            flexShrink: 1,
-                          }}
-                        >
-                          {shortPlayerName(item?.fullName)}
-                        </Text>
-
-                        <InjuryIcon injury={item?.injury} size={16} />
-
-                        {!!team && teamLogo ? <Image source={teamLogo(team)} style={{ width: 16, height: 16 }} /> : null}
-
-                        {/* ✅ PRO/VIP seulement: matchup */}
-                        {!isFree && !!opp && teamLogo ? (
-                          <>
-                            <Text style={{ color: colors.subtext, fontWeight: "900" }}>@</Text>
-                            <Image source={teamLogo(opp)} style={{ width: 16, height: 16 }} />
-                          </>
-                        ) : null}
-                      </View>
-
-                      {/* Ligne 2: aide décision (PRO/VIP seulement) */}
-                      {!isFree && item?.matchup ? (
-                        <View style={{ marginTop: 6 }}>
-                          <TeamMetaBadge
-                            compact
-                            rankOverall={oppRankOverall}
-                            goalDifferential={oppGoalDifferential}
+                          <MlbOpponentMatchupLine
+                            opponentAbbr={oppAbbr}
+                            colors={colors}
+                            formatStandingsLine={formatStandingsLine}
                           />
-                        </View>
-                      ) : null}
 
-                      {item?.opponentProbablePitcher ? (
-                        <Text
-                          style={{
-                            marginTop: 4,
-                            color: colors.subtext,
-                            fontWeight: "700",
-                            fontSize: 12,
-                          }}
-                          numberOfLines={1}
-                        >
-                          {formatMlbOpponentPitcherLine(item.opponentProbablePitcher, i18n.t.bind(i18n))}
-                        </Text>
-                      ) : null}
+                          <MlbProbablePitcherLine
+                            pitcher={item?.opponentProbablePitcher}
+                            colors={colors}
+                          />
+                          <MlbBvpLine
+                            bvp={item?.bvpVsOpposingStarter}
+                            pitcher={item?.opponentProbablePitcher}
+                            colors={colors}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <PlayerTeamLogo
+                              teamAbbr={team}
+                              sport={sport}
+                              teamLogo={teamLogo}
+                              colors={colors}
+                              size={16}
+                            />
+
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                fontSize: 16,
+                                fontWeight: "800",
+                                color: isOut ? colors.subtext : colors.text,
+                                flexShrink: 1,
+                              }}
+                            >
+                              {displayName}
+                            </Text>
+
+                            <InjuryIcon injury={item?.injury} size={16} />
+
+                            {!isFree && !!opp && teamLogo ? (
+                              <>
+                                <Text style={{ color: colors.subtext, fontWeight: "900" }}>@</Text>
+                                <Image source={teamLogo(opp)} style={{ width: 16, height: 16 }} />
+                              </>
+                            ) : null}
+                          </View>
+
+                          {!isFree && item?.matchup ? (
+                            <View style={{ marginTop: 6 }}>
+                              <TeamMetaBadge
+                                compact
+                                rankOverall={oppRankOverall}
+                                goalDifferential={oppGoalDifferential}
+                              />
+                            </View>
+                          ) : null}
+                        </>
+                      )}
                     </View>
 
                     {/* Stats droite */}
@@ -462,7 +562,7 @@ export default function PlayerSelectModal({
             }}
           />
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

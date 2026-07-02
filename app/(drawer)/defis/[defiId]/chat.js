@@ -1,5 +1,5 @@
-// app/(drawer)/defis/[defiId]/chat.js (par exemple)
-import React, { useEffect, useState, useCallback } from 'react';
+// app/(drawer)/defis/[defiId]/chat.js
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   TextInput,
@@ -9,29 +9,50 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { useTheme } from '@src/theme/ThemeProvider';
-import { useDefiChat } from '@src/defiChat/useDefiChat';
-import i18n from '@src/i18n/i18n';
+  ActivityIndicator,
+} from "react-native";
+import { Stack, useLocalSearchParams } from "expo-router";
+import firestore from "@react-native-firebase/firestore";
+import { useTheme } from "@src/theme/ThemeProvider";
+import { useGroupChat } from "@src/groupChat/useGroupChat";
+import i18n from "@src/i18n/i18n";
 
-const AVATAR = require('@src/assets/avatar-placeholder.png');
+const AVATAR = require("@src/assets/avatar-placeholder.png");
 
 export default function DefiChatScreen() {
   const { colors } = useTheme();
   const { defiId } = useLocalSearchParams();
-  const { messages, send, busy, markRead } = useDefiChat(defiId);
-  const [text, setText] = useState('');
+  const [groupId, setGroupId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Marquer lu quand on arrive sur l’écran (et quand defiId change)
   useEffect(() => {
-    if (defiId) markRead();
-  }, [defiId, markRead]);
+    if (!defiId) {
+      setGroupId(null);
+      setLoading(false);
+      return;
+    }
+    const ref = firestore().doc(`defis/${String(defiId)}`);
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        setGroupId(snap.exists ? String(snap.data()?.groupId || "") || null : null);
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+    return () => unsub();
+  }, [defiId]);
+
+  const { messages, send, busy, markRead } = useGroupChat(groupId);
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    if (groupId) markRead();
+  }, [groupId, markRead]);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
-    setText('');
+    setText("");
     send(trimmed);
   }, [text, busy, send]);
 
@@ -39,121 +60,125 @@ export default function DefiChatScreen() {
     <>
       <Stack.Screen
         options={{
-          title: i18n.t('defi.results.chat.title'),
+          title: i18n.t("home.groupChatTitle", { defaultValue: "Chat du groupe" }),
         }}
       />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: colors.background }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-      >
-        {/* Liste des messages */}
-        <FlatList
-          style={{ flex: 1 }}
-          inverted
-          data={messages}
-          keyExtractor={(m) => m.id}
-          keyboardShouldPersistTaps="always"
-          contentContainerStyle={{
-            padding: 12,
-            backgroundColor: colors.card,
-          }}
-          ListEmptyComponent={
-            <Text
-              style={{
-                textAlign: 'center',
-                color: colors.subtext,
-                marginVertical: 16,
-              }}
-            >
-              {i18n.t('defi.results.chat.empty')}
-            </Text>
-          }
-          renderItem={({ item }) => (
-            <View
-              style={{
-                flexDirection: 'row',
-                paddingVertical: 6,
-                paddingHorizontal: 4,
-                gap: 8,
-              }}
-            >
-              <Image
-                source={item.photoURL ? { uri: item.photoURL } : AVATAR}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  backgroundColor: colors.border,
-                }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontWeight: '700',
-                    color: colors.text,
-                    marginBottom: 2,
-                  }}
-                >
-                  {item.displayName || item.uid}
-                </Text>
-                <Text style={{ color: colors.text }}>
-                  {String(item.text ?? '')}
-                </Text>
-              </View>
-            </View>
-          )}
-        />
-
-        {/* Barre d’entrée */}
-        <View
-          style={{
-            flexDirection: 'row',
-            padding: 8,
-            gap: 8,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.card,
-          }}
+      {loading ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : !groupId ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <Text style={{ color: colors.subtext, textAlign: "center" }}>
+            {i18n.t("home.groupChatUnavailable", {
+              defaultValue: "Chat indisponible pour ce défi.",
+            })}
+          </Text>
+        </View>
+      ) : (
+        <KeyboardAvoidingView
+          style={{ flex: 1, backgroundColor: colors.background }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
         >
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder={i18n.t('defi.results.chat.inputPlaceholder')}
-            placeholderTextColor={colors.subtext}
-            style={{
-              flex: 1,
+          <FlatList
+            style={{ flex: 1 }}
+            inverted
+            data={messages}
+            keyExtractor={(m) => m.id}
+            keyboardShouldPersistTaps="always"
+            contentContainerStyle={{
               padding: 12,
-              backgroundColor: colors.card2,
-              color: colors.text,
-              borderRadius: 10,
+              backgroundColor: colors.card,
             }}
-            returnKeyType="send"
-            onSubmitEditing={handleSend}
+            ListEmptyComponent={
+              <Text
+                style={{
+                  textAlign: "center",
+                  color: colors.subtext,
+                  marginVertical: 16,
+                }}
+              >
+                {i18n.t("defi.results.chat.empty")}
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <View
+                style={{
+                  flexDirection: "row",
+                  paddingVertical: 6,
+                  paddingHorizontal: 4,
+                  gap: 8,
+                }}
+              >
+                <Image
+                  source={item.photoURL ? { uri: item.photoURL } : AVATAR}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: colors.border,
+                  }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontWeight: "700",
+                      color: colors.text,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {item.displayName || item.uid}
+                  </Text>
+                  <Text style={{ color: colors.text }}>{String(item.text ?? "")}</Text>
+                </View>
+              </View>
+            )}
           />
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={busy || !text.trim()}
+
+          <View
             style={{
-              paddingHorizontal: 14,
-              justifyContent: 'center',
-              borderRadius: 10,
-              backgroundColor:
-                busy || !text.trim() ? colors.border : colors.primary,
+              flexDirection: "row",
+              padding: 8,
+              gap: 8,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              backgroundColor: colors.card,
             }}
           >
-            <Text
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder={i18n.t("defi.results.chat.inputPlaceholder")}
+              placeholderTextColor={colors.subtext}
               style={{
-                color: '#fff',
-                fontWeight: '800',
+                flex: 1,
+                padding: 12,
+                backgroundColor: colors.card2,
+                color: colors.text,
+                borderRadius: 10,
+              }}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={busy || !text.trim()}
+              style={{
+                paddingHorizontal: 14,
+                justifyContent: "center",
+                borderRadius: 10,
+                backgroundColor: busy || !text.trim() ? colors.border : colors.primary,
               }}
             >
-              {i18n.t('defi.results.chat.send')}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+              <Text style={{ color: "#fff", fontWeight: "800" }}>
+                {i18n.t("defi.results.chat.send")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </>
   );
 }

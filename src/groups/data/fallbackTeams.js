@@ -57,7 +57,6 @@ export const MLB_FALLBACK_TEAMS = [
   { sport: "MLB", teamId: "121", abbreviation: "NYM", name: "New York Mets" },
   { sport: "MLB", teamId: "147", abbreviation: "NYY", name: "New York Yankees" },
   { sport: "MLB", teamId: "133", abbreviation: "ATH", name: "Athletics" },
-  { sport: "MLB", teamId: "133", abbreviation: "OAK", name: "Athletics" },
   { sport: "MLB", teamId: "143", abbreviation: "PHI", name: "Philadelphia Phillies" },
   { sport: "MLB", teamId: "134", abbreviation: "PIT", name: "Pittsburgh Pirates" },
   { sport: "MLB", teamId: "135", abbreviation: "SD", name: "San Diego Padres" },
@@ -84,6 +83,10 @@ export function lookupTeamByAbbr(sport, abbr) {
 
   const found = getFallbackTeams(s).find((t) => t.abbreviation === a);
   if (found) return found;
+
+  if (s === "MLB" && a === "OAK") {
+    return getFallbackTeams(s).find((t) => t.abbreviation === "ATH") || null;
+  }
 
   if (s === "NHL") {
     return {

@@ -19,6 +19,7 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import { filterGroupsForManualChallengeCreation } from "@src/groups/groupAutopilotUtils";
 import {
   formatMlbPitcherFallbackLabel,
   formatMlbPitcherSummary,
@@ -412,7 +413,7 @@ export default function CreateTeamPredictionModal({
 
   const eligibleGroups = useMemo(
     () =>
-      (groups || []).filter(
+      filterGroupsForManualChallengeCreation(groups).filter(
         (g) => String(g.sport || g.league || "NHL").toUpperCase() === sportLeague
       ),
     [groups, sportLeague]

@@ -59,3 +59,19 @@ export function buildTpExactScorePush({
       : `Tu as prédit le pointage exact du match ${away} contre ${home}.`,
   };
 }
+
+export function buildTsWinPush({ lang = "fr" } = {}) {
+  const lg = normalizeLang(lang);
+
+  if (lg === "en") {
+    return {
+      title: "Bravo!",
+      body: "You won today's Trio challenge!",
+    };
+  }
+
+  return {
+    title: "Bravo !",
+    body: "Tu as gagné le défi Trio du jour !",
+  };
+}

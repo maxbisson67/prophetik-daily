@@ -1,0 +1,53 @@
+{
+  "sport": "MLB",
+  "type": "statistic",
+  "category": "Team Stats",
+  "key": "team_record",
+  "status": "published",
+  "challengeTypes": ["FGC", "TP"],
+  "translations": {
+    "fr": {
+      "title": "Fiche d'équipe (victoires-défaites)",
+      "shortAnswer": "La fiche indique le bilan W-L, la production offensive (runs marqués), la défense (runs accordés), la séquence récente, les 10 derniers matchs et le split domicile/visite.",
+      "beginnerExplanation": "Une équipe avec plus de victoires que de défaites est généralement compétitive. Regarde aussi la séquence en cours (ex. W3 = 3 victoires de suite) et les 10 derniers matchs pour sentir la forme récente.",
+      "intermediateExplanation": "Les runs marqués et runs accordés aident à estimer le potentiel offensif et défensif. Le split domicile/visite compte : une équipe forte à domicile ne performe pas toujours pareil sur la route. Croise tout cela avec le lanceur partant.",
+      "expertExplanation": "La fiche saisonnière ne dit pas tout sur un match précis (blessures, bullpen, météo). Utilise W-L, streak, last-10, runs/game et split home/away comme contexte — pas comme prédiction certaine.",
+      "prophetikUse": "Dans Prédire l'issue du match, compare les deux fiches : bilan saison, séquence, 10 derniers matchs, runs marqués/accordés et fiche à domicile ou à l'extérieur selon le lieu du match. Nova s'appuie sur ces données vérifiées, pas seulement sur l'ERA du lanceur.",
+      "commonMistakes": [
+        "Choisir uniquement selon le meilleur bilan W-L sans regarder le lanceur.",
+        "Ignorer les runs accordés quand une équipe affiche une bonne fiche offensive.",
+        "Ignorer la séquence récente ou les 10 derniers matchs.",
+        "Oublier le split domicile/visite pour l'équipe qui joue à domicile ou sur la route."
+      ],
+      "examples": [
+        "Équipe avec beaucoup de runs marqués contre un lanceur faible → score élevé possible.",
+        "Deux équipes avec runs accordés bas → match plus serré plausible."
+      ]
+    },
+    "en": {
+      "title": "Team record (wins-losses)",
+      "shortAnswer": "The record shows W-L, runs scored, runs allowed, current streak, last-10 form and home/away splits.",
+      "beginnerExplanation": "Teams with more wins than losses are generally competitive. Also check the current streak (e.g. W3 = three wins in a row) and last-10 record for recent form.",
+      "intermediateExplanation": "Runs scored and allowed estimate offense and run prevention. Home/away splits matter — a strong home team may not travel as well. Combine with the probable starter.",
+      "expertExplanation": "Season records do not tell the whole story for one game. Use W-L, streak, last-10, runs/game and home/away splits as context — not as certainty.",
+      "prophetikUse": "In Predict the Game Outcome, compare both teams: season record, streak, last 10, runs scored/allowed and home or road split for tonight's site. Nova uses these verified factors — not ERA alone.",
+      "commonMistakes": [
+        "Picking only by best W-L without considering the starter.",
+        "Ignoring runs allowed when a team has a strong offense.",
+        "Ignoring recent streak or last-10 form.",
+        "Forgetting home/away split for the team playing at home or on the road."
+      ],
+      "examples": [
+        "High run-scoring team vs weak starter → higher score possible.",
+        "Two teams with low runs allowed → tighter game plausible."
+      ]
+    }
+  },
+  "relatedTopics": ["tp_scoring", "probable_pitcher", "era"],
+  "tags": ["team", "record", "standings", "runs_scored", "runs_allowed", "streak", "last_ten", "home_away", "mlb", "tp"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik Editorial",
+  "sourceUrl": null,
+  "version": 2
+}

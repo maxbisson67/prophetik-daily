@@ -100,12 +100,16 @@ function parseTpBundleEntry(entry = {}) {
 
   let pointsFromResults = 0;
   let correctCount = 0;
+  let exactCount = 0;
 
   for (const result of Object.values(pickResults)) {
     if (!result || typeof result !== "object") continue;
     pointsFromResults += toNumber(result.points, 0);
     if (result.won === true || result.winnerCorrect === true) {
       correctCount += 1;
+    }
+    if (result.exactScoreCorrect === true) {
+      exactCount += 1;
     }
   }
 
@@ -117,6 +121,7 @@ function parseTpBundleEntry(entry = {}) {
     points,
     won: correctCount > 0,
     correctCount,
+    exactCount,
     displayName: entry.displayName || null,
     avatarUrl: pickString(entry.avatarUrl),
   };
@@ -135,6 +140,7 @@ function addTpLeaderboardEntry({
   points,
   won,
   correctCount,
+  exactCount = 0,
   displayName,
   avatarUrl,
   gameDate,
@@ -166,10 +172,12 @@ function addTpLeaderboardEntry({
   cur.families.tp.plays += 1;
   cur.families.tp.points += toNumber(points, 0);
   cur.families.tp.wins += winsDelta;
+  cur.families.tp.exacts += toNumber(exactCount, 0);
 
   summary.totals.tp.plays += 1;
   summary.totals.tp.points += toNumber(points, 0);
   summary.totals.tp.wins += winsDelta;
+  summary.totals.tp.exacts += toNumber(exactCount, 0);
 
   const tpTypeKey = "TP";
   if (!cur.winsByType[tpTypeKey]) {
@@ -284,7 +292,7 @@ function challengeFamily(defi = {}) {
 }
 
 function emptyFamilyStats() {
-  return { points: 0, plays: 0, wins: 0 };
+  return { points: 0, plays: 0, wins: 0, exacts: 0 };
 }
 
 function makeEmptyAgg(uid) {
@@ -642,7 +650,8 @@ const summary = {
       if (!uid) continue;
       if (!tpEntryHasParticipation(entry)) continue;
 
-      const { points, won, correctCount, displayName, avatarUrl } = parseTpBundleEntry(entry);
+      const { points, won, correctCount, exactCount, displayName, avatarUrl } =
+        parseTpBundleEntry(entry);
 
       addTpLeaderboardEntry({
         totals,
@@ -651,6 +660,7 @@ const summary = {
         points,
         won,
         correctCount,
+        exactCount,
         displayName,
         avatarUrl,
         gameDate,
@@ -748,6 +758,7 @@ const summary = {
   await db.doc(`groups/${groupId}/leaderboards/${seasonId}`).set(
     {
       seasonId,
+      competitionKey: seasonId,
       groupId,
       fromYmd: from,
       toYmd: to,
@@ -858,6 +869,7 @@ const summary = {
 
           fgcWins: fgc.wins,
           tpWins: tp.wins,
+          tpExactWins: tp.exacts,
           tsWins: ts.wins,
 
           fgcPlays: fgc.plays,

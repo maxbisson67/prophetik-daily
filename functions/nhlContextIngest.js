@@ -125,6 +125,8 @@ async function writeSeasonDatesIfPresent(schedulePayload) {
   // ✅ on évite d’écraser d’autres sports/contexts
   if (String(cur.sport || "nhl").toLowerCase() !== "nhl") return;
 
+  const seasonId = String(cur.seasonId || schedulePayload?.season || "20252026");
+
   await ref.set(
     {
       sport: "nhl",
@@ -149,6 +151,32 @@ async function writeSeasonDatesIfPresent(schedulePayload) {
     },
     { merge: true }
   );
+
+  try {
+    const { deriveNhlCompetitionEntries } = await import("./leaderboard/seasonCompetitionCore.js");
+    const entries = deriveNhlCompetitionEntries({
+      seasonId,
+      regularSeasonStartYmd: rs,
+      regularSeasonEndYmd: re,
+      playoffEndYmd: pe,
+      fromYmd: rs || cur.fromYmd,
+      toYmd: pe || cur.toYmd,
+    });
+
+    for (const entry of entries) {
+      await db.doc(`seasonCompetitions/${entry.competitionKey}`).set(
+        {
+          ...entry,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (e) {
+    logger.warn("writeSeasonDatesIfPresent: seasonCompetitions sync failed", {
+      error: String(e?.message || e),
+    });
+  }
 }
 
 /* ----------------------------- ingest schedule window ----------------------------- */

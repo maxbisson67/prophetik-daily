@@ -1,27 +1,42 @@
 // app/firebaseauth/link.js
 import { useEffect } from "react";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useRootNavigationState } from "expo-router";
 import { ActivityIndicator, View, Text } from "react-native";
+import { useAuth } from "@src/auth/SafeAuthProvider";
 
 export default function FirebaseAuthLink() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const rootState = useRootNavigationState();
+  const navReady = !!rootState?.key;
+  const { user, ready: authReady } = useAuth();
 
   useEffect(() => {
-    // 🔥 HOTFIX : ne plus envoyer systématiquement vers auth-choice
-    // -> Pour l’instant, on revient simplement à l’écran précédent.
-    //    Comme ça, si ce screen est appelé en plein phone-login,
-    //    tu restes dans ton flow.
-    router.back();
+    if (!navReady || !authReady) return;
 
-    // Variante possible si tu préfères :
-    // router.replace("/(auth)/phone-login");
-  }, [router]);
+    const timer = setTimeout(() => {
+      try {
+        if (router.canGoBack?.()) {
+          router.back();
+          return;
+        }
+
+        if (user?.uid) {
+          router.replace("/(drawer)/(tabs)/AccueilScreen");
+        } else {
+          router.replace("/(auth)/auth-choice");
+        }
+      } catch (e) {
+        console.warn("[firebaseauth/link] navigation failed", e?.message || e);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [navReady, authReady, router, user?.uid]);
 
   return (
-    <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
       <ActivityIndicator />
-      <Text style={{ marginTop:10 }}>Traitement du lien…</Text>
+      <Text style={{ marginTop: 10 }}>Traitement du lien…</Text>
     </View>
   );
 }

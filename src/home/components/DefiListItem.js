@@ -8,9 +8,11 @@ import {
   formatParticipantCtaLabel,
   resolveParticipantTaskStatus,
 } from "@src/defis/participant/participantTaskStatus";
+import { PARTICIPANT_MODIFY_CTA, PARTICIPANT_PRIMARY_CTA } from "@src/defis/participant/participantCtaStyles";
+import { PROPHETIK_RED } from "@src/achievements/components/prophetikCardStyles";
 import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
-
-import { TeamLogo } from "@src/nhl/nhlAssets";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 
 import {
   fmtTSLocalHM,
@@ -118,40 +120,6 @@ function objectValuesSorted(obj) {
     .map((k) => obj[k]);
 }
 
-function SecondaryTsCta({ colors, onPress, RED_DARK }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={{
-        marginTop: 10,
-        paddingVertical: 10,
-        borderRadius: 12,
-        alignItems: "center",
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        width: "100%",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Text
-          style={{
-            color: RED_DARK,
-            fontWeight: "900",
-            fontSize: 13,
-            marginLeft: 6,
-          }}
-        >
-          {i18n.t("home.viewParticipants", {
-            defaultValue: "Voir les participants",
-          })}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 function getTsSelectionLines(item, sport = "NHL") {
   const entry =
     item?.myEntry ||
@@ -235,19 +203,28 @@ function getTsPickCount(item, lines) {
 function getTsDisplayTitle(item, count, isAsc) {
   if (isAsc) return ascLabel(item);
 
-  return i18n.t("home.tsPlayersTitle", {
-    defaultValue: count > 1 ? "Défi {{count}} joueurs" : "Défi 1 joueur",
-    count,
+  const n = Number(item?.type || count || 1);
+  if (n <= 1) {
+    return i18n.t("home.tsPickOnePlayerTitle", {
+      defaultValue: "1 joueur à choisir",
+    });
+  }
+
+  return i18n.t("home.tsPickPlayersTitle", {
+    defaultValue: "{{count}} joueurs à choisir",
+    count: n,
   });
 }
 
-function TsSelectionBlock({ lines, colors }) {
+function TsSelectionBlock({ lines, colors, sport = "NHL" }) {
   if (!lines?.length) return null;
+
+  const league = String(sport || "NHL").toUpperCase();
 
   return (
     <View style={{ marginTop: 8 }}>
       <Text style={{ color: colors.subtext, fontSize: 13, marginBottom: 6 }}>
-        {i18n.t("home.myPick", { defaultValue: "Ton choix" })}:
+        {i18n.t("home.tsMyPrediction", { defaultValue: "Ma prédiction" })}:
       </Text>
 
       <View style={{ gap: 6 }}>
@@ -297,8 +274,26 @@ function TsSelectionBlock({ lines, colors }) {
   )}
 
   {row.teamAbbr ? (
-    <View style={{ marginRight: 6 }}>
-      <TeamLogo abbr={row.teamAbbr} size={18} />
+    <View style={{ flexDirection: "row", alignItems: "center", marginRight: 6 }}>
+      <TeamLogoBadge
+        team={{
+          ...lookupTeamByAbbr(league, row.teamAbbr),
+          sport: league,
+          abbreviation: row.teamAbbr,
+        }}
+        size={18}
+        colors={colors}
+      />
+      <Text
+        style={{
+          marginLeft: 4,
+          color: colors.subtext,
+          fontWeight: "800",
+          fontSize: 11,
+        }}
+      >
+        {String(row.teamAbbr).trim().toUpperCase()}
+      </Text>
     </View>
   ) : null}
 </View>
@@ -333,10 +328,16 @@ export default function DefiListItem({
   onPressResults,
   onPressParticipate,
 }) {
-  const RED_DARK = "#b91c1c";
-
   const uiStatus = computeUiStatus(item);
   const signupDeadlineValue = getSignupDeadlineOrFallback(item, 15);
+  const signupDeadlinePassed = (() => {
+    if (!signupDeadlineValue) return false;
+    const ms =
+      typeof signupDeadlineValue?.getTime === "function"
+        ? signupDeadlineValue.getTime()
+        : new Date(signupDeadlineValue).getTime();
+    return Number.isFinite(ms) && Date.now() >= ms;
+  })();
 
   const { canJoin, lockedBy } = canJoinDefiUi({
     tier: tierLower,
@@ -347,12 +348,6 @@ export default function DefiListItem({
 
   const lockedByPlan = lockedBy === "PLAN";
   const lockedByDeadline = lockedBy === "DEADLINE";
-
-  const pointsToWin = Number(
-    item?.pot
-  );
-
-  
 
   const showResultsCta =
     lockedByDeadline ||
@@ -416,44 +411,61 @@ export default function DefiListItem({
             defaultValue: "Choisir mon joueur",
           }));
 
+  const showTsPrimaryCta =
+    isTS &&
+    !lockedByPlan &&
+    !showResultsCta &&
+    canJoin &&
+    (participantTask?.showPrimaryCta || !participantTask?.showModifyCta);
 
+  const showTsModifyCta =
+    isTS &&
+    !lockedByPlan &&
+    !showResultsCta &&
+    canJoin &&
+    (participantTask?.showModifyCta || tsSelectionLines.length > 0) &&
+    !showTsPrimaryCta;
+
+  const showTsResultsHint =
+    isTS &&
+    !lockedByPlan &&
+    (showResultsCta ||
+      (signupDeadlinePassed && !showTsPrimaryCta && !showTsModifyCta));
 
   if (isTS) {
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.9}
-        style={{
-          padding: 12,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.card,
-          marginBottom: 10,
-        }}
-      >
+    const cardStyle = {
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      marginBottom: 10,
+    };
 
-        <Text
-          style={{ fontWeight: "900", color: colors.text, fontSize: 15 }}
-          numberOfLines={2}
+    const cardBody = (
+      <>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
         >
-          {title}
-        </Text>
+          <Text
+            style={{ fontWeight: "900", color: colors.text, fontSize: 17, flex: 1 }}
+            numberOfLines={2}
+          >
+            {title}
+          </Text>
 
-        {participantTask ? (
-          <View style={{ marginTop: 8, alignSelf: "flex-start" }}>
+          {participantTask ? (
             <ParticipantTaskStatusChip
               task={participantTask}
               colors={colors}
               compact
             />
-          </View>
-        ) : null}
-
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-          <Text style={{ color: "#f97316", fontWeight: "900", fontSize: 14 }}>
-            🔥 {i18n.t("home.pointsToWin", { defaultValue: "Points à gagner" })}: +{pointsToWin}
-          </Text>
+          ) : null}
         </View>
 
         <Text style={{ color: colors.subtext, marginTop: 8, fontSize: 13 }}>
@@ -461,9 +473,15 @@ export default function DefiListItem({
             defaultValue: "Heure limite d'inscription",
           })}
           {": "}
-          <Text style={{ color: colors.text, fontWeight: "900" }}>
-            {signupDeadlineValue ? fmtTSLocalHM(signupDeadlineValue) : "—"}
-          </Text>
+          {signupDeadlinePassed ? (
+            <Text style={{ color: colors.text, fontWeight: "900" }}>
+              {i18n.t("firstGoal.home.signupClosed", { defaultValue: "Fermé" })}
+            </Text>
+          ) : (
+            <Text style={{ color: colors.text, fontWeight: "900" }}>
+              {signupDeadlineValue ? fmtTSLocalHM(signupDeadlineValue) : "—"}
+            </Text>
+          )}
         </Text>
 
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
@@ -474,103 +492,95 @@ export default function DefiListItem({
           </Text>
         </View>
 
-        <TsSelectionBlock lines={tsSelectionLines} colors={colors} />
+        <TsSelectionBlock lines={tsSelectionLines} colors={colors} sport={itemSport} />
 
-<View style={{ marginTop: 12 }}>
-  {lockedByPlan ? (
-    <>
-      <Text
-        style={{
-          color: colors.subtext,
-          fontSize: 12,
-          fontWeight: "700",
-          marginBottom: 8,
-        }}
-      >
-        {i18n.t("home.upgradeToJoin", {
-          defaultValue: "Passe à Pro/Vip pour participer à ce défi.",
-        })}
-      </Text>
+        <View style={{ marginTop: 12 }}>
+          {lockedByPlan ? (
+            <>
+              <Text
+                style={{
+                  color: colors.subtext,
+                  fontSize: 12,
+                  fontWeight: "700",
+                  marginBottom: 8,
+                }}
+              >
+                {i18n.t("home.upgradeToJoin", {
+                  defaultValue: "Passe à Pro/Vip pour participer à ce défi.",
+                })}
+              </Text>
 
-      <TouchableOpacity
-        onPress={onPressUpgrade}
-        activeOpacity={0.85}
-        style={{
-          marginTop: 4,
-          paddingVertical: 10,
-          borderRadius: 12,
-          alignItems: "center",
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.border,
-          width: "100%",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <MaterialCommunityIcons
-            name="lock-open-outline"
-            size={16}
-            color={RED_DARK}
-          />
-          <Text
-            style={{
-              color: RED_DARK,
-              fontWeight: "900",
-              fontSize: 13,
-              marginLeft: 6,
-            }}
-          >
-            {ctaLabel}
-          </Text>
+              <TouchableOpacity
+                onPress={onPressUpgrade}
+                activeOpacity={0.85}
+                style={{
+                  marginTop: 4,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  width: "100%",
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <MaterialCommunityIcons
+                    name="lock-open-outline"
+                    size={16}
+                    color={PROPHETIK_RED}
+                  />
+                  <Text
+                    style={{
+                      color: PROPHETIK_RED,
+                      fontWeight: "900",
+                      fontSize: 13,
+                      marginLeft: 6,
+                    }}
+                  >
+                    {ctaLabel}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : showTsResultsHint ? (
+            <ResultsTabHint colors={colors} groupId={item?.groupId} />
+          ) : (
+            <>
+              {showTsPrimaryCta ? (
+                <TouchableOpacity
+                  disabled={!canJoin}
+                  onPress={onPressParticipate}
+                  activeOpacity={0.85}
+                  style={[PARTICIPANT_PRIMARY_CTA.button, { marginTop: 12 }, !canJoin && { opacity: 0.45 }]}
+                >
+                  <Text style={[PARTICIPANT_PRIMARY_CTA.text, { fontSize: 13 }]}>{ctaLabel}</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {showTsModifyCta ? (
+                <TouchableOpacity
+                  disabled={!canJoin}
+                  onPress={onPressParticipate}
+                  activeOpacity={0.85}
+                  style={[PARTICIPANT_MODIFY_CTA.button, { marginTop: 12 }, !canJoin && { opacity: 0.45 }]}
+                >
+                  <Text style={[PARTICIPANT_MODIFY_CTA.text, { fontSize: 13 }]}>{ctaLabel}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
         </View>
-      </TouchableOpacity>
+      </>
+    );
 
-      <SecondaryTsCta
-        colors={colors}
-        onPress={onPressResults}
-        RED_DARK={RED_DARK}
-      />
-    </>
-  ) : showResultsCta ? (
-    <>
-      <ResultsTabHint colors={colors} style={{ marginTop: 12 }} />
+    if (showTsResultsHint) {
+      return <View style={cardStyle}>{cardBody}</View>;
+    }
 
-      <SecondaryTsCta
-        colors={colors}
-        onPress={onPressResults}
-        RED_DARK={RED_DARK}
-      />
-    </>
-  ) : (
-    <>
-      <TouchableOpacity
-        disabled={!canJoin}
-        onPress={onPressParticipate}
-        activeOpacity={0.85}
-        style={[
-          {
-            marginTop: 12,
-            paddingVertical: 10,
-            borderRadius: 12,
-            alignItems: "center",
-            backgroundColor: RED_DARK,
-          },
-          !canJoin && { opacity: 0.45 },
-        ]}
-      >
-        <Text style={{ color: "#fff", fontWeight: "900", fontSize: 13 }}>
-          {ctaLabel}
-        </Text>
-      </TouchableOpacity>
-
-      <SecondaryTsCta
-        colors={colors}
-        onPress={onPressResults}
-        RED_DARK={RED_DARK}
-      />
-    </>
-  )}
-</View>
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={cardStyle}>
+        {cardBody}
       </TouchableOpacity>
     );
   }
@@ -649,14 +659,14 @@ export default function DefiListItem({
                   gap: 6,
                 }}
               >
-                <Text style={{ color: RED_DARK, fontWeight: "900", fontSize: 13 }}>
+                <Text style={{ color: PROPHETIK_RED, fontWeight: "900", fontSize: 13 }}>
                   {i18n.t("home.upgradeCta", { defaultValue: "Voir les forfaits" })}
                 </Text>
-                <MaterialCommunityIcons name="chevron-right" size={16} color={RED_DARK} />
+                <MaterialCommunityIcons name="chevron-right" size={16} color={PROPHETIK_RED} />
               </TouchableOpacity>
             </View>
           ) : showResultsCta ? (
-            <ResultsTabHint colors={colors} />
+            <ResultsTabHint colors={colors} groupId={item?.groupId} />
           ) : (
             <TouchableOpacity
               disabled={!canJoin}
@@ -664,7 +674,7 @@ export default function DefiListItem({
               activeOpacity={0.85}
               style={[
                 {
-                  backgroundColor: RED_DARK,
+                  backgroundColor: PROPHETIK_RED,
                   paddingHorizontal: 12,
                   paddingVertical: 8,
                   borderRadius: 10,

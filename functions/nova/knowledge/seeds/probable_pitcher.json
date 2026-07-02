@@ -1,0 +1,51 @@
+{
+  "sport": "MLB",
+  "type": "concept",
+  "category": "Match Context",
+  "key": "probable_pitcher",
+  "status": "published",
+  "challengeTypes": ["FGC", "TP"],
+  "translations": {
+    "fr": {
+      "title": "Lanceur partant (probable starter)",
+      "shortAnswer": "Le lanceur partant est le lanceur prévu pour débuter la partie. Son ERA et son bilan (victoires-défaites) donnent un premier indice sur le matchup offensif.",
+      "beginnerExplanation": "Avant un match, les équipes annoncent généralement qui lancera en début de partie. C'est souvent leur meilleur lanceur disponible ce soir-là.",
+      "intermediateExplanation": "Le lanceur partant influence surtout les premières manches. Dans Prédire l'issue du match, regarde son ERA, son WHIP et son bilan récent pour estimer combien de points chaque équipe pourrait marquer.",
+      "expertExplanation": "Le lanceur annoncé peut changer (blessure, rotation). Prophetik affiche le probable starter quand il est connu. Combine-le avec les records offensifs et défensifs des équipes (runs marqués / runs accordés).",
+      "prophetikUse": "Dans le Défi premier point produit, le lanceur partant adverse limite ou favorise les opportunités offensives tôt dans le match. Dans Prédire l'issue du match, son ERA aide à estimer le total de points.",
+      "commonMistakes": [
+        "Ignorer le lanceur partant et prédire seulement selon la réputation de l'équipe.",
+        "Oublier que le bullpen peut changer le score final.",
+        "Ne pas ajuster quand le lanceur partant est changé au dernier moment."
+      ],
+      "examples": [
+        "Deux lanceurs avec ERA sous 3.00 → match potentiellement bas-scoring.",
+        "Lanceur partant avec ERA élevé contre une équipe offensive → plus de points possibles."
+      ]
+    },
+    "en": {
+      "title": "Probable starting pitcher",
+      "shortAnswer": "The probable starter is the pitcher expected to open the game. ERA and win-loss record provide a first read on the offensive matchup.",
+      "beginnerExplanation": "Teams usually announce who will start before game time. It is often their best available starter that night.",
+      "intermediateExplanation": "The starter mainly shapes the early innings. In Predict the Game Outcome, use ERA, WHIP and recent form to estimate how many runs each team might score.",
+      "expertExplanation": "Probable starters can change (injury, rotation). Prophetik shows the probable starter when known. Combine with team run-scoring and run-prevention records.",
+      "prophetikUse": "In the First Run Challenge, the opposing starter shapes early offensive chances. In Predict the Game Outcome, their ERA helps calibrate your predicted score.",
+      "commonMistakes": [
+        "Ignoring the starter and picking only by team reputation.",
+        "Forgetting the bullpen affects the final score.",
+        "Not adjusting when the starter changes late."
+      ],
+      "examples": [
+        "Two starters with ERA under 3.00 → potentially low-scoring.",
+        "High-ERA starter vs strong offense → more runs possible."
+      ]
+    }
+  },
+  "relatedTopics": ["era", "whip", "team_record"],
+  "tags": ["pitcher", "starter", "probable", "mlb", "tp", "fgc"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik Editorial",
+  "sourceUrl": null,
+  "version": 1
+}

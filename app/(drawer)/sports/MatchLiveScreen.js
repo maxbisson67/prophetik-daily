@@ -21,6 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
+import useLiveBoardGames from "@src/live/useLiveBoardGames";
 import i18n from "@src/i18n/i18n";
 import { crashLog, setCrashContext, recordNonFatal } from "@src/services/crashlytics";
 import Analytics from "@src/services/analytics";
@@ -886,14 +887,25 @@ export default function MatchLiveScreen() {
   const requestedGameId = String(params?.gameId || "");
   const openedFromFgc = String(params?.from || "") === "fgc";
 
+  const [todayKey, setTodayKey] = useState(() => computeNhlYmd());
+
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const { games: boardGames, loading: boardLoading } = useLiveBoardGames({
+    league: "nhl",
+    ymd: todayKey,
+  });
+
+  useEffect(() => {
+    const sorted = [...(boardGames || [])].sort((a, b) => gStartMillis(a) - gStartMillis(b));
+    setGames(sorted);
+    setLoading(boardLoading);
+  }, [boardGames, boardLoading]);
+
   const [selectedGame, setSelectedGame] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-
-  const [todayKey, setTodayKey] = useState(() => computeNhlYmd());
 
   const [firstGoalByGameId, setFirstGoalByGameId] = useState({});
   const [allowedGroupIds, setAllowedGroupIds] = useState([]);
@@ -923,38 +935,6 @@ export default function MatchLiveScreen() {
 
     return () => clearInterval(id);
   }, []);
-
-  useEffect(() => {
-    const ref = firestore().collection("nhl_live_games");
-    setLoading(true);
-
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const todays = all.filter((g) => isGameToday(g, todayKey));
-        setGames(todays);
-        setLoading(false);
-      },
-      (err) => {
-        console.log("[MatchLive] nhl_live_games error", err?.message || err);
-
-        recordNonFatal(err, {
-          screen: "MatchLiveScreen",
-          action: "listen_nhl_live_games",
-          todayKey: todayKey || "",
-          uid: user?.uid || "anonymous",
-        });
-
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, [todayKey, user?.uid]);
 
   // Groupes permis
   useEffect(() => {

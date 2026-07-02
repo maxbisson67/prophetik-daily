@@ -1,0 +1,51 @@
+{
+  "sport": "ALL",
+  "type": "concept",
+  "category": "Challenge Rules",
+  "key": "tp_scoring",
+  "status": "published",
+  "challengeTypes": ["TP"],
+  "translations": {
+    "fr": {
+      "title": "Barème — Prédire l'issue du match",
+      "shortAnswer": "Tu gagnes 3 points si tu prédis le bon gagnant et 3 points bonus si tu trouves le score exact. Maximum 6 points par match.",
+      "beginnerExplanation": "Pour chaque match du défi, tu entres le score des deux équipes. Si tu as le bon gagnant, tu obtiens 3 points. Si le score est exact, tu obtiens 3 points supplémentaires.",
+      "intermediateExplanation": "Le barème récompense à la fois la direction du match (qui gagne) et la précision (combien de points chaque équipe marque). Tu peux marquer des points même sans le score exact.",
+      "expertExplanation": "Stratégiquement, viser le bon gagnant est la base. Le bonus score exact demande plus de précision — pense au lanceur partant, aux records d'équipe et au contexte du match.",
+      "prophetikUse": "Dans Prédire l'issue du match, tu fais jusqu'à 3 prédictions par journée. Chaque match se verrouille quelques minutes avant le début. Nova t'aide à réfléchir — ton choix final t'appartient.",
+      "commonMistakes": [
+        "Viser uniquement le score exact sans d'abord identifier le gagnant probable.",
+        "Oublier qu'un match peut se verrouiller avant que tu enregistres ta prédiction.",
+        "Négliger le lanceur partant et les records récents des équipes."
+      ],
+      "examples": [
+        "Prédiction 5-3, résultat 5-3 → 6 points (gagnant + score exact).",
+        "Prédiction 4-2, résultat 5-2 → 3 points (bon gagnant seulement)."
+      ]
+    },
+    "en": {
+      "title": "Scoring — Predict the Game Outcome",
+      "shortAnswer": "You earn 3 points for the correct winner and a 3-point bonus for the exact score. Maximum 6 points per game.",
+      "beginnerExplanation": "For each game in the challenge, you enter both teams' scores. Correct winner = 3 points. Exact score = 3 bonus points.",
+      "intermediateExplanation": "The scoring rewards both direction (who wins) and precision (the exact run total for each team). You can score without being exact.",
+      "expertExplanation": "Getting the winner right is the foundation. The exact-score bonus requires more precision — consider starting pitching, team records and matchup context.",
+      "prophetikUse": "In Predict the Game Outcome you make up to 3 predictions per day. Each game locks shortly before first pitch. Nova helps you think it through — your final pick is yours.",
+      "commonMistakes": [
+        "Chasing exact scores before identifying the likely winner.",
+        "Forgetting games lock before you save your prediction.",
+        "Ignoring starting pitchers and recent team records."
+      ],
+      "examples": [
+        "Pick 5-3, result 5-3 → 6 points (winner + exact).",
+        "Pick 4-2, result 5-2 → 3 points (winner only)."
+      ]
+    }
+  },
+  "relatedTopics": ["era", "probable_pitcher", "team_record"],
+  "tags": ["tp", "scoring", "barème", "points"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik Editorial",
+  "sourceUrl": null,
+  "version": 1
+}

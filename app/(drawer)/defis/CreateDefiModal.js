@@ -7,17 +7,19 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import { createDefi } from "@src/defis/api";
 import i18n from "@src/i18n/i18n";
-import ProphetikIcons from "@src/ui/ProphetikIcons";
-import { useRouter } from "expo-router";
-import useEntitlement from "../subscriptions/useEntitlement";
 import firestore from "@react-native-firebase/firestore";
 import Analytics from "@src/services/analytics";
-import { isMlbScheduleGameSelectable } from "@src/mlb/mlbGameStatusUtils";
+import { filterMlbScheduleGames } from "@src/mlb/mlbGameStatusUtils";
+import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
+import { filterGroupsForManualChallengeCreation } from "@src/groups/groupAutopilotUtils";
 
 import { Ionicons } from "@expo/vector-icons";
 
 const APP_TZ = "America/Toronto";
 const SIGNUP_DEADLINE_MINUTES_BEFORE_FIRST_GAME = 15;
+const TS_FORMAT = "3x3";
+const TS_TYPE = 3;
+const WIZARD_STEPS = 3;
 
 
 function ymdToCompact(ymd) {
@@ -35,6 +37,18 @@ function tsToIso(v) {
   return Number.isFinite(d?.getTime?.()) ? d.toISOString() : null;
 }
 
+function startTimeMs(v) {
+  if (!v) return Number.POSITIVE_INFINITY;
+  const d =
+    typeof v?.toDate === "function"
+      ? v.toDate()
+      : v instanceof Date
+      ? v
+      : new Date(v);
+  const ms = d?.getTime?.();
+  return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+}
+
 async function fetchEligibleDaySummaryFromFirestore(gameDateYmd, sport = "NHL") {
   if (!gameDateYmd) return { status: "none", count: 0, firstISO: null };
 
@@ -44,24 +58,24 @@ async function fetchEligibleDaySummaryFromFirestore(gameDateYmd, sport = "NHL") 
   try {
     if (league === "MLB") {
       const dayDocRef = firestore().doc(`mlb_schedule_daily/${dayId}`);
-      const daySnap = await dayDocRef.get();
+      const snap = await dayDocRef.collection("games").limit(50).get();
 
-      if (!daySnap.exists) {
-        return { status: "not_ready", count: 0, firstISO: null };
+      if (snap.empty) {
+        const daySnap = await dayDocRef.get();
+        if (!daySnap.exists) {
+          return { status: "not_ready", count: 0, firstISO: null };
+        }
+        return { status: "none", count: 0, firstISO: null };
       }
 
-      const snap = await dayDocRef
-        .collection("games")
-        .orderBy("startTimeUTC", "asc")
-        .limit(50)
-        .get();
-
-      const eligible = snap.docs.filter((doc) =>
-        isMlbScheduleGameSelectable(doc.data() || {})
-      );
-
+      const eligible = filterMlbScheduleGames(snap.docs);
       const count = eligible.length;
-      const firstISO = count ? tsToIso(eligible[0]?.data()?.startTimeUTC) : null;
+      const nowMs = Date.now();
+      const upcoming = eligible.filter(
+        (g) => startTimeMs(g.startTimeUTC) > nowMs
+      );
+      const firstGame = upcoming[0] || eligible[0] || null;
+      const firstISO = firstGame ? tsToIso(firstGame.startTimeUTC) : null;
 
       return { status: count ? "ok" : "none", count, firstISO };
     }
@@ -142,7 +156,7 @@ function humanCreateDefiError(err) {
           ? `Ce défi est trop loin dans le futur (${aheadRounded}h). Tu peux créer un défi au maximum ${max}h à l’avance.`
           : `Ce défi est trop loin dans le futur. Tu peux créer un défi au maximum ${max}h à l’avance.`,
       });
-    };
+    }
     default:
       return i18n.t("common.genericError");
   }
@@ -171,6 +185,12 @@ function StepPill({ active, done, label, colors }) {
 }
 
 function WizardHeader({ step, colors, onClose }) {
+  const steps = [
+    i18n.t("defi.create.wizard.step1", { defaultValue: "1. Groupe" }),
+    i18n.t("defi.create.wizard.stepDate", { defaultValue: "2. Date" }),
+    i18n.t("defi.create.wizard.stepConfirm", { defaultValue: "3. Confirmation" }),
+  ];
+
   return (
     <View style={{ gap: 10 }}>
       {/* Row titre + X */}
@@ -199,32 +219,27 @@ function WizardHeader({ step, colors, onClose }) {
         </TouchableOpacity>
       </View>
 
+      <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: "700" }}>
+        {i18n.t("defi.create.formatFixed", {
+          defaultValue: "Format : Top scoreurs {{format}}",
+          format: TS_FORMAT,
+        })}
+      </Text>
+
       {/* Steps */}
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-        <StepPill
-          active={step === 1}
-          done={step > 1}
-          colors={colors}
-          label={i18n.t("defi.create.wizard.step1", { defaultValue: "1. Groupe" })}
-        />
-        <StepPill
-          active={step === 2}
-          done={step > 2}
-          colors={colors}
-          label={i18n.t("defi.create.wizard.step2", { defaultValue: "2. Format" })}
-        />
-        <StepPill
-          active={step === 3}
-          done={step > 3}
-          colors={colors}
-          label={i18n.t("defi.create.wizard.step3", { defaultValue: "3. Date" })}
-        />
-        <StepPill
-          active={step === 4}
-          done={false}
-          colors={colors}
-          label={i18n.t("defi.create.wizard.step4", { defaultValue: "4. Confirmation" })}
-        />
+        {steps.map((label, idx) => {
+          const n = idx + 1;
+          return (
+            <StepPill
+              key={label}
+              active={step === n}
+              done={step > n}
+              colors={colors}
+              label={label}
+            />
+          );
+        })}
       </View>
     </View>
   );
@@ -269,15 +284,11 @@ export default function CreateDefiModal({
 }) {
   const { user } = useAuth();
   const { colors } = useTheme();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const { tier, loading: loadingTier } = useEntitlement(user?.uid);
-  const userPlan = (tier || "free").toLowerCase();
 
   const selectableGroups = useMemo(
     () =>
-      (groups || []).filter((g) => {
+      filterGroupsForManualChallengeCreation(groups).filter((g) => {
         if (!g) return false;
         const st = String(g.status || "").toLowerCase();
         return !["archived", "deleted"].includes(st);
@@ -290,10 +301,8 @@ export default function CreateDefiModal({
 
   // Selection
   const [selectedGroupId, setSelectedGroupId] = useState(initialGroupId);
-  const [size, setSize] = useState("1x1");
 
-  // ✅ Source de vérité unique: date NHL sous forme YYYY-MM-DD
-  const [gameDateYmd, setGameDateYmd] = useState(() => ymdFromLocalDate(new Date()));
+  const [gameDateYmd, setGameDateYmd] = useState(() => getProphetikBusinessYmd());
   const [showDayPicker, setShowDayPicker] = useState(false);
 
   // Verify NHL date
@@ -311,8 +320,7 @@ export default function CreateDefiModal({
   useEffect(() => {
     if (!visible) return;
     setStep(1);
-    setSize("1x1");
-    setGameDateYmd(ymdFromLocalDate(new Date()));
+    setGameDateYmd(getProphetikBusinessYmd());
     setVerifyStatus("idle");
     setVerifyMsg("");
     setVerifyCount(null);
@@ -333,44 +341,23 @@ export default function CreateDefiModal({
   useEffect(() => {
     if (!visible) return;
     setStep(1);
-    setSize("1x1");
-    setGameDateYmd(ymdFromLocalDate(new Date()));
+    setGameDateYmd(getProphetikBusinessYmd());
     setVerifyStatus("idle");
     setVerifyMsg("");
     setVerifyCount(null);
     setVerifyFirstISO(null);
-    setGroupDropdownOpen(false); // ✅
+    setGroupDropdownOpen(false);
   }, [visible]);
 
-  // Format groups (two lines)
-  const LINE1 = ["1x1", "2x2", "3x3", "4x4"];
-  const LINE2 = ["5x5", "6x6", "7x7"];
+  const nType = TS_TYPE;
+  const size = TS_FORMAT;
+  const participationCost = TS_TYPE;
 
-  const requiredPlanForSize = useMemo(() => {
-    if (size === "5x5" || size === "6x6" || size === "7x7") return "pro";
-    return null; // free (1..4)
+  const computedTitle = useMemo(() => {
+    return i18n.t("defi.create.autoTitle", { format: size, defaultValue: `Défi ${size}` });
   }, [size]);
 
-  function planRank(p) {
-    if (p === "vip") return 3;
-    if (p === "pro") return 2;
-    return 1;
-  }
-
-  const isPlanAllowed = useMemo(() => {
-    if (loadingTier) return true;
-    const req = requiredPlanForSize;
-    if (!req) return true;
-    return planRank(userPlan) >= planRank(req);
-  }, [requiredPlanForSize, userPlan, loadingTier]);
-
-  const requiredPlanForAnySize = useCallback((s) => {
-    if (s === "5x5" || s === "6x6" || s === "7x7") return "pro";
-    return null;
-  }, []);
-
 const nova = useMemo(() => {
-  // Step 1
   if (step === 1) {
     if (!selectedGroupId) {
       return {
@@ -386,24 +373,7 @@ const nova = useMemo(() => {
     };
   }
 
-  // Step 2
   if (step === 2) {
-    if (!isPlanAllowed) {
-      return {
-        variant: "format",
-        titleKey: "defi.nova.locked.title",
-        bodyKey: "defi.nova.locked.body",
-      };
-    }
-    return {
-      variant: "format",
-      titleKey: "defi.nova.format.title",
-      bodyKey: "defi.nova.format.body",
-    };
-  }
-
-  // Step 3
-  if (step === 3) {
     if (verifying) {
       return {
         variant: "calendar",
@@ -434,8 +404,7 @@ const nova = useMemo(() => {
     };
   }
 
-  // Step 4 (confirm)
-  if (step === 4) {
+  if (step === 3) {
     return {
       variant: "thumbsUp",
       titleKey: "defi.nova.confirm.title",
@@ -444,27 +413,7 @@ const nova = useMemo(() => {
   }
 
   return { variant: "neutral", titleKey: "defi.nova.default.title", bodyKey: "defi.nova.default.body" };
-}, [step, selectedGroupId, isPlanAllowed, verifying, verifyStatus, gameDateYmd, verifyCount]);
-
-  const isSizeAllowed = useCallback(
-    (s) => {
-      const req = requiredPlanForAnySize(s);
-      if (!req) return true;
-      return planRank(userPlan) >= planRank(req);
-    },
-    [userPlan, requiredPlanForAnySize]
-  );
-
-  const nType = useMemo(() => {
-    const n = parseInt(String(size).split("x")[0], 10);
-    return Number.isFinite(n) ? n : 0;
-  }, [size]);
-
-  const participationCost = nType;
-
-  const computedTitle = useMemo(() => {
-    return i18n.t("defi.create.autoTitle", { format: size, defaultValue: `Défi ${size}` });
-  }, [size]);
+}, [step, selectedGroupId, verifying, verifyStatus, gameDateYmd, verifyCount]);
 
   const signupDeadlineLocal = useMemo(() => {
     if (!verifyFirstISO) return null;
@@ -547,39 +496,32 @@ const nova = useMemo(() => {
     }
   }, [gameDateYmd, groupSport]);
 
-  // Auto-verify only when step 3 visible
+  // Auto-verify when date step visible
   useEffect(() => {
     if (!visible) return;
-    if (step !== 3) return;
+    if (step !== 2) return;
     verifyDate();
   }, [visible, step, verifyDate]);
 
   useEffect(() => {
     if (!visible) return;
-    if (step !== 3) return;
+    if (step !== 2) return;
     verifyDate();
   }, [gameDateYmd, groupSport, visible, step, verifyDate]);
-
-  const onGoToSubscriptions = useCallback(() => {
-    onClose?.();
-    router.push("/(drawer)/subscriptions");
-  }, [router, onClose]);
 
   const noGroupAvailable = selectableGroups.length === 0;
 
   // Step guards
   const canGoNextFromStep1 = !!selectedGroupId && !noGroupAvailable;
-  const canGoNextFromStep2 = !!size;
-  const canGoNextFromStep3 = useMemo(() => {
-    if (!isPlanAllowed) return false;
+  const canGoNextFromStep2 = useMemo(() => {
     if (!verifyCount || !signupDeadlineLocal) return false;
     return new Date() < signupDeadlineLocal;
-  }, [isPlanAllowed, verifyCount, signupDeadlineLocal]);
+  }, [verifyCount, signupDeadlineLocal]);
 
-  const canCreate = canGoNextFromStep3; // même condition (date valide + plan ok)
+  const canCreate = canGoNextFromStep2;
 
   const goNext = useCallback(() => {
-    setStep((s) => Math.min(4, s + 1));
+    setStep((s) => Math.min(WIZARD_STEPS, s + 1));
   }, []);
 
   const goBack = useCallback(() => {
@@ -592,10 +534,12 @@ const nova = useMemo(() => {
 
     if (!verifyCount) {
       Alert.alert(
-        i18n.t("defi.create.alert.noGames.title", { defaultValue: "Aucun match NHL" }),
+        i18n.t("defi.create.alert.noGames.title", {
+          defaultValue: groupSport === "MLB" ? "Aucun match MLB" : "Aucun match NHL",
+        }),
         i18n.t("defi.create.alert.noGames.body", {
           date: gameDateYmd,
-          defaultValue: `Aucun match NHL pour ${gameDateYmd}.`,
+          defaultValue: `Aucun match éligible pour ${gameDateYmd}.`,
         })
       );
       return;
@@ -827,133 +771,7 @@ const nova = useMemo(() => {
     );
   };
 
-  const renderSizeButton = (s, { locked = false } = {}) => {
-    const active = s === size;
-    const disabled = locked;
-
-    return (
-      <TouchableOpacity
-        key={s}
-        onPress={() => {
-          if (disabled) return;
-          setSize(s);
-        }}
-        activeOpacity={disabled ? 1 : 0.85}
-        style={{
-          paddingVertical: 10,
-          paddingHorizontal: 14,
-          borderWidth: 2,
-          borderRadius: 14,
-          borderColor: active ? colors.primary : colors.border,
-          backgroundColor: active ? colors.primary : colors.card,
-          opacity: disabled ? 0.35 : 1,
-        }}
-      >
-        <Text style={{ color: active ? "#fff" : colors.text, fontWeight: "900", fontSize: 14 }}>
-          {s}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderStep2 = () => {
-    const line2Locked = planRank(userPlan) < planRank("pro");
-
-    return (
-      <View style={{ gap: 12 }}>
-
-        <Text style={{ fontWeight: "800", color: colors.text }}>
-          {i18n.t("defi.create.wizard.pickFormat", { defaultValue: "Choix du format" })}
-        </Text>
-
-        <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-          {LINE1.map((s) => renderSizeButton(s))}
-        </View>
-
-        <View style={{ alignItems: "center", gap: 8 }}>
-          <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-            {LINE2.map((s) => {
-              const allowed = isSizeAllowed(s);
-              return renderSizeButton(s, { locked: !allowed });
-            })}
-          </View>
-
-          {line2Locked && (
-            <TouchableOpacity
-              onPress={onGoToSubscriptions}
-              style={{
-                marginTop: 2,
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: "#b91c1c",
-                backgroundColor: "#b91c1c",
-                minWidth: 240,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "900" }}>
-                {i18n.t("defi.create.unlockOther", { defaultValue: "Débloquer les autres défis" })}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {!isPlanAllowed && (
-          <View
-            style={{
-              padding: 12,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "#b91c1c",
-              backgroundColor: colors.card2,
-              gap: 8,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={{ width: 44, alignItems: "center", justifyContent: "center", marginRight: 10 }}>
-                <ProphetikIcons mode="badge" variant={requiredPlanForSize} iconOnly size="xl" />
-              </View>
-
-              <Text style={{ color: colors.text, fontWeight: "900", flex: 1 }} numberOfLines={2}>
-                {i18n.t("defi.create.planLocked.title", {
-                  plan: requiredPlanForSize?.toUpperCase?.() ?? "",
-                  defaultValue: `Défi ${requiredPlanForSize?.toUpperCase?.() ?? ""} — non disponible`,
-                })}
-              </Text>
-            </View>
-
-            <Text style={{ color: colors.subtext, fontSize: 12 }}>
-              {i18n.t("defi.create.planLocked.body", {
-                size,
-                defaultValue: `Abonne-toi pour débloquer ${size} et accéder aux défis premium.`,
-              })}
-            </Text>
-
-            <TouchableOpacity
-              onPress={onGoToSubscriptions}
-              style={{
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                borderRadius: 10,
-                backgroundColor: "#b91c1c",
-                alignSelf: "center",
-                minWidth: 220,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "900" }}>
-                {i18n.t("defi.create.planLocked.cta", { defaultValue: "Voir les abonnements" })}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const renderStep3 = () => {
+  const renderStep2Date = () => {
     const meta =
       verifyCount != null
         ? ` (${verifyCount} ${i18n.t("defi.create.date.matchesShort", { defaultValue: "match(s)" })}${
@@ -1059,9 +877,8 @@ const nova = useMemo(() => {
     );
   };
 
-  const renderStep4 = () => {
+  const renderStep3Confirm = () => {
     const groupLabel = selectedGroup?.name || selectedGroup?.id || selectedGroupId || "-";
-    const formatLabel = size || "-";
     const dateLabel = gameDateYmd || "-";
 
     const gamesLabel =
@@ -1093,15 +910,9 @@ const nova = useMemo(() => {
           />
           <SummaryRow
             colors={colors}
-            label={i18n.t("defi.create.wizard.summary.format", { defaultValue: "Format" })}
-            value={formatLabel}
-            onEdit={() => setStep(2)}
-          />
-          <SummaryRow
-            colors={colors}
             label={i18n.t("defi.create.wizard.summary.date", { defaultValue: "Date" })}
             value={dateLabel}
-            onEdit={() => setStep(3)}
+            onEdit={() => setStep(2)}
           />
 
           <View
@@ -1131,40 +942,6 @@ const nova = useMemo(() => {
               value={deadlineLabel}
             />
           </View>
-
-          {!isPlanAllowed && (
-            <View
-              style={{
-                padding: 12,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: "#b91c1c",
-                backgroundColor: colors.card2,
-              }}
-            >
-              <Text style={{ color: colors.text, fontWeight: "900" }}>
-                {i18n.t("defi.errors.planNotAllowed", { defaultValue: "Ton abonnement ne permet pas ce défi." })}
-              </Text>
-
-              <TouchableOpacity
-                onPress={onGoToSubscriptions}
-                style={{
-                  marginTop: 10,
-                  paddingVertical: 10,
-                  paddingHorizontal: 14,
-                  borderRadius: 10,
-                  backgroundColor: "#b91c1c",
-                  alignSelf: "center",
-                  minWidth: 220,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: "#fff", fontWeight: "900" }}>
-                  {i18n.t("defi.create.unlockOther", { defaultValue: "Débloquer les autres défis" })}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </View>
     );
@@ -1172,12 +949,10 @@ const nova = useMemo(() => {
 
   if (!visible) return null;
 
-  // Next button disabled logic per step
   const nextDisabled =
     creating ||
     (step === 1 && !canGoNextFromStep1) ||
-    (step === 2 && !canGoNextFromStep2) ||
-    (step === 3 && !canGoNextFromStep3);
+    (step === 2 && !canGoNextFromStep2);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
@@ -1204,9 +979,8 @@ const nova = useMemo(() => {
             }}
           >
             {step === 1 ? renderStep1() : null}
-            {step === 2 ? renderStep2() : null}
-            {step === 3 ? renderStep3() : null}
-            {step === 4 ? renderStep4() : null}
+            {step === 2 ? renderStep2Date() : null}
+            {step === 3 ? renderStep3Confirm() : null}
           </View>
 
           {/* ACTIONS */}
@@ -1231,7 +1005,7 @@ const nova = useMemo(() => {
               </Text>
             </TouchableOpacity>
 
-            {step < 4 ? (
+            {step < WIZARD_STEPS ? (
               <TouchableOpacity
                 onPress={goNext}
                 disabled={nextDisabled}
@@ -1250,14 +1024,13 @@ const nova = useMemo(() => {
             ) : (
               <TouchableOpacity
                 onPress={handleCreate}
-                disabled={creating || !canCreate || !isPlanAllowed}
+                disabled={creating || !canCreate}
                 style={{
                   flex: 1,
                   padding: 12,
                   borderRadius: 12,
                   alignItems: "center",
-                  backgroundColor: creating || !canCreate || !isPlanAllowed ? colors.subtext : "#b91c1c",
-                  opacity: !isPlanAllowed ? 0.75 : 1,
+                  backgroundColor: creating || !canCreate ? colors.subtext : "#b91c1c",
                 }}
               >
                 <Text style={{ color: "#fff", fontWeight: "900" }}>

@@ -1,0 +1,53 @@
+{
+  "sport": "MLB",
+  "type": "concept",
+  "category": "Challenge Rules",
+  "key": "first_rbi",
+  "status": "published",
+  "challengeTypes": ["FGC"],
+  "translations": {
+    "fr": {
+      "title": "Le premier point produit du match",
+      "shortAnswer": "Dans le Défi premier point produit, tu dois prédire quel joueur enregistrera le premier RBI (point produit) du match. Le bon choix combine le talent offensif, la place dans l'ordre de frappe et le contexte du match.",
+      "beginnerExplanation": "Le premier RBI dépend de qui produit en début de match et de la place dans l'ordre de frappe. En haut de la 1re manche, le premier frappeur ne peut produire un RBI qu'avec un circuit (bases vides). Les frappeurs 2 à 5 ont souvent plus de chemins possibles. Regarde aussi le lanceur partant et la production récente.",
+      "intermediateExplanation": "Au-delà du total de RBI saisonnier, le premier point produit favorise les frappeurs bien placés dans l'ordre pour voir des coureurs en 1re manche — souvent le cœur d'ordre (3-4-5) côté visiteur. Le lanceur adverse, le pouvoir au bâton (HR) et le contexte du stade comptent aussi.",
+      "expertExplanation": "Prédire le premier RBI implique la probabilité qu'une séquence offensive produise un point tôt, pas seulement la moyenne de RBI par match. La variance est élevée : même un profil optimal peut rester silencieux plusieurs matchs.",
+      "prophetikUse": "Dans le Défi premier point produit, compare les joueurs disponibles sur leur production récente, leur rôle offensif et le lanceur adverse. Nova t'aide à réfléchir — ton choix final reste le tien.",
+      "commonMistakes": [
+        "Choisir uniquement le joueur avec le plus de RBI sur la saison.",
+        "Ignorer le statut de blessure ou de disponibilité.",
+        "Oublier que le lanceur partant peut limiter les opportunités offensives d'un frappeur.",
+        "Croire que le premier frappeur visiteur est favorisé parce qu'il bat en premier dans le match."
+      ],
+      "examples": [
+        "Un frappeur 3e ou 4e visiteur avec de bons circuits saisonniers est un profil classique si le haut d'ordre atteint les buts.",
+        "Un joueur en bonne séquence récente peut mériter autant d'attention qu'une vedette en baisse de forme."
+      ]
+    },
+    "en": {
+      "title": "The first RBI of the game",
+      "shortAnswer": "In the First Run Challenge, you predict which player will record the first RBI of the game. Strong picks usually combine offensive skill, lineup spot and game context.",
+      "beginnerExplanation": "The first RBI depends on who produces early and where they hit in the lineup. In the top of the 1st, the leadoff hitter can only drive in an RBI with a home run (empty bases). Spots 2 through 5 often have more paths. Also check the starting pitcher and recent production.",
+      "intermediateExplanation": "Beyond season RBI totals, the first RBI favors hitters positioned to see baserunners in the 1st—often heart-of-the-order (3–5) for the away team. The opposing starter, power (HR) and ballpark context also matter.",
+      "expertExplanation": "Predicting the first RBI is about the chance an early offensive sequence produces a run, not just season-long RBI rates. Variance is high—even optimal profiles can go quiet.",
+      "prophetikUse": "In the First Run Challenge, compare available players by recent production, offensive role and pitching matchup. Nova helps you think it through—your final pick is still yours.",
+      "commonMistakes": [
+        "Picking only the player with the most season RBI.",
+        "Ignoring injury or availability status.",
+        "Forgetting the starting pitcher can limit a hitter's early opportunities.",
+        "Assuming the away leadoff is favored because they bat first in the game."
+      ],
+      "examples": [
+        "An away #3 or #4 hitter with solid season HR is a classic profile if the top of the order reaches base.",
+        "A player on a hot streak may deserve as much attention as a star in a slump."
+      ]
+    }
+  },
+  "relatedTopics": ["rbi", "fgc_away_first_inning"],
+  "tags": ["first_rbi", "mlb", "fgc", "beginner", "point_produit"],
+  "difficulty": "beginner",
+  "confidence": "high",
+  "sourceName": "Prophetik Editorial",
+  "sourceUrl": null,
+  "version": 1
+}

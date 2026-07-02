@@ -6,6 +6,7 @@ import { logger } from "firebase-functions";
 
 import { db, rebuildLeaderboardSeasonForGroupLogic } from "./leaderboard.js";
 import { getCurrentSeasonConfig } from "./currentSeason.js";
+import { appYmd } from "../ProphetikDate.js";
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10, timeoutSeconds: 540 });
 
@@ -63,14 +64,9 @@ export const rebuildAllLeaderboardsSeason = onSchedule(
     region: "us-central1",
   },
   async () => {
-    const season = await getCurrentSeasonConfig(db);
-    const seasonId = season.seasonId;
-    const fromYmd = season.fromYmd;
-    const toYmd = season.toYmd;
+    const todayYmd = appYmd(new Date());
+    const LIMIT_GROUPS_PER_RUN = 200;
 
-    const LIMIT_GROUPS_PER_RUN = 200; // ajuste selon budget/volume
-
-    // ✅ Dirty-only query (requires an index if you add orderBy later)
     const dirtySnap = await db
       .collection("groups")
       .where("leaderboardSeasonDirty", "==", true)
@@ -82,9 +78,7 @@ export const rebuildAllLeaderboardsSeason = onSchedule(
     logger.info("rebuildAllLeaderboardsSeason: start", {
       dirtyGroups: ids.length,
       limit: LIMIT_GROUPS_PER_RUN,
-      seasonId,
-      fromYmd,
-      toYmd,
+      todayYmd,
     });
 
     if (!ids.length) {
@@ -97,12 +91,23 @@ export const rebuildAllLeaderboardsSeason = onSchedule(
 
     for (const gid of ids) {
       try {
+        let sport = "NHL";
+        try {
+          const gSnap = await db.doc(`groups/${gid}`).get();
+          sport = String(gSnap.data()?.sport || "NHL");
+        } catch {
+          // default
+        }
+
+        const season = await getCurrentSeasonConfig(db, { sport, gameYmd: todayYmd });
+        const competitionKey = String(season.competitionKey || season.seasonId || "");
+
         await rebuildLeaderboardSeasonForGroupLogic({
           groupId: gid,
-          seasonId,
-          fromYmd,
-          toYmd,
-          clearDirty: true, // ✅ clear flag after success
+          seasonId: competitionKey,
+          fromYmd: season.fromYmd,
+          toYmd: season.toYmd,
+          clearDirty: true,
         });
         ok++;
       } catch (e) {
@@ -117,10 +122,9 @@ export const rebuildAllLeaderboardsSeason = onSchedule(
     logger.info("rebuildAllLeaderboardsSeason: done", {
       ok,
       fail,
-      seasonId,
       processed: ids.length,
     });
 
-    return { ok: true, processed: ids.length, okCount: ok, failCount: fail, seasonId };
+    return { ok: true, processed: ids.length, okCount: ok, failCount: fail };
   }
 );

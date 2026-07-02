@@ -4,41 +4,41 @@ import {
   View,
   Text,
   ActivityIndicator,
-  SectionList,
-  TouchableOpacity,
-  Image,
   ScrollView,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";
 
 import i18n from "@src/i18n/i18n";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
-import ChallengeDayCard from "@src/defis/list/ChallengeDayCard";
+import { ChallengeItemCard } from "@src/defis/list/ChallengeDayCard";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
-import useMeDoc from "@src/home/hooks/useMeDoc";
+import HomeDefisToggle from "@src/home/components/HomeDefisToggle";
+import ResultsDayPicker from "@src/defis/results/ResultsDayPicker";
 import {
   getTpBundleFirstDeadline,
-  isHistoryResultItem,
-  resolveChallengeDisplayStatus,
   mergeTpItemsByDate,
-  tpEntryHasParticipation,
   shouldShowPastDayResultItem,
 } from "@src/defis/results/challengeResultsModel";
 import {
   getProphetikBusinessDate,
   getProphetikBusinessYmd,
 } from "@src/lib/prophetikBusinessDate";
-import { isTpResultsViewStatus } from "@src/defis/results/navigateToMesResultats";
-import {
-  PARTICIPANT_TASK_STATES,
-  resolveParticipantTaskStatusForItem,
-} from "@src/defis/participant/participantTaskStatus";
 import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
 import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
+import { useMyGroups } from "@src/groups/MyGroupsProvider";
+import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
+import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
+import { isSignupDeadlinePassed } from "@src/home/homeUtils";
+import { buildTpBundleTabProgress } from "@src/defis/tpTabProgress";
+import {
+  RESULTS_ACCENT,
+  RESULTS_ACCENT_MUTED,
+} from "@src/defis/results/resultsTheme";
 
 const GROUP_PLACEHOLDER = require("@src/assets/group-placeholder.png");
 
@@ -89,15 +89,47 @@ function addDays(date, days) {
   return d;
 }
 
-function buildLast7DaysIncludingToday() {
+function buildResultsDayOptions() {
   const base = getProphetikBusinessDate();
   return Array.from({ length: 8 }, (_, i) => {
     const d = addDays(base, -i);
+    const ymd = ymdLocal(d);
     return {
-      ymd: ymdLocal(d),
+      ymd,
       compact: compactYmd(d),
+      label: prettyDateLabel(ymd),
     };
   });
+}
+
+function cardShadow() {
+  return {
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  };
+}
+
+function leftAccentCardStyle(colors, accent = RESULTS_ACCENT) {
+  return {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    overflow: "hidden",
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: accent,
+  };
+}
+
+function withTabExpiry(progress, deadline) {
+  if (!progress?.total || progress.done >= progress.total) return progress;
+  if (progress.enrolled) return progress;
+  if (isSignupDeadlinePassed(deadline)) {
+    return { ...progress, expired: true };
+  }
+  return progress;
 }
 
 function prettyDateLabel(ymd) {
@@ -148,12 +180,20 @@ function getWinnerUids(raw) {
 
 function normalizeTsDoc(doc) {
   const d = doc.data() || {};
+  const dateKey =
+    normalizeYmdString(d?.gameDate) ||
+    normalizeYmdString(
+      typeof d?.gameDate?.toDate === "function"
+        ? d.gameDate.toDate().toISOString().slice(0, 10)
+        : ""
+    );
+
   return {
     id: doc.id,
     kind: "ts",
     groupId: String(d?.groupId || ""),
-    dateKey: String(d?.gameDate || ""),
-title: i18n.t("home.todayChallenge", { defaultValue: "Top scoreur" }),
+    dateKey,
+    title: i18n.t("home.todayChallenge", { defaultValue: "Le trio du jour" }),
     status: normalizeStatus(d?.status),
     createdAt: d?.createdAt || null,
     signupDeadline: d?.signupDeadline || null,
@@ -251,7 +291,16 @@ export default function ChallengesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
-  const { meDoc } = useMeDoc({ authReady, uid: user?.uid });
+  const isFocused = useIsFocused();
+  const { isActive: appActive } = useAppVisibilitySafe();
+  const listenersEnabled = isFocused && appActive;
+  const { selectedGroupId: currentGroupId, setSelectedGroupId } = useSelectedGroup();
+
+  const {
+    readableGroupIds: groupIds,
+    groupsMeta: groupsMap,
+    loading: groupsLoading,
+  } = useMyGroups();
 
   const paramGroupId = String(params?.groupId || "").trim();
   const paramOpenChallengeId = String(params?.openChallengeId || "").trim();
@@ -264,14 +313,12 @@ export default function ChallengesScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [groupIds, setGroupIds] = useState([]);
-  const [groupsMap, setGroupsMap] = useState({});
-  const [currentGroupId, setCurrentGroupId] = useState(null);
-
   const [tsItems, setTsItems] = useState([]);
   const [fgcItems, setFgcItems] = useState([]);
   const [tpBundleItems, setTpBundleItems] = useState([]);
   const [tpLegacyItems, setTpLegacyItems] = useState([]);
+  const [selectedYmd, setSelectedYmd] = useState(() => getProphetikBusinessYmd());
+  const [selectedDefiTab, setSelectedDefiTab] = useState("fgc");
 
   const tpItems = useMemo(
     () => mergeTpItemsByDate(tpBundleItems, tpLegacyItems),
@@ -280,14 +327,6 @@ export default function ChallengesScreen() {
 
   const [winnerInfoMap, setWinnerInfoMap] = useState({});
 
-  const subs = useRef({
-    byUid: null,
-    byPid: null,
-    byOwnerCreated: null,
-    byOwnerOwnerId: null,
-  });
-
-  const groupsUnsubsRef = useRef(new Map());
   const currentGroupUnsubsRef = useRef({
     ts: [],
     fgc: [],
@@ -296,10 +335,15 @@ export default function ChallengesScreen() {
   });
   const winnerUnsubsRef = useRef(new Map());
 
-  const dayKeys = useMemo(() => buildLast7DaysIncludingToday(), []);
+  const dayKeys = useMemo(() => buildResultsDayOptions(), []);
   const dayYmdSet = useMemo(() => new Set(dayKeys.map((d) => d.ymd)), [dayKeys]);
+  const dayOptions = useMemo(
+    () => dayKeys.map((d) => ({ ymd: d.ymd, label: d.label })),
+    [dayKeys]
+  );
 
   const todayKey = getProphetikBusinessYmd();
+  const isSelectedToday = selectedYmd === todayKey;
 
   const allItems = useMemo(
     () => [...fgcItems, ...tpItems, ...tsItems],
@@ -369,145 +413,15 @@ export default function ChallengesScreen() {
     [fgcParticipationMap, tpParticipationMap, tsParticipationMap]
   );
 
-  /* ---------------- 1) memberships + owned groups ---------------- */
+  /* ---------------- 1) groups via MyGroupsProvider ---------------- */
 
   useEffect(() => {
-    setError(null);
-    setLoading(true);
-    setGroupIds([]);
-    setGroupsMap({});
-    setCurrentGroupId(null);
-
     if (!user?.uid) {
       setLoading(false);
       return;
     }
-
-    Object.values(subs.current).forEach((un) => {
-      try {
-        un?.();
-      } catch {}
-    });
-
-    const qByUid = firestore().collection("group_memberships").where("uid", "==", user.uid);
-    const qByPid = firestore().collection("group_memberships").where("participantId", "==", user.uid);
-    const qOwnerCreated = firestore().collection("groups").where("createdBy", "==", user.uid);
-    const qOwnerOwnerId = firestore().collection("groups").where("ownerId", "==", user.uid);
-
-    let rowsByUid = [];
-    let rowsByPid = [];
-    let rowsOwnerCreated = [];
-    let rowsOwnerOwnerId = [];
-
-    const recompute = () => {
-      const memberships = [...rowsByUid, ...rowsByPid].filter((m) => {
-        const st = String(m?.status || "").toLowerCase();
-        if (st) return ["open", "active", "approved"].includes(st);
-        return m?.active !== false;
-      });
-
-      const gidsFromMemberships = memberships.map((m) => m.groupId).filter(Boolean);
-      const gidsFromOwner = [...rowsOwnerCreated, ...rowsOwnerOwnerId].map((g) => g.id).filter(Boolean);
-      const union = Array.from(new Set([...gidsFromMemberships, ...gidsFromOwner])).sort();
-
-      setGroupIds(union);
-      setLoading(false);
-
-      setGroupsMap((prev) => {
-        const next = { ...prev };
-        [...rowsOwnerCreated, ...rowsOwnerOwnerId].forEach((g) => {
-          if (!g?.id) return;
-          next[g.id] = {
-            ...(next[g.id] || {}),
-            ...g,
-          };
-        });
-        return next;
-      });
-    };
-
-    subs.current.byUid = qByUid.onSnapshot(
-      (snap) => {
-        rowsByUid = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (e) => {
-        setError(e);
-        setLoading(false);
-      }
-    );
-
-    subs.current.byPid = qByPid.onSnapshot(
-      (snap) => {
-        rowsByPid = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (e) => {
-        setError(e);
-        setLoading(false);
-      }
-    );
-
-    subs.current.byOwnerCreated = qOwnerCreated.onSnapshot(
-      (snap) => {
-        rowsOwnerCreated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (e) => {
-        setError(e);
-        setLoading(false);
-      }
-    );
-
-    subs.current.byOwnerOwnerId = qOwnerOwnerId.onSnapshot(
-      (snap) => {
-        rowsOwnerOwnerId = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (e) => {
-        setError(e);
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      Object.values(subs.current).forEach((un) => {
-        try {
-          un?.();
-        } catch {}
-      });
-    };
-  }, [user?.uid]);
-
-  /* ---------------- 2) group meta listeners ---------------- */
-
-  useEffect(() => {
-    for (const [gid, un] of groupsUnsubsRef.current) {
-      if (!groupIds.includes(gid)) {
-        try {
-          un?.();
-        } catch {}
-        groupsUnsubsRef.current.delete(gid);
-      }
-    }
-
-    groupIds.forEach((gid) => {
-      if (groupsUnsubsRef.current.has(gid)) return;
-
-      const un = firestore()
-        .collection("groups")
-        .doc(gid)
-        .onSnapshot((snap) => {
-          if (!snap.exists) return;
-          setGroupsMap((prev) => ({
-            ...prev,
-            [gid]: { id: gid, ...snap.data() },
-          }));
-        });
-
-      groupsUnsubsRef.current.set(gid, un);
-    });
-  }, [groupIds]);
+    setLoading(groupsLoading);
+  }, [user?.uid, groupsLoading]);
 
   /* ---------------- 3) current group selection ---------------- */
 
@@ -525,32 +439,12 @@ export default function ChallengesScreen() {
     [groupIds, groupsMap]
   );
 
-  const favoriteGroupId = meDoc?.favoriteGroupId || null;
-
   useEffect(() => {
-    if (!groupIds.length) {
-      setCurrentGroupId(null);
-      return;
+    if (!paramGroupId || !groupIds.includes(paramGroupId)) return;
+    if (String(currentGroupId) !== paramGroupId) {
+      setSelectedGroupId(paramGroupId);
     }
-
-    if (
-      paramGroupId &&
-      groupIds.includes(paramGroupId) &&
-      currentGroupId !== paramGroupId
-    ) {
-      setCurrentGroupId(paramGroupId);
-      return;
-    }
-
-    if (currentGroupId && groupIds.includes(currentGroupId)) return;
-
-    const fav =
-      favoriteGroupId && groupIds.includes(String(favoriteGroupId))
-        ? String(favoriteGroupId)
-        : null;
-
-    setCurrentGroupId(fav || groupIds[0]);
-  }, [groupIds, currentGroupId, favoriteGroupId, paramGroupId]);
+  }, [paramGroupId, groupIds.join("|"), currentGroupId, setSelectedGroupId]);
 
   useEffect(() => {
     if (!paramOpenChallengeId || loading) return;
@@ -561,6 +455,13 @@ export default function ChallengesScreen() {
     if (paramKind && String(item.kind || "").toLowerCase() !== paramKind) return;
 
     handledOpenRef.current = paramOpenChallengeId;
+
+    if (item.dateKey) {
+      setSelectedYmd(item.dateKey);
+    }
+    if (item.kind === "fgc" || item.kind === "tp" || item.kind === "ts") {
+      setSelectedDefiTab(item.kind);
+    }
 
     if (item.kind === "fgc") {
       setFgcModalItem(item);
@@ -594,7 +495,7 @@ export default function ChallengesScreen() {
 
     cleanup();
 
-    if (!currentGroupId) return;
+    if (!listenersEnabled || !currentGroupId) return;
 
     const gid = String(currentGroupId);
     const groupMeta = groupsMap[gid] || {};
@@ -700,7 +601,7 @@ export default function ChallengesScreen() {
     currentGroupUnsubsRef.current.tpBundle.push(tpBundleUn);
 
     return cleanup;
-  }, [currentGroupId, dayKeys, dayYmdSet, groupsMap]);
+  }, [listenersEnabled, currentGroupId, dayKeys, dayYmdSet, groupsMap]);
 
   /* ---------------- 5) winners info listeners ---------------- */
 
@@ -753,53 +654,72 @@ export default function ChallengesScreen() {
     });
   }, [tsItems, fgcItems, tpItems]);
 
-  /* ---------------- 6) sections by day ---------------- */
+  /* ---------------- 6) items for selected day + tab ---------------- */
 
-  const sections = useMemo(() => {
-    const byDay = {};
+  const visibleItemsForDay = useMemo(() => {
+    return [...fgcItems, ...tpItems, ...tsItems]
+      .filter((item) => item?.dateKey === selectedYmd)
+      .filter((item) => {
+        if (selectedYmd === todayKey) return true;
 
-    dayKeys.forEach((d) => {
-      byDay[d.ymd] = {
-        key: d.ymd,
-        title: prettyDateLabel(d.ymd),
-        data: [],
-      };
-    });
+        const scheduleStatus =
+          item.kind === "fgc" ? fgcScheduleByChallengeId?.[item.id]?.status : undefined;
 
-    [...fgcItems, ...tpItems, ...tsItems].forEach((item) => {
-      if (!item?.dateKey || !byDay[item.dateKey]) return;
-      if (item.dateKey === todayKey) {
-        byDay[item.dateKey].data.push(item);
-        return;
-      }
-
-      const scheduleStatus =
-        item.kind === "fgc" ? fgcScheduleByChallengeId?.[item.id]?.status : undefined;
-
-      if (shouldShowPastDayResultItem(item, { scheduleStatus })) {
-        byDay[item.dateKey].data.push(item);
-      }
-    });
-
-    return dayKeys
-      .map((d) => {
-        const section = byDay[d.ymd];
-
-        section.data.sort((a, b) => {
-          const ta = typeOrder(a.kind);
-          const tb = typeOrder(b.kind);
-          if (ta !== tb) return ta - tb;
-          return challengeSortValue(a) - challengeSortValue(b);
-        });
-
-        return {
-          key: section.key,
-          title: section.title,
-          data: [section],
-        };
+        return shouldShowPastDayResultItem(item, { scheduleStatus });
       })
-      .filter((s) => s.data[0].data.length > 0);
-  }, [dayKeys, fgcItems, tpItems, tsItems, todayKey, fgcScheduleByChallengeId]);
+      .sort((a, b) => {
+        const ta = typeOrder(a.kind);
+        const tb = typeOrder(b.kind);
+        if (ta !== tb) return ta - tb;
+        return challengeSortValue(a) - challengeSortValue(b);
+      });
+  }, [fgcItems, tpItems, tsItems, selectedYmd, todayKey, fgcScheduleByChallengeId]);
+
+  const defiCompletionByTab = useMemo(() => {
+    const fgcItemsForDay = visibleItemsForDay.filter((item) => item.kind === "fgc");
+    const fgcHasChallenge = fgcItemsForDay.length > 0;
+    const fgcDone = fgcItemsForDay.some((item) => fgcParticipationMap[item.id]?.hasPick);
+    const fgc = fgcHasChallenge
+      ? withTabExpiry(
+          { done: fgcDone ? 1 : 0, total: 1 },
+          fgcItemsForDay[0]?.signupDeadline
+        )
+      : { done: 0, total: 0 };
+
+    const tpItem = visibleItemsForDay.find((item) => item.kind === "tp");
+    let tp = { done: 0, total: 0 };
+
+    if (tpItem) {
+      const entry = tpParticipationMap[tpItem.id];
+
+      if (tpItem.subtype === "bundle") {
+        const games = Array.isArray(tpItem.raw?.games) ? tpItem.raw.games : [];
+        tp = buildTpBundleTabProgress({
+          games,
+          picks: entry?.picks || {},
+          picksCompletedCount: entry?.picksCompletedCount,
+          scheduleByGameId,
+        });
+      } else {
+        tp = withTabExpiry(
+          { done: entry ? 1 : 0, total: 1 },
+          tpItem.signupDeadline
+        );
+      }
+    }
+
+    const tsItemsForDay = visibleItemsForDay.filter((item) => item.kind === "ts");
+    const tsHasChallenge = tsItemsForDay.length > 0;
+    const tsDone = tsItemsForDay.some((item) => !!tsParticipationMap[item.id]);
+    const ts = tsHasChallenge
+      ? withTabExpiry(
+          { done: tsDone ? 1 : 0, total: 1 },
+          tsItemsForDay[0]?.signupDeadline
+        )
+      : { done: 0, total: 0 };
+
+    return { fgc, tp, ts };
+  }, [visibleItemsForDay, fgcParticipationMap, tpParticipationMap, tsParticipationMap, scheduleByGameId]);
 
   /* ---------------- 6b) participation listeners ---------------- */
 
@@ -911,19 +831,6 @@ export default function ChallengesScreen() {
 
   useEffect(() => {
     return () => {
-      Object.values(subs.current).forEach((un) => {
-        try {
-          un?.();
-        } catch {}
-      });
-
-      for (const [, un] of groupsUnsubsRef.current) {
-        try {
-          un?.();
-        } catch {}
-      }
-      groupsUnsubsRef.current.clear();
-
       ["ts", "fgc", "tp", "tpBundle"].forEach((k) => {
         const arr = currentGroupUnsubsRef.current[k] || [];
         arr.forEach((u) => {
@@ -946,13 +853,9 @@ export default function ChallengesScreen() {
   /* ---------------- open card ---------------- */
 
   const openChallenge = useCallback(
-    (item, isToday, participantTask = null) => {
+    (item, _isToday, _participantTask = null, options = {}) => {
       if (item.kind === "ts") {
-        if (isToday && !isHistoryResultItem(item)) {
-          router.push(`/(drawer)/defis/${item.id}`);
-        } else {
-          router.push(`/(drawer)/defis/${item.id}/results`);
-        }
+        router.push(`/(drawer)/defis/${item.id}/results`);
         return;
       }
 
@@ -961,52 +864,71 @@ export default function ChallengesScreen() {
         return;
       }
 
-      if (item.kind === "tp") {
-        const task =
-          participantTask ||
-          resolveParticipantTaskStatusForItem(item, {
-            isToday,
-            participationMaps,
-            scheduleStatus: fgcScheduleByChallengeId?.[item.id]?.status,
-            scheduleByGameId,
-          });
-
-        const needsPickScreen =
-          isToday &&
-          (task.state === PARTICIPANT_TASK_STATES.ACTION_REQUIRED ||
-            task.state === PARTICIPANT_TASK_STATES.PARTIAL ||
-            task.ctaKey === "modify");
-
-        if (item.subtype === "bundle" && !needsPickScreen) {
-          if (isTpResultsViewStatus(resolveChallengeDisplayStatus(item))) {
-            setTpModalItem(item);
-            return;
-          }
-        }
-
-        router.push({
-          pathname: "/(drawer)/(team-prediction)/pick/[challengeId]",
-          params: { challengeId: item.id },
-        });
+      if (item.kind === "tp" && item.subtype === "bundle") {
+        setTpModalItem(item);
       }
     },
-    [router, participationMaps, fgcScheduleByChallengeId, scheduleByGameId]
+    [router]
   );
 
-  const renderDaySection = useCallback(
-    ({ item }) => (
-      <ChallengeDayCard
-        section={item}
-        colors={colors}
-        winnerInfoMap={winnerInfoMap}
-        participationMaps={participationMaps}
-        scheduleByChallengeId={fgcScheduleByChallengeId}
-        scheduleByGameId={scheduleByGameId}
-        onOpen={openChallenge}
-        getTodayKey={getProphetikBusinessYmd}
-      />
-    ),
-    [colors, winnerInfoMap, participationMaps, openChallenge, fgcScheduleByChallengeId, scheduleByGameId]
+  const renderDefiTabContent = useCallback(
+    (tab) => {
+      const items = visibleItemsForDay.filter((item) => item.kind === tab);
+
+      if (!items.length) {
+        return (
+          <Text
+            style={{
+              color: colors.subtext,
+              marginTop: 8,
+              textAlign: "center",
+              lineHeight: 20,
+            }}
+          >
+            {i18n.t("challenges.noDefiForSelectedDay", {
+              defaultValue: "Aucun défi pour cette journée.",
+            })}
+          </Text>
+        );
+      }
+
+      return items.map((item, index) => (
+        <View key={`${item.kind}-${item.id}`}>
+          {index > 0 ? (
+            <View
+              style={{
+                height: 4,
+                backgroundColor: RESULTS_ACCENT_MUTED,
+                marginTop: 10,
+                marginBottom: 8,
+                marginHorizontal: 2,
+              }}
+            />
+          ) : null}
+
+          <ChallengeItemCard
+            item={item}
+            isToday={isSelectedToday}
+            colors={colors}
+            winnerInfoMap={winnerInfoMap}
+            participationMaps={participationMaps}
+            scheduleByChallengeId={fgcScheduleByChallengeId}
+            scheduleByGameId={scheduleByGameId}
+            onOpen={openChallenge}
+          />
+        </View>
+      ));
+    },
+    [
+      visibleItemsForDay,
+      isSelectedToday,
+      colors,
+      winnerInfoMap,
+      participationMaps,
+      fgcScheduleByChallengeId,
+      scheduleByGameId,
+      openChallenge,
+    ]
   );
 
   /* ---------------- UI states ---------------- */
@@ -1083,44 +1005,48 @@ export default function ChallengesScreen() {
         onClose={() => setTpModalItem(null)}
       />
 
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <GroupsToggleRow
           colors={colors}
           groups={userGroups}
           value={currentGroupId}
-          onChange={(gid) => setCurrentGroupId(String(gid))}
+          onChange={(gid) => setSelectedGroupId(String(gid))}
         />
-      </View>
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.key}
-        stickySectionHeadersEnabled={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
-        renderSectionHeader={() => null}
-        renderItem={renderDaySection}
-        initialNumToRender={6}
-        maxToRenderPerBatch={6}
-        windowSize={7}
-        removeClippedSubviews={true}
-        ListEmptyComponent={
-          sections.length === 0
-            ? () => (
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    marginTop: 24,
-                    textAlign: "center",
-                  }}
-                >
-                  {i18n.t("challenges.noChallenges", {
-                    defaultValue: "Aucun défi à afficher.",
-                  })}
-                </Text>
-              )
-            : null
-        }
-      />
+        <ResultsDayPicker
+          colors={colors}
+          days={dayOptions}
+          value={selectedYmd}
+          onChange={setSelectedYmd}
+        />
+
+        <View style={[cardShadow(), { marginTop: 12 }]}>
+          <View style={leftAccentCardStyle(colors, RESULTS_ACCENT)}>
+            <HomeDefisToggle
+              accentColor={RESULTS_ACCENT}
+              value={selectedDefiTab}
+              onChange={setSelectedDefiTab}
+              colors={colors}
+              completedByTab={defiCompletionByTab}
+            />
+
+            <View style={selectedDefiTab === "fgc" ? undefined : { display: "none" }}>
+              {renderDefiTabContent("fgc")}
+            </View>
+
+            <View style={selectedDefiTab === "tp" ? undefined : { display: "none" }}>
+              {renderDefiTabContent("tp")}
+            </View>
+
+            <View style={selectedDefiTab === "ts" ? undefined : { display: "none" }}>
+              {renderDefiTabContent("ts")}
+            </View>
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }

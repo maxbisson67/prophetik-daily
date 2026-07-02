@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import auth from "@react-native-firebase/auth";
@@ -19,6 +19,64 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
+
+function isCatalogJerseyActive(row) {
+  if (row?.active === false) return false;
+  if (String(row?.active ?? "").toLowerCase() === "false") return false;
+  return true;
+}
+
+function inferJerseySport(item) {
+  const sport = String(item?.sport || "").toLowerCase().trim();
+  if (sport === "hockey" || sport === "nhl") return "hockey";
+  if (sport === "baseball" || sport === "mlb") return "baseball";
+
+  const path = String(
+    item?.templateFrontPath || item?.templateBackPath || item?.templateProfilePath || ""
+  ).toLowerCase();
+  if (path.includes("/hockey/")) return "hockey";
+  if (path.includes("/baseball/")) return "baseball";
+
+  const blob = `${item?.id || ""} ${item?.name || ""}`.toLowerCase();
+  if (blob.includes("hockey") || blob.includes("nhl")) return "hockey";
+  if (blob.includes("baseball") || blob.includes("mlb")) return "baseball";
+
+  return "other";
+}
+
+function compareCatalogJerseys(a, b) {
+  const sortDiff = Number(a.sort || 9999) - Number(b.sort || 9999);
+  if (sortDiff !== 0) return sortDiff;
+  return String(a.id).localeCompare(String(b.id));
+}
+
+function sortCatalogJerseys(rows = []) {
+  return [...rows].sort(compareCatalogJerseys);
+}
+
+function groupCatalogJerseysBySport(rows = []) {
+  const hockey = [];
+  const baseball = [];
+  const other = [];
+
+  for (const item of rows) {
+    const sport = inferJerseySport(item);
+    if (sport === "hockey") hockey.push(item);
+    else if (sport === "baseball") baseball.push(item);
+    else other.push(item);
+  }
+
+  return {
+    hockey: sortCatalogJerseys(hockey),
+    baseball: sortCatalogJerseys(baseball),
+    other: sortCatalogJerseys(other),
+  };
+}
+
+function normalizeCatalogJerseyDoc(docSnap) {
+  const data = docSnap.data() || {};
+  return { ...data, id: docSnap.id };
+}
 
 function Chip({ icon, color, bg, label }) {
   const { colors } = useTheme();
@@ -356,6 +414,114 @@ function RemoteImage({ uri, style, resizeMode = "contain", fallback }) {
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 }
 
+function JerseyCatalogCard({ item, selectedId, setSelectedId, colors }) {
+  const active = selectedId === item.id;
+  const preview = item.previewFrontUrl || item.previewBackUrl || null;
+  const sport = inferJerseySport(item);
+
+  return (
+    <TouchableOpacity
+      onPress={() => setSelectedId(item.id)}
+      style={{
+        width: "100%",
+        padding: 10,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: active ? "#ef4444" : colors.border,
+        backgroundColor: active ? "rgba(239,68,68,0.08)" : colors.card2,
+      }}
+    >
+      <View
+        style={{
+          width: "100%",
+          aspectRatio: 1,
+          borderRadius: 12,
+          backgroundColor: colors.background,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+        }}
+      >
+        {preview ? (
+          <RemoteImage uri={preview} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+        ) : (
+          <MaterialCommunityIcons name="tshirt-crew" size={46} color={colors.subtext} />
+        )}
+      </View>
+
+      <Text
+        style={{
+          marginTop: 8,
+          fontWeight: "900",
+          color: colors.text,
+        }}
+        numberOfLines={1}
+      >
+        {item.name || item.id}
+      </Text>
+
+      <View
+        style={{
+          marginTop: 8,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        {!!sport && sport !== "other" && (
+          <Chip
+            icon={sport === "hockey" ? "hockey-puck" : "baseball"}
+            bg={colors.background}
+            color={colors.text}
+            label={sport === "hockey" ? "Hockey" : "Baseball"}
+          />
+        )}
+
+        {active ? <MaterialCommunityIcons name="check-circle" size={20} color="#ef4444" /> : null}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function JerseySportColumn({ title, icon, items, selectedId, setSelectedId, colors }) {
+  return (
+    <View style={{ flex: 1, gap: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+        <MaterialCommunityIcons name={icon} size={16} color={colors.subtext} />
+        <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12, letterSpacing: 0.4 }}>
+          {title}
+        </Text>
+      </View>
+
+      {items.length ? (
+        items.map((item) => (
+          <JerseyCatalogCard
+            key={item.id}
+            item={item}
+            selectedId={selectedId}
+            setSelectedId={setSelectedId}
+            colors={colors}
+          />
+        ))
+      ) : (
+        <View
+          style={{
+            padding: 14,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+          }}
+        >
+          <Text style={{ color: colors.subtext, fontSize: 12, textAlign: "center" }}>
+            {i18n.t("jerseys.catalog.emptyColumn", { defaultValue: "Aucun modèle" })}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function JerseysScreen() {
   const r = useRouter();
   const { user } = useAuth();
@@ -378,10 +544,20 @@ export default function JerseysScreen() {
 
   const [submitting, setSubmitting] = useState(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      setStep(1);
+      setPreviewSide("front");
+      setSubmitting(false);
+    }, [])
+  );
+
   const selectedItem = useMemo(
     () => (catalog || []).find((x) => x.id === selectedId) || null,
     [catalog, selectedId]
   );
+
+  const catalogBySport = useMemo(() => groupCatalogJerseysBySport(catalog), [catalog]);
 
   const currentItem = useMemo(
     () => (catalog || []).find((x) => x.id === currentJerseyId) || null,
@@ -409,12 +585,9 @@ export default function JerseysScreen() {
 
     const unsub = qRef.onSnapshot(
       (snap) => {
-        const rows =
-          (snap?.docs?.map((d) => ({ id: d.id, ...d.data() })) || [])
-            .filter((x) => x.active === true)
-            .sort((a, b) => Number(a.sort || 9999) - Number(b.sort || 9999));
+        const rows = (snap?.docs?.map(normalizeCatalogJerseyDoc) || []).filter(isCatalogJerseyActive);
 
-        setCatalog(rows);
+        setCatalog(sortCatalogJerseys(rows));
         setLoadingCatalog(false);
       },
       (err) => {
@@ -702,9 +875,16 @@ export default function JerseysScreen() {
           <SectionCard
             colors={colors}
             title={i18n.t("jerseys.catalog.title", { defaultValue: "Choisir un modèle" })}
-            subtitle={i18n.t("jerseys.catalog.subtitle", {
-              defaultValue: "Sélectionne le style de jersey que tu veux utiliser.",
-            })}
+            subtitle={
+              catalog.length
+                ? i18n.t("jerseys.catalog.subtitleCount", {
+                    defaultValue: "{{count}} modèles disponibles — tous affichés ci-dessous.",
+                    count: catalog.length,
+                  })
+                : i18n.t("jerseys.catalog.subtitle", {
+                    defaultValue: "Sélectionne le style de jersey que tu veux utiliser.",
+                  })
+            }
           >
             <PreviewStage
               uri={previewUrl}
@@ -715,75 +895,44 @@ export default function JerseysScreen() {
               })}
             />
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-              {catalog.map((item) => {
-                const active = selectedId === item.id;
-                const preview = item.previewFrontUrl || item.previewBackUrl || null;
+            <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+              <JerseySportColumn
+                title={i18n.t("jerseys.catalog.hockeyColumn", { defaultValue: "Hockey" })}
+                icon="hockey-puck"
+                items={catalogBySport.hockey}
+                selectedId={selectedId}
+                setSelectedId={setSelectedId}
+                colors={colors}
+              />
+              <JerseySportColumn
+                title={i18n.t("jerseys.catalog.baseballColumn", { defaultValue: "Baseball" })}
+                icon="baseball"
+                items={catalogBySport.baseball}
+                selectedId={selectedId}
+                setSelectedId={setSelectedId}
+                colors={colors}
+              />
+            </View>
 
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    onPress={() => setSelectedId(item.id)}
-                    style={{
-                      width: 150,
-                      padding: 10,
-                      borderRadius: 16,
-                      borderWidth: 2,
-                      borderColor: active ? "#ef4444" : colors.border,
-                      backgroundColor: active ? "rgba(239,68,68,0.08)" : colors.card2,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: "100%",
-                        aspectRatio: 1,
-                        borderRadius: 12,
-                        backgroundColor: colors.background,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {preview ? (
-                        <RemoteImage
-                          uri={preview}
-                          style={{ width: "100%", height: "100%" }}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <MaterialCommunityIcons name="tshirt-crew" size={46} color={colors.subtext} />
-                      )}
+            {catalogBySport.other.length ? (
+              <View style={{ gap: 10, marginTop: 4 }}>
+                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
+                  {i18n.t("jerseys.catalog.otherColumn", { defaultValue: "Autres" })}
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+                  {catalogBySport.other.map((item) => (
+                    <View key={item.id} style={{ width: "47%" }}>
+                      <JerseyCatalogCard
+                        item={item}
+                        selectedId={selectedId}
+                        setSelectedId={setSelectedId}
+                        colors={colors}
+                      />
                     </View>
-
-                    <Text
-                      style={{
-                        marginTop: 8,
-                        fontWeight: "900",
-                        color: colors.text,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {item.name || item.id}
-                    </Text>
-
-                    <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      {!!item.sport && (
-                        <Chip
-                          icon={item.sport === "hockey" ? "hockey-puck" : "tshirt-crew"}
-                          bg={colors.background}
-                          color={colors.text}
-                          label={item.sport}
-                        />
-                      )}
-
-                      {active ? (
-                        <MaterialCommunityIcons name="check-circle" size={20} color="#ef4444" />
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                  ))}
+                </View>
+              </View>
+            ) : null}
           </SectionCard>
         ) : null}
 

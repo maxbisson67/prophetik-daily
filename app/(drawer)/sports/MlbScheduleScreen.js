@@ -15,6 +15,7 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
+import { formatMlbLiveInningLabel } from "@src/mlb/mlbInningLabel";
 // import Analytics from "@src/services/analytics";
 
 /* ========================
@@ -305,12 +306,10 @@ function GameStatusLine({ item, colors }) {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {(inningState || inning > 0 || inningOrdinal) ? (
             <Text style={{ color: colors.subtext }}>
-              {[
-                inningState,
-                inningOrdinal || (inning > 0 ? String(inning) : ""),
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              {formatMlbLiveInningLabel(item) ||
+                [inningState, inningOrdinal || (inning > 0 ? String(inning) : "")]
+                  .filter(Boolean)
+                  .join(" ")}
             </Text>
           ) : null}
 

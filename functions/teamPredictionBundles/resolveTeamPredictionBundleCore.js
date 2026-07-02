@@ -1,10 +1,9 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import {
-  extractMlbOfficialResult,
+  extractMlbOfficialResultFromDoc,
   extractNhlOfficialResult,
-  fetchMlbLiveFeed,
-  isMlbLiveGameFinal,
+  isMlbLiveDocFinal,
   isNhlLiveGameFinal,
   normalizeLeague,
 } from "../teamPredictionChallenges/tpGameSources.js";
@@ -29,17 +28,21 @@ async function resolveSlotOfficialResult(db, slot, league) {
   const gameId = String(slot.gameId || "");
 
   if (normalizeLeague(league) === "MLB") {
-    const liveFeed = await fetchMlbLiveFeed(gameId);
-    if (!isMlbLiveGameFinal(liveFeed)) {
+    const gameSnap = await db.doc(`mlb_live_games/${gameId}`).get();
+    if (!gameSnap.exists) {
+      return { ok: false, reason: "mlb-live-missing" };
+    }
+
+    const game = gameSnap.data() || {};
+    if (!isMlbLiveDocFinal(game)) {
       return {
         ok: false,
         reason: "mlb-not-final",
-        abstractGameState: liveFeed?.gameData?.status?.abstractGameState ?? null,
+        abstractGameState: game?.abstractGameState ?? null,
       };
     }
 
-    const officialResult = extractMlbOfficialResult(liveFeed, slot);
-    return { ok: true, officialResult };
+    return { ok: true, officialResult: extractMlbOfficialResultFromDoc(game, slot) };
   }
 
   const gameSnap = await db.doc(`nhl_live_games/${gameId}`).get();

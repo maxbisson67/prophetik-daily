@@ -54,7 +54,7 @@ export default function InviteQrCard({ code, groupName, colors }) {
         backgroundColor: colors.card,
       }}
     >
-      <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16, marginBottom: 6 }}>
+      <Text style={{ color: colors.text, fontWeight: "700", fontSize: 18, marginBottom: 6 }}>
         {i18n.t("groups.invite.title", { defaultValue: "Inviter avec un QR code" })}
       </Text>
 

@@ -1,5 +1,6 @@
 // src/home/homeUtils.js
 import i18n from "@src/i18n/i18n";
+import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 
 // ----------------------------- Date helpers -----------------------------
 export function toDateOrNull(v) {
@@ -11,6 +12,31 @@ export function toDateOrNull(v) {
   } catch {
     return null;
   }
+}
+
+export function defiGameDateYmd(defi) {
+  const gd = defi?.gameDate;
+  if (typeof gd === "string") {
+    const s = gd.trim();
+    if (s.length >= 10) return s.slice(0, 10);
+    return s;
+  }
+  const d = toDateOrNull(gd);
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+export function isTsDefi(defi) {
+  const typeNum = Number(defi?.type);
+  return typeNum >= 1 && typeNum <= 7;
+}
+
+/** TS affiché dans « Aujourd'hui » uniquement pour le jour Prophetik courant. */
+export function isTsDefiForHomeToday(defi, businessYmd = getProphetikBusinessYmd()) {
+  if (!isTsDefi(defi)) return true;
+  const ymd = defiGameDateYmd(defi);
+  if (!ymd) return true;
+  return ymd === businessYmd;
 }
 
 export function fmtTSLocalHM(v) {
@@ -146,4 +172,22 @@ export function getSignupDeadlineOrFallback(defi, minutesBeforeFirstGame = 15) {
   if (!firstGame) return null;
 
   return new Date(firstGame.getTime() - minutesBeforeFirstGame * 60 * 1000);
+}
+
+export function isSignupDeadlinePassed(deadline, nowMs = Date.now()) {
+  const d = toDateOrNull(deadline);
+  if (!d) return false;
+  return nowMs >= d.getTime();
+}
+
+export function applyTabProgressExpired(progress, deadline, nowMs = Date.now()) {
+  const done = Math.max(0, Number(progress?.done) || 0);
+  const total = Math.max(0, Number(progress?.total) || 0);
+  if (total <= 0 || done >= total) {
+    return { done, total };
+  }
+  if (progress?.expired || isSignupDeadlinePassed(deadline, nowMs)) {
+    return { done, total, expired: true };
+  }
+  return { done, total };
 }

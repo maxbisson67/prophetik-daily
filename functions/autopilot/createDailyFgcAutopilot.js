@@ -6,6 +6,7 @@ import { APP_TZ, appYmd, addDays } from "../ProphetikDate.js";
 import { FUNCTIONS_REGION } from "../regions.js";
 import { createTpBundleForGroupIfNeeded } from "./createTpBundleForGroup.js";
 import { notifyGroupOfAutopilotChallenges } from "./autopilotNotification.js";
+import { resolveGroupDisplayName } from "../groups/groupDisplayUtils.js";
 import {
   createAutopilotTsDefiForGroup,
   hasExistingTsForGroupDay,
@@ -449,6 +450,7 @@ export const createDailyFgcAutopilot = onSchedule(
         if (createdChallenges.length) {
           await notifyGroupOfAutopilotChallenges({
             groupId,
+            groupName: resolveGroupDisplayName(group),
             sport,
             createdChallenges,
             gameYmd,

@@ -62,6 +62,17 @@ export const notifyOnDefiCreate = onDocumentCreated('defis/{defiId}', async (eve
   const createdBy = defi.createdBy || null;
   const includeCreator = !!defi.debugNotifyCreator;
 
+  if (defi.autopilotCreated === true) {
+    logger.info('notifyOnDefiCreate: skipped autopilot defi', { defiId, groupId });
+    return;
+  }
+
+  // TS (3×3) : couvert par la notification autopilot groupée du matin
+  if (Number(defi.type) === 3) {
+    logger.info('notifyOnDefiCreate: skipped TS 3x3 defi', { defiId, groupId });
+    return;
+  }
+
   try {
     logger.info('notifyOnDefiCreate: start', { defiId, groupId, createdBy, includeCreator });
 

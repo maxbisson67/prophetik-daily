@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
+import { formatMlbLiveInningLabel } from "@src/mlb/mlbInningLabel";
 
 function normalizeYmdCompact(v) {
   const s = String(v || "").trim();
@@ -38,7 +39,31 @@ function buildNhlStatusText(game) {
   return state || null;
 }
 
-/** Aligne un doc `mlb_schedule_daily/{ymd}/games/{gamePk}` sur le format live TP. */
+/** Aligne un doc `mlb_live_games/{gamePk}` sur le format live TP. */
+export function normalizeMlbLiveGame(data) {
+  if (!data) return null;
+
+  const awayScore = data.awayScore;
+  const homeScore = data.homeScore;
+
+  let statusText = null;
+  if (data.isFinal) {
+    statusText = data.detailedState || "Final";
+  } else if (data.isLive) {
+    statusText = formatMlbLiveInningLabel(data) || "Live";
+  }
+
+  return {
+    id: String(data.id || data.gamePk || ""),
+    awayScore: awayScore != null ? Number(awayScore) : null,
+    homeScore: homeScore != null ? Number(homeScore) : null,
+    statusText,
+    isLive: !!data.isLive,
+    isFinal: !!data.isFinal,
+  };
+}
+
+/** @deprecated Préférer `normalizeMlbLiveGame` via `mlb_live_games`. */
 export function normalizeMlbScheduleGameForLive(data) {
   if (!data) return null;
 
@@ -54,10 +79,7 @@ export function normalizeMlbScheduleGameForLive(data) {
 
   let statusText = null;
   if (abstractState === "live") {
-    statusText =
-      [data.inningState, data.currentInningOrdinal || (data.currentInning > 0 ? String(data.currentInning) : "")]
-        .filter(Boolean)
-        .join(" ") || "Live";
+    statusText = formatMlbLiveInningLabel(data) || "Live";
   } else if (abstractState === "final") {
     statusText = data?.status?.detailedState || "Final";
   }
@@ -118,24 +140,16 @@ export default function useLiveGameScores(gameIds, league, gameYmd = null) {
     }
 
     if (lg === "MLB") {
-      const ymd = normalizeYmdCompact(gameYmd);
-      if (!ymd) {
-        setMap({});
-        return undefined;
-      }
-
       const unsubs = ids.map((gameId) =>
         firestore()
-          .collection("mlb_schedule_daily")
-          .doc(ymd)
-          .collection("games")
+          .collection("mlb_live_games")
           .doc(gameId)
           .onSnapshot(
             (snap) => {
               setMap((prev) => ({
                 ...prev,
                 [gameId]: snap.exists
-                  ? normalizeMlbScheduleGameForLive({ id: snap.id, ...snap.data() })
+                  ? normalizeMlbLiveGame({ id: snap.id, ...snap.data() })
                   : null,
               }));
             },

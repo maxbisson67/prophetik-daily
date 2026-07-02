@@ -1,3 +1,12 @@
+export function openMesResultatsTab(router, { groupId } = {}) {
+  const gid = String(groupId || "").trim();
+
+  router.push({
+    pathname: "/(drawer)/(tabs)/ChallengesScreen",
+    params: gid ? { groupId: gid } : {},
+  });
+}
+
 export function navigateToMesResultats(router, { groupId, challengeId, kind }) {
   const gid = String(groupId || "").trim();
   const cid = String(challengeId || "").trim();
@@ -10,6 +19,21 @@ export function navigateToMesResultats(router, { groupId, challengeId, kind }) {
     params: {
       ...(gid ? { groupId: gid } : {}),
       openChallengeId: cid,
+      ...(k ? { kind: k } : {}),
+    },
+  });
+}
+
+export function navigateToAccueilChallenge(router, { groupId, challengeId, kind } = {}) {
+  const gid = String(groupId || "").trim();
+  const cid = String(challengeId || "").trim();
+  const k = String(kind || "").trim().toLowerCase();
+
+  router.push({
+    pathname: "/(drawer)/(tabs)/AccueilScreen",
+    params: {
+      ...(gid ? { groupId: gid } : {}),
+      ...(cid ? { openChallengeId: cid } : {}),
       ...(k ? { kind: k } : {}),
     },
   });

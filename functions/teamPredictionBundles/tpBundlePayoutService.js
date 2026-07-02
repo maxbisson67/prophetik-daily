@@ -113,6 +113,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
         uid: String(entryDoc.id),
         points: scored.points,
         won: scored.winnerCorrect,
+        exactScore: scored.exactScoreCorrect,
         recordPlay,
       });
 
@@ -245,6 +246,7 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
           uid: row.uid,
           points: row.points,
           won: row.won,
+          exactScore: row.exactScore === true,
           gameYmd: result.gameYmd,
           recordPlay: row.recordPlay,
         });

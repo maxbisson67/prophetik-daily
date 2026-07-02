@@ -3,6 +3,7 @@ import { db, FieldValue, logger } from "../utils.js";
 import {
   parseAutopilotEnabled,
   parseFavoriteTeam,
+  parseGroupName,
 } from "./groupConfigUtils.js";
 
 const AI_UID = "ai";
@@ -319,6 +320,7 @@ export const transferGroupOwnership = onCall(async (req) => {
 
 /**
  * Met à jour la configuration du groupe (owner seulement).
+ * - name?: string
  * - autopilotEnabled: boolean
  * - favoriteTeam: null | { sport, teamId, abbreviation, name }
  */
@@ -341,6 +343,9 @@ export const updateGroupConfig = onCall(async (req) => {
       ? req.data.favoriteTeam
       : null
   );
+  const parsedName = Object.prototype.hasOwnProperty.call(req.data || {}, "name")
+    ? parseGroupName(req.data.name)
+    : undefined;
 
   const { ref: gRef, data: g } = await getGroup(groupId);
   if (!g) throw new HttpsError("not-found", "Groupe introuvable.");
@@ -360,21 +365,31 @@ export const updateGroupConfig = onCall(async (req) => {
 
   const now = FieldValue.serverTimestamp();
 
-  await gRef.set(
-    {
-      autopilotEnabled,
-      favoriteTeam,
-      updatedAt: now,
-    },
-    { merge: true }
-  );
+  const patch = {
+    autopilotEnabled,
+    favoriteTeam,
+    updatedAt: now,
+  };
+
+  if (parsedName !== undefined) {
+    patch.name = parsedName;
+  }
+
+  if (autopilotEnabled) {
+    patch.autopilotInactivityDays = 0;
+    patch.autopilotDisabledReason = FieldValue.delete();
+    patch.autopilotDisabledAt = FieldValue.delete();
+  }
+
+  await gRef.set(patch, { merge: true });
 
   logger.info("updateGroupConfig", {
     groupId,
     uid,
     autopilotEnabled,
     hasFavoriteTeam: favoriteTeam !== null,
+    nameUpdated: parsedName !== undefined,
   });
 
-  return { ok: true, groupId, autopilotEnabled, favoriteTeam };
+  return { ok: true, groupId, autopilotEnabled, favoriteTeam, name: parsedName ?? g.name ?? null };
 });
