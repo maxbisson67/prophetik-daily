@@ -1,20 +1,24 @@
 import { db, FieldValue } from "../../utils.js";
+import {
+  getPlanLimits,
+  normalizePlanTier,
+  novaQuotaPeriodKey,
+  readUserPlanTier,
+} from "../../subscriptions/planLimits.js";
 
 const COLLECTION = "nova_quotas";
 
-function periodKey(date = new Date()) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
+async function resolveQuotaLimit(uid, bucket) {
+  const tier = await readUserPlanTier(db, uid);
+  const limits = getPlanLimits(tier);
+  if (bucket === "explain_llm") {
+    return Number(limits.novaExplainLlmMonthlyLimit) || 30;
+  }
+  return Number(limits.novaAdviceMonthlyLimit) || 30;
 }
 
-const DEFAULT_LIMITS = {
-  coach: 30,
-  explain_llm: 30,
-};
-
 /**
- * Quotas mensuels simples (MVP).
+ * Quotas mensuels Nova Coach (conseils = bucket coach).
  */
 export class QuotaManager {
   /**
@@ -25,14 +29,13 @@ export class QuotaManager {
 
     const cap = String(capability || "coach").toLowerCase();
 
-    // explain servi depuis la KB = gratuit
     if (cap === "explain" && source === "knowledge_base") {
       return { allowed: true, remaining: null, consumed: false };
     }
 
     const bucket = cap === "explain" ? "explain_llm" : "coach";
-    const limit = DEFAULT_LIMITS[bucket] || 30;
-    const period = periodKey();
+    const limit = await resolveQuotaLimit(uid, bucket);
+    const period = novaQuotaPeriodKey();
     const ref = db.doc(`${COLLECTION}/${uid}_${period}`);
 
     const result = await db.runTransaction(async (tx) => {

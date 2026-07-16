@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import {
   competitionKeyMatchesSport,
@@ -123,7 +124,7 @@ export default function useGroupLeaderboardSummary({
             if (!alive) return;
             setRowsByKey((prev) => ({
               ...prev,
-              [key]: snap.docs.map((d) => ({
+              [key]: (snap?.docs ?? []).map((d) => ({
                 id: d.id,
                 uid: d.id,
                 ...(d.data() || {}),
@@ -148,7 +149,7 @@ export default function useGroupLeaderboardSummary({
       membershipsRef.onSnapshot(
         (snap) => {
           if (!alive) return;
-          const uids = snap.docs
+          const uids = (snap?.docs ?? [])
             .map((d) => {
               const data = d.data() || {};
               if (!isActiveMembership(data)) return null;
@@ -174,7 +175,7 @@ export default function useGroupLeaderboardSummary({
           .onSnapshot(
             (snap) => {
               if (!alive) return;
-              setMyPointsDirect(normalizePoints(snap.exists ? snap.data() : null));
+              setMyPointsDirect(normalizePoints(snapshotExists(snap) ? snapshotData(snap) : null));
             },
             () => {
               if (!alive) return;

@@ -328,7 +328,9 @@ export default function DefiListItem({
   onPressResults,
   onPressParticipate,
 }) {
+  const rawStatus = String(item?.status || "").toLowerCase();
   const uiStatus = computeUiStatus(item);
+  const joinUiStatus = rawStatus === "open" ? "open" : uiStatus;
   const signupDeadlineValue = getSignupDeadlineOrFallback(item, 15);
   const signupDeadlinePassed = (() => {
     if (!signupDeadlineValue) return false;
@@ -342,7 +344,7 @@ export default function DefiListItem({
   const { canJoin, lockedBy } = canJoinDefiUi({
     tier: tierLower,
     defiType: item?.type,
-    uiStatus,
+    uiStatus: joinUiStatus,
     signupDeadline: signupDeadlineValue,
   });
 
@@ -350,10 +352,11 @@ export default function DefiListItem({
   const lockedByDeadline = lockedBy === "DEADLINE";
 
   const showResultsCta =
-    lockedByDeadline ||
-    uiStatus === "live" ||
-    uiStatus === "awaiting_result" ||
-    uiStatus === "completed";
+    !canJoin &&
+    (lockedByDeadline ||
+      uiStatus === "live" ||
+      uiStatus === "awaiting_result" ||
+      uiStatus === "completed");
 
   const isAsc = isAscensionDefi(item);
   const isTS = isTsDefi(item);
@@ -375,10 +378,10 @@ export default function DefiListItem({
       {
         isToday: true,
         entry: item?.myParticipation,
-        uiStatus,
+        uiStatus: joinUiStatus,
       }
     );
-  }, [isTS, item, signupDeadlineValue, uiStatus]);
+  }, [isTS, item, signupDeadlineValue, joinUiStatus]);
 
   const pickCount = getTsPickCount(item, tsSelectionLines);
   const title = isTS

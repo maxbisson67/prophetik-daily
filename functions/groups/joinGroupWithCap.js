@@ -1,36 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, FieldValue } from "../utils.js";
 
-function normalizeTier(tier, active) {
-  const t = String(tier || "free").toLowerCase();
-  const normalized = t === "vip" ? "vip" : t === "pro" ? "pro" : "free";
-  return active === false ? "free" : normalized;
-}
-
-function getCaps(tier) {
-  if (tier === "vip") return { owner: 25, member: 50 };
-  if (tier === "pro") return { owner: 5, member: 10 };
-  return { owner: 1, member: 1 };
-}
-
-async function readEntitlementTier(uid) {
-  const snap = await db.doc(`entitlements/${uid}`).get();
-  if (!snap.exists) return "free";
-  const d = snap.data() || {};
-  return normalizeTier(d.tier, d.active);
-}
-
-async function countByRole(uid, role, limitPlusOne) {
-  const q = await db
-    .collection("group_memberships")
-    .where("uid", "==", String(uid))
-    .where("active", "==", true)
-    .where("role", "==", String(role))
-    .limit(limitPlusOne)
-    .get();
-  return q.size;
-}
-
 export const joinGroupWithCap = onCall(async (req) => {
   try {
     const uid = req.auth?.uid || null;
@@ -43,7 +13,6 @@ export const joinGroupWithCap = onCall(async (req) => {
     const cleaned = upper.replace(/[^A-Z0-9]/g, "");
     const candidates = Array.from(new Set([raw, upper, cleaned])).filter(Boolean);
 
-    // Find group by codeInvitation
     let snap = null;
     for (const c of candidates) {
       const q = await db.collection("groups").where("codeInvitation", "==", c).limit(1).get();
@@ -58,7 +27,6 @@ export const joinGroupWithCap = onCall(async (req) => {
     const membershipId = `${groupId}_${uid}`;
     const membershipRef = db.collection("group_memberships").doc(membershipId);
 
-    // ✅ Si membership déjà active => OK, pas de cap, juste “touch” updatedAt + retour
     const existing = await membershipRef.get();
     if (existing.exists) {
       const ex = existing.data() || {};
@@ -72,27 +40,9 @@ export const joinGroupWithCap = onCall(async (req) => {
       }
     }
 
-    // ✅ Si le user est déjà OWNER de ce groupe, on ne doit pas consommer une place MEMBER
-    // (on “réactive” la membership, rôle owner conservé si déjà owner)
     const isAlreadyOwner =
       existing.exists && String((existing.data() || {}).role || "").toLowerCase() === "owner";
 
-    if (!isAlreadyOwner) {
-      // ✅ MEMBER cap (role === "member")
-      const tier = await readEntitlementTier(uid);
-      const caps = getCaps(tier);
-
-      const memberCount = await countByRole(uid, "member", caps.member + 1);
-      if (memberCount >= caps.member) {
-        throw new HttpsError("failed-precondition", "MEMBER_GROUP_LIMIT_REACHED", {
-          tier,
-          current: memberCount,
-          max: caps.member,
-        });
-      }
-    }
-
-    // Build identity (client -> participants -> defaults)
     const reqIdentity = req.data?.identity ?? {};
     const pDoc = await db.doc(`participants/${uid}`).get();
     const p = pDoc.exists ? pDoc.data() : {};
@@ -113,7 +63,6 @@ export const joinGroupWithCap = onCall(async (req) => {
 
     const now = FieldValue.serverTimestamp();
 
-    // Upsert membership
     await membershipRef.set(
       {
         groupId,

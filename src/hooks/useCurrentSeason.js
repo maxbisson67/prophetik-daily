@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 const CURRENT_SEASON_DOC = "app_config/currentSeason";
@@ -25,10 +26,10 @@ async function fetchCurrentSeasonOnce() {
     .doc(CURRENT_SEASON_DOC)
     .get()
     .then((snap) => {
-      if (!snap.exists) {
+      if (!snapshotExists(snap)) {
         cachedSeason = FALLBACK;
       } else {
-        const d = snap.data() || {};
+        const d = snapshotData(snap) || {};
         cachedSeason = {
           seasonId: String(d.seasonId || FALLBACK.seasonId),
           fromYmd: String(d.fromYmd || FALLBACK.fromYmd).slice(0, 10),

@@ -362,7 +362,7 @@ export default function NhlSkaterLeadersScreen() {
       setSeasonId(currentSeason);
 
       const snap = await buildQuery(currentSeason, sortField).get();
-      const docs = snap.docs || [];
+      const docs = (snap?.docs ?? []) || [];
 
       const data = docs.map((doc) => ({
         id: doc.id,
@@ -395,7 +395,7 @@ export default function NhlSkaterLeadersScreen() {
       setLoadingMore(true);
 
       const snap = await buildQuery(seasonId, sortField, lastDoc).get();
-      const docs = snap.docs || [];
+      const docs = (snap?.docs ?? []) || [];
 
       const data = docs.map((doc) => ({
         id: doc.id,

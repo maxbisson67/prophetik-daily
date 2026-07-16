@@ -1,5 +1,6 @@
 // app/(drawer)/credits/index.js
 import React, { useEffect, useState, useMemo } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { View, Text, ActivityIndicator, FlatList } from 'react-native';
 import { Stack } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -191,7 +192,7 @@ export default function CreditsScreen() {
     const unsub1 = firestore()
       .doc(`participants/${user.uid}`)
       .onSnapshot((snap) => {
-        setMe(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setMe(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
       });
 
     // credit logs
@@ -200,7 +201,7 @@ export default function CreditsScreen() {
       .orderBy('createdAt', 'desc')
       .limit(50)
       .onSnapshot((snap) => {
-        setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLogs((snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() })));
       });
 
     // group memberships (2 variantes de clé)
@@ -213,7 +214,7 @@ export default function CreditsScreen() {
     const found = new Set();
 
     const handle = async (snap) => {
-      snap.docs.forEach((d) => {
+      (snap?.docs ?? []).forEach((d) => {
         const gid = d.data()?.groupId;
         if (gid) found.add(gid);
       });

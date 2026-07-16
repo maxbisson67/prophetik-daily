@@ -1,5 +1,6 @@
 // src/firstGoal/FirstGoalHomeSection.js
 import React, { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -98,11 +99,11 @@ function listenMyPickForChallenge({ challengeId, uid, onData, onError }) {
 
   return ref.onSnapshot(
     (snap) => {
-      const data = snap?.exists ? snap.data() || null : null;
+      const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
       const hasPick = !!String(data?.playerId || "").trim();
 
       onData?.({
-        exists: !!snap?.exists,
+        exists: snapshotExists(snap),
         hasPick,
         data,
       });
@@ -248,7 +249,7 @@ export default function FirstGoalHomeSection({
     );
 
     onHasChallengeChange(hasTodayChallenge);
-  }, [allChallenges, onHasChallengeChange, prophetikDay, sportLeague, ymdCandidateSet]);
+  }, [allChallenges, onHasChallengeChange, prophetikDay, sportLeague, ymdCandidateSet, currentGroupId]);
 
   const fgcTabProgress = useMemo(() => {
     const todayChallenges = (allChallenges || []).filter((ch) =>
@@ -277,7 +278,7 @@ export default function FirstGoalHomeSection({
   useEffect(() => {
     if (typeof onUserParticipatedChange !== "function") return;
     onUserParticipatedChange(fgcTabProgress);
-  }, [fgcTabProgress, onUserParticipatedChange]);
+  }, [fgcTabProgress, onUserParticipatedChange, currentGroupId, sportLeague]);
 
   useEffect(() => {
     const gid = String(currentGroupId || "").trim();
@@ -316,14 +317,14 @@ export default function FirstGoalHomeSection({
 
         const unsub = base.onSnapshot(
           (snap) => {
-            const nextIds = new Set(snap.docs.map((d) => d.id));
+            const nextIds = new Set((snap?.docs ?? []).map((d) => d.id));
             const prevIds = listenerKeys.get(listenerKey) || new Set();
 
             prevIds.forEach((docId) => {
               if (!nextIds.has(docId)) mapById.delete(docId);
             });
 
-            snap.docs.forEach((d) => {
+            (snap?.docs ?? []).forEach((d) => {
               mapById.set(d.id, { id: d.id, ...(d.data() || {}) });
             });
 

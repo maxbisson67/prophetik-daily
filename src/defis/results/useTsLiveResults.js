@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
+import useLeaderboardProfiles, {
+  resolveLeaderboardMember,
+} from "@src/leaderboard/useLeaderboardProfiles";
 import {
   buildLeaderboard,
   emptyLiveStats,
@@ -7,11 +10,12 @@ import {
   normalizeLiveStatsDoc,
   resolveTsSport,
 } from "./tsResultsUtils";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 
 function normalizeParticipation(docSnap) {
-  const v = docSnap.data() || {};
+  const v = snapshotData(docSnap) || {};
   return {
-    uid: docSnap.id,
+    uid: snapshotId(docSnap),
     livePoints: Number(v.livePoints ?? v.finalPoints ?? 0),
     finalPoints: Number(v.finalPoints ?? v.livePoints ?? 0),
     payout: Number(v.payout ?? 0),
@@ -22,13 +26,25 @@ function normalizeParticipation(docSnap) {
   };
 }
 
+function profileToParticipantInfo(member) {
+  const version = member.updatedAt?.toMillis?.() ? member.updatedAt.toMillis() : undefined;
+  const photoURL = member.avatarUrl || member.jerseyFrontUrl || null;
+
+  return {
+    photoURL,
+    avatarUrl: member.avatarUrl || null,
+    jerseyFrontUrl: member.jerseyFrontUrl || null,
+    jerseyBackUrl: member.jerseyBackUrl || null,
+    avatarKind: member.avatarKind || null,
+    version,
+  };
+}
+
 export default function useTsLiveResults(defiId, { sport: sportHint, enabled = true } = {}) {
   const [loading, setLoading] = useState(true);
   const [participations, setParticipations] = useState([]);
   const [liveStats, setLiveStats] = useState(emptyLiveStats);
   const [playerMap, setPlayerMap] = useState({});
-  const [namesMap, setNamesMap] = useState({});
-  const [participantInfoMap, setParticipantInfoMap] = useState({});
 
   const id = String(defiId || "").trim();
   const enabledOk = enabled && !!id;
@@ -64,7 +80,7 @@ export default function useTsLiveResults(defiId, { sport: sportHint, enabled = t
 
     const ref = firestore().doc(`defis/${id}/live/stats`);
     const un = ref.onSnapshot((snap) => {
-      setLiveStats(snap.exists ? normalizeLiveStatsDoc(snap.data() || {}) : emptyLiveStats());
+      setLiveStats(snapshotExists(snap) ? normalizeLiveStatsDoc(snapshotData(snap) || {}) : emptyLiveStats());
     });
 
     return () => un();
@@ -78,8 +94,8 @@ export default function useTsLiveResults(defiId, { sport: sportHint, enabled = t
       .onSnapshot((snap) => {
         const next = {};
         snap.forEach((docSnap) => {
-          const v = docSnap.data() || {};
-          const pid = normPlayerId(v?.playerId ?? docSnap.id);
+          const v = snapshotData(docSnap) || {};
+          const pid = normPlayerId(v?.playerId ?? snapshotId(docSnap));
           if (!pid) return;
           next[pid] = {
             fullName: v.fullName || v.skaterFullName || "—",
@@ -99,38 +115,24 @@ export default function useTsLiveResults(defiId, { sport: sportHint, enabled = t
     [participations]
   );
 
-  useEffect(() => {
-    if (!enabledOk || neededUids.length === 0) return;
+  const profiles = useLeaderboardProfiles(neededUids);
 
-    const unsubs = neededUids.map((uid) =>
-      firestore()
-        .doc(`profiles_public/${uid}`)
-        .onSnapshot(
-          (snap) => {
-            const v = snap.exists ? snap.data() || {} : {};
-            const name =
-              v.displayName || v.name || v.username || v.email || uid;
-            const photoURL = v.avatarUrl || v.photoURL || null;
+  const namesMap = useMemo(() => {
+    const out = {};
+    for (const uid of neededUids) {
+      out[uid] = resolveLeaderboardMember({ id: uid }, profiles).displayName;
+    }
+    return out;
+  }, [neededUids, profiles]);
 
-            setNamesMap((prev) => (prev[uid] === name ? prev : { ...prev, [uid]: name }));
-            setParticipantInfoMap((prev) => {
-              const old = prev[uid] || {};
-              if (old.photoURL === photoURL) return prev;
-              return { ...prev, [uid]: { ...old, photoURL } };
-            });
-          },
-          () => {}
-        )
-    );
-
-    return () => {
-      unsubs.forEach((u) => {
-        try {
-          u?.();
-        } catch {}
-      });
-    };
-  }, [enabledOk, neededUids.join(",")]);
+  const participantInfoMap = useMemo(() => {
+    const out = {};
+    for (const uid of neededUids) {
+      const member = resolveLeaderboardMember({ id: uid }, profiles);
+      out[uid] = profileToParticipantInfo(member);
+    }
+    return out;
+  }, [neededUids, profiles]);
 
   const sport = resolveTsSport({ sport: sportHint, poolSport: sportHint }, sportHint || "NHL");
   const isMlbTs = sport === "MLB";

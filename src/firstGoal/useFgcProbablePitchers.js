@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { mlbScheduleGameDocPath } from "@src/mlb/mlbScheduleClient";
 import { normalizeMlbPitcherId } from "@src/mlb/loadMlbBvpForPlayers";
@@ -34,11 +35,11 @@ export default function useFgcProbablePitchers(challenge) {
       .doc(schedulePath)
       .onSnapshot(
         (snap) => {
-          if (!snap.exists) {
+          if (!snapshotExists(snap)) {
             setSchedulePitchers(null);
             return;
           }
-          const data = snap.data() || {};
+          const data = snapshotData(snap) || {};
           setSchedulePitchers({
             away: data.awayProbablePitcher || null,
             home: data.homeProbablePitcher || null,

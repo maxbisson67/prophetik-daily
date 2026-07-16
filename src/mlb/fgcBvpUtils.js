@@ -1,4 +1,5 @@
 import firestore from "@react-native-firebase/firestore";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { mlbScheduleGameDocPath } from "@src/mlb/mlbScheduleClient";
 import { normalizeMlbPitcherId } from "@src/mlb/loadMlbBvpForPlayers";
 
@@ -50,6 +51,24 @@ export function mergeProbablePitcherRecords(fromChallenge, fromSchedule) {
   };
 }
 
+export function opposingProbablePitcherForPlayer(player, probablePitchers, homeAbbr, awayAbbr) {
+  const team = safeTeamAbbr(player?.teamAbbr);
+  const home = safeTeamAbbr(homeAbbr);
+  const away = safeTeamAbbr(awayAbbr);
+  if (team === away) return probablePitchers?.home || null;
+  if (team === home) return probablePitchers?.away || null;
+  return null;
+}
+
+export function mergeFgcOpposingPitcherSources(...sources) {
+  let merged = null;
+  for (const src of sources) {
+    if (!src) continue;
+    merged = mergeProbablePitcherRecords(merged, src);
+  }
+  return merged;
+}
+
 export function getFgcBvpMatchups({ probablePitchers, awayAbbr, homeAbbr }) {
   const away = safeTeamAbbr(awayAbbr);
   const home = safeTeamAbbr(homeAbbr);
@@ -96,8 +115,8 @@ export async function resolveFgcProbablePitchersForBvp(challenge, probablePitche
     if (path) {
       try {
         const snap = await firestore().doc(path).get();
-        if (snap.exists) {
-          const data = snap.data() || {};
+        if (snapshotExists(snap)) {
+          const data = snapshotData(snap) || {};
           merged = {
             away: mergeProbablePitcherRecords(merged.away, data.awayProbablePitcher),
             home: mergeProbablePitcherRecords(merged.home, data.homeProbablePitcher),

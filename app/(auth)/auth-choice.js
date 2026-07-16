@@ -1,13 +1,18 @@
 // app/(auth)/auth-choice.js
 import React from "react";
-import { View, Text, TouchableOpacity, SafeAreaView } from "react-native";
+import { View, Text, TouchableOpacity, SafeAreaView, Linking } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
+import { privacyUrlForLang, termsUrlForLang } from "@src/constants/legalUrls";
+import { useLanguage } from "@src/i18n/LanguageProvider";
 
 export default function AuthChoiceScreen() {
   const router = useRouter();
+  const { lang } = useLanguage();
+  const privacyUrl = privacyUrlForLang(lang);
+  const termsUrl = termsUrlForLang(lang);
 
   const Button = ({ variant = "primary", onPress, icon, label, testID }) => {
     const isPrimary = variant === "primary";
@@ -44,29 +49,24 @@ export default function AuthChoiceScreen() {
     );
   };
 
-  // i18n
   const title = i18n.t("auth.choice.title", { defaultValue: "Welcome" });
   const headline = i18n.t("auth.choice.headline", {
-    defaultValue: "Choose your sign-in method",
+    defaultValue: "Connecte-toi à Prophetik",
   });
-  const body = i18n.t("auth.choice.body", {
+  const body = i18n.t("auth.choice.bodySmsOnly", {
     defaultValue:
-      "Sign in to join challenges, see live results, and track your progress.",
+      "Connecte-toi avec ton numéro de mobile pour rejoindre des défis, voir les résultats en direct et suivre ta progression.",
   });
 
-  const continueEmailLink = i18n.t("auth.choice.continueEmailLink", {
-    defaultValue: "Continue with email link",
-  });
   const continueSms = i18n.t("auth.choice.continueSms", {
     defaultValue: "Continue with SMS",
   });
-  const continueEmail = i18n.t("auth.choice.continueEmail", {
-    defaultValue: "Continue with email",
-  });
 
-  const footer = i18n.t("auth.choice.footer", {
-    defaultValue: "By continuing, you accept our terms of use.",
-  });
+  const openUrl = async (url) => {
+    try {
+      await Linking.openURL(url);
+    } catch {}
+  };
 
   return (
     <>
@@ -83,15 +83,14 @@ export default function AuthChoiceScreen() {
             flex: 1,
             padding: 16,
             justifyContent: "flex-start",
-            paddingTop: 32, // ou 40 selon ton goût
+            paddingTop: 32,
             gap: 14,
           }}
         >
-          {/* Logo Prophetik */}
           <View style={{ alignItems: "center", marginBottom: 16 }}>
             <ProphetikIcons size="xxl" iconPosition="after" />
           </View>
-          {/* Carte d’intro */}
+
           <View
             style={{
               padding: 16,
@@ -102,38 +101,17 @@ export default function AuthChoiceScreen() {
               marginBottom: 6,
             }}
           >
-            <Text style={{ fontSize: 22, fontWeight: "900", marginBottom: 6 }}>
-              {headline}
-            </Text>
+            <Text style={{ fontSize: 22, fontWeight: "900", marginBottom: 6 }}>{headline}</Text>
             <Text style={{ color: "#6B7280" }}>{body}</Text>
           </View>
 
-          {/* 1) Email link (principal) */}
           <Button
             variant="primary"
-            onPress={() => router.push("/(auth)/email-link-signup")}
-            label={continueEmailLink}
-            testID="btn-continue-email-link"
-            icon={<Ionicons name="mail-outline" size={20} color="#fff" />}
-          />
-
-          {/* 2) SMS */}
-          <Button
-            variant="outline"
             onPress={() => router.push("/(auth)/phone-login")}
             label={continueSms}
             testID="btn-continue-sms"
-            icon={<Ionicons name="chatbubble-ellipses-outline" size={20} color="#111827" />}
+            icon={<Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />}
           />
-
-          {/* 3) Email password (temp) 
-          <Button
-            variant="outline"
-            onPress={() => router.push("/(auth)/email-login")}
-            label={continueEmail}
-            testID="btn-continue-email"
-            icon={<Ionicons name="mail-outline" size={20} color="#111827" />}
-          />*/}
 
           <View
             style={{
@@ -143,24 +121,32 @@ export default function AuthChoiceScreen() {
               backgroundColor: "#F3F4F6",
             }}
           >
-            <Text
-              style={{
-                fontSize: 12,
-                color: "#374151",
-                lineHeight: 16,
-              }}
-            >
+            <Text style={{ fontSize: 12, color: "#374151", lineHeight: 16 }}>
               {i18n.t("auth.choice.securityNote", {
                 defaultValue:
-                  "🔒 For security reasons, emails and SMS may come from capitaine.firebaseapp.com. This is the official authentication service used by Prophetik.",
+                  "🔒 For security reasons, SMS may come from capitaine.firebaseapp.com. This is the official authentication service used by Prophetik.",
               })}
             </Text>
           </View>
 
-          <View style={{ alignItems: "center", marginTop: 10 }}>
+          <View style={{ alignItems: "center", marginTop: 10, gap: 6 }}>
             <Text style={{ color: "#6B7280", fontSize: 12, textAlign: "center" }}>
-              {footer}
+              {i18n.t("auth.choice.footerLegal", {
+                defaultValue: "En continuant, tu acceptes nos conditions d'utilisation et notre politique de confidentialité.",
+              })}
             </Text>
+            <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              <TouchableOpacity onPress={() => openUrl(termsUrl)}>
+                <Text style={{ color: "#111827", fontSize: 12, fontWeight: "700", textDecorationLine: "underline" }}>
+                  {i18n.t("settings.legal.terms", { defaultValue: "Conditions d'utilisation" })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => openUrl(privacyUrl)}>
+                <Text style={{ color: "#111827", fontSize: 12, fontWeight: "700", textDecorationLine: "underline" }}>
+                  {i18n.t("settings.legal.privacy", { defaultValue: "Politique de confidentialité" })}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </SafeAreaView>

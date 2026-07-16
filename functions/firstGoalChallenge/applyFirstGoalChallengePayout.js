@@ -4,6 +4,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
 import { applyFgcChallengeLiveLeaderboard } from "../leaderboard/incrementLeaderboardPoints.js";
 import { notifyFgcWinners } from "../notifications/notifyChallengeWin.js";
 
@@ -94,7 +95,7 @@ export const applyFirstGoalChallengePayout = onDocumentWritten(
 
         const winnerShares = {};
         winnerUids.forEach((uid) => {
-          winnerShares[uid] = 0;
+          winnerShares[uid] = FGC_WIN_POINTS;
         });
 
         for (const uid of winnerUids) {
@@ -104,7 +105,8 @@ export const applyFirstGoalChallengePayout = onDocumentWritten(
             entryRef,
             {
               won: true,
-              payout: 0,
+              payout: FGC_WIN_POINTS,
+              points: FGC_WIN_POINTS,
               finalizedAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
             },
@@ -117,7 +119,7 @@ export const applyFirstGoalChallengePayout = onDocumentWritten(
           {
             payoutAppliedAt: FieldValue.serverTimestamp(),
             payoutApplied: true,
-            payoutTotal: 0,
+            payoutTotal: winnerUids.length * FGC_WIN_POINTS,
             winnerShares,
             updatedAt: FieldValue.serverTimestamp(),
           },

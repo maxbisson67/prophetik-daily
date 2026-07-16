@@ -6,6 +6,10 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 // ✅ Source de vérité date/tz
 import { APP_TZ, appYmd, weekAnchorDate } from "../ProphetikDate.js";
+import {
+  assertManualChallengeCreationAllowed,
+  assertManualTsDayLimit,
+} from "../groups/manualChallengeLimits.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -184,13 +188,6 @@ function allowedTypesForTier(tier) {
   return new Set([1, 2, 3, 4]);
 }
 
-function weeklyLimitsForTier(tier) {
-  const t = String(tier || "free").toLowerCase();
-  if (t === "pro") return { maxCreates: 21, maxJoins: 21 };
-  if (t === "vip") return { maxCreates: 250, maxJoins: 250 };
-  return { maxCreates: 7, maxJoins: 7 }; // free
-}
-
 /* ----------------------------- callable ----------------------------- */
 /**
  * Input minimal:
@@ -256,10 +253,17 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
     const usageRef = db.doc(`usage_weekly/${usageId}`);
 
     const groupSnap = await db.doc(`groups/${groupId}`).get();
-    const groupSport = String(groupSnap.data()?.sport || "NHL").toUpperCase();
+    const group = groupSnap.data() || {};
+    const groupSport = String(group?.sport || "NHL").toUpperCase();
+
+    assertManualChallengeCreationAllowed(group);
 
     // game date
     const gameDateYmd = normalizeGameDate(input.gameDate); // "YYYY-MM-DD"
+
+    if (type === 3) {
+      await assertManualTsDayLimit({ groupId, gameDateYmd });
+    }
 
     const eligible = await hasEligibleGamesForYmd(gameDateYmd, groupSport);
     if (!eligible) {
@@ -302,21 +306,7 @@ export const defisCreate = onCall({ region: "us-central1" }, async (req) => {
 
     const defiRef = db.doc(`defis/${defiId}`);
 
-    const limits = weeklyLimitsForTier(tier);
-
     await db.runTransaction(async (tx) => {
-      const usageSnap = await tx.get(usageRef);
-      const usage = usageSnap.exists ? usageSnap.data() || {} : {};
-      const createdCount = Number(usage.createdCount || 0);
-
-      if (createdCount >= limits.maxCreates) {
-        throw new HttpsError("resource-exhausted", "CREATE_LIMIT_REACHED", {
-          reason: "CREATE_LIMIT_REACHED",
-          tier,
-          max: limits.maxCreates,
-        });
-      }
-
       const existing = await tx.get(defiRef);
       if (existing.exists) {
         throw new HttpsError("already-exists", "Un défi avec cet id existe déjà.");

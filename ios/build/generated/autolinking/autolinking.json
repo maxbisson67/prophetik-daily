@@ -110,6 +110,30 @@
         }
       }
     },
+    "@react-native-firebase/app-check": {
+      "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/app-check",
+      "name": "@react-native-firebase/app-check",
+      "platforms": {
+        "ios": {
+          "podspecPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/app-check/RNFBAppCheck.podspec",
+          "version": "23.5.0",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/app-check/android",
+          "packageImportPath": "import io.invertase.firebase.appcheck.ReactNativeFirebaseAppCheckPackage;",
+          "packageInstance": "new ReactNativeFirebaseAppCheckPackage()",
+          "buildTypes": [],
+          "componentDescriptors": [],
+          "cmakeListsPath": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/app-check/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
     "@react-native-firebase/auth": {
       "root": "/Users/marcelbisson/Documents/Prophetik/prophetik-daily/node_modules/@react-native-firebase/auth",
       "name": "@react-native-firebase/auth",

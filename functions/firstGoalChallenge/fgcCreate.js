@@ -5,6 +5,11 @@ import { logger } from "firebase-functions";
 
 import { APP_TZ, toYmdInTz } from "../ProphetikDate.js";
 import { sendPushToGroup } from "../utils/pushUtils.js";
+import {
+  assertManualChallengeCreationAllowed,
+  assertManualFgcDayLimit,
+  getManualChallengeBusinessYmdDashed,
+} from "../groups/manualChallengeLimits.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -73,12 +78,30 @@ export const fgcCreate = onCall(
     if (!start) throw new HttpsError("invalid-argument", "gameStartTimeUTC requis/invalide.");
 
     const gameYmd = toYmdInTz(start, APP_TZ);
+    const businessYmd = getManualChallengeBusinessYmdDashed();
 
-    const expiresHours = Number(data.expiresHours ?? EXPIRES_HOURS);
-    const safeExpiresHours = Number.isFinite(expiresHours) && expiresHours > 0 ? expiresHours : EXPIRES_HOURS;
+    const groupSnap = await db.doc(`groups/${groupId}`).get();
+    if (!groupSnap.exists) {
+      throw new HttpsError("not-found", "Groupe introuvable.");
+    }
+    const group = groupSnap.data() || {};
+
+    assertManualChallengeCreationAllowed(group);
 
     const challengeId = `fgc_${groupId}_${gameId}`;
     const chRef = db.collection("first_goal_challenges").doc(challengeId);
+    const existingSnap = await chRef.get();
+
+    if (!existingSnap.exists) {
+      await assertManualFgcDayLimit(db, {
+        groupId,
+        league,
+        businessYmdDashed: businessYmd,
+      });
+    }
+
+    const expiresHours = Number(data.expiresHours ?? EXPIRES_HOURS);
+    const safeExpiresHours = Number.isFinite(expiresHours) && expiresHours > 0 ? expiresHours : EXPIRES_HOURS;
 
     try {
       const out = await db.runTransaction(async (tx) => {

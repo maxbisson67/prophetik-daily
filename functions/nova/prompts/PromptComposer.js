@@ -430,6 +430,180 @@ function buildFgcSlimContext(verifiedContext) {
   };
 }
 
+function formatOffensiveEnvironmentBlock(offensiveEnvironment, lang) {
+  if (!offensiveEnvironment) return null;
+  const isFr = lang !== "en";
+  const labelMapFr = {
+    unfavorable: "défavorable",
+    neutral: "neutre",
+    favorable: "favorable",
+    very_favorable: "très favorable",
+  };
+  const labelMapEn = {
+    unfavorable: "unfavorable",
+    neutral: "neutral",
+    favorable: "favorable",
+    very_favorable: "very favorable",
+  };
+  const rawLabel = String(offensiveEnvironment.label || "").toLowerCase();
+  const labelText = isFr
+    ? labelMapFr[rawLabel] || rawLabel || "?"
+    : labelMapEn[rawLabel] || rawLabel || "?";
+  const score =
+    offensiveEnvironment.score != null ? `${offensiveEnvironment.score}/100` : "?";
+  const explanation = isFr
+    ? offensiveEnvironment.explanationFr || offensiveEnvironment.explanationEn
+    : offensiveEnvironment.explanationEn || offensiveEnvironment.explanationFr;
+
+  const lines = [
+    isFr
+      ? `Environnement offensif du match : ${labelText} (${score})`
+      : `Game offensive environment: ${labelText} (${score})`,
+  ];
+  if (offensiveEnvironment.parkScore != null) {
+    lines.push(
+      isFr
+        ? `- Parc : ${offensiveEnvironment.parkScore}/100`
+        : `- Ballpark: ${offensiveEnvironment.parkScore}/100`
+    );
+  }
+  if (offensiveEnvironment.weatherScore != null) {
+    lines.push(
+      isFr
+        ? `- Météo : ${offensiveEnvironment.weatherScore}/100`
+        : `- Weather: ${offensiveEnvironment.weatherScore}/100`
+    );
+  }
+  if (explanation) lines.push(explanation);
+  return lines.join("\n");
+}
+
+function buildTsCoachingBrief(verifiedContext, lang) {
+  const ch = verifiedContext?.challenge || {};
+  const matchup = verifiedContext?.matchup || null;
+  const pick = verifiedContext?.participant?.currentPick || null;
+  const player = verifiedContext?.player || verifiedContext?.players?.[0] || null;
+  if (!ch.homeAbbr || !ch.awayAbbr) return null;
+
+  const isFr = lang !== "en";
+  const header = isFr
+    ? `Match — ${ch.awayAbbr} (visiteur) @ ${ch.homeAbbr} (domicile)`
+    : `Game — ${ch.awayAbbr} (away) @ ${ch.homeAbbr} (home)`;
+
+  const lines = [header, ""];
+
+  const envBlock = formatOffensiveEnvironmentBlock(verifiedContext?.offensiveEnvironment, lang);
+  if (envBlock) {
+    lines.push(envBlock, "");
+  } else {
+    lines.push(
+      isFr
+        ? "Environnement offensif : non disponible pour ce match."
+        : "Offensive environment: unavailable for this game.",
+      ""
+    );
+  }
+
+  if (pick?.playerName || player?.fullName) {
+    const sideLabel =
+      pick?.isAway === true || matchup?.isAway === true
+        ? isFr
+          ? "visiteur"
+          : "away"
+        : pick?.isHome === true || matchup?.isHome === true
+          ? isFr
+            ? "domicile"
+            : "home"
+          : isFr
+            ? "équipe inconnue"
+            : "team unknown";
+
+    lines.push(
+      isFr
+        ? `Joueur concerné : ${pick?.playerName || player?.fullName} (${pick?.teamAbbr || player?.teamAbbr || "?"}, ${sideLabel})`
+        : `Player in focus: ${pick?.playerName || player?.fullName} (${pick?.teamAbbr || player?.teamAbbr || "?"}, ${sideLabel})`
+    );
+
+    const stats = player?.seasonStats;
+    if (stats) {
+      const slg = stats.slg ? `, SLG ${stats.slg}` : "";
+      const avg = stats.battingAverage ? `, AVG ${stats.battingAverage}` : "";
+      lines.push(
+        isFr
+          ? `Production saison : ${stats.hits} H, ${stats.rbi} RBI, ${stats.runs} R, ${stats.homeRuns} HR${slg}${avg}`
+          : `Season production: ${stats.hits} H, ${stats.rbi} RBI, ${stats.runs} R, ${stats.homeRuns} HR${slg}${avg}`
+      );
+    }
+    lines.push("");
+  }
+
+  const scoring = verifiedContext?.scoring;
+  if (scoring?.summaryFr || scoring?.summaryEn) {
+    lines.push(isFr ? scoring.summaryFr : scoring.summaryEn, "");
+  }
+
+  const opp = matchup?.opposingPitcher;
+  if (opp?.name || matchup?.opposingTeamAbbr) {
+    const hand = opp?.throwHand
+      ? isFr
+        ? `, ${opp.throwHand === "L" ? "gaucher" : opp.throwHand === "R" ? "droitier" : opp.throwHand}`
+        : `, throws ${opp.throwHand}`
+      : "";
+    const era = opp?.era != null ? `ERA ${opp.era}` : isFr ? "ERA ?" : "ERA ?";
+    lines.push(
+      isFr
+        ? `Lanceur adverse (${matchup?.opposingTeamAbbr || "?"}) : ${opp?.name || "non annoncé"} (${era}${hand})`
+        : `Opposing starter (${matchup?.opposingTeamAbbr || "?"}): ${opp?.name || "TBD"} (${era}${hand})`
+    );
+  }
+
+  const bvp = matchup?.bvp;
+  const bvpPa = Number(bvp?.pa) || 0;
+  if (bvp?.hasSample && bvpPa > 9 && opp?.name) {
+    lines.push(
+      isFr
+        ? `BvP carrière vs ${opp.name} (échantillon fiable, >9 PA) : ${bvp.pa} PA, ${bvp.hits} H, ${bvp.homeRuns} HR, ${bvp.rbi} RBI, OPS ${bvp.ops ?? "?"}`
+        : `Career BvP vs ${opp.name} (reliable sample, >9 PA): ${bvp.pa} PA, ${bvp.hits} H, ${bvp.homeRuns} HR, ${bvp.rbi} RBI, OPS ${bvp.ops ?? "?"}`
+    );
+  } else if (bvpPa > 0 && bvpPa <= 9 && opp?.name) {
+    lines.push(
+      isFr
+        ? `BvP vs ${opp.name} : ${bvpPa} PA — échantillon trop petit pour l'analyse (seuil > 9 PA)`
+        : `BvP vs ${opp.name}: ${bvpPa} PA — sample too small for analysis (>9 PA threshold)`
+    );
+  } else if (opp?.name) {
+    lines.push(
+      isFr
+        ? `BvP carrière vs ${opp.name} : aucune présence au bâton enregistrée`
+        : `Career BvP vs ${opp.name}: no recorded plate appearances`
+    );
+  }
+
+  return lines.filter(Boolean).join("\n");
+}
+
+function buildTsSlimContext(verifiedContext) {
+  if (!verifiedContext) return null;
+
+  return {
+    challenge: verifiedContext.challenge,
+    participant: verifiedContext.participant,
+    offensiveEnvironment: verifiedContext.offensiveEnvironment,
+    matchup: verifiedContext.matchup,
+    player: verifiedContext.player
+      ? {
+          playerId: verifiedContext.player.playerId,
+          fullName: verifiedContext.player.fullName,
+          teamAbbr: verifiedContext.player.teamAbbr,
+          seasonStats: verifiedContext.player.seasonStats,
+          injury: verifiedContext.player.injury,
+          bvpVsOpposingStarter: verifiedContext.player.bvpVsOpposingStarter ?? null,
+        }
+      : null,
+    scoring: verifiedContext.scoring,
+  };
+}
+
 export class PromptComposer {
   /**
    * @param {{ capability: string, lang: string, memoryBlock: object, verifiedContext?: object|null, knowledgeExcerpts?: object[], userMessage: string }}
@@ -440,6 +614,8 @@ export class PromptComposer {
     const isTpCoach = !isExplain && verifiedContext?.domain === "tp";
     const isFgcMlbCoach =
       !isExplain && verifiedContext?.domain === "fgc" && verifiedContext?.sport === "MLB";
+    const isTsMlbCoach =
+      !isExplain && verifiedContext?.domain === "ts" && verifiedContext?.sport === "MLB";
 
     const system = isExplain ? SYSTEM_EXPLAIN : SYSTEM_COACH;
     const schema = isExplain ? EXPLAIN_SCHEMA : isTpCoach ? TP_COACH_SCHEMA : COACH_SCHEMA;
@@ -448,10 +624,12 @@ export class PromptComposer {
     const tpSlimContext = isTpCoach ? buildTpSlimContext(verifiedContext) : null;
     const fgcCoachingBrief = isFgcMlbCoach ? buildFgcCoachingBrief(verifiedContext, lang) : null;
     const fgcSlimContext = isFgcMlbCoach ? buildFgcSlimContext(verifiedContext) : null;
+    const tsCoachingBrief = isTsMlbCoach ? buildTsCoachingBrief(verifiedContext, lang) : null;
+    const tsSlimContext = isTsMlbCoach ? buildTsSlimContext(verifiedContext) : null;
 
     const tpCoachHint = isTpCoach
       ? lang === "en"
-        ? `Context: Predict the Game Outcome (team scores). Scoring: 3 pts correct winner + 3 pts exact score per game.
+        ? `Context: Predict the Game Outcome (team scores). Scoring: 5 pts correct winner + 5 pts exact score per game (10 total max).
 
 MANDATORY — fill teamFormFactors for BOTH teams by copying values from the verified brief below.
 Never invent "unavailable" if the brief contains numbers.
@@ -459,7 +637,7 @@ Your observation MUST explicitly mention for each team: season W-L, current stre
 Put pitching in comparison.pitchingNote (one sentence max). Do NOT anchor the analysis on ERA alone.
 Use focusedMatch when the user asks about a specific game (e.g. match 1).
 Suggest plausible score ranges and risks — never guarantee an outcome.`
-        : `Contexte : Prédire l'issue du match (scores d'équipe). Barème : 3 pts bon vainqueur + 3 pts score exact par match.
+        : `Contexte : Prédire l'issue du match (scores d'équipe). Barème : 5 pts bon vainqueur + 5 pts score exact par match (10 max).
 
 OBLIGATOIRE — remplis teamFormFactors pour LES DEUX équipes en copiant les valeurs du brief vérifié ci-dessous.
 N'invente jamais "unavailable" / "non disponible" si le brief contient des chiffres.
@@ -509,12 +687,52 @@ Dynamique visiteur/domicile en 1re manche (haut vs bas de 1re).
 Ne garantis jamais un résultat.`
       : "";
 
+    const tsCoachHint = isTsMlbCoach
+      ? lang === "en"
+        ? `Context: Daily Trio (pick 3 batters). The participant wants ONE holistic advice for this batter in their trio.
+
+Structure your JSON response as a single integrated analysis:
+- observation: concise synthesis covering ALL available factors below (2–4 short paragraphs max in one string).
+- comparison.pitchingNote: opposing starter ERA + throwHand (one sentence).
+- risks: 1–3 concrete risks for this TS pick.
+- reflection: one question to help the participant decide.
+
+MANDATORY factors when present in the verified brief (skip only if truly missing):
+1) Offensive environment: score, label, park/weather context — cite from brief; do not invent.
+2) Opposing starter: name, ERA, throwHand (L/R).
+3) Batter season production: H, RBI, R, SLG (and HR if relevant).
+4) TS scoring reminder: +1 per H, +1 bonus per extra-base (2B/3B/HR), +1 RBI, +1 R.
+5) Career BvP vs this starter ONLY if the brief shows >9 PA — cite PA, H, HR, RBI, OPS exactly. If ≤9 PA or no sample, do NOT use BvP.
+
+Never guarantee an outcome.`
+        : `Contexte : Le Trio du jour (3 frappeurs). Le participant veut UN avis complet pour ce frappeur dans son trio.
+
+Structure ta réponse JSON comme une analyse intégrée :
+- observation : synthèse concise couvrant TOUS les facteurs disponibles ci-dessous (2–4 paragraphes courts en une seule chaîne).
+- comparison.pitchingNote : ERA + throwHand du lanceur adverse (une phrase).
+- risks : 1–3 risques concrets pour ce choix TS.
+- reflection : une question pour aider le participant à trancher.
+
+Facteurs OBLIGATOIRES quand présents dans le brief vérifié (saute seulement si vraiment absent) :
+1) Environnement offensif : score, label, contexte parc/météo — cite le brief ; n'invente pas.
+2) Lanceur adverse : nom, ERA, throwHand (G/D).
+3) Production saison du frappeur : H, RBI, R, SLG (et HR si pertinent).
+4) Rappel barème TS : +1 par H, +1 boni par extra-base (2B/3B/HR), +1 RBI, +1 R.
+5) BvP carrière vs ce lanceur UNIQUEMENT si le brief indique >9 PA — cite PA, H, HR, RBI, OPS exactement. Si ≤9 PA ou pas d'échantillon, n'utilise PAS le BvP.
+
+Ne garantis jamais un résultat.`
+      : "";
+
     const tpBriefBlock = tpCoachingBrief
       ? `=== BRIEF VÉRIFIÉ (source prioritaire pour teamFormFactors) ===\n${tpCoachingBrief}\n=== FIN DU BRIEF ===`
       : "";
 
     const fgcBriefBlock = fgcCoachingBrief
       ? `=== BRIEF VÉRIFIÉ FGC MLB ===\n${fgcCoachingBrief}\n=== FIN DU BRIEF ===`
+      : "";
+
+    const tsBriefBlock = tsCoachingBrief
+      ? `=== BRIEF VÉRIFIÉ TS MLB ===\n${tsCoachingBrief}\n=== FIN DU BRIEF ===`
       : "";
 
     const contextBlock = isTpCoach
@@ -524,6 +742,10 @@ Ne garantis jamais un résultat.`
       : isFgcMlbCoach
         ? fgcSlimContext
           ? `Verified Prophetik context (do not invent stats beyond this):\n${JSON.stringify(fgcSlimContext, null, 2)}`
+          : "No live challenge context."
+      : isTsMlbCoach
+        ? tsSlimContext
+          ? `Verified Prophetik context (do not invent stats beyond this):\n${JSON.stringify(tsSlimContext, null, 2)}`
           : "No live challenge context."
       : verifiedContext
         ? `Verified Prophetik context (do not invent stats beyond this):\n${JSON.stringify(verifiedContext, null, 2)}`
@@ -548,6 +770,18 @@ Ne garantis jamais un résultat.`
             };
             return (order[a.key] ?? 99) - (order[b.key] ?? 99);
           })
+        : isTsMlbCoach
+          ? [...knowledgeExcerpts].sort((a, b) => {
+              const order = {
+                rbi: 0,
+                ops: 1,
+                platoon_advantage: 2,
+                bvp: 3,
+                probable_pitcher: 4,
+                era: 5,
+              };
+              return (order[a.key] ?? 99) - (order[b.key] ?? 99);
+            })
         : knowledgeExcerpts;
 
     const developerBlock = [
@@ -555,8 +789,10 @@ Ne garantis jamais un résultat.`
       `Language: ${lang === "en" ? "en" : "fr"}`,
       tpCoachHint,
       fgcCoachHint,
+      tsCoachHint,
       tpBriefBlock,
       fgcBriefBlock,
+      tsBriefBlock,
       `Response JSON schema:\n${schema}`,
       `Participant memory:\n${JSON.stringify(memoryBlock, null, 2)}`,
       contextBlock,

@@ -1,5 +1,6 @@
 // src/players/PlayerProfileModal.js
 import React, { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { Modal, View, Text, TouchableOpacity, ActivityIndicator, Image } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,7 +32,7 @@ export default function PlayerProfileModal({ visible, playerId, onClose }) {
     const ref = firestore().doc(`nhl_players/${pid}`);
     const unsub = ref.onSnapshot(
       (snap) => {
-        setDoc(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setDoc(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
         setLoading(false);
       },
       (e) => {

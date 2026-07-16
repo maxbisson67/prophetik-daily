@@ -1,5 +1,6 @@
 // app/(drawer)/subscriptions/useEntitlement.js
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 export default function useEntitlement(uid) {
@@ -37,7 +38,7 @@ export default function useEntitlement(uid) {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        if (!snap.exists) {
+        if (!snapshotExists(snap)) {
           setTier("free");
           setActive(false);
           setExpiresAt(null);
@@ -48,7 +49,7 @@ export default function useEntitlement(uid) {
           return;
         }
 
-        const d = snap.data() || {};
+        const d = snapshotData(snap) || {};
         const t = String(d.tier || "free").toLowerCase();
         const normalizedTier = t === "vip" || t === "pro" ? t : "free";
 

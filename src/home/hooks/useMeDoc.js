@@ -1,5 +1,6 @@
 // src/home/hooks/useMeDoc.js
 import { useEffect, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { listenRNFB } from "../firestoreListen";
 
@@ -31,7 +32,7 @@ export default function useMeDoc({ authReady, uid, dayTick, enabled = true }) {
     subRef.current = listenRNFB(
       ref,
       (snap) => {
-        setMeDoc(snap.exists ? { uid: snap.id, ...snap.data() } : null);
+        setMeDoc(snapshotExists(snap) ? { uid: snapshotId(snap), ...snapshotData(snap) } : null);
         setLoadingMe(false);
       },
       "participants/self",

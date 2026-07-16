@@ -1,9 +1,10 @@
 // src/leaderboard/hooks/usePublicProfilesFor.js
 import { useEffect, useState } from 'react';
+import { snapshotExists, snapshotData } from "@src/lib/safeSnapshot";
 import firestore from '@react-native-firebase/firestore';
 
 export default function usePublicProfilesFor(uids) {
-  const [map, setMap] = useState({}); // uid -> { displayName, avatarUrl, updatedAt }
+  const [map, setMap] = useState({});
 
   useEffect(() => {
     const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
@@ -20,22 +21,17 @@ export default function usePublicProfilesFor(uids) {
       const ref = firestore().collection('profiles_public').doc(uid);
       const un = ref.onSnapshot(
         (snap) => {
-          if (!snap.exists) {
-            setMap((prev) => {
-              if (!prev[uid]) return prev;
-              const next = { ...prev };
-              delete next[uid];
-              return next;
-            });
-            return;
-          }
+          if (!snap || !snapshotExists(snap)) return;
 
-          const d = snap.data() || {};
+          const d = snapshotData(snap) || {};
           setMap((prev) => ({
             ...prev,
             [uid]: {
               displayName: d.displayName || 'Invité',
-              avatarUrl: d.avatarUrl || null,
+              avatarUrl: d.avatarUrl || d.jerseyFrontUrl || null,
+              jerseyFrontUrl: d.jerseyFrontUrl || null,
+              jerseyBackUrl: d.jerseyBackUrl || null,
+              avatarKind: d.avatarKind || null,
               updatedAt: d.updatedAt || null,
             },
           }));

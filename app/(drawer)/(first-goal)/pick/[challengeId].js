@@ -1,5 +1,6 @@
 // app/(drawer)/(first-goal)/pick/[challengeId].js
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -151,7 +152,7 @@ async function buildIdentityForEntry(user) {
 
   try {
     const snap = await firestore().doc(`participants/${uid}`).get();
-    const p = snap.exists ? snap.data() || {} : {};
+    const p = snapshotExists(snap) ? snapshotData(snap) || {} : {};
 
     const displayName =
       (typeof p.displayName === "string" && p.displayName.trim()) ||
@@ -200,6 +201,7 @@ export default function FirstGoalPickScreen() {
   const [loadingChallenge, setLoadingChallenge] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPlayerId, setSavingPlayerId] = useState(null);
   const [novaModalPlayer, setNovaModalPlayer] = useState(null);
 
   const cid = String(challengeId || "");
@@ -229,7 +231,7 @@ export default function FirstGoalPickScreen() {
       .doc(cid)
       .onSnapshot(
         (snap) => {
-          setChallenge(snap?.exists ? { id: snap.id, ...snap.data() } : null);
+          setChallenge(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
           setLoadingChallenge(false);
         },
         (err) => {
@@ -257,7 +259,7 @@ export default function FirstGoalPickScreen() {
 
     const unsub = entryRef.onSnapshot(
       (snap) => {
-        setEntry(snap?.exists ? { id: snap.id, ...snap.data() } : null);
+        setEntry(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
       },
       (err) => {
         console.warn("[FirstGoalPick] entry snapshot error", err?.code, err?.message);
@@ -693,6 +695,7 @@ export default function FirstGoalPickScreen() {
 
       try {
         setSaving(true);
+        setSavingPlayerId(playerId);
 
         const call = functions().httpsCallable("fgcPick");
 
@@ -734,6 +737,7 @@ export default function FirstGoalPickScreen() {
         Alert.alert(i18n.t("common.error", { defaultValue: "Erreur" }), String(e?.message || e));
       } finally {
         setSaving(false);
+        setSavingPlayerId(null);
       }
     },
     [cid, user?.uid, challenge?.league]
@@ -769,6 +773,7 @@ export default function FirstGoalPickScreen() {
           showNovaButton={showNova}
           colors={colors}
           selectedPlayerId={entry?.playerId}
+          pendingPlayerId={savingPlayerId}
           league={derived.league}
           seasonPair={activeSeasonPair}
           lineupsAvailable={lineupsAvailable}
@@ -786,6 +791,7 @@ export default function FirstGoalPickScreen() {
       derived.locked,
       derived.league,
       saving,
+      savingPlayerId,
       pickPlayer,
       colors,
       entry?.playerId,
@@ -997,10 +1003,19 @@ export default function FirstGoalPickScreen() {
                           safeAbbr(challenge?.awayAbbr)
                         )
                       : novaModalPlayer?.lineupSlot ?? null,
+                  bvpVsOpposingStarter:
+                    novaModalPlayer?.bvpVsOpposingStarter ||
+                    bvpByPlayerId[String(novaModalPlayer?.playerId ?? novaModalPlayer?.id ?? "")] ||
+                    null,
+                  opposingPitcherForBvp:
+                    novaModalPlayer?.opposingPitcherForBvp ||
+                    bvpPitcherByPlayerId[String(novaModalPlayer?.playerId ?? novaModalPlayer?.id ?? "")] ||
+                    null,
                 }
               : null
           }
           challengeId={String(challenge.id)}
+          domain="fgc"
           sport={derived.league}
           gameId={challenge?.gamePk ?? challenge?.gameId ?? challenge?.mlbGameId ?? null}
           probablePitchers={probablePitchers}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -12,17 +13,25 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@src/auth/SafeAuthProvider";
-import FirstGoalChallengeModal from "@src/firstGoal/FirstGoalChallengeModal";
-import {
-  getFgcResultPlayerName,
-  getFgcResultPrefix,
-} from "@src/firstGoal/fgcChallengeUtils";
+import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
+import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
+import TsMyResultsModal from "@src/defis/results/TsMyResultsModal";
+import useFgcMutualizedGamesMap from "@src/firstGoal/useFgcMutualizedGamesMap";
+import useTodayLiveChallenges from "@src/live/useTodayLiveChallenges";
+import LiveGameChallengeTags, {
+  getActiveLiveChallengeKinds,
+  getLiveRowHighlightStyle,
+} from "@src/live/LiveGameChallengeTags";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import { lookupByGameId, liveBoardGameId } from "@src/live/liveChallengeModels";
+import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import useLiveBoardGames from "@src/live/useLiveBoardGames";
 import i18n from "@src/i18n/i18n";
+import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
 import { crashLog, setCrashContext, recordNonFatal } from "@src/services/crashlytics";
 import Analytics from "@src/services/analytics";
 
@@ -222,7 +231,31 @@ function statusRank(status) {
    Composant de ligne
 ========================= */
 
-function GameRow({ game, onPress, colors, challenges = [], onPressChallenge, groupNameById = {} }) {
+function GameRow({
+  game,
+  onPress,
+  colors,
+  fgcItem = null,
+  fgcMyPick = null,
+  tpSlot = null,
+  tpMyPick = null,
+  tpPickResult = null,
+  tsPlayers = [],
+  mutualizedGame = null,
+  onPressFgc,
+  onPressTp,
+  onPressTs,
+}) {
+  const { isDark } = useTheme();
+  const challengeKinds = getActiveLiveChallengeKinds({
+    fgcItem,
+    fgcMyPick,
+    tpSlot,
+    tpMyPick,
+    tsPlayers,
+  });
+  const highlightStyle = getLiveRowHighlightStyle(colors, challengeKinds, { isDark });
+
   const {
     homeAbbr,
     awayAbbr,
@@ -245,12 +278,26 @@ function GameRow({ game, onPress, colors, challenges = [], onPressChallenge, gro
       style={{
         padding: 12,
         borderRadius: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.card,
         marginBottom: 10,
+        ...highlightStyle,
       }}
     >
+      <LiveGameChallengeTags
+        colors={colors}
+        sport="NHL"
+        fgcItem={fgcItem}
+        fgcMyPick={fgcMyPick}
+        tpSlot={tpSlot}
+        tpMyPick={tpMyPick}
+        tpPickResult={tpPickResult}
+        teamForAbbr={(abbr) => lookupTeamByAbbr("NHL", abbr)}
+        tsPlayers={tsPlayers}
+        mutualizedGame={mutualizedGame}
+        onPressFgc={onPressFgc}
+        onPressTp={onPressTp}
+        onPressTs={onPressTs}
+      />
+
       <TouchableOpacity onPress={() => onPress?.(game)} activeOpacity={0.85}>
         <View
           style={{
@@ -337,77 +384,6 @@ function GameRow({ game, onPress, colors, challenges = [], onPressChallenge, gro
           </View>
         </View>
       </TouchableOpacity>
-
-      {challenges.length > 0 ? (
-        <View style={{ marginTop: 10, gap: 8 }}>
-          {challenges.map((ch) => {
-            const chStatus = String(ch?.status || "").toLowerCase();
-            const chParticipants = Number(ch?.participantsCount || 0);
-            const groupName = groupNameById[String(ch.groupId || "")] || String(ch.groupId || "");
-
-            const chLine =
-              chStatus === "open"
-                ? `🟢 ${i18n.t("firstGoal.status.open", { defaultValue: "Ouvert" })}`
-                : chStatus === "locked"
-                ? `🔒 ${i18n.t("firstGoal.status.locked", { defaultValue: "Verrouillé" })}`
-                : chStatus === "pending"
-                ? `⏳ ${i18n.t("firstGoal.status.pending", { defaultValue: "En vérification" })}`
-                : chStatus === "decided"
-                ? `✅ ${i18n.t("firstGoal.status.decided", { defaultValue: "Résultats" })}`
-                : chStatus === "closed"
-                ? `🏁 ${i18n.t("firstGoal.status.closed", { defaultValue: "Terminé" })}`
-                : chStatus || null;
-
-            const chResult =
-              chStatus === "decided" || chStatus === "closed"
-                ? getFgcResultPlayerName(ch)
-                  ? `${getFgcResultPrefix(ch, i18n.t.bind(i18n))} ${getFgcResultPlayerName(ch)}`
-                  : i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })
-                : null;
-
-            return (
-              <TouchableOpacity
-                key={String(ch.id)}
-                onPress={() => onPressChallenge?.(ch)}
-                activeOpacity={0.85}
-                style={{
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card2,
-                }}
-              >
-                <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
-                  🎯 {groupName} • {chParticipants}
-                </Text>
-
-                {chLine ? (
-                  <Text style={{ marginTop: 2, color: colors.subtext, fontSize: 12 }} numberOfLines={2}>
-                    {chLine}
-                    {chResult ? ` • ${chResult}` : ""}
-                  </Text>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      ) : (
-        <View
-          style={{
-            marginTop: 8,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "flex-end",
-          }}
-        >
-          <Ionicons name="information-circle-outline" size={16} color={colors.subtext} />
-          <Text style={{ marginLeft: 4, color: colors.subtext, fontSize: 12 }}>
-            {i18n.t("live.row.tapForDetails", "Touchez pour voir les détails")}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -436,7 +412,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
 
     const unsubGame = ref.onSnapshot(
       (snap) => {
-        setGameDoc(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setGameDoc(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
       },
       (err) => {
         console.log("[MatchLive] game doc error", err?.message || err);
@@ -448,7 +424,7 @@ function GameDetailModal({ visible, onClose, game, colors }) {
       .orderBy("timeInPeriod", "asc")
       .onSnapshot(
         (snap) => {
-          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const list = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
           setGoals(list);
           setLoading(false);
         },
@@ -907,12 +883,46 @@ export default function MatchLiveScreen() {
   const [selectedGame, setSelectedGame] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const [firstGoalByGameId, setFirstGoalByGameId] = useState({});
-  const [allowedGroupIds, setAllowedGroupIds] = useState([]);
-  const [groupNameById, setGroupNameById] = useState({});
+  const { selectedGroupId: currentGroupId } = useSelectedGroup();
+  const businessYmd = useMemo(() => getProphetikBusinessYmd(), [todayKey]);
+  const challengeExtraYmds = useMemo(() => {
+    const extras = [];
+    if (todayKey && todayKey !== businessYmd) extras.push(todayKey);
+    return extras;
+  }, [todayKey, businessYmd]);
 
-  const [fgModalOpen, setFgModalOpen] = useState(false);
-  const [fgSelectedChallenge, setFgSelectedChallenge] = useState(null);
+  const {
+    fgcByGameId,
+    fgcItems,
+    fgcPickByGameId,
+    tpByGameId,
+    tpBundleItem,
+    tpEntry,
+    tpEntryByBundleId,
+    tpPickByGameId,
+    tpPickResultByGameId,
+    tsItem,
+    tsByGameId,
+    tsEntry,
+  } = useTodayLiveChallenges({
+    groupId: currentGroupId,
+    league: "NHL",
+    extraYmds: challengeExtraYmds,
+    userId: user?.uid,
+    enabled: !!currentGroupId,
+  });
+
+  const mutualizedChallenges = useMemo(
+    () => fgcItems.map((item) => item?.raw || item),
+    [fgcItems]
+  );
+  const mutualizedGamesByGameId = useFgcMutualizedGamesMap(mutualizedChallenges, {
+    enabled: mutualizedChallenges.length > 0,
+  });
+
+  const [fgcModalItem, setFgcModalItem] = useState(null);
+  const [tpModalItem, setTpModalItem] = useState(null);
+  const [tsModalOpen, setTsModalOpen] = useState(false);
 
   useEffect(() => {
     crashLog("Opened MatchLiveScreen");
@@ -936,243 +946,40 @@ export default function MatchLiveScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // Groupes permis
-  useEffect(() => {
-    if (!user?.uid) {
-      setAllowedGroupIds([]);
-      setGroupNameById({});
-      return;
-    }
+  const handlePressFgc = useCallback(
+    (item) => {
+      crashLog(`Open FGC challenge: ${String(item?.id || "")}`);
 
-    const qByUid = firestore()
-      .collection("group_memberships")
-      .where("uid", "==", String(user.uid));
-
-    const qOwnerCreated = firestore()
-      .collection("groups")
-      .where("createdBy", "==", String(user.uid));
-
-    const qOwnerOwnerId = firestore()
-      .collection("groups")
-      .where("ownerId", "==", String(user.uid));
-
-    let memberships = [];
-    let ownedCreated = [];
-    let ownedOwnerId = [];
-
-    const recompute = () => {
-      const memberIds = memberships
-        .filter((m) => {
-          const st = String(m?.status || "").toLowerCase();
-          if (st) return ["active", "open", "approved"].includes(st);
-          return m?.active !== false;
-        })
-        .map((m) => String(m.groupId || ""))
-        .filter(Boolean);
-
-      const ownerRows = [...ownedCreated, ...ownedOwnerId];
-      const ownerIds = ownerRows.map((g) => String(g.id || "")).filter(Boolean);
-
-      setAllowedGroupIds(Array.from(new Set([...memberIds, ...ownerIds])));
-
-      const names = {};
-      ownerRows.forEach((g) => {
-        const id = String(g.id || "");
-        if (!id) return;
-        names[id] = g?.name || g?.title || id;
-      });
-      setGroupNameById((prev) => ({ ...prev, ...names }));
-    };
-
-    const un1 = qByUid.onSnapshot(
-      (snap) => {
-        memberships = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (err) => {
-        console.log("[MatchLive] group_memberships error", err?.message || err);
-
-        recordNonFatal(err, {
-          screen: "MatchLiveScreen",
-          action: "listen_group_memberships",
-          uid: user?.uid || "anonymous",
-        });
-      }
-    );
-
-    const un2 = qOwnerCreated.onSnapshot(
-      (snap) => {
-        ownedCreated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (err) => {
-        console.log("[MatchLive] groups(createdBy) error", err?.message || err);
-
-        recordNonFatal(err, {
-          screen: "MatchLiveScreen",
-          action: "listen_groups_createdBy",
-          uid: user?.uid || "anonymous",
-        });
-      }
-    );
-
-    const un3 = qOwnerOwnerId.onSnapshot(
-      (snap) => {
-        ownedOwnerId = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        recompute();
-      },
-      (err) => {
-        console.log("[MatchLive] groups(ownerId) error", err?.message || err);
-
-        recordNonFatal(err, {
-          screen: "MatchLiveScreen",
-          action: "listen_groups_ownerId",
-          uid: user?.uid || "anonymous",
-        });
-      }
-    );
-
-    return () => {
-      try {
-        un1();
-      } catch {}
-      try {
-        un2();
-      } catch {}
-      try {
-        un3();
-      } catch {}
-    };
-  }, [user?.uid]);
-
-  // Compléter les noms de groupes manquants
-  useEffect(() => {
-    if (!allowedGroupIds.length) return;
-
-    const missingIds = allowedGroupIds.filter((gid) => !groupNameById[gid]);
-    if (!missingIds.length) return;
-
-    const unsubs = [];
-
-    missingIds.forEach((gid) => {
-      const un = firestore()
-        .collection("groups")
-        .doc(String(gid))
-        .onSnapshot((snap) => {
-          if (!snap.exists) return;
-          const data = snap.data() || {};
-          setGroupNameById((prev) => ({
-            ...prev,
-            [gid]: data?.name || data?.title || gid,
-          }));
-        });
-
-      unsubs.push(un);
-    });
-
-    return () => {
-      unsubs.forEach((u) => {
-        try {
-          u();
-        } catch {}
-      });
-    };
-  }, [allowedGroupIds.join("|"), Object.keys(groupNameById).join("|")]);
-
-  // FGC visibles du jour
-  useEffect(() => {
-    setFirstGoalByGameId({});
-
-    const ymd = String(todayKey || "");
-    if (!ymd || !allowedGroupIds.length) return;
-
-    const unsubs = [];
-    const mapByDocId = new Map();
-    const docIdsByGroup = new Map();
-
-    const rebuildByGameId = () => {
-      const byGameId = {};
-      const all = Array.from(mapByDocId.values());
-
-      all.forEach((ch) => {
-        const gameId = String(ch.gameId || "");
-        if (!gameId) return;
-
-        if (!byGameId[gameId]) byGameId[gameId] = [];
-        byGameId[gameId].push(ch);
+      setCrashContext({
+        screen: "MatchLiveScreen",
+        challengeId: String(item?.id || ""),
+        challengeStatus: String(item?.status || item?.raw?.status || ""),
+        groupId: String(item?.groupId || item?.raw?.groupId || ""),
+        gameId: String(item?.raw?.gameId || ""),
+        uid: user?.uid || "anonymous",
       });
 
-      Object.keys(byGameId).forEach((gameId) => {
-        byGameId[gameId].sort((a, b) => {
-          const ra = statusRank(a.status);
-          const rb = statusRank(b.status);
-          if (ra !== rb) return ra - rb;
-
-          const ga = groupNameById[String(a.groupId || "")] || String(a.groupId || "");
-          const gb = groupNameById[String(b.groupId || "")] || String(b.groupId || "");
-          return ga.localeCompare(gb);
-        });
+      Analytics.matchLiveFgcOpen({
+        challengeId: String(item?.id || ""),
+        challengeStatus: String(item?.status || item?.raw?.status || "").toLowerCase(),
+        groupId: String(item?.groupId || item?.raw?.groupId || ""),
+        gameId: String(item?.raw?.gameId || ""),
       });
 
-      setFirstGoalByGameId(byGameId);
-    };
+      setFgcModalItem(item);
+    },
+    [user?.uid]
+  );
 
-    allowedGroupIds.forEach((groupId) => {
-      const gid = String(groupId || "").trim();
-      if (!gid) return;
+  const handlePressTp = useCallback((item) => {
+    setTpModalItem(item);
+  }, []);
 
-      const q = firestore()
-        .collection("first_goal_challenges")
-        .where("league", "==", "NHL")
-        .where("type", "==", "first_goal")
-        .where("gameYmd", "==", ymd)
-        .where("groupId", "==", gid);
+  const handlePressTs = useCallback(() => {
+    setTsModalOpen(true);
+  }, []);
 
-      const unsub = q.onSnapshot(
-        (snap) => {
-          const prevDocIds = docIdsByGroup.get(gid) || new Set();
-          const nextDocIds = new Set(snap.docs.map((d) => d.id));
-
-          prevDocIds.forEach((docId) => {
-            if (!nextDocIds.has(docId)) {
-              mapByDocId.delete(docId);
-            }
-          });
-
-          snap.docs.forEach((d) => {
-            mapByDocId.set(d.id, { id: d.id, ...d.data() });
-          });
-
-          docIdsByGroup.set(gid, nextDocIds);
-          rebuildByGameId();
-        },
-        (err) => {
-          console.log("[MatchLive] first_goal_challenges group error", gid, err?.message || err);
-
-          recordNonFatal(err, {
-            screen: "MatchLiveScreen",
-            action: "listen_first_goal_challenges",
-            groupId: gid,
-            todayKey: ymd || "",
-            uid: user?.uid || "anonymous",
-          });
-        }
-      );
-
-      unsubs.push(unsub);
-    });
-
-    return () => {
-      unsubs.forEach((u) => {
-        try {
-          u();
-        } catch {}
-      });
-    };
-  }, [todayKey, allowedGroupIds.join("|"), Object.keys(groupNameById).join("|"), user?.uid]);
-
-
-    const hasLoggedMatchLiveViewRef = React.useRef(false);
+  const hasLoggedMatchLiveViewRef = React.useRef(false);
 
   useEffect(() => {
     if (loading) return;
@@ -1225,39 +1032,6 @@ export default function MatchLiveScreen() {
     setModalVisible(true);
   }, [user?.uid]);
 
-  const handlePressFirstGoal = useCallback(
-    (ch, game) => {
-      crashLog(`Open FGC challenge: ${String(ch?.id || "")}`);
-
-      setCrashContext({
-        screen: "MatchLiveScreen",
-        challengeId: String(ch?.id || ""),
-        challengeStatus: String(ch?.status || ""),
-        groupId: String(ch?.groupId || ""),
-        gameId: String(ch?.gameId || game?.id || ""),
-        uid: user?.uid || "anonymous",
-      });
-
-      Analytics.matchLiveFgcOpen({
-        challengeId: String(ch?.id || ""),
-        challengeStatus: String(ch?.status || "").toLowerCase(),
-        groupId: String(ch?.groupId || ""),
-        gameId: String(ch?.gameId || game?.id || ""),
-      });
-
-      const st = String(ch?.status || "").toLowerCase();
-
-      if (st === "open") {
-        router.push(`/(first-goal)/pick/${String(ch.id)}`);
-        return;
-      }
-
-      setFgSelectedChallenge({ ...ch, gameId: ch.gameId || game?.id });
-      setFgModalOpen(true);
-    },
-    [router, user?.uid]
-  );
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -1287,6 +1061,31 @@ export default function MatchLiveScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <FgcChallengeModal
+        visible={!!fgcModalItem}
+        item={fgcModalItem}
+        colors={colors}
+        hidePickCta
+        onClose={() => setFgcModalItem(null)}
+      />
+
+      <TpMyPicksModal
+        visible={!!tpModalItem}
+        item={tpModalItem}
+        myEntry={tpEntryByBundleId[String(tpModalItem?.id || "")] || tpEntry}
+        colors={colors}
+        scheduleByGameId={{}}
+        onClose={() => setTpModalItem(null)}
+      />
+
+      <TsMyResultsModal
+        visible={tsModalOpen}
+        item={tsItem}
+        myEntry={tsEntry}
+        colors={colors}
+        onClose={() => setTsModalOpen(false)}
+      />
+
       {openedFromFgc ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
           <TouchableOpacity
@@ -1354,16 +1153,26 @@ export default function MatchLiveScreen() {
               </Text>
             </View>
           )}
-          renderItem={({ item }) => (
-            <GameRow
-              game={item}
-              onPress={handlePressGame}
-              colors={colors}
-              challenges={firstGoalByGameId[String(item.id)] || []}
-              onPressChallenge={(ch) => handlePressFirstGoal(ch, item)}
-              groupNameById={groupNameById}
-            />
-          )}
+          renderItem={({ item }) => {
+            const gameId = liveBoardGameId(item);
+            return (
+              <GameRow
+                game={item}
+                onPress={handlePressGame}
+                colors={colors}
+                fgcItem={lookupByGameId(fgcByGameId, gameId)}
+                fgcMyPick={lookupByGameId(fgcPickByGameId, gameId)}
+                tpSlot={lookupByGameId(tpByGameId, gameId)}
+                tpMyPick={lookupByGameId(tpPickByGameId, gameId)}
+                tpPickResult={lookupByGameId(tpPickResultByGameId, gameId)}
+                tsPlayers={lookupByGameId(tsByGameId, gameId) || []}
+                mutualizedGame={lookupByGameId(mutualizedGamesByGameId, gameId)}
+                onPressFgc={handlePressFgc}
+                onPressTp={handlePressTp}
+                onPressTs={handlePressTs}
+              />
+            );
+          }}
           ListEmptyComponent={() => (
             <View style={{ marginTop: 40, alignItems: "center" }}>
               <Text style={{ color: colors.subtext }}>
@@ -1378,13 +1187,6 @@ export default function MatchLiveScreen() {
           )}
         />
       )}
-
-      <FirstGoalChallengeModal
-        visible={fgModalOpen}
-        onClose={() => setFgModalOpen(false)}
-        challenge={fgSelectedChallenge}
-        colors={colors}
-      />
 
       <GameDetailModal
         visible={modalVisible}

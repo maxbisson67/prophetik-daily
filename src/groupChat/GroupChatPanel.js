@@ -5,17 +5,9 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import i18n from "@src/i18n/i18n";
-
-const AVATAR_PLACEHOLDER = require("@src/assets/avatar-placeholder.png");
-
-function withCacheBust(url, tsMillis) {
-  if (!url) return null;
-  const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
-  return url.includes("?") ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
-}
+import ParticipantAvatar, { participantInfoToAvatarProps } from "@src/ui/ParticipantAvatar";
 
 export default function GroupChatPanel({
   colors,
@@ -105,10 +97,13 @@ export default function GroupChatPanel({
                 const uid = String(item.uid || "");
                 const name = namesMap?.[uid] || item.displayName || uid;
                 const info = participantInfoMap?.[uid] || {};
-                const uri = info.photoURL
-                  ? withCacheBust(info.photoURL, info.version)
-                  : item.photoURL || null;
-                const imgKey = `${uid}:${info.version || item._ver || 0}`;
+                const avatarProps = participantInfoToAvatarProps(
+                  {
+                    ...info,
+                    photoURL: info.photoURL || item.photoURL || null,
+                  },
+                  24
+                );
 
                 return (
                   <View key={item.id} style={{ marginBottom: 10 }}>
@@ -119,17 +114,9 @@ export default function GroupChatPanel({
                         marginBottom: 2,
                       }}
                     >
-                      <Image
-                        key={imgKey}
-                        source={uri ? { uri } : AVATAR_PLACEHOLDER}
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 12,
-                          backgroundColor: colors.border,
-                          marginRight: 6,
-                        }}
-                      />
+                      <View style={{ marginRight: 6 }}>
+                        <ParticipantAvatar {...avatarProps} name={name} colors={colors} />
+                      </View>
                       <Text style={{ fontWeight: "700", color: colors.text }}>{name}</Text>
                     </View>
                     <Text style={{ color: colors.text }}>{String(item.text ?? "")}</Text>

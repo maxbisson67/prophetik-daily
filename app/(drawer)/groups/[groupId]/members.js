@@ -1,5 +1,6 @@
 // app/groups/[groupId]/members.js
 import { View, ActivityIndicator, Text } from 'react-native';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
@@ -56,7 +57,7 @@ export default function GroupMembersScreen() {
     const un = onSnapshot(
       qM,
       (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() })).map(normaliseMembership);
+        const rows = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() })).map(normaliseMembership);
         const active = rows.filter((m) => m.status === 'active');
         const onlyMembers = active.filter((m) => m.role === 'member');
 
@@ -125,7 +126,7 @@ export default function GroupMembersScreen() {
       const un = onSnapshot(
         pref,
         (snap) => {
-          pending[uid] = snap.exists() ? { uid, ...snap.data() } : { uid };
+          pending[uid] = snapshotExists(snap) ? { uid, ...snapshotData(snap) } : { uid };
           scheduled = true;
           Promise.resolve().then(flush);
         },

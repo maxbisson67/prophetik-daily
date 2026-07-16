@@ -112,6 +112,7 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
   showNovaButton,
   colors,
   selectedPlayerId,
+  pendingPlayerId = null,
   league,
   seasonPair,
   lineupsAvailable = false,
@@ -125,6 +126,11 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
     selectedPlayerId &&
     (String(selectedPlayerId) === String(item?.id) ||
       String(selectedPlayerId) === String(item?.playerId))
+  );
+  const isPending = !!(
+    pendingPlayerId &&
+    (String(pendingPlayerId) === String(item?.id) ||
+      String(pendingPlayerId) === String(item?.playerId))
   );
 
   const statChips = getFgcPlayerStatChips(item, league, seasonPair);
@@ -141,9 +147,9 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
       style={{
         borderRadius: 14,
         borderWidth: 2,
-        borderColor: isPicked ? colors.primary : colors.border,
+        borderColor: isPending ? colors.warning || "#FB8C00" : isPicked ? colors.primary : colors.border,
         backgroundColor: isPicked ? colors.card2 : colors.card,
-        opacity: disabled ? 0.55 : 1,
+        opacity: disabled && !isPending ? 0.55 : 1,
         overflow: "hidden",
       }}
     >
@@ -200,10 +206,18 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
                 />
               ) : null}
 
-              {isPicked ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
+              {isPending ? (
+                <Ionicons name="hourglass-outline" size={18} color={colors.warning || "#FB8C00"} />
+              ) : isPicked ? (
+                <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+              ) : null}
             </View>
 
-            {roleLabel ? (
+            {isPending ? (
+              <Text style={{ color: colors.warning || "#FB8C00", fontSize: 12, fontWeight: "800" }}>
+                {i18n.t("firstGoal.pick.saving", { defaultValue: "Enregistrement en cours…" })}
+              </Text>
+            ) : roleLabel ? (
               <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "800" }}>{roleLabel}</Text>
             ) : isPicked ? (
               <Text
@@ -235,7 +249,7 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
             ) : null}
           </View>
 
-          {locked || isPicked ? null : (
+          {locked || isPicked || isPending ? null : (
             <Ionicons name="chevron-forward" size={18} color={colors.subtext} style={{ marginTop: 4 }} />
           )}
         </View>

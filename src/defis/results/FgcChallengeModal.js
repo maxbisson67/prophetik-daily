@@ -5,7 +5,7 @@ import i18n from "@src/i18n/i18n";
 import FirstGoalLiveCard from "@src/firstGoal/FirstGoalLiveCard";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 
-export default function FgcChallengeModal({ visible, item, colors, onClose }) {
+export default function FgcChallengeModal({ visible, item, colors, onClose, hidePickCta = false }) {
   const challenge = item?.raw || {};
   const challengeId = String(item?.id || challenge?.id || "");
   const gameId = String(challenge?.gameId || "");
@@ -73,6 +73,7 @@ export default function FgcChallengeModal({ visible, item, colors, onClose }) {
             gameId={gameId}
             challengeId={challengeId}
             colors={colors}
+            hidePickCta={hidePickCta}
           />
         </View>
       </View>

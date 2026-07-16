@@ -1,5 +1,6 @@
 // app/(tabs)/GroupsScreen.js
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View, Text, FlatList, TouchableOpacity, ActivityIndicator,
   Alert, Image, Platform,
@@ -10,6 +11,9 @@ import { useAuth } from '@src/auth/SafeAuthProvider';
 import { useTheme } from '@src/theme/ThemeProvider';
 import i18n from '@src/i18n/i18n'; // 👈 i18n
 import GroupAvatar from '@src/groups/components/GroupAvatar';
+import GroupAutopilotModeBadge from '@src/groups/components/GroupAutopilotModeBadge';
+import { useMyGroups } from '@src/groups/MyGroupsProvider';
+import { isGroupOwner } from '@src/groups/groupOwnership';
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)
@@ -60,27 +64,6 @@ function subParticipant(uid, onNext, onError) {
   return w.rn().collection('participants').doc(uid).onSnapshot(onNext, onError);
 }
 
-function subMembershipsBy(field, uid, onNext, onError) {
-  const w = fw();
-  if (w.mode === 'web') {
-    const q = w.query(w.collection(w.db, 'group_memberships'), w.where(field, '==', String(uid)));
-    return w.onSnapshot(q, onNext, onError);
-  }
-  return w.rn()
-    .collection('group_memberships')
-    .where(field, '==', String(uid))
-    .onSnapshot(onNext, onError);
-}
-
-function subGroupDoc(gid, onNext, onError) {
-  const w = fw();
-  if (w.mode === 'web') {
-    const ref = w.doc(w.db, 'groups', String(gid));
-    return w.onSnapshot(ref, onNext, onError);
-  }
-  return w.rn().collection('groups').doc(String(gid)).onSnapshot(onNext, onError);
-}
-
 async function readParticipant(uid) {
   const w = fw();
   if (w.mode === 'web') {
@@ -111,10 +94,6 @@ async function setParticipant(uid, data, merge = true) {
 /* ----------------------------------------------------
    Utils
 ---------------------------------------------------- */
-function uniq(arr) {
-  return Array.from(new Set(arr.filter(Boolean)));
-}
-
 const RED = "#b91c1c";
 
 function cardShadow() {
@@ -151,6 +130,7 @@ export default function GroupsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors } = useTheme();
+  const { userGroups, loading: loadingGroups } = useMyGroups();
 
   // Création → écran dédié (évite Modal iOS + picker d'équipe)
   function openCreateGroup() {
@@ -160,14 +140,6 @@ export default function GroupsScreen() {
   // Favori
   const [favoriteGroupId, setFavoriteGroupId] = useState(null);
   const [loadingFavorite, setLoadingFavorite] = useState(!!user?.uid);
-
-  // Memberships
-  const [rolesByGroupId, setRolesByGroupId] = useState({});
-  const [loadingMemberships, setLoadingMemberships] = useState(!!user?.uid);
-
-  // Détails des groupes
-  const [groupsMap, setGroupsMap] = useState({});
-  const groupsUnsubsRef = useRef([]);
 
   /* -------------------------
      Favori live (participants/{uid})
@@ -192,119 +164,16 @@ export default function GroupsScreen() {
   }, [user?.uid]);
 
   /* -------------------------
-     Écoute group_memberships (uid | userId | participantId)
+     Partition owner / member (même source que Aujourd'hui)
   ------------------------- */
-  useEffect(() => {
-    if (!user?.uid) {
-      setRolesByGroupId({});
-      setLoadingMemberships(false);
-      return;
-    }
-    setLoadingMemberships(true);
-
-    const fields = ['uid', 'userId', 'participantId'];
-    const buffers = [];
-    const unsubs = [];
-
-    const merge = (parts) => {
-      const merged = {};
-      parts.forEach((list) => {
-        (list || []).forEach((row) => {
-          const prev = merged[row.groupId];
-          const r = (row.role || 'member').toLowerCase();
-          merged[row.groupId] = prev === 'owner' ? 'owner' : (r === 'owner' ? 'owner' : (prev || r));
-        });
-      });
-      setRolesByGroupId(merged);
-      setLoadingMemberships(false);
-    };
-
-    fields.forEach((field, idx) => {
-      try {
-        const un = subMembershipsBy(
-          field,
-          user.uid,
-          (snap) => {
-            const docs = snap?.docs || [];
-            const rows = docs.map((d) => {
-              const x = d.data() || {};
-              const active = x.active === true || x.status === undefined || String(x.status || '').toLowerCase() === 'active';
-              return active ? { id: d.id, groupId: x.groupId, role: x.role || 'member' } : null;
-            }).filter(Boolean);
-            buffers[idx] = rows;
-            merge(buffers);
-          },
-          (e) => {
-            console.log('[GroupsScreen] memberships listener error:', e?.code, e?.message || e);
-            buffers[idx] = [];
-            merge(buffers);
-          }
-        );
-        unsubs.push(un);
-      } catch (e) {
-        console.log('[GroupsScreen] memberships query setup error:', e?.message || e);
-      }
-    });
-
-    return () => { unsubs.forEach((u) => { try { u && u(); } catch {} }); };
-  }, [user?.uid]);
-
-  /* -------------------------
-     Abonnements aux groups/{id}
-  ------------------------- */
-  useEffect(() => {
-    // stop anciens
-    groupsUnsubsRef.current.forEach((u) => { try { u(); } catch {} });
-    groupsUnsubsRef.current = [];
-    setGroupsMap({});
-
-    const ids = uniq(Object.keys(rolesByGroupId || {}));
-    if (ids.length === 0) return;
-
-    ids.forEach((gid) => {
-      try {
-        const un = subGroupDoc(
-          gid,
-          (snap) => {
-            const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
-            if (exists) {
-              const data = typeof snap.data === 'function' ? snap.data() : snap.data;
-              setGroupsMap((prev) => ({ ...prev, [String(gid)]: { id: String(gid), ...data } }));
-            } else {
-              setGroupsMap((prev) => {
-                const n = { ...prev };
-                delete n[String(gid)];
-                return n;
-              });
-            }
-          },
-          (e) => {
-            console.log('[GroupsScreen] group doc listener error:', gid, e?.code, e?.message || e);
-          }
-        );
-        groupsUnsubsRef.current.push(un);
-      } catch (e) {
-        console.log('[GroupsScreen] group doc subscribe error:', gid, e?.message || e);
-      }
-    });
-
-    return () => {
-      groupsUnsubsRef.current.forEach((u) => { try { u(); } catch {} });
-      groupsUnsubsRef.current = [];
-    };
-  }, [JSON.stringify(Object.keys(rolesByGroupId || {}))]);
-
-  /* -------------------------
-     Partition owner / member
-  ------------------------- */
-  const allGroups = useMemo(() => {
-    const ids = Object.keys(rolesByGroupId || {});
-    return ids.map((id) => {
-      const base = groupsMap[id] || { id, name: '(groupe)' };
-      const role = (rolesByGroupId[id] || 'member').toLowerCase();
-      return { ...base, id, role };
-    });
-  }, [rolesByGroupId, groupsMap]);
+  const allGroups = useMemo(
+    () =>
+      userGroups.map((g) => ({
+        ...g,
+        role: isGroupOwner(g, user?.uid) ? 'owner' : 'member',
+      })),
+    [userGroups, user?.uid]
+  );
 
   const myOwnerGroups = useMemo(() => allGroups.filter((g) => g.role === 'owner'), [allGroups]);
   const myMemberGroups = useMemo(() => allGroups.filter((g) => g.role !== 'owner'), [allGroups]);
@@ -326,8 +195,8 @@ export default function GroupsScreen() {
 
     try {
       const snap = await readParticipant(user.uid);
-      const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
-      const data = exists ? (typeof snap.data === 'function' ? snap.data() : snap.data()) : {};
+      const exists = snapshotExists(snap);
+      const data = exists ? snapshotData(snap, {}) : {};
 
       const current = data?.favoriteGroupId || null;
 
@@ -412,7 +281,7 @@ export default function GroupsScreen() {
     );
   }
 
-  const isLoading = loadingMemberships || loadingFavorite;
+  const isLoading = loadingGroups || loadingFavorite;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -590,6 +459,13 @@ export default function GroupsScreen() {
                     <Text style={{ marginTop: 4, color: colors.subtext, fontSize: 12, fontWeight: '800' }}>
                       {(item.sport || 'NHL').toUpperCase() === 'MLB' ? '⚾ MLB' : '🏒 NHL'}
                     </Text>
+
+                    {item.role === 'owner' ? (
+                      <GroupAutopilotModeBadge
+                        autopilotEnabled={item.autopilotEnabled}
+                        colors={colors}
+                      />
+                    ) : null}
                   </View>
                 </View>
 

@@ -58,37 +58,64 @@ export function getFgcResultPrefix(ch, t) {
   return t("firstGoal.result.prefix", { defaultValue: "Premier but:" });
 }
 
-/** Libellé quand le résultat n'est pas encore connu (pas de joueur gagnant). */
-export function getFgcResultOutcomeLabel(challenge, t, matchState) {
-  if (getFgcResultPlayerName(challenge)) return null;
-
-  const state = String(matchState || "").toLowerCase();
-  if (state === "not_started") {
-    return t("firstGoal.home.upcoming", { defaultValue: "À venir" });
-  }
-
-  return t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" });
-}
-
-export function getFgcLiveNoneText(ch, t) {
+/** Premier point produit : match en cours, aucun RBI encore. */
+export function getFgcNoPointYetLabel(ch, t) {
   if (isFirstRbiChallenge(ch)) {
-    return t("firstGoal.firstRbi.live.noneYet", {
-      defaultValue: "Aucun point produit pour le moment.",
+    return t("firstGoal.firstRbi.noPointYet", {
+      defaultValue: "Pas encore de point produit",
     });
   }
   return t("firstGoal.live.noGoalYet", { defaultValue: "Aucun but pour le moment." });
 }
 
+/** Aucun gagnant une fois le résultat officiellement confirmé. */
+export function getFgcConfirmedNoWinnerLabel(ch, t) {
+  if (isFirstRbiChallenge(ch)) {
+    return t("firstGoal.firstRbi.noWinner", { defaultValue: "Aucun gagnant" });
+  }
+  return t("firstGoal.live.noWinner", { defaultValue: "Aucun gagnant" });
+}
+
+/** Libellé quand le résultat n'est pas encore connu (pas de joueur gagnant). */
+export function getFgcResultOutcomeLabel(challenge, t, matchState) {
+  if (getFgcResultPlayerName(challenge)) return null;
+
+  const chStatus = String(challenge?.status || "").toLowerCase();
+  const decided = chStatus === "decided" || chStatus === "closed";
+  const state = String(matchState || "").toLowerCase();
+
+  if (state === "not_started" && !decided) {
+    return t("firstGoal.home.upcoming", { defaultValue: "À venir" });
+  }
+
+  if (isFirstRbiChallenge(challenge)) {
+    if (decided || state === "completed") {
+      return getFgcConfirmedNoWinnerLabel(challenge, t);
+    }
+    return getFgcNoPointYetLabel(challenge, t);
+  }
+
+  if (decided || state === "completed") {
+    return t("firstGoal.home.noWinner", { defaultValue: "Aucun gagnant" });
+  }
+
+  return t("firstGoal.live.noGoalYet", { defaultValue: "Aucun but pour le moment." });
+}
+
+export function getFgcLiveNoneText(ch, t) {
+  return getFgcNoPointYetLabel(ch, t);
+}
+
 export function getFgcLivePendingText(ch, t, { name, team }) {
   if (isFirstRbiChallenge(ch)) {
     return t("firstGoal.firstRbi.live.pending", {
-      defaultValue: "Premier point produit : {{name}} {{team}} · en attente de confirmation",
+      defaultValue: "Premier point produit : {{name}} {{team}} · en attente de confirmation finale",
       name,
       team,
     });
   }
   return t("firstGoal.live.goalPending", {
-    defaultValue: "Premier but: {{name}} {{team}} · en attente de confirmation",
+    defaultValue: "Premier but: {{name}} {{team}} · en attente de confirmation finale",
     name,
     team,
   });

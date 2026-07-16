@@ -222,7 +222,7 @@ export default function CreateFirstGoalModal({
     const unsub = q.onSnapshot(
       (snap) => {
         const map = {};
-        snap.docs.forEach((d) => {
+        (snap?.docs ?? []).forEach((d) => {
           const data = d.data() || {};
           const gid = String(data.groupId || "");
           if (!gid) return;
@@ -345,7 +345,7 @@ useEffect(() => {
       const nowMs = Date.now();
       const today = ymdLocalToday();
 
-      const all = snap.docs.map((d) => {
+      const all = (snap?.docs ?? []).map((d) => {
         const data = d.data() || {};
 
         if (league === "MLB") {
@@ -457,7 +457,7 @@ useEffect(() => {
   size: snap.size,
 });
 
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const all = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
 
         const homePlayers = all
           .filter((p) => safeAbbr(p.teamAbbr) === home)

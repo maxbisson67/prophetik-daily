@@ -11,6 +11,13 @@ export function isMlbGamePostponed(status = {}) {
   );
 }
 
+export function isMlbGameDelayed(statusOrGame = {}) {
+  const status = statusOrGame?.status || statusOrGame || {};
+  if (isMlbGamePostponed(status)) return false;
+  const detailed = String(status?.detailedState || "").toLowerCase();
+  return detailed.includes("delay");
+}
+
 export function isMlbGamePostponedFromLiveFeed(liveFeed) {
   return isMlbGamePostponed(liveFeed?.gameData?.status || {});
 }

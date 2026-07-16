@@ -19,6 +19,7 @@
     "cancel": "Cancel",
     "or": "or",
     "edit":"Edit",
+    "select": "Choose",
     "continue": "Continue",
     "loading": "Loading…",
     "selected":"Selected",
@@ -43,15 +44,17 @@
     "login": "Log in",
     "choice": {
       "title": "Welcome",
-      "headline": "Choose your sign-in method",
+      "headline": "Sign in to Prophetik",
       "body": "Sign in to join challenges, view live results, and track your progress.",
+      "bodySmsOnly": "Sign in with your mobile number to join challenges, view live results, and track your progress.",
       "continueSms": "Continue with SMS",
       "continueEmail": "Continue with Email",
       "createSms": "Create an account (SMS)",
       "createEmail": "Create an account (Email)",
       "footer": "By continuing, you agree to our terms of use.",
+      "footerLegal": "By continuing, you agree to our Terms of Use and Privacy Policy.",
       "continueEmailLink":"Continue with email link",
-      "securityNote":"🔒 For security reasons, emails and SMS may come from capitaine.firebaseapp.com. This is the official authentication service used by Prophetik."
+      "securityNote":"🔒 For security reasons, SMS may come from capitaine.firebaseapp.com. This is the official authentication service used by Prophetik."
     },
 
     "signup": {
@@ -131,7 +134,8 @@
       "codeLabel": "Code received by SMS",
       "codePlaceholder": "123456",
       "confirmCta": "Confirm",
-      "changeNumberCta": "Change number / Resend code",
+      "resendLink": "Resend code",
+      "changeNumberLink": "Use a different number",
 
       "invalidPhoneTitle": "Invalid phone number",
       "invalidPhoneBody": "Enter a valid number (e.g., 5145551234).",
@@ -144,6 +148,12 @@
 
       "smsErrorTitle": "SMS error",
       "smsErrorBody": "Couldn't send the code.",
+      "tooManyRequestsTitle": "Too many attempts",
+      "tooManyRequestsBody": "Wait a few minutes before requesting another code.",
+      "appCheckTitle": "Verification blocked",
+      "appCheckBody": "The app could not verify this device. Update the app or try again later.",
+      "networkErrorTitle": "Network error",
+      "networkErrorBody": "Check your connection and try again.",
 
       "userNotFound": "User not found.",
 
@@ -247,7 +257,7 @@
     "tsInfoFunctioning2": "The participant(s) with the most combined points share the pot.",
     "tsInfoFunctioning3": "The pot grows by 3 points for each entry.",
     "tsInfoScoringTitle": "How to score points",
-    "tsInfoScoringMlb": "Baseball: 1 point per hit, 1 point per RBI, and a 1-point bonus for a home run.",
+    "tsInfoScoringMlb": "Baseball: 1 point per hit, 1 bonus point per extra-base hit (double, triple, or home run), 1 point per RBI, and 1 point per run scored.",
     "tsInfoScoringNhl": "Hockey: 1 point per goal and 1 point per assist.",
     "tsPickOnePlayerTitle": "Pick 1 player",
     "tsPickPlayersTitle": "Pick {{count}} players",
@@ -268,7 +278,7 @@
     "launchAscension":"Start an Ascension",
     "participate":"Participate",
     "resultsTabHintPrefix": "View results in the ",
-    "resultsTabHintLink": "My results",
+    "resultsTabHintLink": "Live",
     "resultsTabHintSuffix": " tab.",
     "selectGroupLabel": "Select a group to view its challenges",
     "dailyDefisTitle": "Take on today's challenges",
@@ -358,7 +368,7 @@
       "upcoming": "Upcoming",
       "myPrediction": "My prediction",
       "infoTitle": "How this challenge works",
-      "infoBody":"• Choose the player who will score the first goal or first run batted in of the game.\n• 5 points are awarded to the participant who correctly predicts the scorer."
+      "infoBody":"• Choose the player who will score the first goal or first run batted in of the game.\n• 10 points are awarded to the participant who correctly predicts the scorer."
     },
     "create":{
       "firstGoalTitle":"Create a First goal challenge",
@@ -410,6 +420,7 @@
         },
         "startsAt": "Start",
         "mySelection": "My pick",
+        "saving": "Saving your pick…",
         "successBody": "Your pick has been saved. Good luck 🍀",
         "updatedBody": "Your pick has been updated.",
         "successTitle": "Pick saved"
@@ -434,15 +445,18 @@
         "modifyPick": "Change my pick"
      },
     "firstRbi": {
-      "title": "First run batted in",
+      "title": "1st RBI",
       "subtitle": "Who will drive in the first run in this game?",
       "resultPrefix": "First run batted in:",
+      "noPointYet": "No run batted in yet",
+      "noWinner": "No winner",
       "live": {
-        "noneYet": "No run batted in yet.",
-        "pending": "First run batted in: {{name}} {{team}} · pending confirmation",
+        "noneYet": "No run batted in yet",
+        "pending": "First run batted in: {{name}} {{team}} · awaiting final confirmation",
         "confirmed": "First run batted in confirmed: {{name}} {{team}}"
       }
     },
+    "awaitingFinalConfirmation": "Awaiting final confirmation",
     "result": {
       "prefix": "First goal:",
       "none": "No winner"
@@ -583,6 +597,8 @@
         "sectionTitle": "Configuration",
         "autopilotLabel": "Automatic challenge creation",
         "autopilotHint": "Challenges are created automatically for the group.",
+        "autopilotHintEnabled": "Daily challenges are created automatically each morning.",
+        "autopilotHintDisabled": "Challenges must be created manually by the owner.",
         "favoriteTeamLabel": "Favorite team",
         "noFavoriteTeam": "No team selected",
         "clearFavoriteTeam": "Remove team",
@@ -618,6 +634,11 @@
         "invitationCode": "Invite code",
         "roleOwner": "Owner",
         "roleMember": "Member",
+
+        "autopilotMode": {
+          "automatic": "Automatic challenges",
+          "manual": "Manual challenges"
+        },
 
         "emptyTitle": "Create your first group or join your friends",
         "emptyText": "Organize your challenges, invite your friends, and start earning points.",
@@ -662,7 +683,7 @@
             "alertAccessDeniedMessage": "You are not allowed to join this group.",
             "alertGenericErrorTitle": "Error",
             "alertLimitTitle": "Limit reached",
-            "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} groups as a member. You currently have {{current}}. Upgrade to PRO/VIP to increase the limit.",
+            "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} group(s) total (owner or member). You currently have {{current}}. Upgrade to PRO/VIP to increase the limit.",
             "scanBtn": "Scan a QR",
             "scanTitle": "Scan a QR",
             "scanHint": "Place the QR inside the frame",
@@ -790,9 +811,10 @@
             "notFoundTitle": "Challenge not found"
         },
         "loading": {
-            "title": "Loading…",
-            "generic": "Loading…",
-            "overlayHint": "This may take a few seconds…",
+          "title": "Loading…",
+          "generic": "Loading…",
+          "inProgress": "Loading in progress",
+          "overlayHint": "This may take a few seconds…",
             "statsUpdatingToday": "Updating today’s stats…",
             "statsUpdatingSeason": "Updating stats for this season…",
             "statsGeneric": "Loading stats…"
@@ -810,16 +832,22 @@
             "searchPlaceholder": "Search a player…",
             "emptyChoice": "Choose a player…",
             "choiceHint": "Pick {{index}}: {{hint}}",
-            "hintTop10": "Select a player from the following 10 options. Points shown for each player are the sum of hits (H), runs batted in (RBI), and home runs (HR).",
-            "hintOpen": "Select a player from the following options. Points shown for each player are the sum of hits (H), runs batted in (RBI), and home runs (HR).",
+            "hintTop10": "Select a player from the following 10 options.",
+            "hintOpen": "Select a player from the following options.",
+            "sortSlg": "SLG",
             "sortPoints": "Points",
             "sortHits": "Hits",
             "sortRbi": "RBI",
+            "sortRuns": "Runs",
             "sortHr": "HR",
+            "statSlg": "SLG",
             "statPoints": "PTS",
             "statHits": "H",
             "statRbi": "RBI",
-            "statHr": "HR"
+            "statHr": "HR",
+            "statExtraBase": "XB",
+            "statRuns": "R",
+            "mlbStatLegend": "PTS = hits + runs scored + RBI + 1 pt per double, triple, or home run (season). Tabs show this total or H, RBI, R individually."
         },
         "seasonToggle": {
             "current": "Season {{id}}",
@@ -854,7 +882,8 @@
             "title": "Select your players",
             "choiceLabel": "Pick {{index}}",
             "summary": "{{current}}/{{max}} pick(s)",
-            "requirementsPrefix": "You must pick:"
+            "requirementsPrefix": "You must pick:",
+            "emptyPick": "No player selected."
         },
         "paywall": {
           "ctaTitle": "Unlock Matchups + PPG + Rank",
@@ -900,7 +929,7 @@
             "pot": "Prize pool of {{count}} points",
             "startsAt": "Starts at",
             "scoring": "Scoring: Goal = +1 • Assist = +1",
-            "scoringMlb": "Scoring: Run batted in (RBI) = +1, Hit (H) = +1, Home run (HR) = bonus +1"
+            "scoringMlb": "Scoring: Hit (H) = +1, Extra-base (2B/3B/HR) = +1 bonus, RBI = +1, Run (R) = +1"
             },
             "status": {
             "open": "Open",
@@ -937,12 +966,51 @@
     },
   "live": {
     "title": "Live Games",
+    "selectGroupLabel": "Select a group to view live results",
+    "legend": {
+      "title": "Track my predictions",
+      "intro": "Follow how your picks perform in highlighted games. Good luck!",
+      "fgcMlb": "Predict the first run batted in of the game",
+      "fgcNhl": "Predict the first goal of the game",
+      "tp": "Predict the outcome of the game",
+      "ts": "Today's trio — rack up as many points as you can."
+    },
+    "viewMode": {
+      "games": "Games",
+      "points": "Points"
+    },
+    "pointsOverview": {
+      "title": "Today's points",
+      "subtitle": "Live recap by participant",
+      "loading": "Loading points…",
+      "noChallenges": "No challenges today for this group.",
+      "noParticipants": "No entries yet.",
+      "hint": "Provisional points based on confirmed or in-progress results. Trio scores can change during games."
+    },
+    "badge": {
+      "rbi": "SOLO",
+      "goal": "SOLO",
+      "score": "DUO",
+      "trio": "TRIO"
+    },
     "loading": "Loading games…",
 
     "headerWithDate": "NHL games on {{date}}",
     "headerNoDate": "NHL games",
 
     "tapHint": "Tap a game to see goals and scorers in real time.",
+
+    "challenge": {
+      "partial": "In progress",
+      "myPick": "My pick",
+      "fgcTitleMlb": "First run batted in",
+      "fgcTitleNhl": "First goal",
+      "tpTitle": "Predict the game",
+      "tsTitle": "Today's trio",
+      "myPredictionLine": "My prediction — {{line}}",
+      "tsMyPickInGame": "My trio player",
+      "tsMyPicksInGame": "{{count}} of my trio players"
+    },
 
     "emptyWithDate": "No games found for {{date}}.",
     "emptyNoDate": "No games found.",
@@ -1000,6 +1068,7 @@
       "loadingPlays": "Loading plays…",
       "noScoringPlays": "No scoring plays yet.",
       "postponed": "Postponed",
+      "delayed": "Delayed",
       "inningTop": "Top {{inning}}",
       "inningBottom": "Bottom {{inning}}",
       "inningHeader": "{{label}}",
@@ -1045,6 +1114,25 @@
         "fgcWinHint": "When you pick the right player in the first run or goal challenge.",
         "leaderboardRankUp": "Leaderboard progress",
         "leaderboardRankUpHint": "When you move up in your group's season standings."
+    },
+    "legal": {
+        "title": "Legal",
+        "privacy": "Privacy Policy",
+        "terms": "Terms of Use"
+    },
+    "account": {
+        "title": "Account"
+    },
+    "deleteAccount": {
+        "cta": "Delete my account",
+        "hint": "Permanent deletion per App Store requirements. Active subscriptions must be cancelled separately in the Store.",
+        "confirmTitle": "Delete your account?",
+        "confirmBody": "This action is permanent. Your profile, preferences, and personal data will be deleted. Your challenge entries may be anonymized to preserve group results.",
+        "confirmCta": "Delete",
+        "finalTitle": "Final confirmation",
+        "finalBody": "Do you really want to permanently delete your Prophetik account?",
+        "finalCta": "Yes, delete",
+        "errorTitle": "Could not delete account"
     }
  },
 
@@ -1530,10 +1618,10 @@
   "tabs": {
     "today": "Today",
     "groups": "Groups",
-    "challenges": "My results",
+    "challenges": "History",
     "leaderboard": "Leaderboard",
     "badges": "Badges",
-    "matchLive": "Live game",
+    "matchLive": "Live",
     "help":"Help"
   },
 
@@ -1546,7 +1634,29 @@
     "active": "Active",
     "currentPlan": "Current plan",
 
-    "perMonth": "/month",
+    "ownedGroupsLimitMessage": "Your current plan allows you to own {{max}} group(s). You already own {{current}} group(s). Upgrade to create a new group.",
+    "autopilotLimitMessage": "Your plan allows up to {{max}} automated group(s). Turn off Autopilot on another group or upgrade your plan.",
+    "autopilotResolutionRequiredMessage": "Your plan allows {{max}} group(s) with automatic challenges. Choose which groups to keep in the management screen.",
+
+    "autopilotDowngrade": {
+      "title": "Automatic challenges",
+      "body": "Your new plan allows {{max}} group(s) with automatic challenges. Choose which group(s) will keep this mode.",
+      "selectedCount": "{{count}} / {{max}} selected",
+      "confirm": "Confirm my choice",
+      "selectRequiredTitle": "Selection required",
+      "selectRequiredBody": "Pick at least one group (maximum {{max}}) to keep automatic challenges."
+    },
+
+    "myPlan": {
+      "title": "My plan",
+      "currentPlan": "Current plan",
+      "ownedGroups": "Groups owned",
+      "autopilotGroups": "Automated groups",
+      "novaAdvice": "Nova Advice",
+      "joinUnlimitedHint": "You can join as many groups as you want. Only groups you own count toward your plan."
+    },
+
+    "perMonth": " / month",
 
     "chooseFree": "Choose Free",
     "upgradePro": "Upgrade to Pro",
@@ -1560,41 +1670,40 @@
     },
 
     "highlights": {
+      "novaCoach": "{{count}} Nova Coach tips / month",
+      "autopilotGroups": "{{count}} group(s) with automatic challenges",
       "free": {
-        "1": "1 group (owner or participant)",
-        "2": "Available formats: 1x1 to 3x3",
-        "3": "Limited weekly participation"
+        "groups": "1 group (participant or owner)",
+        "ownedGroups": "{{count}} group owned · unlimited joined groups"
       },
       "pro": {
-        "1": "Access to advanced leaderboard",
-        "2": "Available formats: 1x1 to 5x5",
-        "3": "More groups and higher weekly limits"
+        "groups": "5 groups (participant or owner)",
+        "ownedGroups": "{{count}} groups owned · unlimited joined groups"
       },
       "vip": {
-        "1": "Available formats: 1x1 to 6x7",
-        "2": "Advanced player stats with AI insights",
-        "3": "Optional Nova AI participant (can be disabled)"
+        "groups": "20 groups (participant or owner)",
+        "ownedGroups": "{{count}} groups owned · unlimited joined groups"
       }
     },
 
     "plans": {
       "free": {
         "title": "Free",
-        "subtitle": "Essential to get started",
+        "subtitle": "One trial group",
         "h1": "Basic access",
         "h2": "Standard participation",
         "h3": "Limited features"
       },
       "pro": {
         "title": "Pro",
-        "subtitle": "Track your performance",
+        "subtitle": "Play with friends and family",
         "h1": "Leaderboard access (for you)",
         "h2": "Full history",
         "h3": "Better stats visibility"
       },
       "vip": {
         "title": "Vip",
-        "subtitle": "Unlock Prophetik’s full potential",
+        "subtitle": "A true Prophetik ambassador!",
         "h1": "Leaderboard + advanced stats",
         "h2": "AI analysis (decision help)",
         "h3": "Advanced notifications"
@@ -1603,6 +1712,72 @@
 
     "compareTitle": "Comparison",
     "compareSubtitle": "✅ included • ⭐ premium advantage",
+
+    "banner": {
+      "betaTitle": "Test mode (billing disabled)",
+      "betaBody": "Plans can be changed without billing.",
+      "freeTitle": "Free plan",
+      "freeBody": "No active subscription.",
+      "vipActiveTitle": "VIP active",
+      "vipCancelledTitle": "VIP active (not renewing)",
+      "proActiveTitle": "PRO active",
+      "proCancelledTitle": "PRO active (not renewing)",
+      "cancelledAccessUntil": "Subscription cancelled. You keep access until {{date}}{{remaining}}, then return to the Free plan.",
+      "downgradeToProOn": "Switching to PRO on {{date}}{{remaining}}.",
+      "remainingIn": " (in {{time}})",
+      "renewsOn": "Next renewal: {{date}}",
+      "activeNoDate": "Active renewal.",
+      "unknownTitle": "Subscription status",
+      "unknownBody": "Unable to determine status at the moment."
+    },
+
+    "manageBtn": "Manage my subscription",
+    "manageTitle": "Manage your subscription",
+    "manageBody": "To cancel or change your subscription, open the Store subscription settings.",
+    "openStore": "Open the Store",
+    "purchaseSuccessTitle": "Subscription activated",
+    "purchaseSuccessBody": "Your plan has been updated.",
+
+    "restorePurchases": "Restore purchases",
+    "restoreTitle": "Purchases restored",
+    "restoreSuccessBody": "Your {{tier}} plan is active.",
+    "restoreEmptyBody": "No active subscription found for this account.",
+    "upgradeTitle": "Change plan?",
+    "upgradeBetaBody": "Test mode: the plan will be activated without billing.",
+
+    "legal": {
+      "title": "Legal information",
+      "autoRenew": "Pro and Vip subscriptions renew automatically each month until cancelled in your App Store or Google Play account settings."
+    },
+
+    "compare": {
+      "feature": "Feature",
+      "groups": "Groups (participant or owner)",
+      "ownedGroups": "Groups owned",
+      "joinedGroups": "Groups joined",
+      "autopilotGroups": "Groups with automatic challenges",
+      "unlimited": "Unlimited",
+      "novaAi": "Nova AI participant",
+      "novaCoachLimit": "Nova Coach tips / month",
+      "novaCoachLimitValue": "{{count}} / month",
+      "nova": {
+        "required": "Required",
+        "optional": "Optional"
+      },
+      "formats": "Available formats",
+      "playerStats": "Player stats",
+      "stats": {
+        "basic": "Basic",
+        "advanced": "Advanced",
+        "advancedAi": "Advanced + AI"
+      },
+      "leaderboard": "Leaderboard",
+      "lb": {
+        "basic": "Basic",
+        "advanced": "Advanced"
+      },
+      "price": "Price"
+    },
 
     "features": {
       "challenges": "Challenges (participation)",
@@ -1648,13 +1823,33 @@
       "player": "Player",
       "total": "Total",
       "points": "Points",
+      "pointsShort": "Pts",
       "successes": "Successes",
+      "successesShort": "Wins",
       "exacts": "Exact scores",
+      "exactsShort": "Exact",
       "victories": "Wins",
+      "victoriesShort": "Wins",
       "correctPicks": "Correct picks",
       "shareFgc": "% of personal total (FGC)",
       "shareTp": "% of personal total (TP)",
       "shareTs": "% of personal total (TS)"
+    },
+
+    "participantProfile": {
+      "title": "Participant profile",
+      "rankOf": "#{{rank}} of {{total}}",
+      "rankFirst": "1st in the group",
+      "rankSecond": "2nd in the group",
+      "rankThird": "3rd in the group",
+      "rankNth": "{{rank}}th in the group",
+      "rankCompact": "#{{rank}} / {{total}}",
+      "amongMembers": "of {{total}} members",
+      "noRank": "—",
+      "byChallenge": "Ranking by challenge",
+      "wins": "Wins",
+      "totalWins": "{{count}} total wins",
+      "noChallengeActivity": "No activity for this challenge yet."
     },
 
     "challenge": {
@@ -1823,8 +2018,8 @@
     "todayMixedSummary": "Today's challenges and results",
     "pastDaySummary": "Results for this day",
     "dailyDefisTitle": "Today's challenge results",
-    "resultsContextTitle": "Viewing results",
-    "resultsContextHint": "You're on My results. To join today's challenges, go to the Home tab.",
+    "resultsContextTitle": "History",
+    "resultsContextHint": "You're viewing challenge history. For today's results, go to Live or Home.",
     "todayCompactSummary": "{{joined}} / {{total}} challenges joined today",
     "goToAccueil": "Join today's challenges",
     "goToAccueilDefi": "Participate in Today",
@@ -1869,7 +2064,7 @@
     "tsLiveLeaderScore": "{{score}} points",
     "pointCount_one": "{{count}} point",
     "pointCount_other": "{{count}} points",
-    "tsWinnerSingle": "{{name}} won this challenge with {{scoreLabel}} and earns {{payoutLabel}}",
+    "tsWinnerSingle": "Congrats {{name}}, {{payoutLabel}} added to your tally!",
     "tsWinnerMultiple_one": "Fierce competition! Multiple winners share {{share}} point each",
     "tsWinnerMultiple_other": "Fierce competition! Multiple winners share {{share}} points each",
     "status": {
@@ -1954,7 +2149,7 @@
       "screenTitle": "Predict the outcome",
       "myTotalPoints": "Your total: {{points}} pt(s)",
       "bundleProgress": "{{done}}/{{total}} games completed",
-      "summaryHintMvp": "3 pts for the correct winner, +3 pts for the exact score.",
+      "summaryHintMvp": "5 pts for the correct winner, +5 pts for the exact score (10 max).",
       "statusIncomplete": "Incomplete",
       "statusPending": "Pending…",
       "statusSaving": "Saving…",
@@ -1993,8 +2188,8 @@
       "ruleWinner": "Winning team",
       "ruleScore": "Exact score",
       "ruleOutcome": "Regulation / OT / SO",
-      "scoringWinner": "Correct winner = 3 points",
-      "scoringExact": "Exact score bonus = +3 points (6 total)",
+      "scoringWinner": "Correct winner = 5 points",
+      "scoringExact": "Exact score bonus = +5 points (10 total)",
       "creating": "Creating…"
     }
   },
@@ -2116,6 +2311,11 @@
     "panelHint": "Ask a question about your predictions",
     "playerModalTitle": "Nova's take",
     "playerAdviceButton": "Nova's take",
+    "matchAdviceButton": "Get Nova's advice",
+    "matchModalTitle": "Nova's take",
+    "matchModalSubtitle": "Analysis for this game",
+    "sectionMatchAdvice": "Advice for this game",
+    "sectionMatchAdviceHint": "Personalized analysis · AI",
     "selectQuestion": "Pick a question",
     "playerModalSubtitle": "Personalized analysis for your pick",
     "customQuestion": "Custom question",
@@ -2123,6 +2323,7 @@
     "sectionPlayerAdviceHint": "Personalized analysis · AI",
     "singleAdviceButton": "Get Nova's advice",
     "singleAdviceHint": "Full analysis for this pick",
+    "adviceTitle": "My take",
     "adviceComplete": "End of analysis",
     "adviceScrollHint": "Scroll to read the full analysis",
     "learnDrawerTitle": "Learn the basics",
@@ -2135,6 +2336,7 @@
     "badgeLlm": "AI analysis",
     "lineupSlotShort": "#{{slot}}",
     "thinking": "Nova is analyzing…",
+    "draftingAnalysis": "Nova is writing the analysis…",
     "placeholder": "Ask Nova a question…",
     "ask": "Ask Nova",
     "title": "Nova",
@@ -2158,20 +2360,62 @@
       "learnBvp": "What is BvP (batter vs pitcher history)?",
       "learnLineupBasics": "Lineup order and first RBI: how does it work?",
       "fgcPlayerAdvice": "Analyze this batter for the game's first RBI: opposing starter (ERA and handedness), lineup spot, season RBI, opposing team runs allowed per game, and career BvP only if more than 9 plate appearances. Give a clear synthesis with key risks.",
+      "tsPlayerAdvice": "Analyze this batter for my Daily Trio: game offensive environment (ballpark and weather), season production (H, RBI, R, SLG), opposing starter (ERA and handedness), and career BvP only if more than 9 plate appearances. Remind me of TS scoring and give a clear synthesis with key risks.",
       "playerAdvice": "Give your full advice on this player for this challenge.",
       "tpMatch1": "Help me predict game 1",
+      "tpMatchAdvice": "Analyze this game for my team prediction: probable starters, recent team form, scoring trends, and key risks. Give a clear recommendation without picking a score for me.",
       "tpTeamRecord": "How do I read team record and recent form?",
       "tpScoring": "How does scoring work?",
       "tpPitcher": "How do I use the probable starter?",
       "tpEra": "What is ERA?"
     },
     "quota": "You've reached the Nova coaching limit for this month.",
+    "quotaDetailed": "You've used your {{limit}} Nova tips for the month ({{used}}/{{limit}}). Your quota resets on the next cycle, or you can upgrade your plan.",
+    "quotaSubscribeCta": "View subscription plans",
     "notConfigured": "Nova isn't configured on the server (OpenAI sk-… key required).",
     "openAiQuota": "OpenAI quota exceeded. Check billing at platform.openai.com.",
     "modelError": "Nova couldn't reach OpenAI. Check the API key and novaCoach deployment.",
     "empty": "Nova couldn't find an answer for this question.",
     "error": "Nova couldn't respond. Try again in a moment.",
-    "devError": "Nova ({{key}}) — retry or check Cloud Functions logs."
+    "devError": "Nova ({{key}}) — retry or check Cloud Functions logs.",
+    "viewText": "Text",
+    "viewIndicators": "Indicators",
+    "readFullAnalysis": "Read full analysis →",
+    "indicators": {
+      "verdict": "Verdict",
+      "matchContext": "Game context",
+      "globalEnv": "Overall environment",
+      "parkAndTemp": "Ballpark & temperature",
+      "park": "Ballpark",
+      "temp": "Temp.",
+      "roofClosedShort": "Roof closed",
+      "confidenceLabel": "Confidence",
+      "unavailable": "—",
+      "weatherPending": "Weather N/A",
+      "roofClosed": "Roof closed — weather neutralized",
+      "seasonProduction": "Season production",
+      "matchupTitle": "Pitcher matchup",
+      "opposingPitcher": "Opposing starter",
+      "bvpTitle": "BvP — optional",
+      "bvpCareerMatchup": "{{batter}} vs {{pitcher}} — career",
+      "bvpCareerGeneric": "Career matchup",
+      "fgcLineupTitle": "Lineup spot & 1st inning",
+      "fgcSeasonProduction": "Season production (RBI)",
+      "platoonTitle": "Platoon advantage",
+      "platoonLine": "{{bat}} vs {{pitch}} pitcher",
+      "opposingTeamTitle": "Opposing team",
+      "runsAllowedPerGame": "{{value}} runs/game allowed (season)",
+      "matchContext": "Game context",
+      "bvpReliable": "Reliable sample",
+      "bvpLimited": "Limited history",
+      "bvpCaution": "Fewer than 9 PA — use with caution.",
+      "risks": "Risks",
+      "confidence": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      }
+    }
   }
 }
   

@@ -23,6 +23,11 @@ import {
   compactNhlBoardEntry,
   upsertLiveBoard,
 } from "./shared/liveBoard.js";
+import {
+  isWithinLiveCronSchedule,
+  LIVE_CRON_SCHEDULE,
+  LIVE_CRON_YESTERDAY_UNTIL_HOUR,
+} from "./shared/liveCronGate.js";
 
 const NHL_HEADSHOT_SEASON = "20242025";
 
@@ -573,15 +578,20 @@ export const updateNhlLiveGamesNow = onCall({ region: "us-central1" }, async (re
 
 export const updateNhlLiveGamesCron = onSchedule(
   {
-    schedule: "*/1 * * * *",
+    schedule: LIVE_CRON_SCHEDULE,
     timeZone: "America/Toronto",
     region: "us-central1",
   },
   async () => {
+    if (!isWithinLiveCronSchedule()) {
+      logger.info("[updateNhlLiveGames] cron skipped — outside active window");
+      return;
+    }
+
     const todayYmd = todayAppYmd();
     const hour = torontoCurrentHour();
 
-    if (hour < 3) {
+    if (hour < LIVE_CRON_YESTERDAY_UNTIL_HOUR) {
       const yesterdayYmd = addDaysToYmd(todayYmd, -1);
       await runUpdateNhlLiveGames(yesterdayYmd, { source: "cron" });
     }

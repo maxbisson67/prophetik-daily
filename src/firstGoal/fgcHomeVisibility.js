@@ -19,7 +19,7 @@ export function fgcHomeYmdCandidates(now = new Date()) {
 
 function isFgcTerminalStatus(status) {
   const st = String(status || "").toLowerCase();
-  return ["decided", "closed", "completed", "cancelled_ghost"].includes(st);
+  return ["decided", "closed", "completed", "cancelled_ghost", "cancelled"].includes(st);
 }
 
 function isFgcStillActive(status) {

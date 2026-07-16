@@ -14,6 +14,7 @@ import {
   previewBundleSelection,
   selectGamesForTpBundle,
 } from "./tpBundleGameSelection.js";
+import { assertManualChallengeCreationAllowed } from "../groups/manualChallengeLimits.js";
 
 if (!getApps().length) initializeApp();
 
@@ -47,6 +48,8 @@ export const createTeamPredictionBundle = onCall(
 
     const group = groupSnap.data() || {};
     const groupSport = normalizeLeague(group.sport || group.league || league);
+
+    assertManualChallengeCreationAllowed(group);
 
     if (groupSport !== league) {
       throw new HttpsError(

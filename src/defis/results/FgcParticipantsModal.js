@@ -12,12 +12,12 @@ import { Ionicons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import {
   getFgcResultPlayerId,
-  getFgcResultPlayerName,
   getFgcResultPrefix,
   getFgcResultOutcomeLabel,
-  getFgcResultTeamAbbr,
   getFgcTitle,
 } from "@src/firstGoal/fgcChallengeUtils";
+import { resolveFgcEffectiveResult } from "@src/firstGoal/fgcMutualizedGameUtils";
+import useFgcMutualizedGame from "@src/firstGoal/useFgcMutualizedGame";
 
 function entryPickName(entry) {
   return (
@@ -43,9 +43,12 @@ export default function FgcParticipantsModal({
   matchTask = null,
   colors,
 }) {
+  const { data: mutualizedGame } = useFgcMutualizedGame(challenge, { enabled: visible });
+  const effectiveResult = resolveFgcEffectiveResult(challenge, mutualizedGame);
   const winnerPlayerId = getFgcResultPlayerId(challenge);
-  const winnerName = getFgcResultPlayerName(challenge);
-  const winnerTeam = getFgcResultTeamAbbr(challenge);
+  const winnerName = effectiveResult?.playerName || null;
+  const winnerTeam = effectiveResult?.teamAbbr || null;
+  const awaitingFinalConfirmation = !!effectiveResult?.awaitingFinalConfirmation;
   const uid = String(currentUid || "");
 
   return (
@@ -75,6 +78,12 @@ export default function FgcParticipantsModal({
                 {winnerName
                   ? `${getFgcResultPrefix(challenge, i18n.t.bind(i18n))} ${winnerName}${
                       winnerTeam ? ` (${winnerTeam})` : ""
+                    }${
+                      awaitingFinalConfirmation
+                        ? ` · ${i18n.t("firstGoal.awaitingFinalConfirmation", {
+                            defaultValue: "En attente de confirmation finale",
+                          })}`
+                        : ""
                     }`
                   : getFgcResultOutcomeLabel(
                       challenge,

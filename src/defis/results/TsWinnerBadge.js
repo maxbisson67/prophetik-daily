@@ -40,10 +40,8 @@ export default function TsWinnerBadge({ summary }) {
     summary.kind === "single"
       ? i18n.t("challenges.tsWinnerSingle", {
           name: summary.name,
-          scoreLabel: formatPointCount(summary.score),
           payoutLabel: formatPointCount(summary.payout),
-          defaultValue:
-            "{{name}} a gagné ce défi avec {{scoreLabel}}, il gagne {{payoutLabel}}",
+          defaultValue: "Bravo {{name}}, {{payoutLabel}} de plus au compteur !",
         })
       : i18n.t("challenges.tsWinnerMultiple", {
           count: summary.sharePerWinner,

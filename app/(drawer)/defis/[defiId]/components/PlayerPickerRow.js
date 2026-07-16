@@ -37,6 +37,8 @@ export default function PlayerPickerRow({
   teamLogo,
   sport = "NHL",
   formatStandingsLine = null,
+  showNovaButton = false,
+  onNovaPress = null,
 }) {
   const { colors } = useTheme();
 
@@ -86,14 +88,14 @@ export default function PlayerPickerRow({
   return (
     <View
       style={{
-        padding: 12,
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: 12,
         backgroundColor: colors.background,
-        gap: 10,
+        overflow: "hidden",
       }}
     >
+      <View style={{ padding: 12, gap: 10 }}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Text style={{ flex: 1, color: colors.subtext, fontWeight: "900" }}>{label}</Text>
 
@@ -116,7 +118,7 @@ export default function PlayerPickerRow({
         >
           <Ionicons name={picked ? "create-outline" : "add-circle-outline"} size={16} color={colors.text} />
           <Text style={{ color: colors.text, fontWeight: "900" }}>
-            {picked ? i18n.t("common.edit", { defaultValue: "Modifier" }) : i18n.t("common.select", { defaultValue: "Choisir" })}
+            {picked ? i18n.t("common.edit", { defaultValue: "Edit" }) : i18n.t("common.select", { defaultValue: "Choose" })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -183,9 +185,35 @@ export default function PlayerPickerRow({
         </View>
       ) : (
         <Text style={{ color: colors.subtext, fontWeight: "700" }}>
-          {i18n.t("defi.pickersCard.emptyPick", { defaultValue: "Aucun joueur sélectionné." })}
+          {i18n.t("defi.pickersCard.emptyPick", { defaultValue: "No player selected." })}
         </Text>
       )}
+      </View>
+
+      {showNovaButton && picked ? (
+        <TouchableOpacity
+          onPress={() => onNovaPress?.(value)}
+          disabled={locked}
+          activeOpacity={0.85}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            paddingVertical: 9,
+            paddingHorizontal: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            backgroundColor: colors.card,
+            opacity: locked ? 0.6 : 1,
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+          <Text style={{ color: colors.primary, fontWeight: "800", fontSize: 12 }}>
+            {i18n.t("novaCoach.playerAdviceButton", { defaultValue: "Avis de Nova" })}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }

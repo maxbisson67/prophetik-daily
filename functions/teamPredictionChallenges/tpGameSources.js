@@ -7,16 +7,7 @@ import {
 
 export { fetchMlbLiveFeed };
 
-export const TP_DEFAULT_SCORING = {
-  winnerBasePoints: 3,
-  exactScoreBonusPoints: 3,
-  riskScoringEnabled: false,
-  riskPoints: {
-    logical: 3,
-    mixed: 5,
-    risky: 10,
-  },
-};
+export { TP_DEFAULT_SCORING } from "../challengeScoringConstants.js";
 
 export function pickString(v) {
   return typeof v === "string" && v.trim() ? v.trim() : null;

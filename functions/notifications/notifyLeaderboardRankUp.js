@@ -1,28 +1,18 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { sendPushToUsers } from "../utils/pushUtils.js";
-import { resolveGroupDisplayName } from "../groups/groupDisplayUtils.js";
 import {
   computeMemberSeasonRank,
   fetchActiveMemberUids,
 } from "../leaderboard/leaderboardRankUtils.js";
 import { NOTIFICATION_PREF_KEYS } from "./notificationPrefs.js";
 import { buildLeaderboardRankUpPush } from "./leaderboardRankMessages.js";
+import {
+  fetchGroupName,
+  loadParticipantDisplayNames,
+  sendGroupPushByLang,
+} from "./notificationUtils.js";
 
 const db = getFirestore();
-
-function normalizeLang(lang) {
-  return String(lang || "fr").toLowerCase().startsWith("en") ? "en" : "fr";
-}
-
-async function getParticipantLang(uid) {
-  try {
-    const snap = await db.doc(`participants/${uid}`).get();
-    return normalizeLang(snap.data()?.appLang);
-  } catch {
-    return "fr";
-  }
-}
 
 function rankStateRef(groupId, seasonId, uid) {
   return db.doc(
@@ -30,8 +20,10 @@ function rankStateRef(groupId, seasonId, uid) {
   );
 }
 
+const TOP_RANK_THRESHOLD = 3;
+
 /**
- * Envoie une push si le rang saison s'améliore (nombre plus petit = mieux).
+ * Envoie une push au groupe si le rang saison s'améliore dans le top 3.
  * @param {number} previousRank — rang immédiatement avant le crédit de points.
  */
 export async function maybeNotifyLeaderboardRankUp({
@@ -69,7 +61,11 @@ export async function maybeNotifyLeaderboardRankUp({
     return { ok: true, skipped: true, reason: "no-after-rank", beforeRank };
   }
 
-  await rankStateRef(gid, sid, userId).set(
+  const stateRef = rankStateRef(gid, sid, userId);
+  const stateSnap = await stateRef.get();
+  const prevState = stateSnap.data() || {};
+
+  await stateRef.set(
     {
       groupId: gid,
       seasonId: sid,
@@ -89,37 +85,61 @@ export async function maybeNotifyLeaderboardRankUp({
     };
   }
 
-  const lang = await getParticipantLang(userId);
-  let groupName = null;
-  try {
-    const groupSnap = await db.doc(`groups/${gid}`).get();
-    groupName = resolveGroupDisplayName(groupSnap.data() || {});
-  } catch {
-    // optional
+  if (afterRank > TOP_RANK_THRESHOLD) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "outside-top-3",
+      beforeRank,
+      afterRank,
+    };
   }
 
-  const { title, body } = buildLeaderboardRankUpPush({
-    lang,
-    groupName,
-    previousRank: beforeRank,
-    newRank: afterRank,
-  });
+  if (Number(prevState.lastGroupBroadcastRank) === afterRank) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "already-broadcast-for-rank",
+      beforeRank,
+      afterRank,
+    };
+  }
 
-  const pushRes = await sendPushToUsers({
-    uids: [userId],
-    title,
-    body,
+  const nameByUid = await loadParticipantDisplayNames([userId]);
+  const memberName = nameByUid.get(userId) || userId;
+  const groupName = await fetchGroupName(gid);
+
+  const pushRes = await sendGroupPushByLang({
+    groupId: gid,
+    buildMessage: (lang) =>
+      buildLeaderboardRankUpPush({
+        lang,
+        groupName,
+        memberName,
+        newRank: afterRank,
+      }),
     data: {
       action: "OPEN_LEADERBOARD",
       groupId: gid,
       seasonId: sid,
       previousRank: String(beforeRank),
       newRank: String(afterRank),
+      uid: userId,
     },
     channelId: "challenges_v2",
     logTag: "leaderboardRankUp",
     notificationPrefKey: NOTIFICATION_PREF_KEYS.LEADERBOARD_RANK_UP,
   });
+
+  if (pushRes?.sent > 0) {
+    await stateRef.set(
+      {
+        lastGroupBroadcastRank: afterRank,
+        lastGroupBroadcastAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
 
   logger.info("[leaderboardRankUp] done", {
     groupId: gid,
@@ -127,10 +147,16 @@ export async function maybeNotifyLeaderboardRankUp({
     uid: userId,
     beforeRank,
     afterRank,
+    sent: pushRes?.sent || 0,
     recipients: pushRes?.recipients || 0,
   });
 
-  return { ok: true, sent: (pushRes?.recipients || 0) > 0, beforeRank, afterRank };
+  return {
+    ok: true,
+    sent: (pushRes?.sent || 0) > 0,
+    beforeRank,
+    afterRank,
+  };
 }
 
 export async function notifyLeaderboardRankUpAfterPointsCredit({

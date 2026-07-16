@@ -1,5 +1,6 @@
 // AccueilScreen.js — ASC7-only + “3 façons de jouer” centré + kicker italique + CTA détails ascension
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import i18n from "@src/i18n/i18n";
 import {
   View,
@@ -20,7 +21,8 @@ import TeamPredictionHomeSection from "@src/defis/TeamPredictionHomeSection";
 import CreateFirstGoalModal from "@src/firstGoal/CreateFirstGoalModal";
 import FirstGoalHomeSection from "@src/firstGoal/FirstGoalHomeSection";
 
-import { friendlyError, readPointsBalanceAny, isAscensionDefi, isTsDefi, isTsDefiForHomeToday, getSignupDeadlineOrFallback, isSignupDeadlinePassed } from "@src/home/homeUtils";
+import { friendlyError, readPointsBalanceAny, isAscensionDefi, isTsDefi, isTsDefiForHomeToday, resolveDefiSport, getSignupDeadlineOrFallback, isSignupDeadlinePassed, defiGameDateYmd } from "@src/home/homeUtils";
+import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import useMeDoc from "@src/home/hooks/useMeDoc";
 
 // UI
@@ -54,7 +56,7 @@ import HomeDefisToggle, {
 } from "@src/home/components/HomeDefisToggle";
 import DailyDefisProgress from "@src/home/components/DailyDefisProgress";
 import GroupChatSection from "@src/home/components/GroupChatSection";
-import { openMesResultatsTab } from "@src/defis/results/navigateToMesResultats";
+import { openLiveResultsTab } from "@src/defis/results/navigateToMesResultats";
 import { BADGES_TAB_HREF } from "@src/achievements/screens/ProgressionScreen";
 
 import { listenRNFB } from "@src/dev/fsListen";
@@ -367,6 +369,16 @@ function isDefiPickerRoute(segments) {
   );
 }
 
+function hiddenDefiTabPanelStyle(isActive) {
+  if (isActive) return undefined;
+  return {
+    overflow: "hidden",
+    height: 0,
+    opacity: 0,
+    pointerEvents: "none",
+  };
+}
+
 export default function AccueilScreen() {
   const { user, authReady } = useAuth();
   const router = useRouter();
@@ -557,11 +569,28 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
         );
 
         const rows = rowsRaw.filter((d) => {
-          const sport = String(d?.sport || "NHL").toUpperCase();
+          const sport = resolveDefiSport(d);
           const status = String(d?.status || "").toLowerCase();
 
           return sport === currentSport && ["open", "live"].includes(status);
         });
+
+        const dropped = rowsRaw.filter((d) => !rows.some((r) => r.id === d.id));
+        if (dropped.length) {
+          console.log(
+            "[HOME DEFIS DROPPED]",
+            dropped.map((d) => ({
+              id: d.id,
+              groupId: d.groupId,
+              sport: d.sport,
+              poolSport: d.poolSport,
+              resolvedSport: resolveDefiSport(d),
+              status: d.status,
+              currentSport,
+              currentGroupId,
+            }))
+          );
+        }
 
 
         rows.sort((a, b) => {
@@ -600,26 +629,34 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
   }, [listenersEnabled, authReady, user?.uid, currentGroupId, currentGroupMeta?.id, currentSport]);
 
 useEffect(() => {
-
   setActiveDefis([]);
-
   setMyParticipationsByDefiId({});
-
-  setHasFirstGoalForGroup(false);
-
-  setHasTeamPredictionForGroup(false);
-  setCanCreateTpBundle(true);
   setTpBundleHintId(null);
   setFgcHintChallengeId(null);
   setTsHintDefiId(null);
-  setFgcProgress({ done: 0, total: 0 });
-  setTpProgress({ done: 0, total: 0 });
-
 }, [currentGroupId, currentSport]);
 
   const normalDefisBase = useMemo(() => {
     const rows = Array.isArray(activeDefis) ? activeDefis : [];
-    return rows.filter((d) => !isAscensionDefi?.(d) && isTsDefiForHomeToday(d));
+    const businessYmd = getProphetikBusinessYmd();
+    const kept = rows.filter((d) => !isAscensionDefi?.(d) && isTsDefiForHomeToday(d, businessYmd));
+
+    const hiddenTs = rows.filter(
+      (d) => isTsDefi(d) && !isAscensionDefi?.(d) && !isTsDefiForHomeToday(d, businessYmd)
+    );
+    if (hiddenTs.length) {
+      console.log(
+        "[HOME TS HIDDEN BY DATE]",
+        hiddenTs.map((d) => ({
+          id: d.id,
+          gameDate: defiGameDateYmd(d),
+          businessYmd,
+          status: d.status,
+        }))
+      );
+    }
+
+    return kept;
   }, [activeDefis]);
 
   const hasTsForGroup = useMemo(() => {
@@ -633,6 +670,8 @@ useEffect(() => {
     });
   }, [normalDefisBase, myParticipationsByDefiId]);
 
+  const dailyDefisSectionKey = `${currentGroupId || "none"}-${currentSport}`;
+
   const defiCompletionByTab = useMemo(
     () => {
       const tsDefi = (normalDefisBase || []).find((d) => isTsDefi(d));
@@ -641,14 +680,14 @@ useEffect(() => {
       const tsExpired = tsDone < 1 && isSignupDeadlinePassed(tsDeadline);
 
       return {
-        fgc: hasFirstGoalForGroup ? fgcProgress : { done: 0, total: 0 },
+        fgc: fgcProgress,
         tp: tpProgress,
         ts: hasTsForGroup
           ? { done: tsDone, total: 1, ...(tsExpired ? { expired: true } : {}) }
           : { done: 0, total: 0 },
       };
     },
-    [fgcProgress, hasFirstGoalForGroup, tpProgress, tsParticipated, hasTsForGroup, normalDefisBase]
+    [fgcProgress, tpProgress, tsParticipated, hasTsForGroup, normalDefisBase]
   );
 
   const allDailyDefisEnrolled = useMemo(
@@ -677,6 +716,10 @@ useEffect(() => {
       return aHint ? -1 : 1;
     });
   }, [normalDefisBase, myParticipationsByDefiId, tsHintDefiId]);
+
+  const tsDefisForHome = useMemo(() => {
+    return (normalDefis || []).filter((d) => isTsDefi(d));
+  }, [normalDefis]);
 
   // Les participations du user  // Les participations TS du user
   useEffect(() => {
@@ -715,7 +758,7 @@ useEffect(() => {
 
       const unsub = ref.onSnapshot(
         (snap) => {
-          const data = snap?.exists ? snap.data() || null : null;
+          const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
 
           //console.log("[HOME TS SNAP]", defiId, "exists=", snap?.exists, "data=", data);
 
@@ -900,9 +943,14 @@ const avatarUrl =
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         groups={userGroups}
-        initialGroupId={favoriteGroupId}
+        initialGroupId={currentGroupId || favoriteGroupId}
         initialSport={currentSport}
-        onCreated={() => setShowCreateModal(false)}
+        onCreated={({ defiId, groupId } = {}) => {
+          setShowCreateModal(false);
+          setSelectedDefiTab("ts");
+          if (groupId) setSelectedGroupId(String(groupId));
+          if (defiId) setTsHintDefiId(String(defiId));
+        }}
       />
 
       <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -945,7 +993,7 @@ const avatarUrl =
                 avatarUrl={avatarUrl}
                 jerseyFrontUrl={jerseyFrontUrl}
                 jerseyBackUrl={jerseyBackUrl}
-                displayName={meDoc?.displayName || meDoc?.name}
+                displayName={meDoc?.displayName || meDoc?.name || user?.displayName}
                 onEditAvatar={() => router.push("/avatars/JerseysScreen")}
                 onCreateDefi={onPressCreateDefi}
                 onCreateFirstGoal={onPressCreateFirstGoal}
@@ -963,7 +1011,7 @@ const avatarUrl =
             {allDailyDefisEnrolled ? (
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => openMesResultatsTab(router, { groupId: currentGroupId })}
+                onPress={() => openLiveResultsTab(router, { groupId: currentGroupId })}
                 style={{
                   marginTop: 2,
                   marginBottom: 2,
@@ -997,7 +1045,7 @@ const avatarUrl =
                     defaultValue: "Regarde tes performances dans l'onglet ",
                   })}
                   <Text style={{ textDecorationLine: "underline", fontWeight: "900" }}>
-                    {i18n.t("tabs.challenges", { defaultValue: "Mes résultats" })}
+                    {i18n.t("tabs.matchLive", { defaultValue: "En direct" })}
                   </Text>
                 </Text>
               </TouchableOpacity>
@@ -1018,7 +1066,7 @@ const avatarUrl =
 
                 <DailyDefisProgress completedCount={dailyDefisCompletedCount} colors={colors} />
 
-                <View style={selectedDefiTab === "fgc" ? undefined : { display: "none" }}>
+                <View style={hiddenDefiTabPanelStyle(selectedDefiTab === "fgc")}>
                   <DefiSectionIntroBand>
                     <SectionHeader
                       flat
@@ -1042,6 +1090,7 @@ const avatarUrl =
                     <DefiChallengeInfoBubble kind="fgc" colors={colors} inIntroBand />
                   </DefiSectionIntroBand>
                   <FirstGoalHomeSection
+                    key={`fgc-${dailyDefisSectionKey}`}
                     groups={userGroups}
                     currentGroupId={currentGroupId}
                     currentSport={currentSport}
@@ -1053,7 +1102,7 @@ const avatarUrl =
                   />
                 </View>
 
-                <View style={selectedDefiTab === "tp" ? undefined : { display: "none" }}>
+                <View style={hiddenDefiTabPanelStyle(selectedDefiTab === "tp")}>
                   <DefiSectionIntroBand>
                     <SectionHeader
                       flat
@@ -1073,6 +1122,7 @@ const avatarUrl =
                     <DefiChallengeInfoBubble kind="tp" colors={colors} inIntroBand />
                   </DefiSectionIntroBand>
                   <TeamPredictionHomeSection
+                    key={`tp-${dailyDefisSectionKey}`}
                     groups={userGroups}
                     colors={colors}
                     currentGroupId={currentGroupId}
@@ -1085,7 +1135,7 @@ const avatarUrl =
                   />
                 </View>
 
-                <View style={selectedDefiTab === "ts" ? undefined : { display: "none" }}>
+                <View style={hiddenDefiTabPanelStyle(selectedDefiTab === "ts")}>
                   <DefiSectionIntroBand>
                     <SectionHeader
                       flat
@@ -1111,7 +1161,7 @@ const avatarUrl =
                     loadingDefis={loadingDefis}
                     groupIds={groupIds}
                     currentSport={currentSport}
-                    activeDefis={normalDefis}
+                    activeDefis={tsDefisForHome}
                     groupsMeta={groupsMeta}
                     tierLower={tierLower}
                     onOpenDefi={(defiId) => router.push("/(drawer)/defis/" + defiId)}

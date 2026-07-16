@@ -1,6 +1,7 @@
 // src/defis/TeamPredictionHomeSection.js
 
 import React, { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -28,9 +29,9 @@ import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
 import { getSlotLockedAt } from "@src/defis/tpDeadlineHelpers";
 import {
-  getProphetikBusinessYmdCompact,
   getPreviousProphetikBusinessYmdCompact,
 } from "@src/lib/prophetikBusinessDate";
+import { useProphetikBusinessYmdCompact } from "@src/hooks/useProphetikBusinessDate";
 
 /* ---------------- Helpers ---------------- */
 
@@ -51,10 +52,6 @@ function toYmdCompact(date = new Date()) {
   return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(
     date.getDate()
   ).padStart(2, "0")}`;
-}
-
-function getBusinessYmdCompact(now = new Date()) {
-  return getProphetikBusinessYmdCompact(now);
 }
 
 function getDeadline(ch) {
@@ -214,6 +211,7 @@ export default function TeamPredictionHomeSection({
   const { user, authReady } = useAuth();
 
   const sportLeague = String(currentSport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
+  const businessYmdCompact = useProphetikBusinessYmdCompact();
 
   const [bundle, setBundle] = useState(null);
   const [bundleEntry, setBundleEntry] = useState(null);
@@ -293,13 +291,13 @@ export default function TeamPredictionHomeSection({
   useEffect(() => {
     if (typeof onUserParticipatedChange !== "function") return;
     onUserParticipatedChange(tpProgress);
-  }, [tpProgress, onUserParticipatedChange]);
+  }, [tpProgress, onUserParticipatedChange, currentGroupId, sportLeague]);
 
   useEffect(() => {
     if (typeof onHasChallengeChange === "function") {
       onHasChallengeChange(hasAnyTpContent);
     }
-  }, [hasAnyTpContent, onHasChallengeChange]);
+  }, [hasAnyTpContent, onHasChallengeChange, currentGroupId, sportLeague]);
 
   useEffect(() => {
     if (typeof onCanCreateBundleChange === "function") {
@@ -338,8 +336,7 @@ export default function TeamPredictionHomeSection({
         if (cancelled) return;
 
         const nextBundle = res?.data?.bundle || null;
-        const businessToday = getBusinessYmdCompact();
-        if (nextBundle && isTodayTpBundleForHome(nextBundle, businessToday)) {
+        if (nextBundle && isTodayTpBundleForHome(nextBundle, businessYmdCompact)) {
           setBundle(nextBundle);
           setBundleEntry(res?.data?.entry ?? null);
         } else {
@@ -350,6 +347,7 @@ export default function TeamPredictionHomeSection({
         console.log("[TeamPredictionHomeSection] callable bundle", {
           groupId: gid,
           sportLeague,
+          businessYmdCompact,
           selectedId: nextBundle?.id || null,
         });
       } catch (err) {
@@ -360,31 +358,34 @@ export default function TeamPredictionHomeSection({
     loadViaCallable();
 
     const unsubs = [];
-    const businessToday = getBusinessYmdCompact();
 
     const applyBundleDoc = (bundleId, snap) => {
       if (cancelled) return;
 
-      const exists =
-        typeof snap?.exists === "function" ? snap.exists() : !!snap?.exists;
+      const exists = snapshotExists(snap);
 
       setBundle((prev) => {
         const candidates = [];
         if (exists) {
           const data = { id: bundleId, ...(snap?.data?.() || snap?.data || {}) };
-          if (isTodayTpBundleForHome(data, businessToday)) candidates.push(data);
+          if (isTodayTpBundleForHome(data, businessYmdCompact)) candidates.push(data);
         }
-        if (prev?.id && prev.id !== bundleId && isTodayTpBundleForHome(prev, businessToday)) {
+        if (
+          prev?.id &&
+          prev.id !== bundleId &&
+          isTodayTpBundleForHome(prev, businessYmdCompact)
+        ) {
           candidates.push(prev);
         }
-        return pickTodayHomeBundle(candidates, businessToday);
+        return pickTodayHomeBundle(candidates, businessYmdCompact);
       });
 
       if (exists) {
         const data = { id: bundleId, ...(snap?.data?.() || snap?.data || {}) };
-        if (isTodayTpBundleForHome(data, businessToday)) {
+        if (isTodayTpBundleForHome(data, businessYmdCompact)) {
           console.log("[TeamPredictionHomeSection] firestore bundle", {
             groupId: gid,
+            businessYmdCompact,
             selectedId: bundleId,
           });
         }
@@ -394,7 +395,7 @@ export default function TeamPredictionHomeSection({
     const todayBundleId = buildTpBundleDocId({
       league: sportLeague,
       groupId: gid,
-      gameYmd: businessToday,
+      gameYmd: businessYmdCompact,
     });
 
     const ref = firestore().doc(`team_prediction_bundles/${todayBundleId}`);
@@ -432,7 +433,15 @@ export default function TeamPredictionHomeSection({
         } catch {}
       });
     };
-  }, [listenersEnabled, authReady, user?.uid, currentGroupId, sportLeague, hintBundleId]);
+  }, [
+    listenersEnabled,
+    authReady,
+    user?.uid,
+    currentGroupId,
+    sportLeague,
+    hintBundleId,
+    businessYmdCompact,
+  ]);
 
   useEffect(() => {
     if (!user?.uid || !bundle?.id) {
@@ -446,7 +455,7 @@ export default function TeamPredictionHomeSection({
       .doc(String(user.uid));
 
     const unsub = ref.onSnapshot(
-      (snap) => setBundleEntry(snap?.exists ? snap.data() || null : null),
+      (snap) => setBundleEntry(snapshotExists(snap) ? snapshotData(snap) || null : null),
       (err) => {
         const msg = String(err?.code || err?.message || "");
         if (!msg.includes("permission-denied")) {
@@ -473,7 +482,6 @@ export default function TeamPredictionHomeSection({
       return;
     }
 
-    const businessToday = getBusinessYmdCompact();
     const businessYesterday = getPreviousProphetikBusinessYmdCompact();
 
     setLoading(true);
@@ -482,7 +490,7 @@ export default function TeamPredictionHomeSection({
 
     const applyMerged = () => {
       const merged = Array.from(mapById.values())
-        .filter((ch) => shouldKeepVisible(ch, businessToday))
+        .filter((ch) => shouldKeepVisible(ch, businessYmdCompact))
         .sort((a, b) => {
           const ta = toDateAny(a?.gameStartTimeUTC)?.getTime?.() || 0;
           const tb = toDateAny(b?.gameStartTimeUTC)?.getTime?.() || 0;
@@ -502,7 +510,7 @@ export default function TeamPredictionHomeSection({
           (snap) => {
             const nextIds = new Set();
 
-            snap.docs.forEach((d) => {
+            (snap?.docs ?? []).forEach((d) => {
               nextIds.add(d.id);
               mapById.set(d.id, {
                 id: d.id,
@@ -526,8 +534,9 @@ export default function TeamPredictionHomeSection({
           }
         );
 
-    const unsubToday = attachListenerForYmd(businessToday);
-    const unsubYesterday = businessToday === businessYesterday ? null : attachListenerForYmd(businessYesterday);
+    const unsubToday = attachListenerForYmd(businessYmdCompact);
+    const unsubYesterday =
+      businessYmdCompact === businessYesterday ? null : attachListenerForYmd(businessYesterday);
 
     return () => {
       try {
@@ -537,7 +546,7 @@ export default function TeamPredictionHomeSection({
         unsubYesterday?.();
       } catch {}
     };
-  }, [currentGroupId]);
+  }, [currentGroupId, businessYmdCompact]);
 
   /* ---------------- Entries (user picks) ---------------- */
 
@@ -563,7 +572,7 @@ export default function TeamPredictionHomeSection({
 
       const unsub = ref.onSnapshot(
         (snap) => {
-          const data = snap && snap.exists ? snap.data() || null : null;
+          const data = snap && snapshotExists(snap) ? snapshotData(snap) || null : null;
 
           setMyEntries((prev) => ({
             ...prev,

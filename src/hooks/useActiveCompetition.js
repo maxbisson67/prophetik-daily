@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import {
   deriveMlbCompetitionEntries,
@@ -41,7 +42,7 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
 
     const unCatalog = seasonCompetitionCollection().onSnapshot(
         (snap) => {
-          const rows = snap.docs
+          const rows = (snap?.docs ?? [])
             .map((d) => normalizeCompetitionEntry(d.data(), d.id))
             .filter(Boolean);
           setCatalog(rows);
@@ -54,7 +55,7 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
       );
 
     const unSeason = currentSeasonDocRef().onSnapshot(
-        (snap) => setNhlConfig(snap.exists ? snap.data() || {} : null),
+        (snap) => setNhlConfig(snapshotExists(snap) ? snapshotData(snap) || {} : null),
         () => setNhlConfig(null)
       );
 

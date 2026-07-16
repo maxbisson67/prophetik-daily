@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 function mergeParticipantProfile(prev = {}, participant = {}, pub = {}) {
@@ -63,7 +64,7 @@ export default function useParticipantProfilesFor(uids) {
         .doc(uid)
         .onSnapshot(
           (snap) => {
-            participant = snap.exists ? snap.data() || {} : {};
+            participant = snapshotExists(snap) ? snapshotData(snap) || {} : {};
             mergeForUid();
           },
           () => {}
@@ -76,7 +77,7 @@ export default function useParticipantProfilesFor(uids) {
         .doc(uid)
         .onSnapshot(
           (snap) => {
-            pub = snap.exists ? snap.data() || {} : {};
+            pub = snapshotExists(snap) ? snapshotData(snap) || {} : {};
             mergeForUid();
           },
           () => {}
@@ -106,12 +107,14 @@ export default function useParticipantProfilesFor(uids) {
 }
 
 export function resolveParticipantIdentity(entry, profile) {
+  const uid = String(entry?.uid || entry?.id || "").trim();
   const who =
     entry?.displayName ||
     entry?.name ||
     entry?.playerOwnerName ||
     profile?.displayName ||
-    String(entry?.uid || "").slice(0, 6);
+    (uid.toLowerCase() === "ai" ? "Nova" : "") ||
+    (uid ? uid.slice(0, 6) : "Membre");
 
   const jerseyFrontUrl = profile?.jerseyFrontUrl || null;
   const jerseyBackUrl = profile?.jerseyBackUrl || null;

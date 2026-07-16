@@ -1,18 +1,10 @@
 // src/leaderboard/LeaderboardTable.js
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
-import firestore from '@react-native-firebase/firestore';
 import i18n from "@src/i18n/i18n";
-
-
-const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
-
-function withCacheBust(url, tsMillis) {
-  if (!url) return null;
-  const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
-  return url.includes('?') ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
-}
+import useLeaderboardProfiles, { resolveLeaderboardMember } from './useLeaderboardProfiles';
+import ParticipantAvatar from '@src/ui/ParticipantAvatar';
 
 function asTextNode(value, colors, style) {
   if (value === null || value === undefined || value === false) return null;
@@ -26,89 +18,7 @@ function asTextNode(value, colors, style) {
 }
 
 function useProfilesFor(uids) {
-  const [map, setMap] = React.useState({});
-
-  React.useEffect(() => {
-    const ids = Array.from(new Set((uids || []).filter(Boolean).map(String)));
-
-    if (!ids.length) {
-      setMap({});
-      return;
-    }
-
-    const unsubs = new Map();
-
-    ids.forEach((uid) => {
-      const unsubsForUid = [];
-
-      const mergeForUid = (patch) => {
-        setMap((prev) => ({
-          ...prev,
-          [uid]: {
-            ...(prev[uid] || {}),
-            ...patch,
-          },
-        }));
-      };
-
-      // 1) profiles_public
-      const unPub = firestore()
-        .collection("profiles_public")
-        .doc(uid)
-        .onSnapshot(
-          (snap) => {
-            if (!snap.exists) return;
-            const d = snap.data() || {};
-            mergeForUid({
-              publicDisplayName:
-                d.displayName || i18n.t("common.guest", { defaultValue: "Invité" }),
-              publicAvatarUrl: d.avatarUrl || null,
-              publicUpdatedAt: d.updatedAt || null,
-            });
-          },
-          () => {}
-        );
-
-      unsubsForUid.push(unPub);
-
-      // 2) participants (source prioritaire pour le jersey)
-      const unParticipant = firestore()
-        .collection("participants")
-        .doc(uid)
-        .onSnapshot(
-          (snap) => {
-            if (!snap.exists) return;
-            const d = snap.data() || {};
-            mergeForUid({
-              participantDisplayName: d.displayName || null,
-              participantAvatarUrl: d.avatarUrl || null,
-              participantUpdatedAt: d.updatedAt || null,
-            });
-          },
-          () => {}
-        );
-
-      unsubsForUid.push(unParticipant);
-
-      unsubs.set(uid, () => {
-        unsubsForUid.forEach((u) => {
-          try {
-            u?.();
-          } catch {}
-        });
-      });
-    });
-
-    return () => {
-      for (const [, un] of unsubs) {
-        try {
-          un?.();
-        } catch {}
-      }
-    };
-  }, [JSON.stringify(uids || [])]);
-
-  return map;
+  return useLeaderboardProfiles(uids);
 }
 
 export default function LeaderboardTable({ rows, colors, columns, onRowPress, hideHeader = false}) {
@@ -232,25 +142,8 @@ export default function LeaderboardTable({ rows, colors, columns, onRowPress, hi
       {/* rows */}
       {sorted.map((r, idx) => {
         const prof = profiles[String(r.id)] || {};
-
-        const display =
-          prof.participantDisplayName ||
-          prof.publicDisplayName ||
-          r.displayName ||
-          r.id;
-
-        const avatarUrl =
-          prof.participantAvatarUrl ||
-          prof.publicAvatarUrl ||
-          null;
-
-        const updatedAt =
-          prof.participantUpdatedAt ||
-          prof.publicUpdatedAt ||
-          null;
-
-        const version = updatedAt?.toMillis?.() ? updatedAt.toMillis() : 0;
-        const uri = avatarUrl ? withCacheBust(avatarUrl, version) : null;
+        const member = resolveLeaderboardMember(r, profiles);
+        const version = member.updatedAt?.toMillis?.() ? member.updatedAt.toMillis() : 0;
 
         return (
           <TouchableOpacity
@@ -267,22 +160,23 @@ export default function LeaderboardTable({ rows, colors, columns, onRowPress, hi
               backgroundColor: idx % 2 ? colors.rowAlt : colors.card,
             }}
           >
-            <Image
-              source={uri ? { uri } : AVATAR_PLACEHOLDER}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                marginRight: 8,
-                backgroundColor: colors.border,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            />
+            <View style={{ marginRight: 8 }}>
+              <ParticipantAvatar
+                photoURL={member.avatarUrl || member.jerseyFrontUrl}
+                avatarUrl={member.avatarUrl}
+                jerseyFrontUrl={member.jerseyFrontUrl}
+                jerseyBackUrl={member.jerseyBackUrl}
+                avatarKind={member.avatarKind}
+                name={member.displayName}
+                size={32}
+                colors={colors}
+                version={version}
+              />
+            </View>
 
             <View style={{ flex: 1.5, paddingRight: 8 }}>
               <Text style={{ color: colors.text, fontWeight: '800' }} numberOfLines={1}>
-                {display}
+                {member.displayName}
               </Text>
             </View>
 

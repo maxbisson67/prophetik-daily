@@ -29,6 +29,10 @@ export function resolveChallengeDisplayStatus(item, options = {}) {
     return "postponed";
   }
 
+  if (item?.kind === "fgc" && String(item?.status || "").toLowerCase() === "cancelled") {
+    return "postponed";
+  }
+
   const top = normalizeStatus(item?.status);
 
   if (item?.kind === "fgc") {

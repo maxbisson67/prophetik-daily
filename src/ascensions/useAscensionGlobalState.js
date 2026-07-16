@@ -1,5 +1,6 @@
 // src/ascensions/useAscensionGlobalState.js
 import { useEffect, useMemo, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { listenRNFB } from "@src/dev/fsListen";
 
@@ -110,7 +111,7 @@ export default function useAscensionGlobalState({ groupId, ascKey }) {
     const unRoot = listenRNFB(
       rootRef,
       (snap) => {
-        if (!snap?.exists) {
+        if (!snapshotExists(snap)) {
           devLog("rootMissing", { path: rootRef.path });
 
           setRoot(null);
@@ -128,7 +129,7 @@ export default function useAscensionGlobalState({ groupId, ascKey }) {
         const activeRunId = d.activeRunId ? String(d.activeRunId) : null;
 
         setRoot({
-          id: snap.id,
+          id: snapshotId(snap),
           ascKey: String(ascKey),
           enabled: d.enabled !== false,
           status: String(d.status || "active"),

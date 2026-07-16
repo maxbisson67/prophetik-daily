@@ -206,7 +206,7 @@ export default function NhlScheduleScreen() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const ids = snap.docs.map((d) => d.id);
+        const ids = (snap?.docs ?? []).map((d) => d.id);
         setMonthDayIds(ids);
         setBusy(false);
       },
@@ -234,7 +234,7 @@ export default function NhlScheduleScreen() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const list = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => {
           const ta = a.startTimeUTC?.toDate
             ? a.startTimeUTC.toDate().getTime()

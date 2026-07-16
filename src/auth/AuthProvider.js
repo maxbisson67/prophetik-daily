@@ -1,5 +1,6 @@
 // src/auth/AuthProvider.js
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../lib/firebase";
 
@@ -83,7 +84,7 @@ export function AuthProvider({ children }) {
     const unsub = onSnapshot(
       ref,
       (snap) => {
-        setParticipant(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+        setParticipant(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
         setParticipantReady(true);
       },
       (err) => {

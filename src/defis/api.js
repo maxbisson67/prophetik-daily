@@ -1,5 +1,6 @@
 // src/defis/api.js (RNFB)
 import firestore from "@react-native-firebase/firestore";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
 
@@ -22,7 +23,7 @@ async function isGroupMemberOrOwnerClientCheck(groupId, uid) {
 
     const gRef = firestore().doc(`groups/${String(groupId)}`);
     const gSnap = await gRef.get();
-    if (gSnap.exists && gSnap.data()?.ownerId === uid) return true;
+    if (snapshotExists(gSnap) && snapshotData(gSnap)?.ownerId === uid) return true;
 
     return false;
   } catch (e) {

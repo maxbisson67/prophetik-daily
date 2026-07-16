@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
+import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
 import { db, toNumber } from "./leaderboard.js";
 import { resolveCompetitionForGroupCredit } from "./seasonCompetitions.js";
 import { computeMemberSeasonRank } from "./leaderboardRankUtils.js";
@@ -201,7 +202,7 @@ function parseFgcLeaderboardPoints(entry = {}, winnersPreviewUids = []) {
     payout > 0 ||
     winnersPreviewUids.includes(uid);
 
-  const points = payout > 0 ? payout : won ? 1 : 0;
+  const points = payout > 0 ? payout : won ? FGC_WIN_POINTS : 0;
   return { points, won };
 }
 

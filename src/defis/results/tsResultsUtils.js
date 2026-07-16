@@ -1,7 +1,12 @@
+import { mlbPlayerTsPoints } from "@src/defis/mlbTsScoring";
+
 export function emptyLiveStats() {
   return {
     playerGoals: {},
     playerHits: {},
+    playerDoubles: {},
+    playerTriples: {},
+    playerRuns: {},
     playerRbi: {},
     playerHomeRuns: {},
     playerA1: {},
@@ -15,6 +20,9 @@ export function normalizeLiveStatsDoc(data = {}) {
   return {
     playerGoals: data.playerGoals || {},
     playerHits: data.playerHits || data.playerGoals || {},
+    playerDoubles: data.playerDoubles || {},
+    playerTriples: data.playerTriples || {},
+    playerRuns: data.playerRuns || {},
     playerRbi: data.playerRbi || data.playerAssists || {},
     playerHomeRuns: data.playerHomeRuns || {},
     playerA1: data.playerA1 || {},
@@ -87,20 +95,27 @@ export function buildParticipantPickRows({
     if (!pid || seen.has(pid)) continue;
     seen.add(pid);
 
-    const goals = isMlbTs
+    const hits = isMlbTs
       ? Number(liveStats.playerHits?.[pid] ?? liveStats.playerGoals?.[pid] ?? 0)
       : Number(liveStats.playerGoals?.[pid] || 0);
     const a1 = Number(liveStats.playerA1?.[pid] || 0);
     const a2 = Number(liveStats.playerA2?.[pid] || 0);
-    const assists = isMlbTs
+    const rbi = isMlbTs
       ? Number(liveStats.playerRbi?.[pid] ?? liveStats.playerAssists?.[pid] ?? 0)
       : Number(liveStats.playerAssists?.[pid] || 0);
+    const doubles = isMlbTs ? Number(liveStats.playerDoubles?.[pid] || 0) : 0;
+    const triples = isMlbTs ? Number(liveStats.playerTriples?.[pid] || 0) : 0;
     const homeRuns = isMlbTs ? Number(liveStats.playerHomeRuns?.[pid] || 0) : 0;
+    const runs = isMlbTs ? Number(liveStats.playerRuns?.[pid] || 0) : 0;
+    const extraBase = doubles + triples + homeRuns;
     const ptsFromLive = Number(liveStats.playerPoints?.[pid] || 0);
 
-    const derived = Math.max(0, ptsFromLive - goals);
-    const assistTotal = isMlbTs ? assists : Math.max(a1 + a2, assists, derived);
-    const points = isMlbTs ? ptsFromLive || goals + assistTotal + homeRuns : goals + assistTotal;
+    const derived = Math.max(0, ptsFromLive - hits);
+    const assistTotal = isMlbTs ? rbi : Math.max(a1 + a2, rbi, derived);
+    const points = isMlbTs
+      ? ptsFromLive ||
+        mlbPlayerTsPoints({ hits, doubles, triples, homeRuns, rbi, runs })
+      : hits + assistTotal;
 
     const rawName =
       playerMap[pid]?.fullName ?? p?.fullName ?? p?.name ?? p?.playerName ?? "";
@@ -112,9 +127,13 @@ export function buildParticipantPickRows({
       playerId: pid,
       playerName,
       teamAbbr: playerMap[pid]?.teamAbbr ?? p?.teamAbbr ?? "",
-      goals,
+      goals: hits,
       assists: assistTotal,
       homeRuns,
+      doubles,
+      triples,
+      runs,
+      extraBase,
       points,
     });
   }
@@ -130,11 +149,22 @@ export function buildParticipantPickRows({
 }
 
 export function formatPickStatLine(row, isMlbTs) {
-  const goals = Number(row?.goals) || 0;
-  const assists = Number(row?.assists) || 0;
+  const hits = Number(row?.goals) || 0;
+  const rbi = Number(row?.assists) || 0;
+  const doubles = Number(row?.doubles) || 0;
+  const triples = Number(row?.triples) || 0;
   const homeRuns = Number(row?.homeRuns) || 0;
-  const points = Number(row?.points) || (isMlbTs ? goals + assists + homeRuns : goals + assists);
-  return isMlbTs ? `${goals}-${assists}-${homeRuns}=${points}` : `${goals}-${assists}=${points}`;
+  const runs = Number(row?.runs) || 0;
+  const xb =
+    Number(row?.extraBase) >= 0 && row?.extraBase != null
+      ? Number(row.extraBase)
+      : doubles + triples + homeRuns;
+  const points =
+    Number(row?.points) ||
+    (isMlbTs
+      ? mlbPlayerTsPoints({ hits, doubles, triples, homeRuns, rbi, runs })
+      : hits + rbi);
+  return isMlbTs ? `${hits}-${xb}-${rbi}-${runs}=${points}` : `${hits}-${rbi}=${points}`;
 }
 
 export function splitEvenPot(total, winnerCount) {

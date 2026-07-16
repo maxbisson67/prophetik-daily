@@ -1,10 +1,8 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, FieldValue, logger } from "../utils.js";
-import {
-  parseAutopilotEnabled,
-  parseFavoriteTeam,
-  parseGroupName,
-} from "./groupConfigUtils.js";
+import { parseAutopilotEnabled, parseFavoriteTeam, parseGroupName } from "./groupConfigUtils.js";
+import { assertCanSetAutopilot } from "./groupTierLimits.js";
+import { readUserPlanTier } from "../subscriptions/planLimits.js";
 
 const AI_UID = "ai";
 
@@ -362,6 +360,13 @@ export const updateGroupConfig = onCall(async (req) => {
   if (status === "archived" || g.active === false) {
     throw new HttpsError("failed-precondition", "GROUP_ARCHIVED");
   }
+
+  const currentlyAutopilot = g.autopilotEnabled !== false;
+  const tier = await readUserPlanTier(db, uid);
+  await assertCanSetAutopilot(db, uid, tier, {
+    currentlyEnabled: currentlyAutopilot,
+    nextEnabled: autopilotEnabled,
+  });
 
   const now = FieldValue.serverTimestamp();
 

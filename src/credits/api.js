@@ -1,5 +1,6 @@
 // src/credits/api.js
 import firestore from '@react-native-firebase/firestore';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import functions from '@react-native-firebase/functions';
 
 /** Normalise le solde de crédits selon divers schémas possibles */
@@ -34,7 +35,7 @@ export function subscribeCredits(uid, cb) {
   if (!uid || typeof cb !== 'function') return () => {};
   const ref = firestore().doc(`participants/${uid}`);
   const unsubscribe = ref.onSnapshot(
-    (snap) => cb(snap.exists ? readCredits(snap.data()) : 0),
+    (snap) => cb(snapshotExists(snap) ? readCredits(snapshotData(snap)) : 0),
     () => cb(0)
   );
   return unsubscribe;

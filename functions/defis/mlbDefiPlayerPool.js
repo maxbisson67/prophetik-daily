@@ -6,6 +6,7 @@ import { db, FieldValue } from "../utils.js";
 import { getMlbCurrentSeason } from "../players/seasonHelpers.js";
 import { buildEmptyMlbPitcher } from "../mlb/mlbProbablePitchers.js";
 import { bvpDocId, compactBvpForClient, resolveBvpStatsBatch } from "../mlb/mlbBvpStats.js";
+import { mlbPlayerTsPoints } from "./mlbDefiLiveStats.js";
 
 const MAX_POOL_SIZE = 500;
 const GETALL_CHUNK = 400;
@@ -41,6 +42,11 @@ function num(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function resolveSlgFromStats(d = {}) {
+  const raw = d.sluggingPercentage ?? d.slg ?? null;
+  return raw != null ? String(raw) : null;
+}
+
 function chunk(arr, n) {
   const out = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
@@ -48,6 +54,7 @@ function chunk(arr, n) {
 }
 
 function tierFromIndex0(idx0) {
+  // T1/T2/T3 : même classement (points saison TS) — paliers 1–10, 11–20, 21+
   if (idx0 <= 9) return "T1";
   if (idx0 <= 19) return "T2";
   return "T3";
@@ -76,6 +83,7 @@ export async function loadMlbOpponentPitchersByTeam(gameDateYmd) {
       awayAbbr,
       homeAbbr,
       isHome: false,
+      gamePk: String(doc.id || g.gamePk || ""),
     });
 
     map.set(homeAbbr, {
@@ -84,6 +92,7 @@ export async function loadMlbOpponentPitchersByTeam(gameDateYmd) {
       awayAbbr,
       homeAbbr,
       isHome: true,
+      gamePk: String(doc.id || g.gamePk || ""),
     });
   });
 
@@ -145,6 +154,7 @@ export async function buildMlbDefiPlayerPool({
         awayAbbr: opponent?.awayAbbr || null,
         homeAbbr: opponent?.homeAbbr || null,
         isHome: opponent?.isHome ?? null,
+        gamePk: opponent?.gamePk || null,
       });
     });
   }
@@ -165,20 +175,26 @@ export async function buildMlbDefiPlayerPool({
       const runs = num(d.runs, 0);
       const rbi = num(d.rbi, 0);
       const hits = num(d.hits, 0);
+      const doubles = num(d.doubles, 0);
+      const triples = num(d.triples, 0);
       const homeRuns = num(d.homeRuns, 0);
       const gamesPlayed = num(d.gamesPlayed, 0);
       const atBats = num(d.atBats, 0);
-      const points = hits + rbi + homeRuns;
+      const points = mlbPlayerTsPoints({ hits, doubles, triples, homeRuns, rbi, runs });
       const battingAverage = normalizeBattingAverageFromStats(d);
+      const slg = resolveSlgFromStats(d);
 
       statsMap.set(pid, {
         runs,
         rbi,
         hits,
+        doubles,
+        triples,
         homeRuns,
         atBats,
         gamesPlayed,
         points,
+        slg,
         battingAverage,
         pointsPerGame: gamesPlayed > 0 ? points / gamesPlayed : 0,
       });
@@ -194,7 +210,11 @@ export async function buildMlbDefiPlayerPool({
       hits: num(st.hits, 0),
       atBats: num(st.atBats, 0),
       rbi: num(st.rbi, 0),
+      runs: num(st.runs, 0),
+      doubles: num(st.doubles, 0),
+      triples: num(st.triples, 0),
       homeRuns: num(st.homeRuns, 0),
+      slg: st.slg ?? null,
       battingAverage: String(st.battingAverage ?? ".000"),
       points: num(st.points, 0),
       gamesPlayed: num(st.gamesPlayed, 0),
@@ -207,8 +227,10 @@ export async function buildMlbDefiPlayerPool({
   });
 
   merged.sort((a, b) => {
-    const dp = num(b.points, 0) - num(a.points, 0);
-    if (dp) return dp;
+    const dPts = num(b.points, 0) - num(a.points, 0);
+    if (dPts) return dPts;
+    const dPpg = num(b.pointsPerGame, 0) - num(a.pointsPerGame, 0);
+    if (dPpg) return dPpg;
     return String(a.fullName || "").localeCompare(String(b.fullName || ""));
   });
 
@@ -259,6 +281,7 @@ export async function buildMlbDefiPlayerPool({
       awayAbbr: p.awayAbbr || null,
       homeAbbr: p.homeAbbr || null,
       isHome: p.isHome ?? null,
+      gamePk: p.gamePk || null,
       positionCode: p.positionCode || null,
       injury: p.injury || null,
       goals: num(p.goals, 0),
@@ -266,7 +289,11 @@ export async function buildMlbDefiPlayerPool({
       hits: num(p.hits, 0),
       atBats: num(p.atBats, 0),
       rbi: num(p.rbi, 0),
+      runs: num(p.runs, 0),
+      doubles: num(p.doubles, 0),
+      triples: num(p.triples, 0),
       homeRuns: num(p.homeRuns, 0),
+      slg: p.slg ?? null,
       battingAverage: String(p.battingAverage ?? ".000"),
       points: num(p.points, 0),
       gamesPlayed: num(p.gamesPlayed, 0),

@@ -12,6 +12,14 @@ export function isMlbGamePostponed(status = {}) {
   );
 }
 
+/** Retard météo / technique — distinct de reporté (Postponed). */
+export function isMlbGameDelayed(statusOrGame = {}) {
+  const status = statusOrGame?.status || statusOrGame || {};
+  if (isMlbGamePostponed(status)) return false;
+  const detailed = String(status?.detailedState || "").toLowerCase();
+  return detailed.includes("delay");
+}
+
 export function isMlbScheduleGameSelectable(game = {}) {
   const gameType = String(game?.gameType || "R");
   if (gameType && gameType !== "R") return false;

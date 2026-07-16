@@ -16,10 +16,11 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import i18n from "@src/i18n/i18n";
 import {
   getFgcResultPlayerId,
-  getFgcResultPlayerName,
   getFgcTitle,
   getFgcResultPrefix,
 } from "@src/firstGoal/fgcChallengeUtils";
+import { resolveFgcEffectiveResult } from "@src/firstGoal/fgcMutualizedGameUtils";
+import useFgcMutualizedGame from "@src/firstGoal/useFgcMutualizedGame";
 
 function isDecidedStatus(status) {
   const st = String(status || "").toLowerCase();
@@ -75,6 +76,8 @@ export default function FirstGoalChallengeModal({ visible, onClose, challenge, c
   const chId = String(challenge?.id || "");
   const status = String(challenge?.status || "").toLowerCase();
   const decided = isDecidedStatus(status);
+  const { data: mutualizedGame } = useFgcMutualizedGame(challenge, { enabled: visible });
+  const effectiveResult = resolveFgcEffectiveResult(challenge, mutualizedGame);
 
   useEffect(() => {
     if (!visible || !chId) {
@@ -98,7 +101,7 @@ export default function FirstGoalChallengeModal({ visible, onClose, challenge, c
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+        const list = (snap?.docs ?? []).map((d) => ({ uid: d.id, ...d.data() }));
         // tri alpha par displayName (si présent)
         list.sort((a, b) =>
           String(a.displayName || a.uid || "").localeCompare(String(b.displayName || b.uid || ""))
@@ -140,16 +143,26 @@ export default function FirstGoalChallengeModal({ visible, onClose, challenge, c
   }, [challenge?.participantsCount, entries.length]);
 
   const sub = useMemo(() => {
+    const p = effectiveResult?.playerName || null;
+    const awaitingFinal = !!effectiveResult?.awaitingFinalConfirmation;
+
     if (decided) {
-      const p = getFgcResultPlayerName(challenge);
       return p
         ? `✅ ${getFgcResultPrefix(challenge, i18n.t.bind(i18n))} ${p}`
         : `✅ ${i18n.t("firstGoal.result.none", { defaultValue: "Aucun gagnant" })}`;
     }
+
+    if (awaitingFinal && p) {
+      return `⏳ ${getFgcResultPrefix(challenge, i18n.t.bind(i18n))} ${p} · ${i18n.t(
+        "firstGoal.awaitingFinalConfirmation",
+        { defaultValue: "En attente de confirmation finale" }
+      )}`;
+    }
+
     if (status === "pending") return `⏳ ${i18n.t("firstGoal.status.pending", { defaultValue: "En vérification" })}`;
     if (status === "locked" || status === "live") return `🔒 ${i18n.t("firstGoal.status.locked", { defaultValue: "Verrouillé" })}`;
     return `ℹ️ ${status || "—"}`;
-  }, [decided, status, challenge]);
+  }, [decided, status, challenge, effectiveResult]);
 
   const canClose = () => onClose?.();
 

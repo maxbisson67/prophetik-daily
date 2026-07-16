@@ -8,7 +8,13 @@
   },
   "scripts": {
     "import:nova-kb": "node scripts/importNovaKnowledgeSeeds.js",
-    "import:nova-kb:dry": "node scripts/importNovaKnowledgeSeeds.js --dry-run"
+    "import:nova-kb:dry": "node scripts/importNovaKnowledgeSeeds.js --dry-run",
+    "test:mlb-conditions": "node scripts/testMlbGameConditions.js",
+    "test:mlb-conditions:meteo": "node scripts/testMlbGameConditions.js --meteo",
+    "seed:ballparks:dry": "node scripts/seedMlbBallparkCatalog.js --dry-run",
+    "seed:ballparks": "node scripts/seedMlbBallparkCatalog.js --commit",
+    "reset:participant:dry": "node scripts/resetTestParticipant.js",
+    "reset:participant": "node scripts/resetTestParticipant.js --execute"
   },
   "dependencies": {
     "firebase-admin": "^13.7.0",

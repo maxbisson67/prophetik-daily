@@ -1,5 +1,6 @@
 // src/profile/usePublicProfile.js (RNFB)
 import { useEffect, useState } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from '@react-native-firebase/firestore';
 
 const db = firestore();
@@ -23,15 +24,15 @@ export function usePublicProfile(uid) {
 
     const unsubscribe = ref.onSnapshot(
       (snap) => {
-        if (!snap.exists) {
+        if (!snapshotExists(snap)) {
           setProfile(null);
           setLoading(false);
           return;
         }
 
-        const d = snap.data() || {};
+        const d = snapshotData(snap) || {};
         setProfile({
-          id: snap.id,
+          id: snapshotId(snap),
           displayName: d.displayName || 'Invité',
           avatarUrl: d.avatarUrl || null,
           avatarId: d.avatarId || null,

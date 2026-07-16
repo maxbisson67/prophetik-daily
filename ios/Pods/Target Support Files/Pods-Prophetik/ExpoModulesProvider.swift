@@ -26,7 +26,6 @@ import ExpoLinking
 import ExpoLocalization
 import EXNotifications
 import ExpoHead
-import ExpoSensors
 import ExpoSystemUI
 import EXUpdates
 #if EXPO_CONFIGURATION_DEBUG
@@ -71,13 +70,6 @@ public class ExpoModulesProvider: ModulesProvider {
       ServerRegistrationModule.self,
       ExpoHeadModule.self,
       LinkPreviewNativeModule.self,
-      AccelerometerModule.self,
-      BarometerModule.self,
-      DeviceMotionModule.self,
-      GyroscopeModule.self,
-      MagnetometerModule.self,
-      MagnetometerUncalibratedModule.self,
-      PedometerModule.self,
       ExpoSystemUIModule.self,
       UpdatesModule.self,
       DevMenuModule.self,
@@ -118,13 +110,6 @@ public class ExpoModulesProvider: ModulesProvider {
       ServerRegistrationModule.self,
       ExpoHeadModule.self,
       LinkPreviewNativeModule.self,
-      AccelerometerModule.self,
-      BarometerModule.self,
-      DeviceMotionModule.self,
-      GyroscopeModule.self,
-      MagnetometerModule.self,
-      MagnetometerUncalibratedModule.self,
-      PedometerModule.self,
       ExpoSystemUIModule.self,
       UpdatesModule.self
     ]

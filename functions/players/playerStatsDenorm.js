@@ -27,6 +27,7 @@ function pickMlbDenormFields(row = {}) {
     homeRuns: toNum(row.homeRuns),
     gamesPlayed: toNum(row.gamesPlayed),
     battingAverage: row.battingAverage ?? null,
+    slg: row.sluggingPercentage ?? row.slg ?? null,
     ops: row.ops ?? null,
     hits: toNum(row.hits),
     atBats: toNum(row.atBats),

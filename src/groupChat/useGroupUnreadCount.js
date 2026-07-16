@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 function messageMillis(createdAt) {
@@ -49,7 +50,7 @@ export function useGroupUnreadCount(groupId, uid) {
     const readRef = firestore().doc(`groups/${String(groupId)}/reads/${String(uid)}`);
     const unsubRead = readRef.onSnapshot(
       (snap) => {
-        lastSeenRef.current = snap.exists ? snap.data()?.lastSeenAt ?? null : null;
+        lastSeenRef.current = snapshotExists(snap) ? snapshotData(snap)?.lastSeenAt ?? null : null;
         recompute();
       },
       (err) => {
@@ -66,7 +67,7 @@ export function useGroupUnreadCount(groupId, uid) {
 
     const unsubMsg = msgRef.onSnapshot(
       (snap) => {
-        messagesRef.current = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        messagesRef.current = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
       (err) => {
@@ -113,7 +114,7 @@ export function useGroupsUnreadTotal(groupIds, uid) {
 
       const readRef = firestore().doc(`groups/${groupId}/reads/${String(uid)}`);
       const unsubRead = readRef.onSnapshot((snap) => {
-        lastSeenAt = snap.exists ? snap.data()?.lastSeenAt ?? null : null;
+        lastSeenAt = snapshotExists(snap) ? snapshotData(snap)?.lastSeenAt ?? null : null;
         sync();
       });
 
@@ -123,7 +124,7 @@ export function useGroupsUnreadTotal(groupIds, uid) {
         .limit(50);
 
       const unsubMsg = msgRef.onSnapshot((snap) => {
-        messages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        messages = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         sync();
       });
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { Platform } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import * as Application from "expo-application";
@@ -29,7 +30,7 @@ export default function useAppUpdateCheck() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        setConfig(snap.exists ? snap.data() || null : null);
+        setConfig(snapshotExists(snap) ? snapshotData(snap) || null : null);
         setLoading(false);
       },
       (err) => {

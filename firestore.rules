@@ -43,6 +43,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // catalog_ballparks — catalogue stades (seed serveur, lecture auth)
+    match /catalog_ballparks/{ballparkId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // mlb_game_conditions — conditions offensives par match (ingest serveur, lecture auth)
+    match /mlb_game_conditions/{gamePk} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // nhl_first_goal_games: serveur seulement (détection FGC NHL mutualisée)
     match /nhl_first_goal_games/{gameId} {
       allow read: if isSignedIn();
@@ -85,6 +97,42 @@ service cloud.firestore {
     match /live_control/{docId} {
       allow read: if true;
       allow write: if false;
+    }
+
+    // mlb_schedule_daily — calendrier ingest serveur, lecture auth
+    match /mlb_schedule_daily/{dayId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+
+      match /games/{gamePk} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    // nhl_schedule_daily — calendrier ingest serveur, lecture auth
+    match /nhl_schedule_daily/{dayId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+
+      match /games/{gameId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    // participants — profil privé (lecture auth, écriture propriétaire)
+    match /participants/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // profiles_public — lecture auth, écriture propriétaire (avatarId côté client)
+    match /profiles_public/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
     }
 
     // team_prediction_bundles: lecture membres du groupe, écriture serveur

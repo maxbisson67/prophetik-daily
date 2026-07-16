@@ -1,0 +1,11 @@
+/** Points attribués pour une victoire FGC (premier but / premier point produit). */
+export const FGC_WIN_POINTS = 10;
+
+/** Barème TP par défaut : bonne équipe + bonus score exact. */
+export const TP_WINNER_BASE_POINTS = 5;
+export const TP_EXACT_SCORE_BONUS_POINTS = 5;
+
+export const TP_DEFAULT_SCORING = {
+  winnerBasePoints: TP_WINNER_BASE_POINTS,
+  exactScoreBonusPoints: TP_EXACT_SCORE_BONUS_POINTS,
+};

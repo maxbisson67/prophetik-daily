@@ -93,6 +93,25 @@ export async function loadEligibleScheduleGames(db, { league, gameYmd }) {
   return games;
 }
 
+function shuffleInPlace(arr = []) {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function resolveFavoriteGameForGroup(pool = [], group = {}, league) {
+  const favoriteTeam = group?.favoriteTeam || null;
+  if (!favoriteTeam) return null;
+
+  const lg = normalizeLeague(league);
+  const favSport = String(favoriteTeam.sport || group?.sport || "").toUpperCase();
+  if (favSport && favSport !== lg) return null;
+
+  return pool.find((g) => gameInvolvesFavorite(g, favoriteTeam)) || null;
+}
+
 export function selectGamesForTpBundle({
   games = [],
   group = {},
@@ -104,22 +123,20 @@ export function selectGamesForTpBundle({
     return { games: [], gameCount: 0 };
   }
 
-  const favoriteTeam = group?.favoriteTeam || null;
   const selected = [];
   const usedGameIds = new Set();
 
-  const favoriteGame = favoriteTeam
-    ? pool.find((g) => gameInvolvesFavorite(g, favoriteTeam))
-    : null;
+  const favoriteGame = resolveFavoriteGameForGroup(pool, group, league);
 
   if (favoriteGame) {
     selected.push({ ...favoriteGame, isFavoriteGame: true });
     usedGameIds.add(favoriteGame.gameId);
   }
 
-  for (const game of pool) {
+  const remaining = shuffleInPlace(pool.filter((g) => !usedGameIds.has(g.gameId)));
+
+  for (const game of remaining) {
     if (selected.length >= maxGames) break;
-    if (usedGameIds.has(game.gameId)) continue;
     selected.push({ ...game, isFavoriteGame: false });
     usedGameIds.add(game.gameId);
   }

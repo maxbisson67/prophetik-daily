@@ -1,29 +1,37 @@
 import * as logger from "firebase-functions/logger";
 import { sendPushToGroup } from "../utils/pushUtils.js";
-import { pushTitleWithGroup } from "../groups/groupDisplayUtils.js";
 import { NOTIFICATION_PREF_KEYS } from "../notifications/notificationPrefs.js";
 
-const FGC_LABEL_BY_SPORT = {
-  MLB: "Premier point produit",
-  NHL: "Premier but",
+const CHALLENGE_TAG_BY_TYPE = {
+  fgc: "SOLO",
+  tp: "DUO",
+  ts: "TRIO",
 };
 
-function challengeLabel(challenge, sport) {
-  if (challenge.type === "fgc") {
-    return FGC_LABEL_BY_SPORT[sport] || FGC_LABEL_BY_SPORT.NHL;
-  }
+const CHALLENGE_TAG_ORDER = ["fgc", "tp", "ts"];
 
-  if (challenge.type === "tp") {
-    const count = Number(challenge.gameCount || 0);
-    return count > 1 ? `${count} matchs à prédire` : "Prédire l'issue des matchs";
-  }
+function resolveGroupLabel(groupName, sport) {
+  const name = String(groupName || "").trim();
+  const league = String(sport || "").trim().toUpperCase();
+  if (name && league) return `${name} ${league}`;
+  return name || league || "";
+}
 
-  if (challenge.type === "ts") {
-    return challenge.label || "Top scoreurs 3×3";
-  }
+function challengeTags(createdChallenges = []) {
+  const types = new Set(
+    createdChallenges.map((c) => String(c?.type || "").toLowerCase()).filter(Boolean)
+  );
 
-  if (challenge.label) return String(challenge.label);
-  return null;
+  return CHALLENGE_TAG_ORDER.filter((type) => types.has(type)).map(
+    (type) => CHALLENGE_TAG_BY_TYPE[type]
+  );
+}
+
+function formatFrenchAndList(items = []) {
+  const list = items.filter(Boolean);
+  if (list.length <= 1) return list[0] || "";
+  if (list.length === 2) return `${list[0]} et ${list[1]}`;
+  return `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
 }
 
 export function buildAutopilotNotificationPayload({
@@ -36,11 +44,17 @@ export function buildAutopilotNotificationPayload({
   const items = Array.isArray(createdChallenges) ? createdChallenges.filter(Boolean) : [];
   if (!items.length) return null;
 
-  const labels = items.map((c) => challengeLabel(c, sport)).filter(Boolean);
+  const groupLabel = resolveGroupLabel(groupName, sport);
+  const tags = challengeTags(items);
+  const tagList = formatFrenchAndList(tags);
+
   const titleBase = items.length === 1 ? "Nouveau défi disponible" : "Nouveaux défis disponibles";
-  const title = pushTitleWithGroup(titleBase, groupName);
-  const summary = labels.length ? labels.join(" • ") : "De nouveaux défis";
-  const body = `${summary} • Fais tes choix avant le début des matchs.`;
+  const title = groupLabel ? `${titleBase} pour ${groupLabel}` : titleBase;
+
+  const body =
+    tags.length === 1
+      ? `Le défi ${tagList} est maintenant disponible!`
+      : `Les défis ${tagList} sont maintenant disponibles!`;
 
   const data = {
     action: "OPEN_GROUP_HOME",

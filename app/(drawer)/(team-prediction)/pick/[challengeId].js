@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -248,7 +249,7 @@ function TeamPredictionLegacyPickScreen({ challengeId }) {
 
 const unsubChallenge = challengeRef.onSnapshot(
   (snap) => {
-    const data = snap?.exists ? snap.data() || null : null;
+    const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
     if (cancelled) return;
 
     setChallenge(data);
@@ -264,7 +265,7 @@ const unsubEntry = entryRef.onSnapshot(
   (snap) => {
     if (cancelled) return;
 
-    const entryData = snap?.exists ? snap.data() || null : null;
+    const entryData = snapshotExists(snap) ? snapshotData(snap) || null : null;
     setEntry(entryData);
 
     if (entryData) {
@@ -332,8 +333,8 @@ const unsubEntry = entryRef.onSnapshot(
       .doc(schedulePath)
       .get()
       .then((snap) => {
-        if (cancelled || !snap.exists) return;
-        const data = snap.data() || {};
+        if (cancelled || !snapshotExists(snap)) return;
+        const data = snapshotData(snap) || {};
         setSchedulePitchers({
           away: data.awayProbablePitcher || null,
           home: data.homeProbablePitcher || null,
@@ -788,7 +789,7 @@ const unsubEntry = entryRef.onSnapshot(
                 >
                   <Text style={{ color: colors.subtext, lineHeight: 20 }}>
                     {i18n.t("tp.pick.summaryHintMvp", {
-                      defaultValue: "3 pts pour le bon gagnant, +3 pts pour le score exact.",
+                      defaultValue: "5 pts pour la bonne équipe, +5 pts pour le score exact (10 max).",
                     })}
                   </Text>
                 </View>

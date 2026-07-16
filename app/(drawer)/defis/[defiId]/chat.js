@@ -1,5 +1,6 @@
 // app/(drawer)/defis/[defiId]/chat.js
 import React, { useEffect, useState, useCallback } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   TextInput,
@@ -34,7 +35,7 @@ export default function DefiChatScreen() {
     const ref = firestore().doc(`defis/${String(defiId)}`);
     const unsub = ref.onSnapshot(
       (snap) => {
-        setGroupId(snap.exists ? String(snap.data()?.groupId || "") || null : null);
+        setGroupId(snapshotExists(snap) ? String(snapshotData(snap)?.groupId || "") || null : null);
         setLoading(false);
       },
       () => setLoading(false)

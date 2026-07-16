@@ -1,4 +1,4 @@
-/** Accent visuel de l’onglet Mes résultats (vert — distinct de l’Accueil rouge). */
+/** Accent visuel de l’onglet Historique des défis (vert — distinct de l’Accueil rouge). */
 export const RESULTS_ACCENT = "#16a34a";
 export const RESULTS_ACCENT_DARK = "#15803d";
 export const RESULTS_ACCENT_MUTED = "rgba(22, 163, 74, 0.22)";

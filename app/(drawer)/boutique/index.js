@@ -1,5 +1,6 @@
 // app/(drawer)/boutique/index.js
 import React, { useMemo, useState, useEffect } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -75,7 +76,7 @@ function useOwnedGroups(uid) {
     const attach = (q, key) => {
       const un = q.onSnapshot(
         (snap) => {
-          results[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          results[key] = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
           setOwned(
             dedupeById([
               ...results.ownerId,
@@ -177,7 +178,7 @@ function useParticipantAvatarLive(uid) {
       .doc(`participants/${String(uid)}`)
       .onSnapshot(
         (snap) => {
-          if (!snap.exists) {
+          if (!snapshotExists(snap)) {
             setParticipant({
               displayName: '',
               photoURL: null,
@@ -186,7 +187,7 @@ function useParticipantAvatarLive(uid) {
             });
             return;
           }
-          const d = snap.data() || {};
+          const d = snapshotData(snap) || {};
           setParticipant({
             displayName: d.displayName || '',
             photoURL: d.photoURL || d.avatarUrl || d.photoUrl || d.avatar || null,

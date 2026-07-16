@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 export default function useAppConfig() {
@@ -9,7 +10,7 @@ export default function useAppConfig() {
     const ref = firestore().doc("app_config/currentSeason");
     const unsub = ref.onSnapshot(
       (snap) => {
-        setConfig(snap.exists ? snap.data() : null);
+        setConfig(snapshotExists(snap) ? snapshotData(snap) : null);
         setLoading(false);
       },
       () => setLoading(false)

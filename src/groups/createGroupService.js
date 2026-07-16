@@ -64,11 +64,11 @@ export async function createGroupService({
   } catch (e) {
     const code = e?.code || "";
     const message = e?.message || String(e);
+    const details = e?.details || null;
 
-    if (code === "functions/failed-precondition") {
-      throw new Error(message);
-    }
-
-    throw new Error(message);
+    const err = new Error(message);
+    err.code = code;
+    err.details = details;
+    throw err;
   }
 }

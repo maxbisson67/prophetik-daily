@@ -84,7 +84,7 @@ function throwNovaError(result) {
  *
  * data:
  * {
- *   capability: "coach" | "explain",
+ *   capability: "coach" | "explain" | "indicators",
  *   message: string,
  *   lang?: "fr" | "en",
  *   context?: {
@@ -111,7 +111,7 @@ export const novaCoach = onCall(
     const lang = req.data?.lang;
     const context = req.data?.context || {};
 
-    if (!message) {
+    if (!message && capability !== "indicators") {
       throw new HttpsError("invalid-argument", "MESSAGE_REQUIRED");
     }
 

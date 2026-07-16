@@ -1,5 +1,6 @@
 // src/leaderboard/useLeaderboardSeason.js
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 function normalizeMember(docId, data) {
@@ -54,14 +55,14 @@ export default function useLeaderboardSeason({ groupId, seasonId, limit = 200 })
 
     const unsubMeta = metaRef.onSnapshot(
       (snap) => {
-        setMeta(snap.exists ? { id: snap.id, ...(snap.data() || {}) } : null);
+        setMeta(snapshotExists(snap) ? { id: snapshotId(snap), ...(snapshotData(snap) || {}) } : null);
       },
       (e) => setError(e)
     );
 
     const unsubMembers = membersRef.onSnapshot(
       (snap) => {
-        const next = snap.docs.map((d) => normalizeMember(d.id, d.data()));
+        const next = (snap?.docs ?? []).map((d) => normalizeMember(d.id, d.data()));
         setRows(next);
         setLoading(false);
       },

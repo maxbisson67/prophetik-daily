@@ -12,11 +12,13 @@ import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import {
   getFgcLeague,
   getFgcResultPlayerId,
-  getFgcResultPlayerName,
   getFgcResultPrefix,
   getFgcResultOutcomeLabel,
-  getFgcResultTeamAbbr,
 } from "@src/firstGoal/fgcChallengeUtils";
+import {
+  resolveFgcEffectiveResult,
+} from "@src/firstGoal/fgcMutualizedGameUtils";
+import useFgcMutualizedGame from "@src/firstGoal/useFgcMutualizedGame";
 import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
 import { MATCH_TASK_STATES, resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
 import {
@@ -28,6 +30,7 @@ import {
   PickBravoBadge,
   PickOopsBadge,
 } from "@src/defis/results/PickResultTags";
+import { FGC_WIN_POINTS } from "@src/lib/challengeScoringConstants";
 
 function safeAbbr(v) {
   const s = String(v || "").trim().toUpperCase();
@@ -89,7 +92,9 @@ function isCorrectPick(entry, winnerPlayerId) {
 
 function resolveFgcDefaultPoints(challenge) {
   return (
-    Number(challenge?.stakePoints ?? challenge?.points ?? challenge?.potJoinIncrement ?? 5) || 5
+    Number(
+      challenge?.stakePoints ?? challenge?.points ?? challenge?.potJoinIncrement ?? FGC_WIN_POINTS
+    ) || FGC_WIN_POINTS
   );
 }
 
@@ -125,9 +130,12 @@ export default function FgcResultDetailBlock({
   const challenge = item?.raw || {};
   const challengeId = String(item?.id || challenge?.id || "");
   const challengeLeague = getFgcLeague(challenge);
+  const { data: mutualizedGame } = useFgcMutualizedGame(challenge);
+  const effectiveResult = resolveFgcEffectiveResult(challenge, mutualizedGame);
   const winnerPlayerId = getFgcResultPlayerId(challenge);
-  const winnerName = getFgcResultPlayerName(challenge);
-  const winnerTeam = getFgcResultTeamAbbr(challenge);
+  const winnerName = effectiveResult?.playerName || null;
+  const winnerTeam = effectiveResult?.teamAbbr || null;
+  const awaitingFinalConfirmation = !!effectiveResult?.awaitingFinalConfirmation;
 
   useEffect(() => {
     if (!challengeId) {
@@ -145,7 +153,7 @@ export default function FgcResultDetailBlock({
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const list = snap.docs
+        const list = (snap?.docs ?? [])
           .map((d) => ({ uid: d.id, ...d.data() }))
           .filter((e) => !!e.playerId)
           .sort((a, b) =>
@@ -235,11 +243,19 @@ export default function FgcResultDetailBlock({
               {winnerName}
             </Text>
           </View>
-        ) : (
+        ) : null}
+        {awaitingFinalConfirmation ? (
+          <Text style={{ color: "#d97706", fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+            {i18n.t("firstGoal.awaitingFinalConfirmation", {
+              defaultValue: "En attente de confirmation finale",
+            })}
+          </Text>
+        ) : null}
+        {!winnerName ? (
           <Text style={{ color: colors.text, fontWeight: "900", marginTop: 2 }}>
             {getFgcResultOutcomeLabel(challenge, i18n.t.bind(i18n), matchTask?.state)}
           </Text>
-        )}
+        ) : null}
       </View>
 
       {myEntry ? (

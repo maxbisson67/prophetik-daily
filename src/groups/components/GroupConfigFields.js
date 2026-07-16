@@ -77,9 +77,15 @@ export default function GroupConfigFields({
             })}
           </Text>
           <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>
-            {i18n.t("groups.config.autopilotHint", {
-              defaultValue: "Les défis sont créés automatiquement pour le groupe.",
-            })}
+            {autopilotEnabled
+              ? i18n.t("groups.config.autopilotHintEnabled", {
+                  defaultValue:
+                    "Les défis quotidiens sont créés automatiquement chaque matin.",
+                })
+              : i18n.t("groups.config.autopilotHintDisabled", {
+                  defaultValue:
+                    "Les défis devront être créés manuellement par le propriétaire.",
+                })}
           </Text>
         </View>
         <Switch

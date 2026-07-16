@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -15,12 +16,13 @@ import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import {
   getFgcResultPlayerId,
-  getFgcResultPlayerName,
-  getFgcResultTeamAbbr,
   getFgcLiveNoneText,
   getFgcLivePendingText,
   getFgcLiveConfirmedText,
+  getFgcConfirmedNoWinnerLabel,
 } from "@src/firstGoal/fgcChallengeUtils";
+import { resolveFgcEffectiveResult } from "@src/firstGoal/fgcMutualizedGameUtils";
+import useFgcMutualizedGamesMap from "@src/firstGoal/useFgcMutualizedGamesMap";
 import useParticipantProfilesFor, {
   resolveParticipantIdentity,
 } from "@src/firstGoal/useParticipantProfilesFor";
@@ -137,14 +139,15 @@ function StatusChip({ status, colors }) {
   );
 }
 
-function ResultBanner({ status, challenge, colors }) {
+function ResultBanner({ status, challenge, mutualizedGame, colors }) {
   const st = String(status || "").toLowerCase();
   const decided = st === "decided" || st === "closed";
-  const pending = st === "pending";
   const locked = st === "locked" || st === "live";
 
-  const firstGoalName = getFgcResultPlayerName(challenge);
-  const firstGoalTeam = getFgcResultTeamAbbr(challenge);
+  const effective = resolveFgcEffectiveResult(challenge, mutualizedGame);
+  const firstGoalName = effective?.playerName || null;
+  const firstGoalTeam = effective?.teamAbbr || null;
+  const awaitingFinal = !!effective?.awaitingFinalConfirmation;
   const teamSuffix = firstGoalTeam ? `(${firstGoalTeam})` : "";
 
   let text = getFgcLiveNoneText(challenge, i18n.t.bind(i18n));
@@ -152,7 +155,7 @@ function ResultBanner({ status, challenge, colors }) {
   let bg = colors.card;
   let icon = "flash-outline";
 
-  if (pending && firstGoalName) {
+  if (awaitingFinal && firstGoalName) {
     text = getFgcLivePendingText(challenge, i18n.t.bind(i18n), {
       name: firstGoalName,
       team: teamSuffix,
@@ -169,9 +172,7 @@ function ResultBanner({ status, challenge, colors }) {
     bg = "rgba(59,130,246,0.10)";
     icon = "checkmark-circle-outline";
   } else if (decided && !firstGoalName) {
-    text = i18n.t("firstGoal.live.noWinner", {
-      defaultValue: "Aucun gagnant",
-    });
+    text = getFgcConfirmedNoWinnerLabel(challenge, i18n.t.bind(i18n));
     fg = colors.text;
     bg = colors.card;
     icon = "close-circle-outline";
@@ -363,7 +364,7 @@ function EntryRow({ entry, profile, revealPick, isWinner, isMe, sport = "NHL", c
   );
 }
 
-export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors }) {
+export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors, hidePickCta = false }) {
   const router = useRouter();
   const { user } = useAuth();
 
@@ -437,7 +438,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
 
     const un1 = qByUid.onSnapshot(
       (snap) => {
-        memberships = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        memberships = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
       (err) => {
@@ -447,7 +448,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
 
     const un2 = qOwnerCreated.onSnapshot(
       (snap) => {
-        ownedCreated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        ownedCreated = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
       (err) => {
@@ -457,7 +458,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
 
     const un3 = qOwnerOwnerId.onSnapshot(
       (snap) => {
-        ownedOwnerId = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        ownedOwnerId = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         recompute();
       },
       (err) => {
@@ -491,8 +492,8 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
         .collection("groups")
         .doc(String(gid))
         .onSnapshot((snap) => {
-          if (!snap.exists) return;
-          const data = snap.data() || {};
+          if (!snapshotExists(snap)) return;
+          const data = snapshotData(snap) || {};
           setGroupNameById((prev) => ({
             ...prev,
             [gid]: data?.name || data?.title || gid,
@@ -595,7 +596,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
 
         const unsubEntries = entriesRef.onSnapshot(
           (esnap) => {
-            const rows = esnap.docs.map((d) => ({
+            const rows = (esnap?.docs ?? []).map((d) => ({
               uid: d.id,
               ...d.data(),
             }));
@@ -618,12 +619,12 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
         .doc(scopedChallengeId)
         .onSnapshot(
           async (snap) => {
-            if (!snap.exists) {
+            if (!snapshotExists(snap)) {
               await applyChallengeList([]);
               return;
             }
 
-            const ch = { id: snap.id, ...snap.data() };
+            const ch = { id: snapshotId(snap), ...snapshotData(snap) };
             const groupId = String(ch.groupId || "");
 
             if (!allowed.has(groupId)) {
@@ -655,7 +656,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
 
     const unsub = q.onSnapshot(
       async (snap) => {
-        const list = snap.docs
+        const list = (snap?.docs ?? [])
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((ch) => allowed.has(String(ch.groupId || "")))
           .sort((a, b) => {
@@ -702,6 +703,9 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
   }, [allEntriesByChallengeId]);
 
   const participantProfiles = useParticipantProfilesFor(entryUids);
+  const mutualizedGamesByGameId = useFgcMutualizedGamesMap(firstGoalChallenges, {
+    enabled: firstGoalChallenges.length > 0,
+  });
 
   if (loadingFirstGoal) {
     return (
@@ -781,8 +785,8 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
                 })
                 .join(", ");
 
-        const firstGoalName = getFgcResultPlayerName(ch);
-        const firstGoalTeam = getFgcResultTeamAbbr(ch);
+        const gameDocId = String(ch?.gamePk || ch?.gameId || "").trim();
+        const mutualizedGame = gameDocId ? mutualizedGamesByGameId[gameDocId] : null;
 
         return (
           <View
@@ -812,7 +816,12 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
               <StatusChip status={st} colors={colors} />
             </View>
 
-            <ResultBanner status={st} challenge={ch} colors={colors} />
+            <ResultBanner
+              status={st}
+              challenge={ch}
+              mutualizedGame={mutualizedGame}
+              colors={colors}
+            />
 
             {decided ? (
               <View
@@ -891,6 +900,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
               </View>
             ) : null}
 
+            {!hidePickCta ? (
             <View style={{ marginTop: 12 }}>
               <TouchableOpacity
                 onPress={() => router.push(`/(first-goal)/pick/${cid}`)}
@@ -919,6 +929,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
                 </Text>
               </TouchableOpacity>
             </View>
+            ) : null}
           </View>
         );
       })}

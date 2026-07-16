@@ -1,4 +1,5 @@
 import firestore from "@react-native-firebase/firestore";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import functions from "@react-native-firebase/functions";
 
 const READ_CHUNK = 30;
@@ -185,9 +186,9 @@ async function readBvpCache(pairs) {
     }
 
     snaps.forEach((snap, idx) => {
-      if (!snap?.exists) return;
+      if (!snapshotExists(snap)) return;
       const pair = chunk[idx];
-      const normalized = normalizeBvpClientRow(snap.data() || {});
+      const normalized = normalizeBvpClientRow(snapshotData(snap) || {});
       if (normalized) {
         out.set(mlbBvpDocId(pair.batterId, pair.pitcherId), normalized);
       }

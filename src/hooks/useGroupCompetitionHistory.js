@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { normalizeSport } from "@src/season/seasonCompetitionCore";
 
@@ -51,7 +52,7 @@ export default function useGroupCompetitionHistory({ groupId, sport, enabled = t
       .collection(`groups/${String(groupId)}/leaderboards`)
       .onSnapshot(
         (snap) => {
-          const items = snap.docs
+          const items = (snap?.docs ?? [])
             .map((d) => normalizeHistoryDoc(d.id, d.data() || {}))
             .filter((row) => {
               if (!row.winnerUids.length) return false;
@@ -106,7 +107,7 @@ export function useLeaderboardCompetitionMeta({ groupId, competitionKey, enabled
       .doc(`groups/${gid}/leaderboards/${key}`)
       .onSnapshot(
         (snap) => {
-          setMeta(snap.exists ? normalizeHistoryDoc(snap.id, snap.data() || {}) : null);
+          setMeta(snapshotExists(snap) ? normalizeHistoryDoc(snapshotId(snap), snapshotData(snap) || {}) : null);
           setLoading(false);
         },
         () => {

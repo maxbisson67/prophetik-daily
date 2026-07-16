@@ -31,7 +31,7 @@ export function useGroupMembers(groupId) {
 
     const unsubscribe = qRef.onSnapshot(
       (snap) => {
-        const rows = snap.docs.map((d) => {
+        const rows = (snap?.docs ?? []).map((d) => {
           const data = d.data() || {};
 
           // compat: uid vs userId vs participantId

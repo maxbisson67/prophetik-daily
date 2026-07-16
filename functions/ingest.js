@@ -9,11 +9,17 @@ import {
   apiWebSchedule,
   readTS,
 } from "./utils.js";
-import { appYmd } from "./ProphetikDate.js";
+import { appYmd, todayAppYmd } from "./ProphetikDate.js";
 import {
   aggregateMlbDayBattingStats,
   updateMlbParticipationLivePoints,
 } from "./defis/mlbDefiLiveStats.js";
+import {
+  isWithinLiveCronSchedule,
+  LIVE_CRON_SCHEDULE,
+  shouldRunIngestForControls,
+} from "./shared/liveCronGate.js";
+import { LIVE_LEAGUES, readLiveControl } from "./shared/liveControl.js";
 
 async function getGamesForYmdCached(ymd, cache) {
   if (cache.has(ymd)) return cache.get(ymd);
@@ -173,9 +179,44 @@ async function ingestMlbDefiStats(docSnap, ymd) {
   await updateMlbParticipationLivePoints(docSnap.ref, stats.playerPoints);
 }
 
-export async function runIngestStatsForDate() {
+export async function runIngestStatsForDate(options = {}) {
+  const { forceRun = false, source = "cron" } = options;
+  const nowMs = Date.now();
+
+  if (!forceRun && !isWithinLiveCronSchedule(nowMs)) {
+    logger.info("[runIngestStatsForDate] skipped — outside active window", { source });
+    return { skipped: true, reason: "outside_window" };
+  }
+
+  if (!forceRun) {
+    const ymd = todayAppYmd();
+    const [nhlControl, mlbControl] = await Promise.all([
+      readLiveControl(LIVE_LEAGUES.NHL, ymd),
+      readLiveControl(LIVE_LEAGUES.MLB, ymd),
+    ]);
+
+    if (!shouldRunIngestForControls({ nhlControl, mlbControl })) {
+      const liveDefis = await db
+        .collection("defis")
+        .where("status", "in", ["live", "awaiting_result"])
+        .limit(1)
+        .get();
+
+      if (liveDefis.empty) {
+        logger.info("[runIngestStatsForDate] skipped — leagues idle, no live defis", {
+          source,
+          nhlMode: nhlControl?.mode || "idle",
+          mlbMode: mlbControl?.mode || "idle",
+        });
+        return { skipped: true, reason: "idle" };
+      }
+    }
+  }
+
   logger.info("[runIngestStatsForDate] tick", {
     at: new Date().toISOString(),
+    source,
+    forceRun,
   });
 
   const snap = await db
@@ -215,21 +256,22 @@ export async function runIngestStatsForDate() {
   }
 
   logger.info("[runIngestStatsForDate] done");
+  return { skipped: false };
 }
 
 export const ingestStatsForDate = onCall(async () => {
-  await runIngestStatsForDate();
+  await runIngestStatsForDate({ forceRun: true, source: "callable" });
   return { ok: true };
 });
 
 export const ingestStatsForDateCron = onSchedule(
   {
-    schedule: "*/1 * * * *",
+    schedule: LIVE_CRON_SCHEDULE,
     timeZone: "America/Toronto",
     region: "us-central1",
   },
   async () => {
-    await runIngestStatsForDate();
+    await runIngestStatsForDate({ source: "cron" });
   }
 );
 

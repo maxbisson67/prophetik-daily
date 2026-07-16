@@ -19,10 +19,11 @@ import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
 import firestore from "@react-native-firebase/firestore";
 
 import { dedupeById } from "@src/leaderboard/utils";
-import LeaderboardMemberModal from "@src/leaderboard/LeaderboardMemberModal";
 import LeaderboardGroupDashboard from "@src/leaderboard/LeaderboardGroupDashboard";
+import LeaderboardParticipantProfileModal from "@src/leaderboard/LeaderboardParticipantProfileModal";
 import normalizeMemberRow from "@src/leaderboard/normalizeMemberRow";
 import useLeaderboardGroupMembers from "@src/leaderboard/useLeaderboardGroupMembers";
+import useLeaderboardProfiles from "@src/leaderboard/useLeaderboardProfiles";
 
 import useActiveCompetition from "@src/hooks/useActiveCompetition";
 import useSportCompetitions from "@src/hooks/useSportCompetitions";
@@ -57,7 +58,7 @@ function useOwnedGroups(uid) {
     function attach(qRef, key) {
       const un = qRef.onSnapshot(
         (snap) => {
-          results[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          results[key] = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
 
           const merged = dedupeById([...results.ownerId, ...results.createdBy]).filter((g) => {
             const status = String(g?.status || "").toLowerCase();
@@ -228,6 +229,11 @@ export default function ClassementScreen() {
 
   const rows = useMemo(() => (rawRows || []).map(normalizeMemberRow), [rawRows]);
 
+  const memberUids = useMemo(() => rows.map((r) => String(r.id)), [rows]);
+  const leaderboardProfiles = useLeaderboardProfiles(memberUids);
+
+  const [profileRow, setProfileRow] = useState(null);
+
   const { rows: championHistory, loading: loadingChampions } = useGroupCompetitionHistory({
     groupId: currentGroupId,
     sport: currentSport,
@@ -269,16 +275,6 @@ export default function ClassementScreen() {
     }
   }, [currentGroupId, selectedCompetitionKey, selectedCompetition?.fromYmd, selectedCompetition?.toYmd]);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState(null);
-  const [selectedPeers, setSelectedPeers] = useState([]);
-
-  function openMember(row) {
-    setSelectedRow(row);
-    setSelectedPeers(rows || []);
-    setModalOpen(true);
-  }
-
   const hasLoggedLeaderboardViewRef = useRef(false);
 
   useEffect(() => {
@@ -304,8 +300,6 @@ export default function ClassementScreen() {
     selectedCompetitionKey,
     groups,
   ]);
-
-  const canOpenMember = true;
 
   if (!user) {
     return (
@@ -393,16 +387,6 @@ export default function ClassementScreen() {
     <>
       <Stack.Screen options={{ title: t("leaderboard.title") }} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        <LeaderboardMemberModal
-          visible={modalOpen && canOpenMember}
-          onClose={() => setModalOpen(false)}
-          row={selectedRow ? normalizeMemberRow(selectedRow) : null}
-          peerRows={selectedPeers}
-          colors={colors}
-          tierLower="vip"
-          onUpgrade={() => {}}
-        />
-
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           automaticallyAdjustContentInsets
@@ -468,10 +452,20 @@ export default function ClassementScreen() {
                     rows={rows}
                     colors={colors}
                     sport={currentGroup?.sport || currentGroup?.league}
-                    onRowPress={openMember}
+                    profiles={leaderboardProfiles}
+                    onParticipantPress={setProfileRow}
                     emptyText={t("leaderboard.group.noStats", {
                       defaultValue: "Aucun classement disponible.",
                     })}
+                  />
+                  <LeaderboardParticipantProfileModal
+                    visible={!!profileRow}
+                    row={profileRow}
+                    peerRows={rows}
+                    profiles={leaderboardProfiles}
+                    sport={currentGroup?.sport || currentGroup?.league}
+                    colors={colors}
+                    onClose={() => setProfileRow(null)}
                   />
                 </View>
               )}

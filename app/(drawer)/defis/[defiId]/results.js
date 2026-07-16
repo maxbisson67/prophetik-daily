@@ -1,3 +1,4 @@
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
   // app/(drawer)/defis/[defiId]/results.js
   // Résultats (riche) + Chat repliable (hors FlatList)
 
@@ -44,7 +45,7 @@
   const AVATAR_PLACEHOLDER = require('@src/assets/avatar-placeholder.png');
   const GROUP_PLACEHOLDER = require('@src/assets/group-placeholder.png');
 
-  const CACHE_VERSION = 'v3_profiles_public_names';
+  const CACHE_VERSION = 'v4_participant_jerseys';
   const PARTICIPANTS_CACHE_KEY = `${CACHE_VERSION}`;
 
   /* ----- NHL helpers ----- */
@@ -505,7 +506,7 @@
       const ref = firestore().doc(`defis/${String(defiId)}`);
       const un = ref.onSnapshot(
         (snap) => {
-          setDefi(snap.exists ? { id: snap.id, ...snap.data() } : null);
+          setDefi(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
           setLoadingDefi(false);
         },
         () => setLoadingDefi(false)
@@ -518,7 +519,7 @@
       if (!defi?.groupId) return;
       const ref = firestore().doc(`groups/${String(defi.groupId)}`);
       const un = ref.onSnapshot((snap) => {
-        setGroup(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setGroup(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
       });
       return () => un();
     }, [defi?.groupId]);
@@ -532,8 +533,8 @@
       const un = colRef.onSnapshot((snap) => {
         const next = [];
         snap.forEach((docSnap) => {
-          const v = docSnap.data() || {};
-          const uid = docSnap.id;
+          const v = snapshotData(docSnap) || {};
+          const uid = snapshotId(docSnap);
           next.push({
             uid,
             livePoints: Number(v.livePoints || 0),
@@ -586,15 +587,23 @@ useEffect(() => {
 
       const participantAvatar =
         latestParticipant.avatarUrl ||
+        latestParticipant.jerseyFrontUrl ||
         latestParticipant.photoURL ||
         null;
 
       const publicAvatar =
         latestPublic.avatarUrl ||
+        latestPublic.jerseyFrontUrl ||
         latestPublic.photoURL ||
         null;
 
       const avatarUrl = participantAvatar || publicAvatar || null;
+      const jerseyFrontUrl =
+        latestParticipant.jerseyFrontUrl || latestPublic.jerseyFrontUrl || null;
+      const jerseyBackUrl =
+        latestParticipant.jerseyBackUrl || latestPublic.jerseyBackUrl || null;
+      const avatarKind =
+        latestParticipant.avatarKind || latestPublic.avatarKind || null;
 
       const updatedAt =
         latestParticipant.updatedAt ||
@@ -611,8 +620,19 @@ useEffect(() => {
         { [uid]: displayName },
         {
           [uid]: avatarUrl
-            ? { photoURL: avatarUrl, version }
-            : { version },
+            ? {
+                photoURL: avatarUrl,
+                jerseyFrontUrl,
+                jerseyBackUrl,
+                avatarKind,
+                version,
+              }
+            : {
+                jerseyFrontUrl,
+                jerseyBackUrl,
+                avatarKind,
+                version,
+              },
         }
       );
 
@@ -628,7 +648,15 @@ useEffect(() => {
           ...prev,
           [uid]:
             memNames.info[uid] ||
-            (avatarUrl ? { photoURL: avatarUrl, version } : { version }),
+            (avatarUrl || jerseyFrontUrl
+              ? {
+                  photoURL: avatarUrl || jerseyFrontUrl,
+                  jerseyFrontUrl,
+                  jerseyBackUrl,
+                  avatarKind,
+                  version,
+                }
+              : { version }),
         }));
       }
     };
@@ -637,7 +665,7 @@ useEffect(() => {
       .doc(`participants/${uid}`)
       .onSnapshot(
         (snap) => {
-          latestParticipant = snap.exists ? snap.data() || {} : {};
+          latestParticipant = snapshotExists(snap) ? snapshotData(snap) || {} : {};
           applyMerged();
         },
         () => {}
@@ -647,7 +675,7 @@ useEffect(() => {
       .doc(`profiles_public/${uid}`)
       .onSnapshot(
         (snap) => {
-          latestPublic = snap.exists ? snap.data() || {} : {};
+          latestPublic = snapshotExists(snap) ? snapshotData(snap) || {} : {};
           applyMerged();
         },
         () => {
@@ -683,8 +711,8 @@ useEffect(() => {
       if (!defi?.id) return;
       const ref = firestore().doc(`defis/${String(defi.id)}/live/stats`);
       const un = ref.onSnapshot((snap) => {
-        if (snap.exists) {
-          setLiveStats(normalizeLiveStatsDoc(snap.data() || {}));
+        if (snapshotExists(snap)) {
+          setLiveStats(normalizeLiveStatsDoc(snapshotData(snap) || {}));
         } else {
           setLiveStats(emptyLiveStats());
         }
@@ -752,8 +780,8 @@ useEffect(() => {
         .onSnapshot((snap) => {
           const updates = {};
           snap.forEach((docSnap) => {
-            const v = docSnap.data() || {};
-            const pid = normPlayerId(v?.playerId ?? docSnap.id);
+            const v = snapshotData(docSnap) || {};
+            const pid = normPlayerId(v?.playerId ?? snapshotId(docSnap));
             if (!pid) return;
             updates[pid] = {
               fullName: v.fullName || v.skaterFullName || "—",
@@ -783,8 +811,8 @@ useEffect(() => {
             const s = await qRef.get();
             if (cancelled) return;
             s.forEach((docSnap) => {
-              const v = docSnap.data() || {};
-              updates[docSnap.id] = {
+              const v = snapshotData(docSnap) || {};
+              updates[snapshotId(docSnap)] = {
                 fullName: v.fullName || '—',
                 teamAbbr: v.teamAbbr || '',
               };

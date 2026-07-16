@@ -1,5 +1,6 @@
 // app/(drawer)/(tabs)/ChallengesScreen.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -25,6 +26,7 @@ import {
 import {
   getProphetikBusinessDate,
   getProphetikBusinessYmd,
+  addDaysToYmd,
 } from "@src/lib/prophetikBusinessDate";
 import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
 import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
@@ -92,7 +94,7 @@ function addDays(date, days) {
 function buildResultsDayOptions() {
   const base = getProphetikBusinessDate();
   return Array.from({ length: 8 }, (_, i) => {
-    const d = addDays(base, -i);
+    const d = addDays(base, -(i + 1));
     const ymd = ymdLocal(d);
     return {
       ymd,
@@ -317,7 +319,9 @@ export default function ChallengesScreen() {
   const [fgcItems, setFgcItems] = useState([]);
   const [tpBundleItems, setTpBundleItems] = useState([]);
   const [tpLegacyItems, setTpLegacyItems] = useState([]);
-  const [selectedYmd, setSelectedYmd] = useState(() => getProphetikBusinessYmd());
+  const [selectedYmd, setSelectedYmd] = useState(() =>
+    addDaysToYmd(getProphetikBusinessYmd(), -1)
+  );
   const [selectedDefiTab, setSelectedDefiTab] = useState("fgc");
 
   const tpItems = useMemo(
@@ -343,7 +347,13 @@ export default function ChallengesScreen() {
   );
 
   const todayKey = getProphetikBusinessYmd();
+  const yesterdayKey = useMemo(() => addDaysToYmd(todayKey, -1), [todayKey]);
   const isSelectedToday = selectedYmd === todayKey;
+
+  useEffect(() => {
+    if (!isFocused || paramOpenChallengeId) return;
+    setSelectedYmd(yesterdayKey);
+  }, [isFocused, yesterdayKey, paramOpenChallengeId]);
 
   const allItems = useMemo(
     () => [...fgcItems, ...tpItems, ...tsItems],
@@ -509,7 +519,7 @@ export default function ChallengesScreen() {
       .where("groupId", "==", gid)
       .onSnapshot(
         (snap) => {
-          const rows = snap.docs
+          const rows = (snap?.docs ?? [])
             .map(normalizeTsDoc)
             .filter((x) => dayYmdSet.has(x.dateKey))
             .filter((x) => isTsType(x.raw))
@@ -531,7 +541,7 @@ export default function ChallengesScreen() {
         .where("type", "==", "first_goal")
         .onSnapshot(
           (snap) => {
-            const rows = snap.docs.map(normalizeFgcDoc);
+            const rows = (snap?.docs ?? []).map(normalizeFgcDoc);
 
             setFgcItems((prev) => {
               const keep = prev.filter(
@@ -560,7 +570,7 @@ export default function ChallengesScreen() {
         .where("gameYmd", "==", day.compact)
         .onSnapshot(
           (snap) => {
-            const rows = snap.docs.map(normalizeTpLegacyDoc);
+            const rows = (snap?.docs ?? []).map(normalizeTpLegacyDoc);
 
             setTpLegacyItems((prev) => {
               const keep = prev.filter(
@@ -584,7 +594,7 @@ export default function ChallengesScreen() {
       .where("groupId", "==", gid)
       .onSnapshot(
         (snap) => {
-          const rows = snap.docs
+          const rows = (snap?.docs ?? [])
             .map(normalizeTpBundleDoc)
             .filter((x) => dayYmdSet.has(x.dateKey))
             .filter(
@@ -626,8 +636,8 @@ export default function ChallengesScreen() {
       const ref = firestore().collection("profiles_public").doc(uid);
       const un = ref.onSnapshot(
         (snap) => {
-          if (snap.exists) {
-            const v = snap.data() || {};
+          if (snapshotExists(snap)) {
+            const v = snapshotData(snap) || {};
             setWinnerInfoMap((prev) => ({
               ...prev,
               [uid]: {
@@ -745,7 +755,7 @@ export default function ChallengesScreen() {
         .doc(String(user.uid))
         .onSnapshot(
           (snap) => {
-            const data = snap?.exists ? snap.data() || null : null;
+            const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
             setFgcParticipationMap((prev) => ({
               ...prev,
               [item.id]: {
@@ -776,7 +786,7 @@ export default function ChallengesScreen() {
         .doc(String(user.uid))
         .onSnapshot(
           (snap) => {
-            const data = snap?.exists ? snap.data() || null : null;
+            const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
             setTpParticipationMap((prev) => ({
               ...prev,
               [item.id]: data,
@@ -801,7 +811,7 @@ export default function ChallengesScreen() {
         .doc(String(user.uid))
         .onSnapshot(
           (snap) => {
-            const data = snap?.exists ? snap.data() || null : null;
+            const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
             setTsParticipationMap((prev) => ({
               ...prev,
               [item.id]: data,

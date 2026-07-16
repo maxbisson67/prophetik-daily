@@ -67,7 +67,7 @@ export default function useLeaderboardGroupMembers({
             if (!alive) return;
             setRowsByKey((prev) => ({
               ...prev,
-              [key]: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+              [key]: (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() })),
             }));
             setLoading(false);
           },

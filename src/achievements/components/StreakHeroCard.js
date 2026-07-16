@@ -396,7 +396,7 @@ function StreakCompactBar({
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "stretch" }}>
-          {showGroupStats && !homeMinimal ? (
+          {showGroupStats ? (
             <>
               <PointsDashboardColumn
                 columnTheme={ui.points}
@@ -408,7 +408,7 @@ function StreakCompactBar({
                 style={{
                   width: 1,
                   backgroundColor: ui.divider,
-                  marginVertical: 14,
+                  marginVertical: homeMinimal ? 12 : 14,
                 }}
               />
             </>

@@ -7,10 +7,13 @@ import { OutputValidator } from "./guardrails/OutputValidator.js";
 import { QuotaManager } from "./quotas/QuotaManager.js";
 import { CacheLayer } from "./cache/CacheLayer.js";
 import { AuditLogger } from "./audit/AuditLogger.js";
+import { buildIndicatorsMeta } from "./indicators/buildIndicatorsMeta.js";
 
 function normalizeCapability(value) {
   const v = String(value || "coach").trim().toLowerCase();
-  return v === "explain" ? "explain" : "coach";
+  if (v === "explain") return "explain";
+  if (v === "indicators") return "indicators";
+  return "coach";
 }
 
 function normalizeLang(value, memory) {
@@ -24,7 +27,9 @@ function resolveChallengeType(ctx, verifiedContext) {
   const d = String(ctx?.domain || verifiedContext?.domain || "fgc")
     .trim()
     .toLowerCase();
-  return d === "tp" ? "TP" : "FGC";
+  if (d === "tp") return "TP";
+  if (d === "ts") return "TS";
+  return "FGC";
 }
 
 function guessFocusSlotFromMessage(message) {
@@ -70,7 +75,7 @@ export class NovaService {
     const message = String(request.message || "").trim();
     const ctx = request.context || {};
 
-    if (!message) {
+    if (!message && capability !== "indicators") {
       return { ok: false, error: "MESSAGE_REQUIRED" };
     }
 
@@ -81,7 +86,7 @@ export class NovaService {
     let verifiedContext = null;
     let domain = null;
 
-    if (capability === "coach" || ctx.challengeId) {
+    if (capability === "coach" || capability === "indicators" || ctx.challengeId) {
       try {
         verifiedContext = await this.contextBuilder.build({
           domain: ctx.domain || "fgc",
@@ -96,6 +101,9 @@ export class NovaService {
         domain = `${verifiedContext.domain}_${verifiedContext.sport}`.toLowerCase();
       } catch (e) {
         const code = String(e?.message || e);
+        if (capability === "indicators") {
+          return { ok: false, error: code || "CONTEXT_UNAVAILABLE" };
+        }
         if (capability === "coach") {
           if (code === "CHALLENGE_NOT_FOUND" || code === "CHALLENGE_ID_REQUIRED") {
             return { ok: false, error: code };
@@ -111,6 +119,28 @@ export class NovaService {
           domain = `${verifiedContext.domain}_${verifiedContext.sport}`.toLowerCase();
         }
       }
+    }
+
+    if (capability === "indicators") {
+      const indicators = buildIndicatorsMeta(verifiedContext);
+      if (!indicators) {
+        return { ok: false, error: "INDICATORS_NOT_SUPPORTED" };
+      }
+
+      await this.auditLogger.log({
+        uid,
+        capability: "indicators",
+        domain,
+        provider: "context",
+        cacheHit: false,
+        schemaValid: true,
+      });
+
+      return {
+        ok: true,
+        data: { ready: true },
+        meta: { source: "context", indicators },
+      };
     }
 
     const challengeType = resolveChallengeType(ctx, verifiedContext);
@@ -144,6 +174,11 @@ export class NovaService {
       String(ctx.domain || verifiedContext?.domain || "").toLowerCase() === "fgc" &&
       String(ctx.sport || verifiedContext?.sport || "MLB").toUpperCase() === "MLB";
 
+    const isTsMlbCoach =
+      capability === "coach" &&
+      String(ctx.domain || verifiedContext?.domain || "").toLowerCase() === "ts" &&
+      String(ctx.sport || verifiedContext?.sport || "MLB").toUpperCase() === "MLB";
+
     if (isTpCoach) {
       for (const key of ["team_record", "tp_scoring", "probable_pitcher"]) {
         if (knowledgeExcerpts.some((e) => e.key === key)) continue;
@@ -163,6 +198,16 @@ export class NovaService {
         injectKeys.splice(1, 0, "fgc_away_first_inning");
       }
       for (const key of injectKeys) {
+        if (knowledgeExcerpts.some((e) => e.key === key)) continue;
+        const article = await this.knowledgeRetriever.getByKey(key);
+        if (!article) continue;
+        const ex = this.knowledgeRetriever.formatArticleExcerpt(article, { lang, level });
+        if (ex) knowledgeExcerpts.push(ex);
+      }
+    }
+
+    if (isTsMlbCoach) {
+      for (const key of ["rbi", "ops", "bvp", "probable_pitcher", "era", "platoon_advantage"]) {
         if (knowledgeExcerpts.some((e) => e.key === key)) continue;
         const article = await this.knowledgeRetriever.getByKey(key);
         if (!article) continue;
@@ -235,7 +280,7 @@ export class NovaService {
           schemaValid: true,
         });
 
-        return { ok: true, data: cachedValid.data, meta: { source: "cache" } };
+        return { ok: true, data: cachedValid.data, meta: { source: "cache", indicators: buildIndicatorsMeta(verifiedContext) } };
       }
     }
 
@@ -382,6 +427,7 @@ export class NovaService {
         model: modelResult.model,
         latencyMs: modelResult.latencyMs,
         quota,
+        indicators: buildIndicatorsMeta(verifiedContext),
       },
     };
   }

@@ -7,6 +7,15 @@ export function openMesResultatsTab(router, { groupId } = {}) {
   });
 }
 
+export function openLiveResultsTab(router, { groupId } = {}) {
+  const gid = String(groupId || "").trim();
+
+  router.push({
+    pathname: "/(drawer)/(tabs)/LiveScreen",
+    params: gid ? { groupId: gid } : {},
+  });
+}
+
 export function navigateToMesResultats(router, { groupId, challengeId, kind }) {
   const gid = String(groupId || "").trim();
   const cid = String(challengeId || "").trim();

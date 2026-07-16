@@ -6,17 +6,10 @@ export function toNumber(v, def = 0) {
   return Number.isFinite(n) ? n : def;
 }
 
-export function readScoringConfig(bundle = {}) {
-  const scoring = bundle.scoring || {};
+export function readScoringConfig(_bundle = {}) {
   return {
-    winnerBasePoints: toNumber(
-      scoring.winnerBasePoints,
-      TP_DEFAULT_SCORING.winnerBasePoints
-    ),
-    exactScoreBonusPoints: toNumber(
-      scoring.exactScoreBonusPoints,
-      TP_DEFAULT_SCORING.exactScoreBonusPoints
-    ),
+    winnerBasePoints: TP_DEFAULT_SCORING.winnerBasePoints,
+    exactScoreBonusPoints: TP_DEFAULT_SCORING.exactScoreBonusPoints,
   };
 }
 

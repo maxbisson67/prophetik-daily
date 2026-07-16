@@ -9,10 +9,12 @@ import {
   Platform,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import { mlbPlayerTsPoints } from "@src/defis/mlbTsScoring";
 import {
   isMlbDefiPlayer,
   MlbOpponentMatchupLine,
@@ -75,10 +77,17 @@ function shortPlayerName(fullName = "") {
   return `${first.slice(0, 1).toUpperCase()}. ${last}`;
 }
 
-function mlbPointsValue(p) {
+function mlbSeasonPoints(p) {
   const stored = num(p?.points);
   if (stored > 0) return stored;
-  return num(p?.hits) + num(p?.rbi) + num(p?.homeRuns);
+  return mlbPlayerTsPoints({
+    hits: p?.hits,
+    doubles: p?.doubles,
+    triples: p?.triples,
+    homeRuns: p?.homeRuns,
+    rbi: p?.rbi,
+    runs: p?.runs,
+  });
 }
 
 export default function PlayerSelectModal({
@@ -94,6 +103,7 @@ export default function PlayerSelectModal({
   pickerSlotIndex = 0,
   sport = "NHL",
   formatStandingsLine = null,
+  loading = false,
 }) {
   const { colors } = useTheme();
 
@@ -130,14 +140,17 @@ export default function PlayerSelectModal({
 
   function getStatLabel() {
     if (isMlbSport) {
+      if (sortKey === "points") {
+        return i18n.t("defi.playerSelect.statPoints", { defaultValue: "PTS" });
+      }
       if (sortKey === "hits") {
         return i18n.t("defi.playerSelect.statHits", { defaultValue: "H" });
       }
       if (sortKey === "rbi") {
         return i18n.t("defi.playerSelect.statRbi", { defaultValue: "RBI" });
       }
-      if (sortKey === "hr") {
-        return i18n.t("defi.playerSelect.statHr", { defaultValue: "HR" });
+      if (sortKey === "runs") {
+        return i18n.t("defi.playerSelect.statRuns", { defaultValue: "R" });
       }
       return i18n.t("defi.playerSelect.statPoints", { defaultValue: "PTS" });
     }
@@ -149,8 +162,8 @@ export default function PlayerSelectModal({
     if (isMlbSport) {
       if (sortKey === "hits") return String(Math.round(num(p?.hits)));
       if (sortKey === "rbi") return String(Math.round(num(p?.rbi)));
-      if (sortKey === "hr") return String(Math.round(num(p?.homeRuns)));
-      return String(Math.round(mlbPointsValue(p)));
+      if (sortKey === "runs") return String(Math.round(num(p?.runs)));
+      return String(Math.round(mlbSeasonPoints(p)));
     }
     if (sortKey === "ppg" && !isFree) return num(p?.pointsPerGame).toFixed(2);
     return String(Math.round(num(p?.points)));
@@ -158,10 +171,10 @@ export default function PlayerSelectModal({
 
   function sortComparator(a, b) {
     if (isMlbSport) {
+      if (sortKey === "points") return mlbSeasonPoints(b) - mlbSeasonPoints(a);
       if (sortKey === "hits") return num(b.hits) - num(a.hits);
       if (sortKey === "rbi") return num(b.rbi) - num(a.rbi);
-      if (sortKey === "hr") return num(b.homeRuns) - num(a.homeRuns);
-      if (sortKey === "points") return mlbPointsValue(b) - mlbPointsValue(a);
+      if (sortKey === "runs") return num(b.runs) - num(a.runs);
     }
 
     if (sortKey === "points") return num(b.points) - num(a.points);
@@ -195,12 +208,20 @@ export default function PlayerSelectModal({
         label: i18n.t("defi.playerSelect.sortRbi", { defaultValue: "RBI" }),
       },
       {
-        value: "hr",
-        label: i18n.t("defi.playerSelect.sortHr", { defaultValue: "HR" }),
+        value: "runs",
+        label: i18n.t("defi.playerSelect.sortRuns", { defaultValue: "Points marqués" }),
       },
     ],
     []
   );
+
+  const mlbStatLegend = useMemo(() => {
+    if (!isMlbSport) return null;
+    return i18n.t("defi.playerSelect.mlbStatLegend", {
+      defaultValue:
+        "PTS = coups sûrs + points marqués + points produits + 1 pt par double, triple ou circuit (saison). Les onglets affichent cette stat ou H, RBI, R individuellement.",
+    });
+  }, [isMlbSport]);
 
   const mlbSelectionHint = useMemo(() => {
     if (!isMlbSport) return null;
@@ -209,12 +230,10 @@ export default function PlayerSelectModal({
     const hintBody =
       tier === "T3"
         ? i18n.t("defi.playerSelect.hintOpen", {
-            defaultValue:
-              "Sélectionne un joueur parmi les choix suivants. Les points affichés pour un joueur correspondent à la somme des coups sûrs (HITS), des points produits (RBI) et des coups de circuit (HR).",
+            defaultValue: "Sélectionne un joueur parmi les choix suivants.",
           })
         : i18n.t("defi.playerSelect.hintTop10", {
-            defaultValue:
-              "Sélectionne un joueur parmi les 10 choix suivants. Les points affichés pour un joueur correspondent à la somme des coups sûrs (HITS), des points produits (RBI) et des coups de circuit (HR).",
+            defaultValue: "Sélectionne un joueur parmi les 10 choix suivants.",
           });
 
     return i18n.t("defi.playerSelect.choiceHint", {
@@ -298,6 +317,7 @@ export default function PlayerSelectModal({
             paddingHorizontal: 12,
             maxHeight: "88%",
             minHeight: 320,
+            flex: 1,
             borderTopWidth: 1,
             borderColor: colors.border,
           }}
@@ -325,10 +345,24 @@ export default function PlayerSelectModal({
                 color: colors.subtext,
                 fontSize: 13,
                 lineHeight: 18,
-                marginBottom: 10,
+                marginBottom: mlbStatLegend ? 6 : 10,
               }}
             >
               {mlbSelectionHint}
+            </Text>
+          ) : null}
+
+          {mlbStatLegend ? (
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 11,
+                lineHeight: 16,
+                marginBottom: 10,
+                fontWeight: "600",
+              }}
+            >
+              {mlbStatLegend}
             </Text>
           ) : null}
 
@@ -395,6 +429,23 @@ export default function PlayerSelectModal({
           </View>
 
           {/* Players list */}
+          {loading ? (
+            <View
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 48,
+                gap: 10,
+              }}
+            >
+              <ActivityIndicator color={colors.primary} size="large" />
+              <Ionicons name="hourglass-outline" size={22} color={colors.subtext} />
+              <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 14 }}>
+                {i18n.t("defi.loading.inProgress", { defaultValue: "Chargement en cours" })}
+              </Text>
+            </View>
+          ) : (
           <FlatList
             data={filtered}
             keyExtractor={(item, idx) => String(item?.playerId ?? item?.id ?? `player-${idx}`)}
@@ -561,6 +612,7 @@ export default function PlayerSelectModal({
               );
             }}
           />
+          )}
         </View>
       </View>
     </Modal>

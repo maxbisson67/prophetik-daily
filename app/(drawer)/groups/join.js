@@ -1,5 +1,6 @@
 // app/groups/join.js
 import React, { useMemo, useState, useCallback } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -37,7 +38,7 @@ const ALPHABET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
 async function buildIdentityFromParticipants(uid, user) {
   try {
     const snap = await firestore().doc(`participants/${uid}`).get();
-    const p = snap.exists ? snap.data() || {} : {};
+    const p = snapshotExists(snap) ? snapshotData(snap) || {} : {};
 
     const displayName =
       (typeof p.displayName === "string" && p.displayName.trim()) ||
@@ -174,7 +175,9 @@ export default function JoinGroupScreen() {
       // ✅ Caps (abonnement)
       if (
         errCode.includes("failed-precondition") &&
-        (msg.includes("MEMBER_GROUP_LIMIT_REACHED") ||
+        (msg.includes("GROUP_LIMIT_REACHED") ||
+          msg.includes("OWNED_GROUP_LIMIT_REACHED") ||
+          msg.includes("MEMBER_GROUP_LIMIT_REACHED") ||
           msg.includes("OWNER_GROUP_LIMIT_REACHED"))
       ) {
         const tier = details?.tier || "free";

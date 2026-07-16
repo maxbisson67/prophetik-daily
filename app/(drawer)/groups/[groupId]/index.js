@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import { DrawerToggleButton } from '@react-navigation/drawer';
 import {
   useLocalSearchParams,
@@ -40,6 +41,7 @@ import {
   deleteGroupService,
   transferGroupOwnershipService,
 } from '@src/groups/manageGroupService';
+import { isGroupOwner } from '@src/groups/groupOwnership';
 
 /* ----------------------------- Helpers ----------------------------- */
 const RED = '#b91c1c';
@@ -384,7 +386,7 @@ export default function GroupDetailScreen() {
     const ref = firestore().collection('groups').doc(id);
     const unsub = ref.onSnapshot(
       (snap) => {
-        setGroup(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setGroup(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
         setLoading(false);
       },
       (e) => {
@@ -405,7 +407,7 @@ export default function GroupDetailScreen() {
       .collection('group_memberships')
       .where('groupId', '==', id);
     const unsub = qM.onSnapshot((snap) => {
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rows = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
       const activeRows = rows.filter((m) =>
         m.status
           ? m.status === 'active'
@@ -476,17 +478,7 @@ export default function GroupDetailScreen() {
 
   const effectivePrice = getGroupEffectivePrice(group);
 
-  const isOwner =
-    !!user?.uid &&
-    (group?.ownerId === user.uid ||
-      group?.createdBy === user.uid ||
-      (normalizedMemberships || []).some((m) => {
-        const uidNorm = m?.uidNorm || m?.uid || m?.participantId;
-        return (
-          uidNorm === user.uid &&
-          String(m?.role || '').toLowerCase() === 'owner'
-        );
-      }));
+  const isOwner = isGroupOwner(group, user?.uid);
 
   const isAi = useCallback((m) => {
     const uidX = String(m?.uidNorm || m?.uid || '');

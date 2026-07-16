@@ -52,13 +52,6 @@ async function getUserTier(uid) {
   return { tier: "free", active: true };
 }
 
-function weeklyLimitsForTier(tier) {
-  const t = String(tier || "free").toLowerCase();
-  if (t === "pro") return { maxCreates: 21, maxJoins: 21 };
-  if (t === "vip") return { maxCreates: 200, maxJoins: 200 };
-  return { maxCreates: 7, maxJoins: 7 };
-}
-
 function allowedTypesForTier(tier) {
   const t = String(tier || "free").toLowerCase();
 
@@ -155,7 +148,6 @@ export const defisJoin = onCall({ region: "us-central1" }, async (req) => {
       });
     }
 
-    const limits = weeklyLimitsForTier(tier);
     const allowSet = allowedTypesForTier(tier);
 
     const result = await db.runTransaction(async (tx) => {
@@ -258,21 +250,6 @@ export const defisJoin = onCall({ region: "us-central1" }, async (req) => {
       const now = FieldValue.serverTimestamp();
       const joinedAt = already?.joinedAt ?? now;
       const isFirstJoin = !partSnap.exists;
-
-      // ✅ Quota weekly (joins) seulement si first join
-      if (isFirstJoin) {
-        const usageSnap = await tx.get(usageRef);
-        const usage = usageSnap.exists ? usageSnap.data() || {} : {};
-        const joinedCount = Number(usage.joinedCount || 0);
-
-        if (joinedCount >= limits.maxJoins) {
-          throw new HttpsError("resource-exhausted", "JOIN_LIMIT_REACHED", {
-            reason: "JOIN_LIMIT_REACHED",
-            tier,
-            max: limits.maxJoins,
-          });
-        }
-      }
 
       // ✅ Détecter edits (si picks changent après un premier save)
       const prevPicks = Array.isArray(already?.picks) ? already.picks : [];

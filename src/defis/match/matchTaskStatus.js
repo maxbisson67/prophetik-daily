@@ -60,6 +60,10 @@ function resolveMatchPhaseFromSignals({
     return MATCH_TASK_STATES.POSTPONED;
   }
 
+  if (String(entityStatus || "").toLowerCase() === "voided") {
+    return MATCH_TASK_STATES.POSTPONED;
+  }
+
   if (isScheduleFinal(scheduleStatus)) {
     return MATCH_TASK_STATES.COMPLETED;
   }

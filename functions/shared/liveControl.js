@@ -3,6 +3,7 @@
  * Doc Firestore: live_control/{league}_{ymdCompact}
  */
 
+import { IDLE_MODE_CHECK_INTERVAL_MS } from "./liveCronGate.js";
 import { db, FieldValue, logger } from "../utils.js";
 import {
   isRecentlyFinal,
@@ -36,7 +37,7 @@ export function heavyIngestIntervalMs(mode) {
   }
 }
 
-/** Re-vérifier le mode même en idle (détecter pregame approchant). */
+/** Re-vérifier le mode en idle (détecter pregame approchant). */
 export const MODE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 export function liveControlDocId(league, ymd) {
@@ -91,7 +92,7 @@ export function shouldRefreshModeCheck({ control, nowMs = Date.now(), forceRun =
   const last = tsToMillis(control?.lastModeCheckAt);
   if (!last) return true;
   if (control?.mode && control.mode !== LIVE_MODES.IDLE) return true;
-  return nowMs - last >= MODE_CHECK_INTERVAL_MS;
+  return nowMs - last >= IDLE_MODE_CHECK_INTERVAL_MS;
 }
 
 function nhlGameState(g = {}) {

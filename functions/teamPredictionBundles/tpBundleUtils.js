@@ -8,7 +8,7 @@ import {
   safeUpper,
 } from "../teamPredictionChallenges/tpGameSources.js";
 
-export const TP_BUNDLE_MAX_GAMES = 3;
+export const TP_BUNDLE_MAX_GAMES = 2;
 export const TP_LOCK_BEFORE_MINUTES = 5;
 export const TP_EXPIRES_AFTER_DAYS = 2;
 
@@ -84,12 +84,15 @@ export function computeBundleStatus(games = []) {
   if (!slots.length) return "open";
 
   const statuses = slots.map((g) => String(g.status || "open").toLowerCase());
+  const done = (s) => s === "decided" || s === "voided";
 
-  if (statuses.every((s) => s === "decided")) return "decided";
-  if (statuses.every((s) => ["locked", "live", "decided"].includes(s))) {
+  if (statuses.every(done)) return "decided";
+  if (statuses.every((s) => ["locked", "live", "decided", "voided"].includes(s))) {
     return statuses.some((s) => s === "decided") ? "partial" : "locked";
   }
-  if (statuses.some((s) => ["locked", "live", "decided"].includes(s))) return "partial";
+  if (statuses.some((s) => ["locked", "live", "decided", "voided"].includes(s))) {
+    return "partial";
+  }
   return "open";
 }
 

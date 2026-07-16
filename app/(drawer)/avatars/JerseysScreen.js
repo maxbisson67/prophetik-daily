@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -74,8 +75,8 @@ function groupCatalogJerseysBySport(rows = []) {
 }
 
 function normalizeCatalogJerseyDoc(docSnap) {
-  const data = docSnap.data() || {};
-  return { ...data, id: docSnap.id };
+  const data = snapshotData(docSnap) || {};
+  return { ...data, id: snapshotId(docSnap) };
 }
 
 function Chip({ icon, color, bg, label }) {

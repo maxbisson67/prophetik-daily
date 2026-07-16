@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import {
@@ -30,7 +31,7 @@ export function useNotificationPrefs() {
       .doc(uid)
       .onSnapshot(
         (snap) => {
-          const raw = snap.exists ? snap.data()?.notificationPrefs : null;
+          const raw = snapshotExists(snap) ? snapshotData(snap)?.notificationPrefs : null;
           setPrefs(resolveNotificationPrefs(raw));
           setLoading(false);
         },

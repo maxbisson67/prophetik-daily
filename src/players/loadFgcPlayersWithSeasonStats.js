@@ -1,4 +1,5 @@
 import firestore from "@react-native-firebase/firestore";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   getSeasonPairForLeague,
   getSeasonStats,
@@ -87,8 +88,8 @@ async function loadStatsByPlayerIds(collectionName, playerIds, seasonIds, pickFi
     }
 
     snaps.forEach((snap, idx) => {
-      if (!snap?.exists) return;
-      const row = snap.data() || {};
+      if (!snapshotExists(snap)) return;
+      const row = snapshotData(snap) || {};
       const { playerId, seasonId } = chunkMeta[idx];
       if (!byPlayer[playerId]) byPlayer[playerId] = {};
       byPlayer[playerId][seasonId] = pickFields(row);

@@ -1,5 +1,6 @@
 // src/ascensions/AscensionProgressModal.js
 import React, { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   Modal,
   View,
@@ -54,7 +55,7 @@ function progressFromWinsByType(winsByType, stepsTotal) {
 }
 
 function safeDocs(snap) {
-  return Array.isArray(snap?.docs) ? snap.docs : [];
+  return Array.isArray(snap?.docs) ? (snap?.docs ?? []) : [];
 }
 
 function isLikelyNova(uid, displayName) {
@@ -78,8 +79,8 @@ function usePublicProfilesFor(uids) {
         .collection("profiles_public")
         .doc(uid)
         .onSnapshot((snap) => {
-          if (!snap.exists) return;
-          const d = snap.data() || {};
+          if (!snapshotExists(snap)) return;
+          const d = snapshotData(snap) || {};
           setMap((prev) => ({
             ...prev,
             [uid]: {
@@ -303,7 +304,7 @@ export default function AscensionProgressModal({
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const d = snap.exists ? snap.data() || {} : null;
+        const d = snapshotExists(snap) ? snapshotData(snap) || {} : null;
         setAscRoot(d);
         const rid = d?.activeRunId ? String(d.activeRunId) : null;
         setActiveRunId(rid);
@@ -333,7 +334,7 @@ export default function AscensionProgressModal({
 
     const unsub = runRef.onSnapshot(
       (snap) => {
-        const d = snap.exists ? snap.data() || {} : null;
+        const d = snapshotExists(snap) ? snapshotData(snap) || {} : null;
         setRun(d);
         setLoading(false);
       },

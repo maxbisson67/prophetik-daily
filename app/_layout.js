@@ -37,6 +37,7 @@ import * as SystemUI from "expo-system-ui";
 
 import { initPurchases } from "@src/lib/purchases/initPurchases";
 import { initAppCheck } from "@src/lib/initAppCheck";
+import { snapshotData } from "@src/lib/safeSnapshot";
 
 import Analytics from "@src/services/analytics";
 
@@ -58,16 +59,21 @@ Notifications.setNotificationHandler({
 function subscribeParticipantDoc(uid, onNext, onError) {
   if (!uid) return () => {};
 
+  const emit = (snap) => {
+    if (!snap) return;
+    onNext(snap);
+  };
+
   if (Platform.OS === "web") {
     const { doc, onSnapshot, getFirestore } = require("firebase/firestore");
     const { app } = require("@src/lib/firebase");
     const db = getFirestore(app);
     const ref = doc(db, "participants", uid);
-    return onSnapshot(ref, onNext, onError);
+    return onSnapshot(ref, emit, onError);
   }
 
   const firestore = require("@react-native-firebase/firestore").default;
-  return firestore().collection("participants").doc(uid).onSnapshot(onNext, onError);
+  return firestore().collection("participants").doc(uid).onSnapshot(emit, onError);
 }
 
 /* ---------------- Mounts qui consomment le contexte Auth ---------------- */
@@ -78,7 +84,7 @@ function AuthGateMount() {
   const segments = useSegments();
   const rootState = useRootNavigationState();
   const navReady = !!rootState?.key;
-  const { user, ready: authReady } = useAuth();
+  const { user, authReady } = useAuth();
 
   useEffect(() => {
     if (!authReady || !navReady) return;
@@ -86,11 +92,14 @@ function AuthGateMount() {
     const currentPath = pathname || "";
     const firstSegment = Array.isArray(segments) ? segments[0] : null;
 
-    // 🧯 HOTFIX : NE JAMAIS rediriger depuis phone-login
-    if (
-      currentPath === "/phone-login" ||
-      currentPath === "/(auth)/phone-login"
-    ) {
+    // Ne pas interrompre le flux SMS (reCAPTCHA, saisie du code, auto-vérification Android)
+    const inPhoneSmsFlow =
+      currentPath.includes("phone-login") ||
+      currentPath.includes("phone-signup") ||
+      (Array.isArray(segments) &&
+        (segments.includes("phone-login") || segments.includes("phone-signup")));
+
+    if (currentPath.startsWith("/firebaseauth") || inPhoneSmsFlow) {
       return;
     }
 
@@ -287,6 +296,8 @@ function RootLayoutInner() {
       firstSegment === "(auth)" ||
       firstSegment === "auth";
 
+    const inFirebaseAuthLink = currentPath.startsWith("/firebaseauth");
+
     const inOnboarding =
       currentPath.startsWith("/onboarding") ||
       firstSegment === "onboarding";
@@ -294,10 +305,10 @@ function RootLayoutInner() {
     onboardingUnsubRef.current = subscribeParticipantDoc(
       user.uid,
       (snap) => {
-        const data = snap?.data?.() || {};
+        const data = snapshotData(snap, {}) || {};
         const welcomeSeen = data?.onboarding?.welcomeSeen === true;
 
-        if (!welcomeSeen && !inOnboarding && !inAuth) {
+        if (!welcomeSeen && !inOnboarding && !inAuth && !inFirebaseAuthLink) {
           router.replace("/onboarding/welcome");
           return;
         }
@@ -352,6 +363,7 @@ function RootLayoutInner() {
           <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding/welcome" options={{ headerShown: false }} />
+          <Stack.Screen name="firebaseauth/link" options={{ headerShown: false }} />
         </Stack>
 
         <AuthGateMount />

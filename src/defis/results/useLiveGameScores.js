@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { formatMlbLiveInningLabel } from "@src/mlb/mlbInningLabel";
 
@@ -115,8 +116,8 @@ export default function useLiveGameScores(gameIds, league, gameYmd = null) {
             (snap) => {
               setMap((prev) => ({
                 ...prev,
-                [gameId]: snap.exists
-                  ? normalizeNhlLiveGame({ id: snap.id, ...snap.data() })
+                [gameId]: snapshotExists(snap)
+                  ? normalizeNhlLiveGame({ id: snapshotId(snap), ...snapshotData(snap) })
                   : null,
               }));
             },
@@ -148,8 +149,8 @@ export default function useLiveGameScores(gameIds, league, gameYmd = null) {
             (snap) => {
               setMap((prev) => ({
                 ...prev,
-                [gameId]: snap.exists
-                  ? normalizeMlbLiveGame({ id: snap.id, ...snap.data() })
+                [gameId]: snapshotExists(snap)
+                  ? normalizeMlbLiveGame({ id: snapshotId(snap), ...snapshotData(snap) })
                   : null,
               }));
             },

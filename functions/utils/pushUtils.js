@@ -4,17 +4,12 @@ import { getFirestore, FieldPath } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import * as logger from "firebase-functions/logger";
 import { filterUidsByNotificationPref } from "../notifications/notificationPrefs.js";
+import { isActiveMembership } from "../groups/groupMembership.js";
 
 if (!getApps().length) initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
-
-function isActiveMember(m) {
-  if (m?.status !== undefined) return String(m.status).toLowerCase() === "active";
-  if (m?.active !== undefined) return !!m.active;
-  return true;
-}
 
 function pickUid(docId, m) {
   const uid = m?.userId || m?.uid || m?.participantId;
@@ -78,7 +73,7 @@ async function collectUidsForGroup({ groupId, createdBy, includeCreator, include
 
   snap.forEach((d) => {
     const m = d.data() || {};
-    if (!isActiveMember(m)) return;
+    if (!isActiveMembership(m)) return;
 
     const uid = pickUid(d.id, m);
     if (!uid) return;

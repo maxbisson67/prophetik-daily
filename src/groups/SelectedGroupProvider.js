@@ -11,6 +11,7 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import useMeDoc from "@src/home/hooks/useMeDoc";
 import { useMyGroups } from "@src/groups/MyGroupsProvider";
 import i18n from "@src/i18n/i18n";
+import { useLanguage } from "@src/i18n/LanguageProvider";
 
 const SelectedGroupContext = createContext(null);
 
@@ -28,13 +29,17 @@ export function pickDefaultGroupId(favoriteGroupId, groupIds = []) {
   return null;
 }
 
-export function resolveLiveTabTitle(selectedGroupId, selectedSport) {
-  if (!selectedGroupId) {
-    return i18n.t("tabs.matchLive", { defaultValue: "En direct" });
-  }
-  return selectedSport === "MLB"
-    ? i18n.t("drawer.mlbLive", { defaultValue: "MLB Live" })
-    : i18n.t("drawer.nhlLive", { defaultValue: "NHL Live" });
+export function resolveLiveTabTitle() {
+  return i18n.t("tabs.matchLive", { defaultValue: "En direct" });
+}
+
+/** Titre onglet Live — réactif au chargement / changement de langue. */
+export function useLiveTabTitle() {
+  const { lang } = useLanguage();
+  return useMemo(
+    () => i18n.t("tabs.matchLive", { defaultValue: "En direct" }),
+    [lang]
+  );
 }
 
 /**
@@ -43,7 +48,7 @@ export function resolveLiveTabTitle(selectedGroupId, selectedSport) {
  */
 export function SelectedGroupProvider({ children }) {
   const { user, authReady } = useAuth();
-  const { groupIds, groupsMeta } = useMyGroups();
+  const { readableGroupIds, groupsMeta } = useMyGroups();
   const { meDoc } = useMeDoc({ authReady, uid: user?.uid, dayTick: 0 });
 
   const [selectedGroupId, setSelectedGroupIdState] = useState(null);
@@ -51,8 +56,8 @@ export function SelectedGroupProvider({ children }) {
   const userPickedRef = useRef(false);
 
   const defaultGroupId = useMemo(
-    () => pickDefaultGroupId(meDoc?.favoriteGroupId, groupIds),
-    [meDoc?.favoriteGroupId, groupIds.join("|")]
+    () => pickDefaultGroupId(meDoc?.favoriteGroupId, readableGroupIds),
+    [meDoc?.favoriteGroupId, readableGroupIds.join("|")]
   );
 
   useEffect(() => {
@@ -76,16 +81,16 @@ export function SelectedGroupProvider({ children }) {
   useEffect(() => {
     if (!authReady || !user?.uid) return;
 
-    if (!groupIds.length) {
+    if (!readableGroupIds.length) {
       if (selectedGroupId !== null) setSelectedGroupIdState(null);
       return;
     }
 
-    const defaultId = pickDefaultGroupId(meDoc?.favoriteGroupId, groupIds);
+    const defaultId = pickDefaultGroupId(meDoc?.favoriteGroupId, readableGroupIds);
     const current = String(selectedGroupId || "").trim();
 
     if (userPickedRef.current) {
-      if (current && groupIds.includes(current)) return;
+      if (current && readableGroupIds.includes(current)) return;
       setSelectedGroupIdState(defaultId);
       return;
     }
@@ -93,7 +98,7 @@ export function SelectedGroupProvider({ children }) {
     if (String(defaultId || "") !== current) {
       setSelectedGroupIdState(defaultId);
     }
-  }, [authReady, user?.uid, meDoc?.favoriteGroupId, groupIds.join("|"), selectedGroupId]);
+  }, [authReady, user?.uid, meDoc?.favoriteGroupId, readableGroupIds.join("|"), selectedGroupId]);
 
   const setSelectedGroupId = useCallback((gid) => {
     userPickedRef.current = true;

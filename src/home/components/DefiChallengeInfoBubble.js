@@ -10,7 +10,7 @@ function getBubbleCopy(kind) {
       title: i18n.t("firstGoal.home.infoTitle", { defaultValue: "Comment fonctionne ce défi" }),
       body: i18n.t("firstGoal.home.infoBody", {
         defaultValue:
-          "• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 5 points seront alloués à celui qui a prédit le bon joueur.",
+          "• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 10 points seront alloués à celui qui a prédit le bon joueur.",
       }),
       extra: null,
     };

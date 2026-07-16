@@ -112,7 +112,7 @@ export const finalizeDefiWinners = onSchedule(
     // 0) Dernière synchro live avant figer
     try {
       logger.info("finalizeDefiWinners: running runIngestStatsForDate() before finalization");
-      await runIngestStatsForDate();
+      await runIngestStatsForDate({ forceRun: true, source: "finalize" });
       logger.info("finalizeDefiWinners: ingest done");
     } catch (e) {
       logger.error("finalizeDefiWinners: runIngestStatsForDate failed, using last known livePoints", {

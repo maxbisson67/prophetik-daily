@@ -19,6 +19,7 @@ export function getNovaCoachSuggestionGroups({ sport = "NHL", domain = "fgc", la
   void lang;
   const isMlb = String(sport || "").toUpperCase() === "MLB";
   const isTp = String(domain || "").toLowerCase() === "tp";
+  const isTs = String(domain || "").toLowerCase() === "ts";
   void player?.lineupSlot;
 
   if (isTp && isMlb) {
@@ -33,6 +34,19 @@ export function getNovaCoachSuggestionGroups({ sport = "NHL", domain = "fgc", la
         item("tpMatch1", "novaCoach.suggest.tpMatch1", "coach"),
         item("risk", "novaCoach.suggest.risk", "coach"),
       ],
+    };
+  }
+
+  if (isTs && isMlb) {
+    return {
+      learn: [
+        item("rbi", "novaCoach.suggest.rbi", "explain"),
+        item("ops", "novaCoach.suggest.ops", "explain"),
+        item("learnPlatoon", "novaCoach.suggest.learnPlatoon", "explain"),
+        item("learnBvp", "novaCoach.suggest.learnBvp", "explain"),
+        item("era", "novaCoach.suggest.era", "explain"),
+      ],
+      strategy: [],
     };
   }
 
@@ -71,13 +85,36 @@ export function getNovaCoachSuggestions(opts = {}) {
  */
 export function getNovaCoachPlayerAdvice({ sport = "NHL", domain = "fgc" } = {}) {
   const isMlb = String(sport || "").toUpperCase() === "MLB";
+  const d = String(domain || "").toLowerCase();
+  if (isMlb && d === "ts") {
+    return item("tsPlayerAdvice", "novaCoach.suggest.tsPlayerAdvice", "coach");
+  }
   if (isMlb) {
     return item("fgcPlayerAdvice", "novaCoach.suggest.fgcPlayerAdvice", "coach");
   }
-  if (String(domain || "").toLowerCase() === "tp") {
+  if (d === "tp") {
     return item("tpPlayerAdvice", "novaCoach.suggest.tpMatch1", "coach");
   }
   return item("playerAdvice", "novaCoach.suggest.playerAdvice", "coach");
+}
+
+/**
+ * Question unique « Avis de Nova » pour la modal match TP.
+ * @param {{ sport?: string, slot?: number|string|null }} opts
+ */
+export function getNovaCoachMatchAdvice({ sport = "MLB", slot = null } = {}) {
+  const isMlb = String(sport || "").toUpperCase() === "MLB";
+  if (!isMlb) return null;
+
+  return {
+    id: "tpMatchAdvice",
+    message: i18n.t("novaCoach.suggest.tpMatchAdvice", {
+      defaultValue:
+        "Analyse ce match pour ma prédiction d'équipe : lanceurs probables, forme récente des équipes, tendances au marqueur et principaux risques. Donne une recommandation claire sans choisir un score à ma place.",
+      slot: slot ?? "—",
+    }),
+    capability: "coach",
+  };
 }
 
 export function resolveNovaCapability(message, explicitCapability) {
@@ -158,7 +195,7 @@ export function coachTitle(data) {
     return i18n.t("novaCoach.learningTitle");
   }
   if (data.capability === "coach" && !data.learning?.concept) {
-    return i18n.t("novaCoach.adviceTitle", { defaultValue: "Mon avis" });
+    return i18n.t("novaCoach.adviceTitle");
   }
   return i18n.t("novaCoach.title");
 }
@@ -190,6 +227,21 @@ export function mapNovaCoachError(e) {
   const blob = `${key || ""} ${e?.reason || ""} ${e?.message || ""} ${e?.detailsText || ""}`;
 
   if (blob.includes("QUOTA_EXCEEDED")) {
+    const details = e?.details && typeof e.details === "object" ? e.details : {};
+    const used = Number(details.used);
+    const limit = Number(details.limit);
+    const period = String(details.period || "").trim();
+
+    if (Number.isFinite(used) && Number.isFinite(limit)) {
+      return i18n.t("novaCoach.quotaDetailed", {
+        used,
+        limit,
+        periodLine: "",
+        defaultValue:
+          "Vous avez utilisé vos {{limit}} conseils Nova du mois ({{used}}/{{limit}}). Votre quota sera réinitialisé au prochain cycle, ou vous pouvez passer à un forfait supérieur.",
+      });
+    }
+
     return i18n.t("novaCoach.quota");
   }
   if (blob.includes("OPENAI_NOT_CONFIGURED") || blob.includes("OPENAI_KEY_INVALID_FORMAT")) {

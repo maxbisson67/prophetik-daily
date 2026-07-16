@@ -156,6 +156,53 @@ function cycleMemberRefFor(groupId, cycleId, uid) {
   );
 }
 
+async function resolveTsWinnerUids({ defiId, defiData, txResult }) {
+  let winnerUids = normalizeUidArray(txResult?.progressionContext?.winners);
+  if (!winnerUids.length) {
+    winnerUids = normalizeUidArray(defiData?.winners);
+  }
+  if (!winnerUids.length) {
+    try {
+      const snap = await db.collection("defis").doc(defiId).get();
+      winnerUids = normalizeUidArray(snap.data()?.winners);
+    } catch (e) {
+      logger.warn("resolveTsWinnerUids: read failed", {
+        defiId,
+        error: String(e?.message || e),
+      });
+    }
+  }
+  // Inclure Nova ("ai") : le message push affiche "Nova" via loadParticipantDisplayNames.
+  return winnerUids;
+}
+
+async function shouldAttemptTsWinPush(txResult, defiRef) {
+  if (!txResult?.groupId) return { attempt: false, reason: "no-groupId" };
+  if (txResult?.cancelled) return { attempt: false, reason: "cancelled" };
+  if (!(txResult?.applied === true || txResult?.skippedAlreadyApplied === true)) {
+    return { attempt: false, reason: "not-applicable" };
+  }
+
+  try {
+    const snap = await defiRef.get();
+    const defiData = snap.data() || {};
+    if (defiData.groupWinPushSentAt) {
+      return { attempt: false, reason: "already-sent", defiData };
+    }
+    return { attempt: true, defiData };
+  } catch (e) {
+    logger.warn("shouldAttemptTsWinPush: read failed", {
+      defiId: defiRef.id,
+      error: String(e?.message || e),
+    });
+    return { attempt: true, defiData: {} };
+  }
+}
+
+function isTsDefiType(typeVal) {
+  return Number(typeVal) === 3;
+}
+
 /* -------------------- FINALIZATION (daily 5AM) ----------------- */
 export const finalizeDefiWinners = onSchedule(
   {
@@ -170,7 +217,7 @@ export const finalizeDefiWinners = onSchedule(
     // 0) Pré-sync livePoints (best effort)
     try {
       logger.info("finalizeDefiWinners: running runIngestStatsForDate() before finalization");
-      await runIngestStatsForDate();
+      await runIngestStatsForDate({ forceRun: true, source: "finalize" });
       logger.info("finalizeDefiWinners: ingest done");
     } catch (e) {
       logger.error("finalizeDefiWinners: runIngestStatsForDate failed, using last known livePoints", {
@@ -725,17 +772,32 @@ export const finalizeDefiWinners = onSchedule(
         }
       }
 
-      if (txResult?.finalized && txResult?.groupId && Number(d.type) === 3) {
-        const humanWinners = (txResult.progressionContext?.winners || [])
-          .map(String)
-          .filter((uid) => uid && uid.toLowerCase() !== "ai");
+      const tsPushGate = await shouldAttemptTsWinPush(txResult, docSnap.ref);
+      const tsDefiType = isTsDefiType(tsPushGate.defiData?.type ?? d.type);
 
-        if (humanWinners.length) {
+      if (tsDefiType && tsPushGate.attempt) {
+        const winnerUids = await resolveTsWinnerUids({
+          defiId,
+          defiData: tsPushGate.defiData || d,
+          txResult,
+        });
+
+        if (winnerUids.length) {
           try {
-            await notifyTsWinners({
+            const pushRes = await notifyTsWinners({
               defiId,
               groupId: txResult.groupId,
-              winnerUids: humanWinners,
+              winnerUids,
+              seasonId: competitionKey,
+            });
+            logger.info("finalizeDefiWinners: ts win push", {
+              defiId,
+              groupId: txResult.groupId,
+              winners: winnerUids.length,
+              winnerUids,
+              sent: pushRes?.sent || 0,
+              skipped: pushRes?.skipped || false,
+              reason: pushRes?.reason || null,
             });
           } catch (e) {
             logger.warn("finalizeDefiWinners: ts win push failed", {
@@ -744,7 +806,19 @@ export const finalizeDefiWinners = onSchedule(
               error: String(e?.message || e),
             });
           }
+        } else {
+          logger.warn("finalizeDefiWinners: ts win push skipped (no winners)", {
+            defiId,
+            groupId: txResult.groupId,
+            rawWinners: normalizeUidArray(tsPushGate.defiData?.winners ?? d.winners),
+          });
         }
+      } else if (tsDefiType && !tsPushGate.attempt) {
+        logger.info("finalizeDefiWinners: ts win push not attempted", {
+          defiId,
+          groupId: txResult.groupId,
+          reason: tsPushGate.reason,
+        });
       }
 
       if (

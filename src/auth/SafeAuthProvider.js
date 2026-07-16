@@ -11,7 +11,12 @@ import RNFBAuth from "@react-native-firebase/auth";
 import { webAuth } from "@src/lib/firebase";
 import { signOut as webSignOut } from "firebase/auth";
 import Purchases from "react-native-purchases";
-import { initPurchases } from "@src/lib/purchases/initPurchases";
+import {
+  initPurchases,
+  isPurchasesConfigured,
+  isPurchasesNativeAvailable,
+} from "@src/lib/purchases/initPurchases";
+import { setCrashUser } from "@src/services/crashlytics";
 
 const AuthCtx = createContext(null);
 
@@ -45,6 +50,40 @@ export function AuthProvider({ children }) {
   // ✅ anti race condition RC logIn/logOut
   const rcCycleRef = useRef(0);
 
+  const authReadyRef = useRef(authReady);
+  const webBridgedRef = useRef(webBridged);
+  const rcReadyRef = useRef(rcReady);
+
+  useEffect(() => {
+    authReadyRef.current = authReady;
+  }, [authReady]);
+
+  useEffect(() => {
+    webBridgedRef.current = webBridged;
+  }, [webBridged]);
+
+  useEffect(() => {
+    rcReadyRef.current = rcReady;
+  }, [rcReady]);
+
+  function waitForRef(ref, timeoutMs = 15000, label = "ready") {
+    if (ref.current) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const iv = setInterval(() => {
+        if (ref.current) {
+          clearInterval(iv);
+          resolve();
+          return;
+        }
+        if (Date.now() - start >= timeoutMs) {
+          clearInterval(iv);
+          reject(new Error(`${label} timeout`));
+        }
+      }, 50);
+    });
+  }
+
   // 1) Auth natif
   useEffect(() => {
     safetyTimerRef.current = setTimeout(() => {
@@ -56,6 +95,7 @@ export function AuthProvider({ children }) {
 
     const unsub = RNFBAuth().onAuthStateChanged((u) => {
       setUser(mapUser(u));
+      setCrashUser(u?.uid || null);
 
       if (!settledRef.current) {
         settledRef.current = true;
@@ -126,6 +166,10 @@ export function AuthProvider({ children }) {
         // configure une seule fois / idempotent
         initPurchases();
 
+        if (!isPurchasesNativeAvailable() || !isPurchasesConfigured()) {
+          return;
+        }
+
         // si pas de user, on reste "not ready"
         if (!user?.uid) {
           return;
@@ -159,6 +203,8 @@ export function AuthProvider({ children }) {
     return {
       user,
       authReady,
+      /** @deprecated use authReady */
+      ready: authReady,
       webBridged,
       initializing,
 
@@ -172,7 +218,9 @@ export function AuthProvider({ children }) {
         try {
           // 1) RevenueCat d'abord
           try {
-            await Purchases.logOut();
+            if (isPurchasesConfigured()) {
+              await Purchases.logOut();
+            }
           } catch (e) {
             console.log("[RC] logOut error:", e?.message || e);
           }
@@ -202,41 +250,11 @@ export function AuthProvider({ children }) {
         }
       },
 
-      waitForAuthReady: () =>
-        authReady
-          ? Promise.resolve()
-          : new Promise((resolve) => {
-              const iv = setInterval(() => {
-                if (authReady) {
-                  clearInterval(iv);
-                  resolve();
-                }
-              }, 50);
-            }),
+      waitForAuthReady: () => waitForRef(authReadyRef, 15000, "auth"),
 
-      waitForBridge: () =>
-        webBridged
-          ? Promise.resolve()
-          : new Promise((resolve) => {
-              const iv = setInterval(() => {
-                if (webBridged) {
-                  clearInterval(iv);
-                  resolve();
-                }
-              }, 50);
-            }),
+      waitForBridge: () => waitForRef(webBridgedRef, 15000, "bridge"),
 
-      waitForRcReady: () =>
-        rcReady
-          ? Promise.resolve()
-          : new Promise((resolve) => {
-              const iv = setInterval(() => {
-                if (rcReady) {
-                  clearInterval(iv);
-                  resolve();
-                }
-              }, 50);
-            }),
+      waitForRcReady: () => waitForRef(rcReadyRef, 20000, "RevenueCat"),
     };
   }, [user, authReady, webBridged, rcReady, rcAppUserId]);
 

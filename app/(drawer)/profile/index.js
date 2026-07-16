@@ -1,5 +1,6 @@
 // app/profile/index.js
 import React, { useEffect, useState, useRef } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -18,13 +19,14 @@ import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
-import ProgressionSummaryCard from "@src/achievements/components/ProgressionSummaryCard";
-import { BADGES_TAB_HREF } from "@src/achievements/screens/ProgressionScreen";
+import useDeleteAccount from "@src/account/useDeleteAccount";
+import DeleteAccountButton from "@src/account/DeleteAccountButton";
 
 export default function ProfileScreen() {
   const { user, authReady, signOut } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
+  const { deleting, confirmDeleteAccount } = useDeleteAccount();
 
   const isDark = colors.background === "#111827";
 
@@ -55,9 +57,9 @@ useEffect(() => {
     const ref = firestore().doc(`participants/${user.uid}`);
     const unsub = ref.onSnapshot(
       (snap) => {
-        if (snap.exists) {
-          const p = snap.data() || {};
-          setParticipant({ id: snap.id, ...p });
+        if (snapshotExists(snap)) {
+          const p = snapshotData(snap) || {};
+          setParticipant({ id: snapshotId(snap), ...p });
 
           // La source de vérité UI vient de participants.displayName
           setDisplayName(p?.displayName || user?.displayName || "");
@@ -128,7 +130,7 @@ useEffect(() => {
     const ref = firestore().doc(`participants/${u.uid}`);
     const snap = await ref.get();
 
-    if (!snap.exists) {
+    if (!snapshotExists(snap)) {
       await ref.set(
         {
           displayName: u.displayName || null,
@@ -271,17 +273,7 @@ useEffect(() => {
         didPatchOnboardingRef.current = true;
       }
 
-      // 3) Mettre à jour profiles_public aussi pour garder l’app cohérente
-      await firestore()
-        .doc(`profiles_public/${user.uid}`)
-        .set(
-          {
-            displayName: cleanDisplayName,
-            ...(newPhotoURL ? { avatarUrl: newPhotoURL } : {}),
-            updatedAt: firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
+      // profiles_public est synchronisé par mirrorParticipantToPublic (Cloud Function).
 
       Alert.alert(
         i18n.t("profile.alert.savedTitle", { defaultValue: "Profile updated" })
@@ -415,15 +407,6 @@ useEffect(() => {
           </View>
         </View>
 
-        {user ? (
-          <ProgressionSummaryCard
-            colors={colors}
-            stats={participant?.stats}
-            achievements={participant?.achievements}
-            onPress={() => router.push(BADGES_TAB_HREF)}
-          />
-        ) : null}
-
         {busy ? <ActivityIndicator color={colors.primary} /> : null}
 
         {user ? (
@@ -444,6 +427,7 @@ useEffect(() => {
 
             <TouchableOpacity
               onPress={onSignOut}
+              disabled={deleting}
               style={{
                 padding: 14,
                 borderRadius: 10,
@@ -451,6 +435,7 @@ useEffect(() => {
                 borderWidth: 1,
                 backgroundColor: isDark ? "#450a0a" : "#fff5f5",
                 borderColor: isDark ? "#fecaca" : "#ffd6d6",
+                opacity: deleting ? 0.6 : 1,
               }}
             >
               <Text
@@ -462,6 +447,27 @@ useEffect(() => {
                 {i18n.t("profile.signOut", { defaultValue: "Sign out" })}
               </Text>
             </TouchableOpacity>
+
+            <View style={{ marginTop: 8 }}>
+              <Text
+                style={{
+                  color: colors.subtext,
+                  fontSize: 12,
+                  fontWeight: "700",
+                  marginBottom: 8,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.4,
+                }}
+              >
+                {i18n.t("settings.account.title", { defaultValue: "Compte" })}
+              </Text>
+              <DeleteAccountButton
+                colors={colors}
+                deleting={deleting}
+                onPress={confirmDeleteAccount}
+                disabled={busy}
+              />
+            </View>
           </View>
         ) : (
           <TouchableOpacity

@@ -4,6 +4,11 @@ import { logger } from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { parseAutopilotEnabled, parseFavoriteTeam } from "./groupConfigUtils.js";
+import {
+  assertCanCreateOwnedGroup,
+  assertCanSetAutopilot,
+  readUserPlanTier,
+} from "./groupTierLimits.js";
 
 initializeApp();
 const db = getFirestore();
@@ -18,39 +23,6 @@ function generateCodeInvitation(length = 8) {
 function normalizeSport(value) {
   const sport = String(value || "NHL").trim().toUpperCase();
   return sport === "MLB" ? "MLB" : "NHL";
-}
-
-function getLimits(mode) {
-  if (mode === "vip") return { owner: 25, member: 50 };
-  if (mode === "pro") return { owner: 5, member: 10 };
-  return { owner: 1, member: 1 };
-}
-
-function normalizeTier(tier, active) {
-  const t = String(tier || "free").toLowerCase();
-  const normalized = t === "vip" ? "vip" : t === "pro" ? "pro" : "free";
-  return active === false ? "free" : normalized;
-}
-
-async function readUserPlan(uid) {
-  const snap = await db.doc(`entitlements/${uid}`).get();
-  if (!snap.exists) return { tier: "free", active: true, mode: "free" };
-
-  const d = snap.data() || {};
-  const tier = normalizeTier(d.tier, d.active);
-  return { tier, active: d.active !== false, mode: tier };
-}
-
-async function countMembershipsByRole({ uid, role, limitPlusOne }) {
-  const q = await db
-    .collection("group_memberships")
-    .where("uid", "==", String(uid))
-    .where("active", "==", true)
-    .where("role", "==", String(role))
-    .limit(limitPlusOne)
-    .get();
-
-  return q.size;
 }
 
 export const createGroupWithCap = onCall(async (req) => {
@@ -74,20 +46,13 @@ export const createGroupWithCap = onCall(async (req) => {
     favoriteTeam,
   });
 
-  const { mode } = await readUserPlan(uid);
-  const limits = getLimits(mode);
+  const tier = await readUserPlanTier(db, uid);
+  await assertCanCreateOwnedGroup(db, uid, tier);
 
-  const ownerCount = await countMembershipsByRole({
-    uid,
-    role: "owner",
-    limitPlusOne: limits.owner + 1,
-  });
-
-  if (ownerCount >= limits.owner) {
-    throw new HttpsError("failed-precondition", "OWNER_GROUP_LIMIT_REACHED", {
-      current: ownerCount,
-      max: limits.owner,
-      mode,
+  if (autopilotEnabled) {
+    await assertCanSetAutopilot(db, uid, tier, {
+      currentlyEnabled: false,
+      nextEnabled: true,
     });
   }
 
@@ -111,7 +76,7 @@ export const createGroupWithCap = onCall(async (req) => {
       name,
       description,
       sport,
-      league: sport, // legacy/compatibilité temporaire
+      league: sport,
 
       avatarUrl: null,
       codeInvitation,

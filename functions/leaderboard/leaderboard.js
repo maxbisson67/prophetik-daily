@@ -1,6 +1,7 @@
 // functions/leaderboard/leaderboard.js
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
 
 if (!getApps().length) initializeApp();
 export const db = getFirestore();
@@ -349,7 +350,7 @@ function ensureAgg(totals, uid) {
  *
  * points FGC MVP:
  * - payout si présent
- * - sinon 1 si gagné
+ * - sinon FGC_WIN_POINTS si gagné
  * - sinon 0
  */
 function parseFgcEntry({ entry = {}, winnersPreviewUids = [] }) {
@@ -359,7 +360,7 @@ function parseFgcEntry({ entry = {}, winnersPreviewUids = [] }) {
     payout > 0 ||
     winnersPreviewUids.includes(String(entry?.uid || entry?.pickedBy || ""));
 
-  const points = payout > 0 ? payout : won ? 1 : 0;
+  const points = payout > 0 ? payout : won ? FGC_WIN_POINTS : 0;
 
   return {
     payout,

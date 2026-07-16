@@ -1,4 +1,5 @@
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
+import { parseMlbHalfFromGame } from "@src/mlb/mlbInningLabel";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
@@ -12,8 +13,9 @@ export function mapMlbScheduleGameToLiveGame(row = {}, ymd = "") {
   const status = row?.status || {};
   const abstract = String(status?.abstractGameState || "").toLowerCase();
   const postponed = isMlbGamePostponed(status);
+  const inningState = String(row?.inningState || "");
 
-  return {
+  const mapped = {
     id: gamePk,
     gamePk,
     ymd,
@@ -27,11 +29,14 @@ export function mapMlbScheduleGameToLiveGame(row = {}, ymd = "") {
     isPostponed: postponed,
     currentInning: row?.currentInning != null ? Number(row.currentInning) : null,
     currentInningOrdinal: String(row?.currentInningOrdinal || ""),
-    inningState: String(row?.inningState || ""),
+    inningState,
     inningHalf: "",
     abstractGameState: String(status?.abstractGameState || ""),
     detailedState: String(status?.detailedState || ""),
     startTimeUTC: row?.startTimeUTC || row?.gameDateRaw || null,
     venue: row?.venue?.name || null,
   };
+
+  mapped.inningHalf = parseMlbHalfFromGame(mapped) || "";
+  return mapped;
 }

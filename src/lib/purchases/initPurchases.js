@@ -5,40 +5,51 @@ import Constants from "expo-constants";
 
 let configured = false;
 
-function getRuntimeProfile() {
-  // 1) env injectée par EAS build (fiable)
-  const p1 = process?.env?.EAS_BUILD_PROFILE;
-  if (typeof p1 === "string" && p1.trim()) return p1.trim();
+const GOOGLE_PLAY_RC_KEY = "goog_zspInALRAlfiGdAASFKmnpbnjSh";
+const APPLE_APP_RC_KEY = "appl_JQrNgbdEBGafcPAyUBjnKieEVvJ";
 
-  // 2) fallback: channel que TU mets dans app.json extra (si tu veux l’ajouter)
-  const p2 = Constants?.expoConfig?.extra?.eas?.channel;
-  if (typeof p2 === "string" && p2.trim()) return p2.trim();
+function pickRcApiKey() {
+  if (Platform.OS === "android") {
+    return GOOGLE_PLAY_RC_KEY;
+  }
 
-  // 3) fallback
-  return __DEV__ ? "development" : "production";
+  // iOS : clé App Store (sandbox en dev, prod en TestFlight/App Store).
+  return APPLE_APP_RC_KEY;
 }
 
-function isProdLike(profile) {
-  return profile === "production" || profile === "internal";
+/** Expo Go / web : le module natif RevenueCat n'est pas disponible. */
+export function isPurchasesNativeAvailable() {
+  if (Platform.OS !== "ios" && Platform.OS !== "android") return false;
+  if (Constants.executionEnvironment === "storeClient") return false;
+  return typeof Purchases?.configure === "function";
 }
 
-function pickRcApiKey(profile) {
-  const prod = isProdLike(profile);
-
-  const iosKey = prod ? "goog_zspInALRAlfiGdAASFKmnpbnjSh" : "test_DHohNcnUlUIteFcDrOEckyviAeF";
-  const androidKey = prod ? "goog_zspInALRAlfiGdAASFKmnpbnjSh" : "test_DHohNcnUlUIteFcDrOEckyviAeF";
-
-  return Platform.OS === "ios" ? iosKey : androidKey;
+export function isPurchasesConfigured() {
+  return configured;
 }
 
 export function initPurchases() {
-  if (configured) return;
-  configured = true;
+  if (configured) return true;
 
-  Purchases.setLogLevel(LOG_LEVEL.ERROR);
+  if (!isPurchasesNativeAvailable()) {
+    if (__DEV__) {
+      console.warn(
+        "[RC] Module natif indisponible (Expo Go, web ou build sans dev client) — achats ignorés."
+      );
+    }
+    return false;
+  }
 
-  const profile = getRuntimeProfile();
-  const apiKey = pickRcApiKey(profile);
-
-  Purchases.configure({ apiKey });
+  try {
+    Purchases.setLogLevel(LOG_LEVEL.ERROR);
+    const apiKey = pickRcApiKey();
+    Purchases.configure({ apiKey });
+    configured = true;
+    return true;
+  } catch (e) {
+    if (__DEV__) {
+      console.warn("[RC] configure failed:", e?.message || String(e));
+    }
+    return false;
+  }
 }

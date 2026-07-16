@@ -10,17 +10,18 @@ import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
 import { listenRNFB } from "@src/dev/fsListen";
+import { snapshotExists } from "@src/lib/safeSnapshot";
+import { isActiveGroup, isActiveMembership } from "@src/groups/groupOwnership";
 
 const MyGroupsContext = createContext(null);
 
 function isMembershipActive(m) {
-  const st = String(m?.status || "").toLowerCase();
-  if (st) return ["open", "active", "approved"].includes(st);
-  return m?.active !== false;
+  return isActiveMembership(m);
 }
 
 export function normalizeGroupMeta(gid, data = {}) {
   return {
+    ...data,
     id: gid,
     name: data.name || data.title || gid,
     avatarUrl: data.avatarUrl || null,
@@ -88,6 +89,7 @@ export function MyGroupsProvider({ children, enabled = true }) {
       const memberships = [...rowsByUid, ...rowsByPid].filter(isMembershipActive);
       const gidsFromMemberships = memberships.map((m) => m.groupId).filter(Boolean);
       const gidsFromOwner = [...rowsOwnerCreated, ...rowsOwnerOwnerId]
+        .filter(isActiveGroup)
         .map((g) => g.id)
         .filter(Boolean);
       const unionSorted = Array.from(new Set([...gidsFromMemberships, ...gidsFromOwner])).sort();
@@ -181,7 +183,7 @@ export function MyGroupsProvider({ children, enabled = true }) {
       const un = listenRNFB(
         ref,
         (snap) => {
-          if (!snap?.exists) {
+          if (!snapshotExists(snap)) {
             setGroupsMeta((prev) => {
               const next = { ...prev };
               delete next[gid];
@@ -206,7 +208,11 @@ export function MyGroupsProvider({ children, enabled = true }) {
   }, [shouldListen, groupIds.join("|")]);
 
   const readableGroupIds = useMemo(
-    () => groupIds.filter((gid) => !!groupsMeta[gid]),
+    () =>
+      groupIds.filter((gid) => {
+        const g = groupsMeta[gid];
+        return g && isActiveGroup(g);
+      }),
     [groupIds, groupsMeta]
   );
 

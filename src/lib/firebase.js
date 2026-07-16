@@ -1,5 +1,6 @@
 // src/lib/firebase.js
 import { Platform } from 'react-native';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import Constants from 'expo-constants';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -165,7 +166,7 @@ function getCurrentUidSafe() {
       const dRef = doc(db, 'defis', String(defiId));
       try {
         const dSnap = await getDoc(dRef);
-        console.log('[Probe] defi path:', dRef.path, 'exists:', dSnap.exists());
+        console.log('[Probe] defi path:', dRef.path, 'exists:', snapshotExists(dSnap));
       } catch (e) {
         console.warn('[Probe] defi error:', e);
       }

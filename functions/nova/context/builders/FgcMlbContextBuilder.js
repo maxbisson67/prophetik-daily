@@ -41,6 +41,10 @@ function safeAbbr(v) {
   return str(v).toUpperCase();
 }
 
+function ymdCompact(ymd) {
+  return str(ymd).replaceAll("-", "");
+}
+
 function pickMlbStats(stats = {}) {
   return {
     rbi: Number(stats.rbi) || 0,
@@ -188,7 +192,7 @@ export class FgcMlbContextBuilder {
 
     const gameDate = ch.gameStartTimeUTC?.toDate?.() ? ch.gameStartTimeUTC.toDate() : new Date();
     const seasonId = getMlbCurrentSeason(gameDate);
-    const gameYmd = str(ch.gameYmd);
+    const gameYmd = ymdCompact(ch.gameYmd);
     const gameId = str(ch.gamePk || ch.gameId);
     const homeAbbr = safeAbbr(ch.homeAbbr);
     const awayAbbr = safeAbbr(ch.awayAbbr);

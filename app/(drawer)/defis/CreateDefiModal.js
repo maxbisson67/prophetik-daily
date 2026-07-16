@@ -68,7 +68,7 @@ async function fetchEligibleDaySummaryFromFirestore(gameDateYmd, sport = "NHL") 
         return { status: "none", count: 0, firstISO: null };
       }
 
-      const eligible = filterMlbScheduleGames(snap.docs);
+      const eligible = filterMlbScheduleGames((snap?.docs ?? []));
       const count = eligible.length;
       const nowMs = Date.now();
       const upcoming = eligible.filter(
@@ -95,7 +95,7 @@ async function fetchEligibleDaySummaryFromFirestore(gameDateYmd, sport = "NHL") 
       .get();
 
     const count = snap.size || 0;
-    const firstISO = count ? tsToIso(snap.docs[0]?.data()?.startTimeUTC) : null;
+    const firstISO = count ? tsToIso((snap?.docs ?? [])[0]?.data()?.startTimeUTC) : null;
 
     return { status: count ? "ok" : "none", count, firstISO };
   } catch (e) {

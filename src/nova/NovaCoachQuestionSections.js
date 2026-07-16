@@ -1,7 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
+import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
 
 const LEARN_ACCENT = "#6366f1";
 const STRATEGY_ACCENT = "#ef4444";
@@ -343,7 +346,20 @@ export function NovaCoachLearnDrawer(props) {
   return <LearnDrawer {...props} />;
 }
 
-export function NovaCoachSingleAdvice({ advice, busy, disabled, onPress, colors, isDark, selectedQuestion }) {
+export function NovaCoachSingleAdvice({
+  advice,
+  busy,
+  disabled,
+  onPress,
+  colors,
+  isDark,
+  selectedQuestion,
+  title,
+  subtitle,
+  buttonLabel,
+  player = null,
+  sport = "MLB",
+}) {
   if (!advice) return null;
 
   const selected = selectedQuestion === advice.message;
@@ -353,14 +369,23 @@ export function NovaCoachSingleAdvice({ advice, busy, disabled, onPress, colors,
     <View style={{ gap: 8 }}>
       <SectionHeader
         icon="sparkles"
-        title={i18n.t("novaCoach.sectionPlayerAdvice", { defaultValue: "Conseil sur ce joueur" })}
-        subtitle={i18n.t("novaCoach.singleAdviceHint", {
-          defaultValue: "Analyse complète pour ce choix",
-        })}
+        title={
+          title ||
+          i18n.t("novaCoach.sectionPlayerAdvice", { defaultValue: "Conseil sur ce joueur" })
+        }
+        subtitle={
+          subtitle ||
+          i18n.t("novaCoach.singleAdviceHint", {
+            defaultValue: "Analyse complète pour ce choix",
+          })
+        }
         accent={STRATEGY_ACCENT}
         colors={colors}
         isDark={isDark}
       />
+      {player ? (
+        <NovaCoachPlayerHero player={player} sport={sport} colors={colors} isDark={isDark} embedded />
+      ) : null}
       <TouchableOpacity
         onPress={() => onPress(advice)}
         disabled={busy || disabled}
@@ -391,7 +416,8 @@ export function NovaCoachSingleAdvice({ advice, busy, disabled, onPress, colors,
           <Ionicons name="sparkles" size={18} color={STRATEGY_ACCENT} />
         )}
         <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>
-          {i18n.t("novaCoach.singleAdviceButton", { defaultValue: "Obtenir l'avis de Nova" })}
+          {buttonLabel ||
+            i18n.t("novaCoach.singleAdviceButton", { defaultValue: "Obtenir l'avis de Nova" })}
         </Text>
       </TouchableOpacity>
     </View>
@@ -469,24 +495,92 @@ export default function NovaCoachQuestionSections({
   );
 }
 
-export function NovaCoachPlayerHero({ player, colors, isDark }) {
+export function NovaCoachMatchHero({ slot, awayAbbr, homeAbbr, sport = "MLB", colors, isDark }) {
+  const league = String(sport || "MLB").toUpperCase();
+  const away = String(awayAbbr || "").trim();
+  const home = String(homeAbbr || "").trim();
+  if (!away && !home) return null;
+
+  const awayTeam = lookupTeamByAbbr(league, away);
+  const homeTeam = lookupTeamByAbbr(league, home);
+  const slotLabel =
+    slot != null
+      ? i18n.t("tp.pick.matchSlot", { defaultValue: "Match {{n}}", n: slot })
+      : null;
+
+  return (
+    <View
+      style={{
+        padding: 12,
+        borderRadius: 16,
+        borderWidth: 1.5,
+        borderColor: isDark ? "rgba(239,68,68,0.35)" : "rgba(239,68,68,0.25)",
+        backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)",
+        gap: 10,
+      }}
+    >
+      {slotLabel ? (
+        <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12, textAlign: "center" }}>
+          {slotLabel}
+        </Text>
+      ) : null}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <View style={{ flex: 1, alignItems: "center", gap: 6 }}>
+          <TeamLogoBadge team={awayTeam} size={44} colors={colors} />
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>{away}</Text>
+        </View>
+        <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 16 }}>@</Text>
+        <View style={{ flex: 1, alignItems: "center", gap: 6 }}>
+          <TeamLogoBadge team={homeTeam} size={44} colors={colors} />
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>{home}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function NovaCoachPlayerHero({ player, colors, isDark, sport = "MLB", embedded = false }) {
   const name = String(player?.fullName || player?.name || "").trim();
-  const uri = player?.headshotUrl || player?.headshot || null;
+  const uri = useMemo(() => {
+    if (!player) return null;
+    return (
+      player.headshotUrl ||
+      player.headshot ||
+      player.photoUrl ||
+      player.avatarUrl ||
+      resolveDefiHeadshotUrl(
+        String(sport || player?.league || "MLB").toUpperCase(),
+        player.teamAbbr,
+        player.playerId || player.id
+      ) ||
+      null
+    );
+  }, [player, sport]);
   const team = String(player?.teamAbbr || "").trim();
   const slot = player?.lineupSlot != null ? Number(player.lineupSlot) : null;
   const slotLabel = slot != null ? i18n.t("novaCoach.lineupSlotShort", { slot }) : null;
-  const isMlb = String(player?.league || "").toUpperCase() === "MLB";
+  const league = String(player?.league || sport || "").toUpperCase();
+  const isMlb = league === "MLB";
   const lineupText =
     slot != null
       ? i18n.t("firstGoal.pick.lineupOrder", { defaultValue: "{{slot}}e frappeur", slot })
       : isMlb
-      ? i18n.t("firstGoal.pick.lineupPending", { defaultValue: "Ordre de frappe à confirmer" })
-      : null;
+        ? i18n.t("firstGoal.pick.lineupPending", { defaultValue: "Ordre de frappe à confirmer" })
+        : null;
   const subtitleParts = isMlb
     ? [team, lineupText].filter(Boolean)
     : [team, player?.positionCode].filter(Boolean);
 
   if (!name) return null;
+
+  const avatarSize = embedded ? 48 : 52;
 
   return (
     <View
@@ -494,18 +588,18 @@ export function NovaCoachPlayerHero({ player, colors, isDark }) {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        padding: 12,
-        borderRadius: 16,
-        borderWidth: 1.5,
+        padding: embedded ? 10 : 12,
+        borderRadius: embedded ? 14 : 16,
+        borderWidth: embedded ? 1.5 : 1.5,
         borderColor: isDark ? "rgba(239,68,68,0.35)" : "rgba(239,68,68,0.25)",
         backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)",
       }}
     >
       <View
         style={{
-          width: 52,
-          height: 52,
-          borderRadius: 26,
+          width: avatarSize,
+          height: avatarSize,
+          borderRadius: avatarSize / 2,
           overflow: "hidden",
           backgroundColor: colors.card2,
           borderWidth: 2,
@@ -515,9 +609,9 @@ export function NovaCoachPlayerHero({ player, colors, isDark }) {
         }}
       >
         {uri ? (
-          <Image source={{ uri }} style={{ width: 52, height: 52 }} resizeMode="cover" />
+          <Image source={{ uri }} style={{ width: avatarSize, height: avatarSize }} resizeMode="cover" />
         ) : (
-          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: embedded ? 16 : 18 }}>
             {name.slice(0, 1).toUpperCase()}
           </Text>
         )}

@@ -1,5 +1,6 @@
 // src/live/liveSyncClient.js
 import firestore from '@react-native-firebase/firestore';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 
 const db = firestore();
 
@@ -97,7 +98,7 @@ export async function tryAcquireLock(defiId, uid) {
   const now = Date.now();
   const ttlMs = 90_000;
 
-  const data = snap.exists ? snap.data() : {};
+  const data = snapshotExists(snap) ? snapshotData(snap) : {};
   const last = data?.heartbeatAt?.toMillis
     ? data.heartbeatAt.toMillis()
     : typeof data?.heartbeatAt === 'number'

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { mlbScheduleGameDocPath } from "@src/mlb/mlbScheduleClient";
 
@@ -44,7 +45,7 @@ export default function useMlbScheduleGames(targets = []) {
         .doc(path)
         .onSnapshot(
           (snap) => {
-            const data = snap?.exists ? snap.data() || {} : null;
+            const data = snapshotExists(snap) ? snapshotData(snap) || {} : null;
             setByKey((prev) => ({
               ...prev,
               [key]: data

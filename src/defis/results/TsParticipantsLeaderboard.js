@@ -3,6 +3,7 @@ import { View, Text, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
+import ParticipantAvatar, { participantInfoToAvatarProps } from "@src/ui/ParticipantAvatar";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
 import {
@@ -46,14 +47,11 @@ function TsPlayerHeadshot({ sport, teamAbbr, playerId, colors, size = 28 }) {
   );
 }
 
-const MLB_STAT_COL_WIDTH = 44;
-const HEADSHOT_SIZE_DEFAULT = 28;
-const HEADSHOT_SIZE_COMPACT = 26;
-const HEADSHOT_MARGIN_RIGHT = 10;
+const MLB_STAT_COL_WIDTH = 30;
 const TEAM_LOGO_SIZE_DEFAULT = 18;
 const TEAM_LOGO_SIZE_COMPACT = 16;
-const AVATAR_LOGO_GAP = 4;
-const NAME_MARGIN_RIGHT = 8;
+const TEAM_LOGO_MARGIN_RIGHT = 6;
+const NAME_MARGIN_RIGHT = 4;
 
 function resolvePickTeam(sport, teamAbbr) {
   const league = String(sport || "NHL").toUpperCase();
@@ -64,19 +62,31 @@ function resolvePickTeam(sport, teamAbbr) {
   return { ...team, sport: league, abbreviation: abbr };
 }
 
-function avatarWithTeamSlotWidth(compact = false) {
-  const headshotSize = compact ? HEADSHOT_SIZE_COMPACT : HEADSHOT_SIZE_DEFAULT;
-  const logoSize = compact ? TEAM_LOGO_SIZE_COMPACT : TEAM_LOGO_SIZE_DEFAULT;
-  return headshotSize + AVATAR_LOGO_GAP + logoSize + HEADSHOT_MARGIN_RIGHT;
+function teamLogoSlotWidth(compact = false) {
+  const size = compact ? TEAM_LOGO_SIZE_COMPACT : TEAM_LOGO_SIZE_DEFAULT;
+  return size + TEAM_LOGO_MARGIN_RIGHT;
+}
+
+function PickTeamLogo({ sport, teamAbbr, colors, compact = false }) {
+  const team = resolvePickTeam(sport, teamAbbr);
+  const size = compact ? TEAM_LOGO_SIZE_COMPACT : TEAM_LOGO_SIZE_DEFAULT;
+  if (!team) {
+    return <View style={{ width: size, marginRight: TEAM_LOGO_MARGIN_RIGHT }} />;
+  }
+  return (
+    <View style={{ marginRight: TEAM_LOGO_MARGIN_RIGHT }}>
+      <TeamLogoBadge team={team} size={size} colors={colors} />
+    </View>
+  );
 }
 
 function TsPlayerAvatarWithTeam({ sport, teamAbbr, playerId, colors, compact = false }) {
-  const headshotSize = compact ? HEADSHOT_SIZE_COMPACT : HEADSHOT_SIZE_DEFAULT;
+  const headshotSize = compact ? 26 : 28;
   const logoSize = compact ? TEAM_LOGO_SIZE_COMPACT : TEAM_LOGO_SIZE_DEFAULT;
   const team = resolvePickTeam(sport, teamAbbr);
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: AVATAR_LOGO_GAP }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
       <TsPlayerHeadshot
         sport={sport}
         teamAbbr={teamAbbr}
@@ -89,11 +99,17 @@ function TsPlayerAvatarWithTeam({ sport, teamAbbr, playerId, colors, compact = f
   );
 }
 
-function headshotSlotWidth(compact = false) {
-  return avatarWithTeamSlotWidth(compact);
+function mlbStatColumns() {
+  return [
+    { key: "h", label: i18n.t("defi.playerSelect.statHits", { defaultValue: "H" }) },
+    { key: "xb", label: i18n.t("defi.playerSelect.statExtraBase", { defaultValue: "XB" }) },
+    { key: "rbi", label: i18n.t("defi.playerSelect.statRbi", { defaultValue: "RBI" }) },
+    { key: "r", label: i18n.t("defi.playerSelect.statRuns", { defaultValue: "R" }) },
+  ];
 }
 
 function MlbPickColumnsHeader({ colors, compact = false }) {
+  const cols = mlbStatColumns();
   return (
     <View
       style={{
@@ -103,20 +119,20 @@ function MlbPickColumnsHeader({ colors, compact = false }) {
         paddingBottom: 6,
       }}
     >
-      <View style={{ width: headshotSlotWidth(compact) }} />
+      <View style={{ width: teamLogoSlotWidth(compact) }} />
       <View style={{ flex: 1, marginRight: NAME_MARGIN_RIGHT }} />
-      {["H", "RBI", "HR"].map((col) => (
+      {cols.map((col) => (
         <Text
-          key={col}
+          key={col.key}
           style={{
             width: MLB_STAT_COL_WIDTH,
             textAlign: "center",
             color: colors.subtext,
             fontWeight: "900",
-            fontSize: 11,
+            fontSize: 10,
           }}
         >
-          {col}
+          {col.label}
         </Text>
       ))}
     </View>
@@ -127,7 +143,12 @@ function PickRow({ row, sport, isMlbTs, colors, compact = false }) {
   if (isMlbTs) {
     const hits = Number(row?.goals) || 0;
     const rbi = Number(row?.assists) || 0;
-    const hr = Number(row?.homeRuns) || 0;
+    const runs = Number(row?.runs) || 0;
+    const xb =
+      Number(row?.extraBase) >= 0 && row?.extraBase != null
+        ? Number(row.extraBase)
+        : (Number(row?.doubles) || 0) + (Number(row?.triples) || 0) + (Number(row?.homeRuns) || 0);
+    const values = [hits, xb, rbi, runs];
 
     return (
       <View
@@ -137,20 +158,7 @@ function PickRow({ row, sport, isMlbTs, colors, compact = false }) {
           paddingVertical: compact ? 4 : 6,
         }}
       >
-        <View
-          style={{
-            width: headshotSlotWidth(compact) - HEADSHOT_MARGIN_RIGHT,
-            marginRight: HEADSHOT_MARGIN_RIGHT,
-          }}
-        >
-          <TsPlayerAvatarWithTeam
-            sport={sport}
-            teamAbbr={row.teamAbbr}
-            playerId={row.playerId}
-            colors={colors}
-            compact={compact}
-          />
-        </View>
+        <PickTeamLogo sport={sport} teamAbbr={row.teamAbbr} colors={colors} compact={compact} />
         <Text
           numberOfLines={1}
           style={{
@@ -163,7 +171,7 @@ function PickRow({ row, sport, isMlbTs, colors, compact = false }) {
         >
           {row.playerName}
         </Text>
-        {[hits, rbi, hr].map((value, index) => (
+        {values.map((value, index) => (
           <Text
             key={index}
             style={{
@@ -192,20 +200,7 @@ function PickRow({ row, sport, isMlbTs, colors, compact = false }) {
         paddingVertical: compact ? 4 : 6,
       }}
     >
-      <View
-        style={{
-          width: headshotSlotWidth(compact) - HEADSHOT_MARGIN_RIGHT,
-          marginRight: 10,
-        }}
-      >
-        <TsPlayerAvatarWithTeam
-          sport={sport}
-          teamAbbr={row.teamAbbr}
-          playerId={row.playerId}
-          colors={colors}
-          compact={compact}
-        />
-      </View>
+      <PickTeamLogo sport={sport} teamAbbr={row.teamAbbr} colors={colors} compact={compact} />
       <Text
         numberOfLines={1}
         style={{
@@ -213,14 +208,14 @@ function PickRow({ row, sport, isMlbTs, colors, compact = false }) {
           color: colors.text,
           fontSize: compact ? 13 : 14,
           fontWeight: "600",
-          marginRight: 10,
+          marginRight: NAME_MARGIN_RIGHT,
         }}
       >
         {row.playerName}
       </Text>
       <Text
         style={{
-          minWidth: 86,
+          minWidth: 72,
           textAlign: "right",
           fontWeight: "800",
           color: colors.text,
@@ -237,7 +232,7 @@ function PickRow({ row, sport, isMlbTs, colors, compact = false }) {
 function ParticipantBlock({
   entry,
   name,
-  photoURL,
+  participantInfo,
   colors,
   liveStats,
   playerMap,
@@ -259,7 +254,7 @@ function ParticipantBlock({
     <View
       style={{
         paddingVertical: compact ? 8 : 12,
-        paddingHorizontal: compact ? 8 : 10,
+        paddingHorizontal: compact ? 6 : 8,
         backgroundColor: isSelf ? colors.card2 : colors.card,
         borderWidth: 1,
         borderColor: isSelf ? colors.primary : colors.border,
@@ -268,28 +263,13 @@ function ParticipantBlock({
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: hidePicks ? 0 : 8 }}>
-        {photoURL ? (
-          <Image
-            source={{ uri: photoURL }}
-            style={{
-              width: compact ? 36 : 44,
-              height: compact ? 36 : 44,
-              borderRadius: compact ? 18 : 22,
-              marginRight: 10,
-              backgroundColor: colors.card2,
-            }}
+        <View style={{ marginRight: 10 }}>
+          <ParticipantAvatar
+            {...participantInfoToAvatarProps(participantInfo, compact ? 36 : 44)}
+            name={name}
+            colors={colors}
           />
-        ) : (
-          <View
-            style={{
-              width: compact ? 36 : 44,
-              height: compact ? 36 : 44,
-              borderRadius: compact ? 18 : 22,
-              marginRight: 10,
-              backgroundColor: colors.border,
-            }}
-          />
-        )}
+        </View>
         <View style={{ flex: 1 }}>
           <Text numberOfLines={1} style={{ fontWeight: "700", color: colors.text }}>
             {name}
@@ -359,9 +339,9 @@ export default function TsParticipantsLeaderboard({
   const containerStyle = compact
     ? {}
     : {
-        marginHorizontal: 16,
+        marginHorizontal: 8,
         marginBottom: 12,
-        padding: 12,
+        padding: 10,
         borderWidth: 1,
         borderRadius: 12,
         backgroundColor: colors.card,
@@ -388,7 +368,7 @@ export default function TsParticipantsLeaderboard({
         <ParticipantBlock
           entry={myEntry}
           name={namesMap[myEntry.uid] || myEntry.uid}
-          photoURL={participantInfoMap[myEntry.uid]?.photoURL || null}
+          participantInfo={participantInfoMap[myEntry.uid] || {}}
           colors={colors}
           liveStats={liveStats}
           playerMap={playerMap}
@@ -408,7 +388,7 @@ export default function TsParticipantsLeaderboard({
                 key={entry.uid}
                 entry={entry}
                 name={namesMap[entry.uid] || entry.uid}
-                photoURL={participantInfoMap[entry.uid]?.photoURL || null}
+                participantInfo={participantInfoMap[entry.uid] || {}}
                 colors={colors}
                 liveStats={liveStats}
                 playerMap={playerMap}
@@ -456,7 +436,7 @@ export default function TsParticipantsLeaderboard({
                 key={entry.uid}
                 entry={entry}
                 name={namesMap[entry.uid] || entry.uid}
-                photoURL={participantInfoMap[entry.uid]?.photoURL || null}
+                participantInfo={participantInfoMap[entry.uid] || {}}
                 colors={colors}
                 liveStats={liveStats}
                 playerMap={playerMap}

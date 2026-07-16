@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import i18n from "@src/i18n/i18n";
 import SportGlyph from "@src/sports/SportGlyph";
+import LiveChallengeKindBadge, { LIVE_BADGE_ACCENTS } from "@src/live/LiveChallengeKindBadge";
 import LeaderboardRankBadge from "./LeaderboardRankBadge";
+import ParticipantAvatar from "@src/ui/ParticipantAvatar";
 import useLeaderboardProfiles, {
   resolveLeaderboardMember,
 } from "./useLeaderboardProfiles";
@@ -11,14 +13,6 @@ import {
   fgcDisplayPoints,
   isMlbSport,
 } from "./leaderboardDashboardHelpers";
-
-const AVATAR_PLACEHOLDER = require("@src/assets/avatar-placeholder.png");
-
-function withCacheBust(url, tsMillis) {
-  if (!url) return null;
-  const v = Number.isFinite(tsMillis) ? tsMillis : Date.now();
-  return url.includes("?") ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
-}
 
 function formatPts(n) {
   const v = Number(n) || 0;
@@ -62,7 +56,13 @@ function SectionHeader({ leading, title, subtitle, colors }) {
   );
 }
 
+function playerColumnFlex(columns) {
+  return columns[0]?.flex ?? 1.4;
+}
+
 function ColumnHeader({ columns, colors }) {
+  const nameFlex = playerColumnFlex(columns);
+
   return (
     <View
       style={{
@@ -75,17 +75,24 @@ function ColumnHeader({ columns, colors }) {
       }}
     >
       <View style={{ width: 36 }} />
-      <View style={{ flex: 1.4, paddingRight: 6 }}>
+      <View style={{ flex: nameFlex, minWidth: 0, paddingRight: 6 }}>
         <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
           {columns[0]?.label || ""}
         </Text>
       </View>
       {columns.slice(1).map((col) => (
-        <View key={col.key} style={{ flex: col.flex || 1, alignItems: col.align || "center" }}>
+        <View
+          key={col.key}
+          style={{
+            flex: col.flex || 1,
+            minWidth: 0,
+            alignItems: col.align || "center",
+          }}
+        >
           <Text
             style={{
               color: colors.subtext,
-              fontSize: 10,
+              fontSize: col.headerSize || 10,
               fontWeight: "800",
               textAlign: col.align === "right" ? "right" : "center",
             }}
@@ -101,6 +108,7 @@ function ColumnHeader({ columns, colors }) {
 
 function ChallengeCard({
   sport,
+  challengeKind,
   title,
   accent,
   rows,
@@ -109,32 +117,66 @@ function ChallengeCard({
   hasActivity,
   colors,
   profiles,
-  onRowPress,
+  onParticipantPress,
   emptyText,
+  t,
 }) {
+  const [showAll, setShowAll] = useState(false);
+
   const sorted = useMemo(() => {
     const copy = [...(rows || [])];
     copy.sort((a, b) => Number(sortValue(b) ?? 0) - Number(sortValue(a) ?? 0));
     return copy.filter((row) => hasActivity(row));
   }, [rows, sortValue, hasActivity]);
 
+  const visibleRows = showAll ? sorted : sorted.slice(0, 5);
+  const hasMore = sorted.length > 5;
+
   return (
     <View style={[cardStyle(colors, accent), { marginBottom: 16 }]}>
       <SectionHeader
-        leading={<SportGlyph sport={sport} colors={colors} size={20} />}
+        leading={
+          challengeKind ? (
+            <LiveChallengeKindBadge
+              kind={challengeKind}
+              colors={colors}
+              sport={sport}
+              compact
+            />
+          ) : null
+        }
         title={title}
         colors={colors}
       />
       <ColumnHeader columns={columns} colors={colors} />
       <RankedRows
-        rows={sorted.slice(0, 5)}
+        rows={visibleRows}
         colors={colors}
         columns={columns}
         accent={accent}
         profiles={profiles}
-        onRowPress={onRowPress}
+        onParticipantPress={onParticipantPress}
         emptyText={emptyText}
       />
+      {hasMore ? (
+        <TouchableOpacity
+          onPress={() => setShowAll((v) => !v)}
+          activeOpacity={0.85}
+          style={{
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            alignItems: "flex-end",
+          }}
+        >
+          <Text style={{ color: colors.primary, fontWeight: "900", fontSize: 13 }}>
+            {showAll
+              ? t("leaderboard.actions.showLess")
+              : t("leaderboard.actions.showAll")}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -145,7 +187,7 @@ function RankedRows({
   columns,
   accent,
   profiles,
-  onRowPress,
+  onParticipantPress,
   emptyText,
 }) {
   if (!rows?.length) {
@@ -156,47 +198,76 @@ function RankedRows({
     );
   }
 
+  const nameFlex = playerColumnFlex(columns);
+  const compactStats = columns.length > 3;
+  const avatarSize = compactStats ? 26 : 30;
+
   return rows.map((row, idx) => {
-    const { displayName, avatarUrl, updatedAt } = resolveLeaderboardMember(row, profiles);
-    const version = updatedAt?.toMillis?.() ? updatedAt.toMillis() : 0;
-    const uri = avatarUrl ? withCacheBust(avatarUrl, version) : null;
+    const member = resolveLeaderboardMember(row, profiles);
+    const version = member.updatedAt?.toMillis?.() ? member.updatedAt.toMillis() : 0;
     const rank = idx + 1;
+    const rowStyle = {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: idx === rows.length - 1 ? 0 : 1,
+      borderBottomColor: colors.border,
+      backgroundColor: idx % 2 ? colors.rowAlt : colors.card,
+    };
+
+    const openProfile = onParticipantPress
+      ? () => onParticipantPress(row)
+      : null;
 
     return (
-      <TouchableOpacity
-        key={`${row.id}:${idx}`}
-        activeOpacity={0.85}
-        onPress={() => onRowPress?.(row)}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          borderBottomWidth: idx === rows.length - 1 ? 0 : 1,
-          borderBottomColor: colors.border,
-          backgroundColor: idx % 2 ? colors.rowAlt : colors.card,
-        }}
-      >
+      <View key={`${row.id}:${idx}`} style={rowStyle}>
         <View style={{ width: 36, alignItems: "center" }}>
           <LeaderboardRankBadge rank={rank} colors={colors} size={26} />
         </View>
 
-        <View style={{ flex: 1.4, flexDirection: "row", alignItems: "center", paddingRight: 6 }}>
-          <Image
-            source={uri ? { uri } : AVATAR_PLACEHOLDER}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              marginRight: 8,
-              backgroundColor: colors.border,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          />
-          <Text style={{ color: colors.text, fontWeight: "800", flex: 1 }} numberOfLines={1}>
-            {displayName}
-          </Text>
+        <View style={{ flex: nameFlex, minWidth: 0, flexDirection: "row", alignItems: "center", paddingRight: 6 }}>
+          <TouchableOpacity
+            disabled={!openProfile}
+            activeOpacity={openProfile ? 0.75 : 1}
+            onPress={openProfile}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          >
+            <View style={{ marginRight: compactStats ? 6 : 8, flexShrink: 0 }}>
+            <ParticipantAvatar
+              photoURL={member.avatarUrl || member.jerseyFrontUrl}
+              avatarUrl={member.avatarUrl}
+              jerseyFrontUrl={member.jerseyFrontUrl}
+              jerseyBackUrl={member.jerseyBackUrl}
+              avatarKind={member.avatarKind}
+              name={member.displayName}
+              size={avatarSize}
+              colors={colors}
+              version={version}
+            />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            disabled={!openProfile}
+            activeOpacity={openProfile ? 0.75 : 1}
+            onPress={openProfile}
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            <Text
+              style={{
+                color: openProfile ? colors.primary : colors.text,
+                fontWeight: "800",
+                flex: 1,
+                minWidth: 0,
+                fontSize: compactStats ? 12 : 14,
+                lineHeight: compactStats ? 15 : 18,
+              }}
+              numberOfLines={compactStats ? 2 : 1}
+              ellipsizeMode="tail"
+            >
+              {member.displayName}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {columns.slice(1).map((col) => {
@@ -207,6 +278,7 @@ function RankedRows({
               key={col.key}
               style={{
                 flex: col.flex || 1,
+                minWidth: 0,
                 alignItems:
                   col.align === "right"
                     ? "flex-end"
@@ -222,9 +294,12 @@ function RankedRows({
                   style={{
                     color: col.color || colors.text,
                     fontWeight: col.bold ? "900" : "700",
-                    fontSize: col.small ? 12 : 14,
+                    fontSize: col.small ? 11 : compactStats ? 12 : 14,
                     textAlign: col.align === "right" ? "right" : "center",
                   }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit={compactStats}
+                  minimumFontScale={0.85}
                 >
                   {content ?? "—"}
                 </Text>
@@ -232,67 +307,85 @@ function RankedRows({
             </View>
           );
         })}
-      </TouchableOpacity>
+      </View>
     );
   });
 }
 
 function buildChallengeColumns({ t, accent, variant }) {
-  const statColumn = (key, label, render) => ({
+  const statColumn = (key, label, render, options = {}) => ({
     key,
     label,
-    flex: 1,
+    flex: options.flex ?? 1,
+    headerSize: options.headerSize,
+    align: options.align,
     render,
     color: accent,
     bold: true,
+    small: options.small,
   });
 
   if (variant === "fgc") {
     return [
-      { key: "player", label: t("leaderboard.columns.player") },
-      statColumn("successes", t("leaderboard.columns.successes"), (row) =>
-        String(Number(row?.fgcWins ?? 0) || 0)
+      { key: "player", label: t("leaderboard.columns.player"), flex: 1.8 },
+      statColumn("successes", t("leaderboard.columns.successesShort", { defaultValue: "Réuss." }), (row) =>
+        String(Number(row?.fgcWins ?? 0) || 0),
+        { flex: 0.75 }
       ),
-      statColumn("points", t("leaderboard.columns.points"), (row) =>
-        String(fgcDisplayPoints(row))
+      statColumn("points", t("leaderboard.columns.pointsShort", { defaultValue: "Pts" }), (row) =>
+        String(fgcDisplayPoints(row)),
+        { flex: 0.75 }
       ),
     ];
   }
 
   if (variant === "tp") {
     return [
-      { key: "player", label: t("leaderboard.columns.player") },
-      statColumn("successes", t("leaderboard.columns.successes"), (row) =>
-        String(Number(row?.tpWins ?? 0) || 0)
+      { key: "player", label: t("leaderboard.columns.player"), flex: 2.2 },
+      statColumn("successes", t("leaderboard.columns.successesShort", { defaultValue: "Réuss." }), (row) =>
+        String(Number(row?.tpWins ?? 0) || 0),
+        { flex: 0.55, small: true }
       ),
-      statColumn("exacts", t("leaderboard.columns.exacts"), (row) =>
-        String(deriveTpExactCount(row))
+      statColumn("exacts", t("leaderboard.columns.exactsShort", { defaultValue: "Exact." }), (row) =>
+        String(deriveTpExactCount(row)),
+        { flex: 0.55, small: true }
       ),
-      statColumn("points", t("leaderboard.columns.points"), (row) =>
-        String(Number(row?.tpPoints ?? 0) || 0)
+      statColumn("points", t("leaderboard.columns.pointsShort", { defaultValue: "Pts" }), (row) =>
+        String(Number(row?.tpPoints ?? 0) || 0),
+        { flex: 0.55, small: true }
       ),
     ];
   }
 
   return [
-    { key: "player", label: t("leaderboard.columns.player") },
-    statColumn("victories", t("leaderboard.columns.victories"), (row) =>
-      String(Number(row?.tsWins ?? 0) || 0)
+    { key: "player", label: t("leaderboard.columns.player"), flex: 1.8 },
+    statColumn("victories", t("leaderboard.columns.victoriesShort", { defaultValue: "Vict." }), (row) =>
+      String(Number(row?.tsWins ?? 0) || 0),
+      { flex: 0.75 }
     ),
-    statColumn("points", t("leaderboard.columns.points"), (row) =>
-      String(Number(row?.tsPoints ?? 0) || 0)
+    statColumn("points", t("leaderboard.columns.pointsShort", { defaultValue: "Pts" }), (row) =>
+      String(Number(row?.tsPoints ?? 0) || 0),
+      { flex: 0.75 }
     ),
   ];
 }
 
-export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPress, emptyText }) {
+export default function LeaderboardGroupDashboard({
+  rows,
+  colors,
+  sport,
+  profiles: profilesProp,
+  onParticipantPress,
+  emptyText,
+}) {
   const t = i18n.t.bind(i18n);
   const [showAllTotals, setShowAllTotals] = useState(false);
   const mlb = isMlbSport(sport);
 
   const normalizedRows = rows || [];
   const uids = useMemo(() => normalizedRows.map((r) => String(r.id)), [normalizedRows]);
-  const profiles = useLeaderboardProfiles(uids);
+  const profilesInternal = useLeaderboardProfiles(uids);
+  const profiles = profilesProp || profilesInternal;
 
   const sectionTitles = useMemo(
     () => ({
@@ -334,11 +427,11 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
   const hasMoreTotals = totalsSorted.length > 5;
 
   const totalsColumns = [
-    { key: "player", label: t("leaderboard.columns.player") },
+    { key: "player", label: t("leaderboard.columns.player"), flex: 1.8 },
     {
       key: "pointsTotal",
       label: t("leaderboard.columns.total"),
-      flex: 1,
+      flex: 0.9,
       align: "right",
       bold: true,
       render: (row) => formatPts(row?.pointsTotal ?? 0),
@@ -368,7 +461,7 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
           columns={totalsColumns}
           accent="#FACC15"
           profiles={profiles}
-          onRowPress={onRowPress}
+          onParticipantPress={onParticipantPress}
           emptyText={emptyText}
         />
         {hasMoreTotals ? (
@@ -394,10 +487,11 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
 
       <ChallengeCard
         sport={sport}
+        challengeKind="fgc"
         title={sectionTitles.fgc}
-        accent="#22C55E"
+        accent={LIVE_BADGE_ACCENTS.fgc}
         rows={normalizedRows}
-        columns={buildChallengeColumns({ t, accent: "#22C55E", variant: "fgc" })}
+        columns={buildChallengeColumns({ t, accent: LIVE_BADGE_ACCENTS.fgc, variant: "fgc" })}
         sortValue={(row) => fgcDisplayPoints(row)}
         hasActivity={(row) => {
           const wins = Number(row?.fgcWins ?? 0) || 0;
@@ -406,16 +500,18 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
         }}
         colors={colors}
         profiles={profiles}
-        onRowPress={onRowPress}
+        onParticipantPress={onParticipantPress}
         emptyText={emptyTexts.fgc}
+        t={t}
       />
 
       <ChallengeCard
         sport={sport}
+        challengeKind="tp"
         title={sectionTitles.tp}
-        accent="#3B82F6"
+        accent={LIVE_BADGE_ACCENTS.tp}
         rows={normalizedRows}
-        columns={buildChallengeColumns({ t, accent: "#3B82F6", variant: "tp" })}
+        columns={buildChallengeColumns({ t, accent: LIVE_BADGE_ACCENTS.tp, variant: "tp" })}
         sortValue={(row) => Number(row?.tpPoints ?? 0) || 0}
         hasActivity={(row) => {
           const pts = Number(row?.tpPoints ?? 0) || 0;
@@ -425,16 +521,18 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
         }}
         colors={colors}
         profiles={profiles}
-        onRowPress={onRowPress}
+        onParticipantPress={onParticipantPress}
         emptyText={emptyTexts.tp}
+        t={t}
       />
 
       <ChallengeCard
         sport={sport}
+        challengeKind="ts"
         title={sectionTitles.ts}
-        accent="#A855F7"
+        accent={LIVE_BADGE_ACCENTS.ts}
         rows={normalizedRows}
-        columns={buildChallengeColumns({ t, accent: "#A855F7", variant: "ts" })}
+        columns={buildChallengeColumns({ t, accent: LIVE_BADGE_ACCENTS.ts, variant: "ts" })}
         sortValue={(row) => Number(row?.tsPoints ?? 0) || 0}
         hasActivity={(row) => {
           const pts = Number(row?.tsPoints ?? 0) || 0;
@@ -443,8 +541,9 @@ export default function LeaderboardGroupDashboard({ rows, colors, sport, onRowPr
         }}
         colors={colors}
         profiles={profiles}
-        onRowPress={onRowPress}
+        onParticipantPress={onParticipantPress}
         emptyText={emptyTexts.ts}
+        t={t}
       />
     </View>
   );

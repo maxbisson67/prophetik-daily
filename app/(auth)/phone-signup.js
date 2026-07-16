@@ -1,5 +1,5 @@
 // app/(auth)/phone-signup.js
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,28 +13,17 @@ import { Stack, useRouter } from 'expo-router';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Analytics from '@src/services/analytics';
-
-// i18n
+import {
+  E164,
+  normalizePhone,
+  isSignedInForPhone,
+  isSessionExpiredError,
+  prepareForPhoneVerification,
+  sendPhoneVerification,
+  alertForPhoneSendError,
+  waitForSignedInPhone,
+} from '@src/auth/phoneAuthHelpers';
 import i18n from '@src/i18n/i18n';
-
-// --- Helpers E.164 ---
-const DEFAULT_COUNTRY = '+1';
-const E164 = /^\+\d{8,15}$/;
-
-function normalizePhone(input) {
-  if (!input) return '';
-  const raw = String(input).trim();
-
-  if (raw.startsWith('+')) {
-    const digits = raw.replace(/[^\d+]/g, '');
-    return digits.replace(/\+(?=\+)/g, '');
-  }
-
-  const digitsOnly = raw.replace(/\D+/g, '');
-  if (digitsOnly.length === 10) return `${DEFAULT_COUNTRY}${digitsOnly}`;
-  if (digitsOnly.length > 0) return `+${digitsOnly}`;
-  return '';
-}
 
 function sanitizeDisplayName(s) {
   return String(s || '')
@@ -69,6 +58,49 @@ async function ensureParticipantDoc(displayNameRaw) {
   await firestore().collection('participants').doc(user.uid).set(payload, { merge: true });
 }
 
+async function completePhoneSignupFlow({ displayName, router }) {
+  Analytics.authSuccess("sms");
+  const user = auth().currentUser;
+  if (user?.uid) {
+    Analytics.setUserId(user.uid);
+    Analytics.setUserProperty("auth_method", "sms");
+  }
+
+  if (!user) {
+    throw new Error(
+      i18n.t('auth.phoneSignup.errors.userUnavailable', {
+        defaultValue: 'User not available after confirmation.',
+      })
+    );
+  }
+
+  const cleanName = sanitizeDisplayName(displayName);
+  if (cleanName && user.displayName !== cleanName) {
+    await user.updateProfile({ displayName: cleanName }).catch(() => {});
+    await auth().currentUser?.reload().catch(() => {});
+  }
+
+  await ensureParticipantDoc(cleanName);
+
+  await firestore()
+    .collection('participants')
+    .doc(user.uid)
+    .set(
+      {
+        onboarding: { welcomeSeen: false },
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+  Alert.alert(
+    i18n.t('auth.phoneSignup.alerts.welcomeTitle', { defaultValue: 'Welcome!' }),
+    i18n.t('auth.phoneSignup.alerts.welcomeBody', { defaultValue: 'Your account has been created.' })
+  );
+
+  router.replace('/onboarding/welcome');
+}
+
 export default function PhoneSignUpScreen() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -76,10 +108,39 @@ export default function PhoneSignUpScreen() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const confirmationRef = useRef(null);
+  const completingRef = useRef(false);
+  const sentOnceRef = useRef(false);
+  const lastSentPhoneRef = useRef(null);
+  const displayNameRef = useRef('');
+  const normalizedRef = useRef('');
 
   const normalized = useMemo(() => normalizePhone(phone), [phone]);
   const canSend = useMemo(() => E164.test(normalized), [normalized]);
+  const canConfirm = useMemo(() => {
+    if (busy) return false;
+    if (code.trim().length >= 4) return true;
+    return phoneVerified;
+  }, [busy, code, phoneVerified]);
+
+  displayNameRef.current = displayName;
+  normalizedRef.current = normalized;
+
+  useEffect(() => {
+    if (step !== 2) {
+      setPhoneVerified(false);
+      return undefined;
+    }
+
+    const syncVerified = () => {
+      setPhoneVerified(isSignedInForPhone(normalizedRef.current));
+    };
+
+    const unsub = auth().onAuthStateChanged(syncVerified);
+    syncVerified();
+    return unsub;
+  }, [step]);
 
   const requestCode = async () => {
     try {
@@ -105,8 +166,19 @@ export default function PhoneSignUpScreen() {
 
       Analytics.authStart("sms");
 
-      const confirmation = await auth().signInWithPhoneNumber(normalized, true);
+      const prep = await prepareForPhoneVerification(normalized);
+      if (prep.alreadySignedIn) {
+        completingRef.current = true;
+        await completePhoneSignupFlow({ displayName, router });
+        return;
+      }
+
+      const forceResend =
+        sentOnceRef.current && lastSentPhoneRef.current === normalized;
+      const confirmation = await sendPhoneVerification(normalized, { forceResend });
       confirmationRef.current = confirmation;
+      sentOnceRef.current = true;
+      lastSentPhoneRef.current = normalized;
 
       setStep(2);
       setPhone(normalized);
@@ -119,19 +191,8 @@ export default function PhoneSignUpScreen() {
         })
       );
     } catch (e) {
-      const code = e?.code || "";
-
-      if (code === "auth/invalid-phone-number") {
-        Alert.alert(
-          i18n.t("auth.phoneLogin.invalidPhoneTitle", { defaultValue: "Numéro invalide" }),
-          i18n.t("auth.phoneLogin.invalidPhoneBody", { defaultValue: "Entre un numéro valide (ex. 5145551234)." })
-        );
-      } else {
-        Alert.alert(
-          i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "Erreur SMS" }),
-          i18n.t("auth.phoneLogin.smsErrorBody", { defaultValue: "Impossible d’envoyer le code." })
-        );
-      }
+      console.log('SMS send error:', e?.code, e?.message);
+      alertForPhoneSendError(e?.code, e?.message);
     } finally {
       setBusy(false);
     }
@@ -139,7 +200,18 @@ export default function PhoneSignUpScreen() {
 
   const confirmCode = async () => {
     try {
+      setBusy(true);
+
+      const finishIfSignedIn = async () => {
+        if (!(await waitForSignedInPhone(normalized))) return false;
+        completingRef.current = true;
+        await completePhoneSignupFlow({ displayName, router });
+        return true;
+      };
+
       if (!code.trim() || code.trim().length < 4) {
+        if (await finishIfSignedIn()) return;
+
         Alert.alert(
           i18n.t('auth.phoneSignup.errors.codeRequiredTitle', { defaultValue: 'Code required' }),
           i18n.t('auth.phoneSignup.errors.codeRequiredBody', { defaultValue: 'Enter the code you received by SMS.' })
@@ -147,10 +219,10 @@ export default function PhoneSignUpScreen() {
         return;
       }
 
-      setBusy(true);
-
       const confirmation = confirmationRef.current;
       if (!confirmation) {
+        if (await finishIfSignedIn()) return;
+
         Alert.alert(
           i18n.t('auth.phoneSignup.errors.sessionExpiredTitle', { defaultValue: 'Session expired' }),
           i18n.t('auth.phoneSignup.errors.sessionExpiredBody', { defaultValue: 'Try sending the code again.' })
@@ -159,51 +231,17 @@ export default function PhoneSignUpScreen() {
         return;
       }
 
-      const cred = await confirmation.confirm(code.trim());
-      Analytics.authSuccess("sms");
-      const user = cred?.user || auth().currentUser;
-      if (user?.uid) {
-        Analytics.setUserId(user.uid);
-        Analytics.setUserProperty("auth_method", "sms");
+      completingRef.current = true;
+
+      try {
+        await confirmation.confirm(code.trim());
+        await completePhoneSignupFlow({ displayName, router });
+      } catch (confirmErr) {
+        if (isSessionExpiredError(confirmErr) && (await finishIfSignedIn())) return;
+        throw confirmErr;
       }
-
-      if (!user) {
-        throw new Error(
-          i18n.t('auth.phoneSignup.errors.userUnavailable', {
-            defaultValue: 'User not available after confirmation.',
-          })
-        );
-      }
-
-      const cleanName = sanitizeDisplayName(displayName);
-      if (cleanName && user.displayName !== cleanName) {
-        await user.updateProfile({ displayName: cleanName }).catch(() => {});
-        await auth().currentUser?.reload().catch(() => {});
-      }
-
-      // 1) Crée / met à jour le doc participant de base
-      await ensureParticipantDoc(cleanName);
-
-      // 2) Initialise l'onboarding si pas encore fait
-      await firestore()
-        .collection('participants')
-        .doc(user.uid)
-        .set(
-          {
-            onboarding: { welcomeSeen: false },
-            updatedAt: firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-      Alert.alert(
-        i18n.t('auth.phoneSignup.alerts.welcomeTitle', { defaultValue: 'Welcome!' }),
-        i18n.t('auth.phoneSignup.alerts.welcomeBody', { defaultValue: 'Your account has been created.' })
-      );
-
-      // 3) Envoie directement vers l'onboarding
-      router.replace('/onboarding/welcome');
     } catch (e) {
+      completingRef.current = false;
       const msg = String(e?.message || e);
 
       if (msg.includes('invalid-verification-code')) {
@@ -211,7 +249,18 @@ export default function PhoneSignUpScreen() {
           i18n.t('auth.phoneSignup.errors.invalidCodeTitle', { defaultValue: 'Invalid code' }),
           i18n.t('auth.phoneSignup.errors.invalidCodeBody', { defaultValue: 'Check the code and try again.' })
         );
-      } else if (msg.includes('session-expired')) {
+      } else if (isSessionExpiredError(e)) {
+        if (await waitForSignedInPhone(normalized)) {
+          completingRef.current = true;
+          try {
+            await completePhoneSignupFlow({ displayName, router });
+            return;
+          } catch (completeErr) {
+            completingRef.current = false;
+            console.log('phone signup recovery failed:', completeErr?.code, completeErr?.message);
+          }
+        }
+
         Alert.alert(
           i18n.t('auth.phoneSignup.errors.sessionExpiredTitle', { defaultValue: 'Session expired' }),
           i18n.t('auth.phoneSignup.errors.sessionExpiredBody2', { defaultValue: 'Request a new code.' })
@@ -343,15 +392,24 @@ export default function PhoneSignUpScreen() {
                 />
               </View>
 
+              {phoneVerified && code.trim().length < 4 ? (
+                <Text style={{ color: '#059669' }}>
+                  {i18n.t('auth.phoneSignup.autoVerifiedHint', {
+                    defaultValue:
+                      'Numéro vérifié automatiquement. Entrez le code reçu ou appuyez sur Confirmer.',
+                  })}
+                </Text>
+              ) : null}
+
               <TouchableOpacity
                 onPress={confirmCode}
-                disabled={busy}
+                disabled={!canConfirm}
                 style={{
                   backgroundColor: '#111',
                   padding: 14,
                   borderRadius: 10,
                   alignItems: 'center',
-                  opacity: busy ? 0.7 : 1,
+                  opacity: !canConfirm ? 0.7 : 1,
                 }}
               >
                 {busy ? (

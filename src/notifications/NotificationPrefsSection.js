@@ -79,7 +79,7 @@ export default function NotificationPrefsSection({ colors }) {
           defaultValue: "Prédire l'issue des matchs",
         })}
         hint={i18n.t("settings.notifications.tpExactScoreHint", {
-          defaultValue: "Quand tu prédis le pointage exact d'un match.",
+          defaultValue: "Quand un membre prédit le pointage exact d'un match.",
         })}
         value={prefs[NOTIFICATION_PREF_KEYS.TP_EXACT_SCORE] !== false}
         onValueChange={(v) => setPref(NOTIFICATION_PREF_KEYS.TP_EXACT_SCORE, v)}
@@ -92,7 +92,7 @@ export default function NotificationPrefsSection({ colors }) {
           defaultValue: "Le trio du jour",
         })}
         hint={i18n.t("settings.notifications.tsWinHint", {
-          defaultValue: "Quand tu gagnes le défi Trio du jour.",
+          defaultValue: "Quand un membre gagne le défi Trio du jour.",
         })}
         value={prefs[NOTIFICATION_PREF_KEYS.TS_WIN] !== false}
         onValueChange={(v) => setPref(NOTIFICATION_PREF_KEYS.TS_WIN, v)}
@@ -105,7 +105,7 @@ export default function NotificationPrefsSection({ colors }) {
           defaultValue: "Bon joueur (premier point / but)",
         })}
         hint={i18n.t("settings.notifications.fgcWinHint", {
-          defaultValue: "Quand tu prédis le bon joueur au défi premier point ou but.",
+          defaultValue: "Quand des membres prédisent le bon joueur au défi premier point ou but.",
         })}
         value={prefs[NOTIFICATION_PREF_KEYS.FGC_WIN] !== false}
         onValueChange={(v) => setPref(NOTIFICATION_PREF_KEYS.FGC_WIN, v)}
@@ -118,7 +118,7 @@ export default function NotificationPrefsSection({ colors }) {
           defaultValue: "Progression au classement",
         })}
         hint={i18n.t("settings.notifications.leaderboardRankUpHint", {
-          defaultValue: "Quand tu grimpes dans le classement saison de ton groupe.",
+          defaultValue: "Quand un membre entre dans le top 3 du classement saison.",
         })}
         value={prefs[NOTIFICATION_PREF_KEYS.LEADERBOARD_RANK_UP] !== false}
         onValueChange={(v) => setPref(NOTIFICATION_PREF_KEYS.LEADERBOARD_RANK_UP, v)}

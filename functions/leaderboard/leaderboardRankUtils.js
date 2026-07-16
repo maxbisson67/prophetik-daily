@@ -1,4 +1,5 @@
 import { db } from "./leaderboard.js";
+import { isActiveMembership } from "../groups/groupMembership.js";
 
 function chunk(arr, size) {
   const out = [];
@@ -12,12 +13,6 @@ function pickMembershipUid(docId, data = {}) {
   const s = String(docId || "").trim();
   const idx = s.indexOf("_");
   return idx > 0 ? s.slice(idx + 1) : s;
-}
-
-function isActiveMembership(data = {}) {
-  if (data.status !== undefined) return String(data.status).toLowerCase() === "active";
-  if (data.active !== undefined) return data.active === true;
-  return true;
 }
 
 export async function fetchActiveMemberUids(groupId) {

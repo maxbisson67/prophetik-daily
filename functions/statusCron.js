@@ -11,6 +11,9 @@ export const cronIngestToday = onSchedule(
       const d = { id: docSnap.id, ...(docSnap.data() || {}) };
       const startAt = readTS(d.startAt);
       const endAt   = readTS(d.endAt);
+      // Les défis TS manuels n'ont pas startAt/endAt — ne pas toucher leur statut.
+      if (!startAt && !endAt) continue;
+
       let status = String(d.status || "").toLowerCase();
       if (status === "completed") continue;
       if (startAt && now < startAt) status = "open";

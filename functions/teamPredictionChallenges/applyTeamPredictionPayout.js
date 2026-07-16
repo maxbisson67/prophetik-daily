@@ -16,17 +16,10 @@ function toNumber(v, def = 0) {
   return Number.isFinite(n) ? n : def;
 }
 
-function readScoringConfig(ch = {}) {
-  const scoring = ch.scoring || {};
+function readScoringConfig(_ch = {}) {
   return {
-    winnerBasePoints: toNumber(
-      scoring.winnerBasePoints,
-      TP_DEFAULT_SCORING.winnerBasePoints
-    ),
-    exactScoreBonusPoints: toNumber(
-      scoring.exactScoreBonusPoints,
-      TP_DEFAULT_SCORING.exactScoreBonusPoints
-    ),
+    winnerBasePoints: TP_DEFAULT_SCORING.winnerBasePoints,
+    exactScoreBonusPoints: TP_DEFAULT_SCORING.exactScoreBonusPoints,
   };
 }
 

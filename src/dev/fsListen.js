@@ -43,6 +43,12 @@ export function listenRNFB(refOrQuery, onNext, tag, onError, options = {}) {
     subscribe: (onRegistryNext) =>
       refOrQuery.onSnapshot(
         (snap) => {
+          if (!snap) {
+            if (__DEV__) {
+              console.warn(`[FS NULL SNAP] tag=${tag} path=${path || "?"}`);
+            }
+            return;
+          }
           onRegistryNext(snap);
           onNext?.(snap);
         },

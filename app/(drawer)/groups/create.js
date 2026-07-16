@@ -18,6 +18,7 @@ import i18n from "@src/i18n/i18n";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import { createGroupService } from "@src/groups/createGroupService";
+import { parseCreateGroupError } from "@src/groups/createGroupErrors";
 import { updateGroupConfigService } from "@src/groups/manageGroupService";
 import { normalizeGroupFavoriteTeam } from "@src/groups/normalizeGroupFavoriteTeam";
 import GroupConfigFields from "@src/groups/components/GroupConfigFields";
@@ -136,7 +137,7 @@ export default function CreateGroupScreen() {
     } catch (e) {
       Alert.alert(
         i18n.t("groups.alertErrorTitle", { defaultValue: "Erreur" }),
-        String(e?.message || e)
+        parseCreateGroupError(e)
       );
     } finally {
       setCreating(false);

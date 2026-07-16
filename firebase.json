@@ -1,4 +1,7 @@
 {
+  "react-native": {
+    "google_analytics_adid_collection_enabled": false
+  },
   "firestore": {
     "rules": "firestore.rules"
   },
@@ -20,8 +23,20 @@
   ],
   "hosting": {
     "public": "public",
+    "cleanUrls": true,
     "rewrites": [
-      { "source": "/email-link", "destination": "/email-link.html" }
+      { "source": "/email-link", "destination": "/email-link.html" },
+      { "source": "/fr", "destination": "/fr/index.html" },
+      { "source": "/en", "destination": "/en/index.html" },
+      { "source": "/fr/privacy", "destination": "/fr/privacy.html" },
+      { "source": "/en/privacy", "destination": "/en/privacy.html" },
+      { "source": "/fr/terms", "destination": "/fr/terms.html" },
+      { "source": "/en/terms", "destination": "/en/terms.html" },
+      { "source": "/fr/support", "destination": "/fr/support.html" },
+      { "source": "/en/support", "destination": "/en/support.html" },
+      { "source": "/support", "destination": "/fr/support.html" },
+      { "source": "/privacy", "destination": "/fr/privacy.html" },
+      { "source": "/terms", "destination": "/fr/terms.html" }
     ],
     "ignore": [
       "firebase.json",

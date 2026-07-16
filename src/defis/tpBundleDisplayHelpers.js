@@ -3,9 +3,11 @@ import {
   MATCH_TASK_STATES,
   resolveTpSlotMatchStatus,
 } from "@src/defis/match/matchTaskStatus";
+import { TP_DEFAULT_SCORING } from "@src/lib/challengeScoringConstants";
 
 export function isSlotDecided(slot) {
-  return String(slot?.status || "").toLowerCase() === "decided";
+  const st = String(slot?.status || "").toLowerCase();
+  return st === "decided" || st === "voided";
 }
 
 /** @deprecated Préférer resolveTpSlotMatchStatus — alias legacy pour compatibilité. */
@@ -45,19 +47,10 @@ function toNumber(v, def = 0) {
   return Number.isFinite(n) ? n : def;
 }
 
-const TP_DEFAULT_SCORING = {
-  winnerBasePoints: 3,
-  exactScoreBonusPoints: 3,
-};
-
-export function readTpScoringConfig(bundle = {}) {
-  const scoring = bundle?.scoring || {};
+export function readTpScoringConfig(_bundle = {}) {
   return {
-    winnerBasePoints: toNumber(scoring.winnerBasePoints, TP_DEFAULT_SCORING.winnerBasePoints),
-    exactScoreBonusPoints: toNumber(
-      scoring.exactScoreBonusPoints,
-      TP_DEFAULT_SCORING.exactScoreBonusPoints
-    ),
+    winnerBasePoints: TP_DEFAULT_SCORING.winnerBasePoints,
+    exactScoreBonusPoints: TP_DEFAULT_SCORING.exactScoreBonusPoints,
   };
 }
 

@@ -1,6 +1,6 @@
 // src/home/homeUtils.js
 import i18n from "@src/i18n/i18n";
-import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
+import { APP_TZ, getProphetikBusinessYmd, toYmdInTz } from "@src/lib/prophetikBusinessDate";
 
 // ----------------------------- Date helpers -----------------------------
 export function toDateOrNull(v) {
@@ -14,16 +14,29 @@ export function toDateOrNull(v) {
   }
 }
 
+function normalizeYmdString(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  const dashed = s.replace(/_/g, "-");
+  const m = dashed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const compact = dashed.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  return dashed.length >= 10 ? dashed.slice(0, 10) : dashed;
+}
+
+export function resolveDefiSport(defi, fallback = "NHL") {
+  return String(defi?.sport || defi?.poolSport || fallback).toUpperCase();
+}
+
 export function defiGameDateYmd(defi) {
   const gd = defi?.gameDate;
   if (typeof gd === "string") {
-    const s = gd.trim();
-    if (s.length >= 10) return s.slice(0, 10);
-    return s;
+    return normalizeYmdString(gd);
   }
   const d = toDateOrNull(gd);
   if (!d) return "";
-  return d.toISOString().slice(0, 10);
+  return toYmdInTz(d, APP_TZ);
 }
 
 export function isTsDefi(defi) {
@@ -35,8 +48,9 @@ export function isTsDefi(defi) {
 export function isTsDefiForHomeToday(defi, businessYmd = getProphetikBusinessYmd()) {
   if (!isTsDefi(defi)) return true;
   const ymd = defiGameDateYmd(defi);
+  const today = normalizeYmdString(businessYmd);
   if (!ymd) return true;
-  return ymd === businessYmd;
+  return ymd === today;
 }
 
 export function fmtTSLocalHM(v) {

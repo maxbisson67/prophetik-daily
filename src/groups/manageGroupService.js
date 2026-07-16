@@ -27,8 +27,12 @@ function getErrorKey(err) {
   // On garde les clés qu'on utilise côté CF.
   const candidates = [
     "OWNER_MUST_TRANSFER_BEFORE_LEAVING",
+    "GROUP_LIMIT_REACHED",
+    "OWNED_GROUP_LIMIT_REACHED",
     "OWNER_GROUP_LIMIT_REACHED",
     "MEMBER_GROUP_LIMIT_REACHED",
+    "AUTOPILOT_GROUP_LIMIT_REACHED",
+    "AUTOPILOT_RESOLUTION_REQUIRED",
   ];
   return candidates.find((k) => msg.includes(k)) || null;
 }

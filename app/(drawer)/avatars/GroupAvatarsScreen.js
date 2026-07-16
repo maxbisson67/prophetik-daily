@@ -1,5 +1,6 @@
 // app/avatars/GroupAvatarsScreen.js
 import React, { useEffect, useMemo, useState } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -114,7 +115,7 @@ export default function GroupAvatarsScreen() {
     const ref = firestore().doc(`groups/${String(groupId)}`);
     const unsub = ref.onSnapshot(
       (snap) => {
-        setGroup(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setGroup(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
         setLoadingGroup(false);
       },
       () => setLoadingGroup(false)

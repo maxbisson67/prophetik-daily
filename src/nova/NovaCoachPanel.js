@@ -14,7 +14,8 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import { useLanguage } from "@src/i18n/LanguageProvider";
 import i18n from "@src/i18n/i18n";
 import NovaBubble from "@src/ui/NovaBubble";
-import { novaCoachService } from "@src/nova/novaCoachService";
+import { novaCoachService, getNovaErrorKey } from "@src/nova/novaCoachService";
+import NovaCoachErrorNotice from "@src/nova/NovaCoachErrorNotice";
 import {
   NOVA_COACH_BUBBLE_IMAGE,
   NOVA_COACH_HEADER_IMAGE,
@@ -46,6 +47,7 @@ export default function NovaCoachPanel({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [errorKey, setErrorKey] = useState(null);
   const [response, setResponse] = useState(null);
 
   const resetPanel = useCallback(() => {
@@ -54,6 +56,7 @@ export default function NovaCoachPanel({
     setMessage("");
     setBusy(false);
     setError(null);
+    setErrorKey(null);
     setResponse(null);
   }, []);
 
@@ -81,6 +84,7 @@ export default function NovaCoachPanel({
 
       setBusy(true);
       setError(null);
+      setErrorKey(null);
       setExpanded(true);
       setSelectedQuestion(clean);
 
@@ -108,6 +112,7 @@ export default function NovaCoachPanel({
       } catch (e) {
         if (__DEV__) console.warn("[NovaCoach] error", e);
         setError(mapNovaCoachError(e));
+        setErrorKey(getNovaErrorKey(e));
       } finally {
         setBusy(false);
       }
@@ -141,6 +146,7 @@ export default function NovaCoachPanel({
           if (expanded) {
             setResponse(null);
             setError(null);
+            setErrorKey(null);
             setMessage("");
             setSelectedQuestion(null);
             setBusy(false);
@@ -276,9 +282,7 @@ export default function NovaCoachPanel({
           </TouchableOpacity>
 
           {!!error && (
-            <Text style={{ color: colors.danger || "#ef4444", fontSize: 12, fontWeight: "700" }}>
-              {error}
-            </Text>
+            <NovaCoachErrorNotice message={error} errorKey={errorKey} colors={colors} />
           )}
 
           {!!response && (

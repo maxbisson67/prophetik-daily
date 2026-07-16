@@ -1,5 +1,6 @@
 // src/credits/useCredits.js
 import { useEffect, useState, useCallback } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 // Safe auth
@@ -43,7 +44,7 @@ export function useCredits() {
     const ref = firestore().doc(`participants/${user.uid}`);
     const unsub = ref.onSnapshot(
       (snap) => {
-        setCredits(readCredits(snap.exists ? snap.data() : null));
+        setCredits(readCredits(snapshotExists(snap) ? snapshotData(snap) : null));
         setLoading(false);
       },
       (e) => { setError(e); setLoading(false); }
@@ -79,7 +80,7 @@ export function useCredits() {
     const ref = firestore().doc(`participants/${user.uid}`);
     return firestore().runTransaction(async (tx) => {
       const snap = await tx.get(ref);
-      const cur  = readCredits(snap.exists ? snap.data() : null);
+      const cur  = readCredits(snapshotExists(snap) ? snapshotData(snap) : null);
       if (cur < amount) throw new Error('Crédits insuffisants');
       tx.set(ref, {
         credits: { balance: (cur - amount) }, // écriture explicite pour rester simple

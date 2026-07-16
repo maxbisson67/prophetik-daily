@@ -3,15 +3,15 @@ import { Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import i18n from "@src/i18n/i18n";
-import { openMesResultatsTab } from "@src/defis/results/navigateToMesResultats";
+import { openLiveResultsTab } from "@src/defis/results/navigateToMesResultats";
 
 export default function ResultsTabHint({ colors, style, groupId = null }) {
   const router = useRouter();
-  const tabLabel = i18n.t("tabs.challenges", { defaultValue: "Mes résultats" });
+  const tabLabel = i18n.t("tabs.matchLive", { defaultValue: "En direct" });
   const linkColor = colors?.primary || "#b91c1c";
 
   const onPressLink = () => {
-    openMesResultatsTab(router, { groupId });
+    openLiveResultsTab(router, { groupId });
   };
 
   return (

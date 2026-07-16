@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -193,7 +194,7 @@ export default function MlbStandingsScreen() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const data = snap.data() || {};
+        const data = snapshotData(snap) || {};
         const s = String(data.season || "");
 
         setCurrentSeason(s || null);
@@ -224,7 +225,7 @@ export default function MlbStandingsScreen() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        setLeagueDoc(snap.data() || null);
+        setLeagueDoc(snapshotData(snap) || null);
         setBusy(false);
       },
       (err) => {

@@ -1,6 +1,8 @@
 // src/groups/useGroups.js
 import { useEffect, useMemo, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
+import { isGroupOwner } from "@src/groups/groupOwnership";
 
 /**
  * useGroups(uid)
@@ -82,11 +84,11 @@ export function useGroups(uid) {
         const gref = firestore().doc(`groups/${gid}`);
         const un = gref.onSnapshot(
           (gSnap) => {
-            if (!gSnap.exists) {
+            if (!snapshotExists(gSnap)) {
               setGroups((prev) => prev.filter((g) => g.id !== gid));
               return;
             }
-            const data = { id: gSnap.id, ...gSnap.data() };
+            const data = { id: snapshotId(gSnap), ...snapshotData(gSnap) };
 
             setGroups((prev) => {
               const map = new Map(prev.map((g) => [g.id, g]));
@@ -111,7 +113,7 @@ export function useGroups(uid) {
 
     const unByUid = qByUid.onSnapshot(
       (snap) => {
-        rowsByUid = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rowsByUid = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         recomputeFromMemberships();
       },
       (err) => { setError(err); setLoading(false); }
@@ -119,7 +121,7 @@ export function useGroups(uid) {
 
     const unByPid = qByPid.onSnapshot(
       (snap) => {
-        rowsByPid = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rowsByPid = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
         recomputeFromMemberships();
       },
       (err) => { setError(err); setLoading(false); }
@@ -133,12 +135,12 @@ export function useGroups(uid) {
   }, [uid]);
 
   const groupsOwned = useMemo(
-    () => groups.filter((g) => g.role === "owner" || g.ownerId === uid || g.createdBy === uid),
+    () => groups.filter((g) => isGroupOwner(g, uid)),
     [groups, uid]
   );
 
   const groupsMember = useMemo(
-    () => groups.filter((g) => !(g.role === "owner" || g.ownerId === uid || g.createdBy === uid)),
+    () => groups.filter((g) => !isGroupOwner(g, uid)),
     [groups, uid]
   );
 

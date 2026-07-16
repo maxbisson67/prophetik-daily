@@ -628,7 +628,7 @@ export default function TpResultDetailBlock({
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const list = snap.docs
+        const list = (snap?.docs ?? [])
           .map((d) => ({ uid: d.id, ...d.data() }))
           .filter((e) => tpEntryHasParticipation(e))
           .sort((a, b) =>

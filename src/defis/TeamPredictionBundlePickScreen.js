@@ -1,6 +1,7 @@
 // src/defis/TeamPredictionBundlePickScreen.js
 
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -40,7 +41,7 @@ import {
 } from "@src/defis/tpBundleDisplayHelpers";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
-import NovaCoachPanel from "@src/nova/NovaCoachPanel";
+import NovaCoachMatchModal from "@src/nova/NovaCoachMatchModal";
 
 const RED = "#b91c1c";
 
@@ -317,6 +318,8 @@ function BundleMatchPickSection({
   nowTick,
   scheduleInfo = null,
   onScoreFocus = null,
+  showNovaButton = false,
+  onNovaPress = null,
 }) {
   const isMlb = league === "MLB";
   const gameId = String(slot?.gameId || "");
@@ -492,6 +495,31 @@ function BundleMatchPickSection({
           })}
         </Text>
       ) : null}
+
+      {showNovaButton && !decided ? (
+        <TouchableOpacity
+          onPress={() => onNovaPress?.(slot)}
+          disabled={locked}
+          activeOpacity={0.85}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            marginTop: 12,
+            paddingVertical: 9,
+            paddingHorizontal: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            backgroundColor: colors.card,
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+          <Text style={{ color: colors.primary, fontWeight: "800", fontSize: 12 }}>
+            {i18n.t("novaCoach.matchAdviceButton", { defaultValue: "Avis de Nova" })}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
         </>
       )}
     </View>
@@ -512,6 +540,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
   const [savingGameIds, setSavingGameIds] = useState([]);
   const [saveError, setSaveError] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [novaMatch, setNovaMatch] = useState(null);
   const saveTimerRef = useRef(null);
   const saveInFlightRef = useRef(false);
   const pendingAfterFlightRef = useRef(false);
@@ -572,7 +601,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     const unsubBundle = bundleRef.onSnapshot(
       (snap) => {
         if (cancelled) return;
-        setBundle(snap?.exists ? { id: snap.id, ...snap.data() } : null);
+        setBundle(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
         setLoading(false);
       },
       () => {
@@ -583,7 +612,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     const unsubEntry = entryRef.onSnapshot(
       (snap) => {
         if (cancelled) return;
-        setEntry(snap?.exists ? snap.data() || null : null);
+        setEntry(snapshotExists(snap) ? snapshotData(snap) || null : null);
       },
       () => {
         if (cancelled) return;
@@ -828,16 +857,6 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
               </View>
             </View>
 
-            {league === "MLB" && !showResults ? (
-              <NovaCoachPanel
-                key={`nova-tp-${bundleId}`}
-                challengeId={String(bundleId)}
-                domain="tp"
-                sport="MLB"
-                disabled={false}
-              />
-            ) : null}
-
             <KeyboardAwareScrollView
               ref={scrollRef}
               style={{ flex: 1 }}
@@ -885,6 +904,8 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                     colors={colors}
                     scheduleInfo={scheduleByGameId[gameId] || null}
                     onScoreFocus={scrollToScoreInput}
+                    showNovaButton={isMlb && !showResults}
+                    onNovaPress={setNovaMatch}
                   />
                 );
               })}
@@ -897,7 +918,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
               >
                 <Text style={{ color: colors.subtext, lineHeight: 20 }}>
                   {i18n.t("tp.pick.summaryHintMvp", {
-                    defaultValue: "3 pts pour le bon gagnant, +3 pts pour le score exact.",
+                    defaultValue: "5 pts pour la bonne équipe, +5 pts pour le score exact (10 max).",
                   })}
                 </Text>
               </View>
@@ -959,6 +980,18 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                 </View>
               </View>
             ) : null}
+
+            <NovaCoachMatchModal
+              visible={!!novaMatch}
+              onClose={() => setNovaMatch(null)}
+              challengeId={String(bundleId)}
+              gameId={novaMatch?.gameId}
+              slot={novaMatch?.slot}
+              homeAbbr={novaMatch?.homeAbbr}
+              awayAbbr={novaMatch?.awayAbbr}
+              sport="MLB"
+              domain="tp"
+            />
           </View>
         )}
       </View>

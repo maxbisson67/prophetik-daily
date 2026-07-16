@@ -12,6 +12,8 @@ import {
   refreshSlotStatuses,
 } from "./tpBundleUtils.js";
 import { applySlotPayoutForBundle } from "./tpBundlePayoutService.js";
+import { isMlbGamePostponed } from "../mlb/mlbGameStatus.js";
+import { handleMlbGamePostponed, buildVoidedTpSlotFields } from "../mlb/mlbPostponedGameHandler.js";
 
 const BATCH_SIZE = 100;
 
@@ -94,9 +96,35 @@ export async function resolveTeamPredictionBundleDoc({ db, doc }) {
     const slot = games[i];
     const slotStatus = String(slot.status || "open").toLowerCase();
 
-    if (slotStatus === "decided") continue;
+    if (slotStatus === "decided" || slotStatus === "voided") continue;
 
     try {
+      if (normalizeLeague(league) === "MLB") {
+        const gameSnap = await db.doc(`mlb_live_games/${String(slot.gameId)}`).get();
+        const game = gameSnap.exists ? gameSnap.data() || {} : {};
+        const scheduleYmd = String(bundle.gameYmd || game.ymd || game.date || "").replace(/-/g, "");
+        const scheduleSnap = scheduleYmd
+          ? await db.doc(`mlb_schedule_daily/${scheduleYmd}/games/${String(slot.gameId)}`).get()
+          : null;
+        const scheduleStatus = scheduleSnap?.exists ? scheduleSnap.data()?.status || {} : {};
+
+        if (game.isPostponed || isMlbGamePostponed(scheduleStatus)) {
+          await handleMlbGamePostponed({
+            db,
+            gamePk: String(slot.gameId),
+            ymd: bundle.gameYmd,
+            source: "tpBundleResolve",
+          });
+
+          games[i] = {
+            ...slot,
+            ...buildVoidedTpSlotFields(),
+          };
+          changed = true;
+          continue;
+        }
+      }
+
       const resolved = await resolveSlotOfficialResult(db, slot, league);
 
       if (!resolved.ok) {

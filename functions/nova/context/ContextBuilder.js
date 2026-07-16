@@ -1,11 +1,13 @@
 import { FgcNhlContextBuilder } from "./builders/FgcNhlContextBuilder.js";
 import { FgcMlbContextBuilder } from "./builders/FgcMlbContextBuilder.js";
 import { TpMlbContextBuilder } from "./builders/TpMlbContextBuilder.js";
+import { TsMlbContextBuilder } from "./builders/TsMlbContextBuilder.js";
 
 const BUILDERS = {
   fgc_nhl: new FgcNhlContextBuilder(),
   fgc_mlb: new FgcMlbContextBuilder(),
   tp_mlb: new TpMlbContextBuilder(),
+  ts_mlb: new TsMlbContextBuilder(),
 };
 
 /**
@@ -33,9 +35,11 @@ export class ContextBuilder {
     if (d === "fgc" && s === "NHL") return "fgc_nhl";
     if (d === "fgc" && s === "MLB") return "fgc_mlb";
     if (d === "tp" && s === "MLB") return "tp_mlb";
+    if (d === "ts" && s === "MLB") return "ts_mlb";
     if (d === "fgc_nhl") return "fgc_nhl";
     if (d === "fgc_mlb") return "fgc_mlb";
     if (d === "tp_mlb") return "tp_mlb";
+    if (d === "ts_mlb") return "ts_mlb";
 
     return `${d}_${s}`.toLowerCase();
   }

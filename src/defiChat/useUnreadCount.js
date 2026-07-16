@@ -1,5 +1,6 @@
 // src/defiChat/useUnreadCount.js
 import { useEffect, useState, useCallback } from 'react';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from '@react-native-firebase/firestore';
 
 /**
@@ -19,7 +20,7 @@ export function useUnreadCount(defiId, uid, opts = {}) {
       // 1) lastSeenAt
       const readRef = firestore().doc(`defis/${String(defiId)}/reads/${String(uid)}`);
       const readSnap = await readRef.get();
-      const lastSeenAt = readSnap.exists ? readSnap.data()?.lastSeenAt : null;
+      const lastSeenAt = snapshotExists(readSnap) ? snapshotData(readSnap)?.lastSeenAt : null;
       if (!lastSeenAt?.toMillis) { setCount(0); return; }
 
       // 2) Requêtes > lastSeenAt

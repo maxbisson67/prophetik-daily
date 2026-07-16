@@ -1,5 +1,6 @@
 // src/defis/useDefis.js (RNFB)
 import { useEffect, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 
 export function useGroupDefis(groupId, { status } = {}) {
@@ -24,7 +25,7 @@ export function useGroupDefis(groupId, { status } = {}) {
 
     const unsub = q.onSnapshot(
       (snap) => {
-        setDefis(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setDefis((snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
       (e) => {
@@ -70,7 +71,7 @@ export function useMyDefiParticipation(defiId, uid, { reloadKey = 0 } = {}) {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        setParticipation(snap.exists ? { id: snap.id, ...snap.data() } : null);
+        setParticipation(snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null);
         setLoading(false);
       },
       (e) => {

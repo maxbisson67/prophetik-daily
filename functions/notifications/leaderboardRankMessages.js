@@ -2,57 +2,60 @@ function normalizeLang(lang) {
   return String(lang || "fr").toLowerCase().startsWith("en") ? "en" : "fr";
 }
 
-function formatRankFr(rank) {
-  const n = Number(rank);
-  if (!Number.isFinite(n) || n < 1) return String(rank || "");
-  if (n === 1) return "1er";
-  return `${n}e`;
+function titleWithGroup(baseTitle, groupName) {
+  const base = String(baseTitle || "").trim();
+  const group = String(groupName || "").trim();
+  if (!base) return group || "";
+  return group ? `${base} — ${group}` : base;
 }
 
-function formatRankEn(rank) {
+function formatRankPositionFr(rank) {
   const n = Number(rank);
   if (!Number.isFinite(n) || n < 1) return String(rank || "");
+  if (n === 1) return "première position";
+  if (n === 2) return "deuxième position";
+  if (n === 3) return "troisième position";
+  return `${n}e position`;
+}
+
+function formatRankPositionEn(rank) {
+  const n = Number(rank);
+  if (!Number.isFinite(n) || n < 1) return String(rank || "");
+  if (n === 1) return "first place";
+  if (n === 2) return "second place";
+  if (n === 3) return "third place";
   const v = n % 100;
-  if (v >= 11 && v <= 13) return `${n}th`;
+  if (v >= 11 && v <= 13) return `${n}th place`;
   const r = n % 10;
-  if (r === 1) return `${n}st`;
-  if (r === 2) return `${n}nd`;
-  if (r === 3) return `${n}rd`;
-  return `${n}th`;
+  if (r === 1) return `${n}st place`;
+  if (r === 2) return `${n}nd place`;
+  if (r === 3) return `${n}rd place`;
+  return `${n}th place`;
 }
 
 export function buildLeaderboardRankUpPush({
   lang = "fr",
   groupName,
-  previousRank,
+  memberName,
   newRank,
 } = {}) {
   const lg = normalizeLang(lang);
-  const prev = Number(previousRank);
+  const name = String(memberName || "").trim() || (lg === "en" ? "A member" : "Un membre");
   const next = Number(newRank);
-  const spots = Number.isFinite(prev) && Number.isFinite(next) ? Math.max(0, prev - next) : 0;
-  const group = String(groupName || "").trim();
+
+  const title = titleWithGroup(lg === "en" ? "Standings" : "Classement", groupName);
 
   if (lg === "en") {
-    const rankLabel = formatRankEn(next);
-    const title = group ? `Standings — ${group}` : "Standings update";
-    const body =
-      spots > 1
-        ? `You moved up to ${rankLabel} (+${spots} spots)!`
-        : spots === 1
-        ? `You moved up to ${rankLabel} (+1 spot)!`
-        : `You are now ${rankLabel} in the group standings!`;
-    return { title, body };
+    const position = formatRankPositionEn(next);
+    return {
+      title,
+      body: `Congrats to ${name}, now in ${position}!`,
+    };
   }
 
-  const rankLabel = formatRankFr(next);
-  const title = group ? `Classement — ${group}` : "Classement";
-  const body =
-    spots > 1
-      ? `Tu grimpes au ${rankLabel} rang (+${spots} places) !`
-      : spots === 1
-      ? `Tu grimpes au ${rankLabel} rang (+1 place) !`
-      : `Tu es maintenant ${rankLabel} au classement du groupe !`;
-
-  return { title, body };
+  const position = formatRankPositionFr(next);
+  return {
+    title,
+    body: `Bravo à ${name} qui est maintenant en ${position}.`,
+  };
 }

@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import i18n from "@src/i18n/i18n";
 import { updateGroupConfigService } from "@src/groups/manageGroupService";
 import GroupConfigFields, { favoriteTeamLabel } from "@src/groups/components/GroupConfigFields";
+import { parseGroupConfigError } from "@src/subscriptions/autopilotErrors";
 
 const RED = "#b91c1c";
 
@@ -96,7 +97,7 @@ export default function GroupConfigSection({ group, isOwner, colors, onFavoriteT
     } catch (e) {
       Alert.alert(
         i18n.t("groups.config.saveErrorTitle", { defaultValue: "Erreur" }),
-        String(e?.message || e)
+        parseGroupConfigError(e)
       );
     } finally {
       setSaving(false);

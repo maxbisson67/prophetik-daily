@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -8,8 +9,9 @@ import {
   Alert,
   SafeAreaView,
   ScrollView,
+  AppState,
 } from "react-native";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 import i18n from "@src/i18n/i18n";
@@ -17,25 +19,19 @@ import i18n from "@src/i18n/i18n";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import Analytics from "@src/services/analytics";
-
-// --- Helpers E.164 ---
-const DEFAULT_COUNTRY = "+1";
-const E164 = /^\+\d{8,15}$/;
-
-function normalizePhone(input) {
-  if (!input) return "";
-  const raw = String(input).trim();
-
-  if (raw.startsWith("+")) {
-    const digits = raw.replace(/[^\d+]/g, "");
-    return digits.replace(/\+(?=\+)/g, "");
-  }
-
-  const digitsOnly = raw.replace(/\D+/g, "");
-  if (digitsOnly.length === 10) return `${DEFAULT_COUNTRY}${digitsOnly}`;
-  if (digitsOnly.length > 0) return `+${digitsOnly}`;
-  return "";
-}
+import {
+  E164,
+  normalizePhone,
+  isSignedInForPhone,
+  isSessionExpiredError,
+  prepareForPhoneVerification,
+  sendPhoneVerification,
+  alertForPhoneSendError,
+  waitForSignedInPhone,
+  peekPendingPhoneVerification,
+  stashPendingPhoneVerification,
+  clearPendingPhoneVerification,
+} from "@src/auth/phoneAuthHelpers";
 
 function sanitizeDisplayName(s) {
   return String(s || "")
@@ -59,18 +55,23 @@ async function ensureParticipantDoc({ displayName }) {
 
   const now = firestore.FieldValue.serverTimestamp();
 
+  const ref = firestore().collection("participants").doc(user.uid);
+  const snap = await ref.get();
+  const resolvedName =
+    sanitizeDisplayName(displayName) ||
+    sanitizeDisplayName(snapshotExists(snap) ? snapshotData(snap)?.displayName : "") ||
+    sanitizeDisplayName(user.displayName) ||
+    null;
+
   const payload = stripUndefined({
-    displayName: displayName || user.displayName || null,
+    displayName: resolvedName,
     phoneNumber: user.phoneNumber ?? null,
     email: user.email ?? null,
     photoURL: user.photoURL ?? null,
     updatedAt: now,
   });
 
-  const ref = firestore().collection("participants").doc(user.uid);
-  const snap = await ref.get();
-
-  if (!snap.exists) {
+  if (!snapshotExists(snap)) {
     await ref.set(
       {
         ...payload,
@@ -84,7 +85,7 @@ async function ensureParticipantDoc({ displayName }) {
     return { isNew: true, shouldShowWelcome: true };
   }
 
-  const data = snap.data() || {};
+  const data = snapshotData(snap) || {};
   const welcomeSeen = data?.onboarding?.welcomeSeen === true;
 
   await ref.set(payload, { merge: true });
@@ -119,7 +120,7 @@ async function ensurePublicProfile({ displayName }) {
   const ref = firestore().collection("profiles_public").doc(user.uid);
   const snap = await ref.get();
 
-  if (!snap.exists) {
+  if (!snapshotExists(snap)) {
     await ref.set(payload);
     return { created: true };
   }
@@ -128,25 +129,130 @@ async function ensurePublicProfile({ displayName }) {
   return { created: false };
 }
 
+async function completePhoneLoginFlow({ displayName, router }) {
+  const pending = peekPendingPhoneVerification();
+  const cleanName = sanitizeDisplayName(
+    displayName || pending?.displayName || auth().currentUser?.displayName || ""
+  );
+
+  clearPendingPhoneVerification();
+  await Analytics.authSuccess("sms_login");
+
+  const signedUser = auth().currentUser;
+  if (signedUser?.uid) {
+    await Analytics.setUserId(signedUser.uid);
+    await Analytics.setUserProperty("auth_method", "sms");
+  }
+
+  const currentUser = auth().currentUser;
+
+  if (currentUser && cleanName && !currentUser.displayName) {
+    try {
+      await currentUser.updateProfile({ displayName: cleanName });
+      await currentUser.reload().catch(() => {});
+    } catch {}
+  }
+
+  const res = await ensureParticipantDoc({ displayName: cleanName || null });
+  await ensurePublicProfile({ displayName: cleanName || null });
+  const shouldShowWelcome = !!res?.shouldShowWelcome;
+
+  if (shouldShowWelcome) {
+    router.replace("/onboarding/welcome");
+  } else {
+    router.replace("/(drawer)/(tabs)/AccueilScreen");
+  }
+}
+
 export default function PhoneLoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
 
   const initialPhone = typeof params?.phone === "string" ? params.phone : "";
+  const initialDisplayName =
+    typeof params?.displayName === "string" ? sanitizeDisplayName(params.displayName) : "";
+  const resumeStep = params?.step === "2" ? 2 : 1;
 
-  const [step, setStep] = useState(1);
-  const [displayName, setDisplayName] = useState("");
+  const [step, setStep] = useState(resumeStep);
+  const [displayName, setDisplayName] = useState(initialDisplayName);
   const [phone, setPhone] = useState(initialPhone);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
 
   const confirmationRef = useRef(null);
+  const completingRef = useRef(false);
+  const sentOnceRef = useRef(false);
+  const lastSentPhoneRef = useRef(null);
+  const displayNameRef = useRef("");
+  const normalizedRef = useRef("");
 
   const normalized = useMemo(() => normalizePhone(phone), [phone]);
   const canSend = useMemo(() => E164.test(normalized), [normalized]);
+  const canConfirm = useMemo(() => {
+    if (busy) return false;
+    if (code.trim().length >= 4) return true;
+    return phoneVerified;
+  }, [busy, code, phoneVerified]);
 
-  const goHome = () => router.replace("/(drawer)/(tabs)/AccueilScreen");
+  displayNameRef.current = displayName;
+  normalizedRef.current = normalized;
+
+  const resumePendingVerification = useCallback(() => {
+    const pending = peekPendingPhoneVerification(normalizedRef.current);
+    if (!pending?.confirmation) return false;
+
+    confirmationRef.current = pending.confirmation;
+    if (pending.phone) {
+      setPhone(pending.phone);
+      normalizedRef.current = pending.phone;
+      lastSentPhoneRef.current = pending.phone;
+    }
+    if (pending.displayName) {
+      setDisplayName(sanitizeDisplayName(pending.displayName));
+    }
+    sentOnceRef.current = true;
+    setStep(2);
+    setBusy(false);
+    return true;
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      resumePendingVerification();
+    }, [resumePendingVerification])
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        resumePendingVerification();
+      }
+    });
+    return () => sub.remove();
+  }, [resumePendingVerification]);
+
+  useEffect(() => {
+    if (resumeStep === 2) {
+      resumePendingVerification();
+    }
+  }, [resumeStep, resumePendingVerification]);
+
+  useEffect(() => {
+    if (step !== 2) {
+      setPhoneVerified(false);
+      return undefined;
+    }
+
+    const syncVerified = () => {
+      setPhoneVerified(isSignedInForPhone(normalizedRef.current));
+    };
+
+    const unsub = auth().onAuthStateChanged(syncVerified);
+    syncVerified();
+    return unsub;
+  }, [step]);
 
   const sendCode = async () => {
     try {
@@ -164,8 +270,28 @@ export default function PhoneLoginScreen() {
 
       await Analytics.authStart("sms_login");
 
-      const confirmation = await auth().signInWithPhoneNumber(normalized, true);
+      const prep = await prepareForPhoneVerification(normalized);
+      if (prep.alreadySignedIn) {
+        completingRef.current = true;
+        await completePhoneLoginFlow({
+          displayName: sanitizeDisplayName(displayName || displayNameRef.current),
+          router,
+        });
+        return;
+      }
+
+      const forceResend =
+        sentOnceRef.current && lastSentPhoneRef.current === normalized;
+      const nameForStash = sanitizeDisplayName(displayName);
+      stashPendingPhoneVerification(normalized, null, nameForStash);
+      const confirmation = await sendPhoneVerification(normalized, {
+        forceResend,
+        displayName: nameForStash,
+      });
       confirmationRef.current = confirmation;
+      stashPendingPhoneVerification(normalized, confirmation, nameForStash);
+      sentOnceRef.current = true;
+      lastSentPhoneRef.current = normalized;
 
       setPhone(normalized);
       setStep(2);
@@ -176,24 +302,7 @@ export default function PhoneLoginScreen() {
       );
     } catch (e) {
       console.log("SMS send error:", e?.code, e?.message);
-
-      const errCode = e?.code || "";
-
-      if (errCode === "auth/invalid-phone-number") {
-        Alert.alert(
-          i18n.t("auth.phoneLogin.invalidPhoneTitle", { defaultValue: "Numéro invalide" }),
-          i18n.t("auth.phoneLogin.invalidPhoneBody", {
-            defaultValue: "Le format du numéro est invalide. Exemple : 5145551234.",
-          })
-        );
-      } else {
-        Alert.alert(
-          i18n.t("auth.phoneLogin.smsErrorTitle", { defaultValue: "Erreur SMS" }),
-          i18n.t("auth.phoneLogin.smsErrorBody", {
-            defaultValue: "Impossible d’envoyer le code.",
-          })
-        );
-      }
+      alertForPhoneSendError(e?.code, e?.message);
     } finally {
       setBusy(false);
     }
@@ -201,7 +310,19 @@ export default function PhoneLoginScreen() {
 
   const confirmCode = async () => {
     try {
+      setBusy(true);
+      const nameForCompletion = sanitizeDisplayName(displayName || displayNameRef.current);
+
+      const finishIfSignedIn = async () => {
+        if (!(await waitForSignedInPhone(normalized))) return false;
+        completingRef.current = true;
+        await completePhoneLoginFlow({ displayName: nameForCompletion, router });
+        return true;
+      };
+
       if (!code.trim() || code.trim().length < 4) {
+        if (await finishIfSignedIn()) return;
+
         Alert.alert(
           i18n.t("auth.phoneLogin.codeRequiredTitle", { defaultValue: "Code required" }),
           i18n.t("auth.phoneLogin.codeRequiredBody", {
@@ -213,6 +334,8 @@ export default function PhoneLoginScreen() {
 
       const confirmation = confirmationRef.current;
       if (!confirmation) {
+        if (await finishIfSignedIn()) return;
+
         Alert.alert(
           i18n.t("auth.phoneLogin.sessionExpiredTitle", { defaultValue: "Session expired" }),
           i18n.t("auth.phoneLogin.sessionExpiredBody", {
@@ -224,54 +347,17 @@ export default function PhoneLoginScreen() {
         return;
       }
 
-      setBusy(true);
-
-      await confirmation.confirm(code.trim());
-
-      await Analytics.authSuccess("sms_login");
-
-      const signedUser = auth().currentUser;
-      if (signedUser?.uid) {
-        await Analytics.setUserId(signedUser.uid);
-        await Analytics.setUserProperty("auth_method", "sms");
-      }
-
-      const cleanName = sanitizeDisplayName(displayName);
-      const currentUser = auth().currentUser;
-
-      if (currentUser && cleanName && !currentUser.displayName) {
-        try {
-          await currentUser.updateProfile({ displayName: cleanName });
-          await currentUser.reload().catch(() => {});
-        } catch {}
-      }
-
-      let shouldShowWelcome = false;
+      completingRef.current = true;
 
       try {
-        const res = await ensureParticipantDoc({ displayName: cleanName || null });
-        shouldShowWelcome = !!res?.shouldShowWelcome;
-        console.log("participants OK", { shouldShowWelcome });
-      } catch (e) {
-        console.log("participants FAIL", e?.code, e?.message);
-        throw e;
-      }
-
-      /*
-        try {
-          await ensurePublicProfile({ displayName: cleanName || null });
-          console.log("profiles_public OK");
-        } catch (e) {
-          console.log("profiles_public FAIL", e?.code, e?.message);
-          throw e;
-        }
-    */
-      if (shouldShowWelcome) {
-        router.replace("/onboarding/welcome");
-      } else {
-        goHome();
+        await confirmation.confirm(code.trim());
+        await completePhoneLoginFlow({ displayName: nameForCompletion, router });
+      } catch (confirmErr) {
+        if (isSessionExpiredError(confirmErr) && (await finishIfSignedIn())) return;
+        throw confirmErr;
       }
     } catch (e) {
+      completingRef.current = false;
       const msg = String(e?.message || e);
 
       if (msg.includes("invalid-verification-code")) {
@@ -279,7 +365,18 @@ export default function PhoneLoginScreen() {
           i18n.t("auth.phoneLogin.invalidCodeTitle", { defaultValue: "Invalid code" }),
           i18n.t("auth.phoneLogin.invalidCodeBody", { defaultValue: "Double-check the code." })
         );
-      } else if (msg.includes("session-expired")) {
+      } else if (isSessionExpiredError(e)) {
+        if (await waitForSignedInPhone(normalized)) {
+          completingRef.current = true;
+          try {
+            await completePhoneLoginFlow({ displayName: nameForCompletion, router });
+            return;
+          } catch (completeErr) {
+            completingRef.current = false;
+            console.log("phone login recovery failed:", completeErr?.code, completeErr?.message);
+          }
+        }
+
         Alert.alert(
           i18n.t("auth.phoneLogin.sessionExpiredTitle", { defaultValue: "Session expired" }),
           i18n.t("auth.phoneLogin.sessionExpiredBody", {
@@ -406,15 +503,24 @@ export default function PhoneLoginScreen() {
                 style={{ borderWidth: 1, borderRadius: 10, padding: 12, letterSpacing: 4 }}
               />
 
+              {phoneVerified && code.trim().length < 4 ? (
+                <Text style={{ color: "#059669" }}>
+                  {i18n.t("auth.phoneLogin.autoVerifiedHint", {
+                    defaultValue:
+                      "Numéro vérifié automatiquement. Entrez le code reçu ou appuyez sur Confirmer.",
+                  })}
+                </Text>
+              ) : null}
+
               <TouchableOpacity
                 onPress={confirmCode}
-                disabled={busy || code.trim().length < 4}
+                disabled={!canConfirm}
                 style={{
                   backgroundColor: "#b91c1c",
                   padding: 14,
                   borderRadius: 10,
                   alignItems: "center",
-                  opacity: busy || code.trim().length < 4 ? 0.6 : 1,
+                  opacity: !canConfirm ? 0.6 : 1,
                 }}
               >
                 {busy ? (
@@ -427,7 +533,25 @@ export default function PhoneLoginScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
+                onPress={async () => {
+                  if (busy) return;
+                  setCode("");
+                  confirmationRef.current = null;
+                  await sendCode();
+                }}
+                disabled={busy}
+                style={{ padding: 10, alignItems: "center" }}
+              >
+                <Text style={{ color: "#6B7280" }}>
+                  {i18n.t("auth.phoneLogin.resendLink", {
+                    defaultValue: "Resend code",
+                  })}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 onPress={() => {
+                  clearPendingPhoneVerification();
                   setStep(1);
                   setCode("");
                   confirmationRef.current = null;
@@ -436,8 +560,8 @@ export default function PhoneLoginScreen() {
                 style={{ padding: 10, alignItems: "center" }}
               >
                 <Text style={{ color: "#6B7280" }}>
-                  {i18n.t("auth.phoneLogin.resendLink", {
-                    defaultValue: "Use a different number / resend",
+                  {i18n.t("auth.phoneLogin.changeNumberLink", {
+                    defaultValue: "Use a different number",
                   })}
                 </Text>
               </TouchableOpacity>

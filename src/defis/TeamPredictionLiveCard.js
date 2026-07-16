@@ -1,6 +1,7 @@
 // src/defis/TeamPredictionLiveCard.js
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -420,7 +421,7 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
 
     challengeRefUnsub.current = ref.onSnapshot(
       (snap) => {
-        const data = snap?.exists ? { id: snap.id, ...(snap.data() || {}) } : null;
+        const data = snapshotExists(snap) ? { id: snapshotId(snap), ...(snapshotData(snap) || {}) } : null;
         setChallenge(data);
         setLoading(false);
       },
@@ -456,7 +457,7 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
 
     entriesRefUnsub.current = ref.onSnapshot(
       (snap) => {
-        const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+        const list = (snap?.docs ?? []).map((d) => ({ uid: d.id, ...d.data() }));
         list.sort((a, b) =>
           String(a.displayName || a.name || a.uid || "").localeCompare(
             String(b.displayName || b.name || b.uid || "")
@@ -493,7 +494,7 @@ export default function TeamPredictionLiveCard({ visible, challengeId, colors })
 
     myEntryRefUnsub.current = ref.onSnapshot(
       (snap) => {
-        const data = snap?.exists ? snap.data() || null : null;
+        const data = snapshotExists(snap) ? snapshotData(snap) || null : null;
         setMyEntry(data);
       },
       (err) => {

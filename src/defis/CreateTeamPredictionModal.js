@@ -594,14 +594,14 @@ export default function CreateTeamPredictionModal({
       <Text style={{ color: colors.subtext, marginTop: 10 }}>
         🎯{" "}
         {i18n.t("tp.create.scoringWinner", {
-          defaultValue: "Bonne équipe gagnante = 3 points",
+          defaultValue: "Bonne équipe gagnante = 5 points",
         })}
       </Text>
 
       <Text style={{ color: colors.subtext }}>
         ⭐{" "}
         {i18n.t("tp.create.scoringExact", {
-          defaultValue: "Score exact en plus = +3 points (total 6)",
+          defaultValue: "Score exact en plus = +5 points (total 10)",
         })}
       </Text>
     </View>

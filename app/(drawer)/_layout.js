@@ -19,6 +19,10 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import { usePublicProfile } from "@src/profile/usePublicProfile";
 import useMeDoc from "@src/home/hooks/useMeDoc";
 import i18n from "@src/i18n/i18n";
+import { useLanguage } from "@src/i18n/LanguageProvider";
+import { AutopilotDowngradeGate } from "@src/subscriptions/AutopilotDowngradeModal";
+import { MyGroupsProvider } from "@src/groups/MyGroupsProvider";
+import { SelectedGroupProvider } from "@src/groups/SelectedGroupProvider";
 
 /* =========================================================
    Helpers
@@ -33,7 +37,7 @@ function getHeaderTitle(route) {
       return i18n.t("tabs.today", { defaultValue: "Aujourd’hui" });
 
     case "ChallengesScreen":
-      return i18n.t("tabs.challenges", { defaultValue: "Mes résultats" });
+      return i18n.t("tabs.challenges", { defaultValue: "Historique" });
 
     case "ClassementScreen":
       return i18n.t("tabs.leaderboard", { defaultValue: "Classement" });
@@ -49,6 +53,9 @@ function getHeaderTitle(route) {
 
     case "profile/index":
       return i18n.t("drawer.profile", { defaultValue: "Mon profil" });
+
+    case "subscriptions/index":
+      return i18n.t("drawer.subscriptions", { defaultValue: "Abonnement" });
 
     case "progression/index":
       return i18n.t("progression.title", { defaultValue: "Progression" });
@@ -212,6 +219,7 @@ function CustomDrawerContent(props) {
   const { colors } = useTheme();
   const router = useRouter();
   const { signOut } = useAuth();
+  useLanguage();
 
   const goTab = useCallback(
     (screenName) => {
@@ -260,10 +268,19 @@ function CustomDrawerContent(props) {
 
       <DrawerItem
         {...itemCommonProps}
-        label={i18n.t("tabs.challenges", { defaultValue: "Mes résultats" })}
+        label={i18n.t("tabs.matchLive", { defaultValue: "En direct" })}
+        onPress={() => goTab("LiveScreen")}
+        icon={({ size }) => (
+          <MaterialCommunityIcons name="broadcast" size={size} color={colors.text} />
+        )}
+      />
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t("tabs.challenges", { defaultValue: "Historique" })}
         onPress={() => goTab("ChallengesScreen")}
         icon={({ size }) => (
-          <Ionicons name="stats-chart-outline" size={size} color={colors.text} />
+          <Ionicons name="time-outline" size={size} color={colors.text} />
         )}
       />
 
@@ -273,15 +290,6 @@ function CustomDrawerContent(props) {
         onPress={() => goTab("ClassementScreen")}
         icon={({ size }) => (
           <Ionicons name="podium-outline" size={size} color={colors.text} />
-        )}
-      />
-
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t("tabs.matchLive", { defaultValue: "En direct" })}
-        onPress={() => goTab("LiveScreen")}
-        icon={({ size }) => (
-          <MaterialCommunityIcons name="broadcast" size={size} color={colors.text} />
         )}
       />
 
@@ -300,14 +308,7 @@ function CustomDrawerContent(props) {
         )}
       />
 
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t("tabs.badges", { defaultValue: "Badges" })}
-        onPress={() => closeAndPush("/(drawer)/progression")}
-        icon={({ size }) => (
-          <Ionicons name="ribbon-outline" size={size} color={colors.text} />
-        )}
-      />
+      {/* MVP: Badges drawer item hidden — route /(drawer)/progression still reachable if needed */}
 
       <DrawerItem
         {...itemCommonProps}
@@ -315,6 +316,15 @@ function CustomDrawerContent(props) {
         onPress={() => goTab("GroupsScreen")}
         icon={({ size }) => (
           <Ionicons name="people-outline" size={size} color={colors.text} />
+        )}
+      />
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t("drawer.subscriptions", { defaultValue: "Abonnement" })}
+        onPress={() => closeAndPush("/(drawer)/subscriptions")}
+        icon={({ size }) => (
+          <Ionicons name="card-outline" size={size} color={colors.text} />
         )}
       />
 
@@ -378,6 +388,9 @@ export default function DrawerLayout() {
   const { colors } = useTheme();
 
   return (
+    <>
+    <MyGroupsProvider>
+      <SelectedGroupProvider>
     <Drawer
       id="rootDrawer"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
@@ -418,5 +431,9 @@ export default function DrawerLayout() {
         }}
       />
     </Drawer>
+      </SelectedGroupProvider>
+    </MyGroupsProvider>
+    <AutopilotDowngradeGate />
+    </>
   );
 }

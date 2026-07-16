@@ -1,5 +1,6 @@
 // src/participants/api.js (RNFB)
 import firestore from '@react-native-firebase/firestore';
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 
 const db = firestore();
 
@@ -12,7 +13,7 @@ export async function createParticipantIfMissing(uid, { name, email, avatarUrl =
 
   const ref = db.collection('participants').doc(String(uid));
   const snap = await ref.get();
-  if (snap.exists) return false; // déjà présent
+  if (snapshotExists(snap)) return false; // déjà présent
 
   await ref.set({
     name: name ?? '',

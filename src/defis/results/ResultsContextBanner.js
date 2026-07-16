@@ -29,13 +29,13 @@ export default function ResultsContextBanner({ colors }) {
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14 }}>
             {i18n.t("challenges.resultsContextTitle", {
-              defaultValue: "Consultation des résultats",
+              defaultValue: "Historique",
             })}
           </Text>
           <Text style={{ color: colors.subtext, marginTop: 4, lineHeight: 19, fontSize: 13 }}>
             {i18n.t("challenges.resultsContextHint", {
               defaultValue:
-                "Tu es dans Mes résultats. Pour participer aux défis du jour, va sur l’onglet Accueil.",
+                "Tu es dans l'historique des défis. Pour les résultats du jour, va sur l'onglet En direct ou Accueil.",
             })}
           </Text>
           <TouchableOpacity

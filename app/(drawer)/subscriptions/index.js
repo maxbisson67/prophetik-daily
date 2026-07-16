@@ -1,5 +1,5 @@
   // app/(drawer)/subscriptions/index.js
-  import React, { useMemo, useState, useCallback, useEffect } from "react";
+  import React, { useMemo, useState, useCallback, useRef } from "react";
   import {
     View,
     Text,
@@ -14,6 +14,10 @@
   import { useAuth } from "@src/auth/SafeAuthProvider";
   import i18n from "@src/i18n/i18n";
   import { useLanguage } from "@src/i18n/LanguageProvider";
+  import { NOVA_COACH_MONTHLY_LIMITS } from "@src/nova/novaQuotaLimits";
+  import { PLAN_LIMITS } from "@src/subscriptions/planLimits";
+  import PlanUsageCard from "@src/subscriptions/PlanUsageCard";
+  import usePlanUsage from "@src/subscriptions/usePlanUsage";
 
 
   import firestore from "@react-native-firebase/firestore";
@@ -25,8 +29,52 @@
   import Purchases from "react-native-purchases";
 
   import useAppConfig from "@src/hooks/useAppConfig";
+  import { syncSubscriptionEntitlement } from "@src/subscriptions/syncSubscriptionService";
+  import { privacyUrlForLang, termsUrlForLang } from "@src/constants/legalUrls";
 
 
+
+  function SubscriptionLegalFooter({ colors, privacyUrl, termsUrl }) {
+    const open = (url) => {
+      Linking.openURL(url).catch(() => {});
+    };
+
+    return (
+      <View
+        style={{
+          marginTop: 8,
+          padding: 12,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
+          gap: 8,
+        }}
+      >
+        <Text style={{ color: colors.text, fontWeight: "800" }}>
+          {i18n.t("subscriptions.legal.title", { defaultValue: "Informations légales" })}
+        </Text>
+        <Text style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>
+          {i18n.t("subscriptions.legal.autoRenew", {
+            defaultValue:
+              "Les abonnements Pro et Vip se renouvellent automatiquement chaque mois jusqu'à annulation dans les réglages de ton compte App Store ou Google Play.",
+          })}
+        </Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          <TouchableOpacity onPress={() => open(termsUrl)}>
+            <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 12, textDecorationLine: "underline" }}>
+              {i18n.t("settings.legal.terms", { defaultValue: "Conditions d'utilisation" })}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => open(privacyUrl)}>
+            <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 12, textDecorationLine: "underline" }}>
+              {i18n.t("settings.legal.privacy", { defaultValue: "Politique de confidentialité" })}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   // Revenue Cat
 
@@ -119,6 +167,11 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function hasActiveRcEntitlement(customerInfo) {
+    const active = customerInfo?.entitlements?.active || {};
+    return !!(active.pro?.isActive || active.vip?.isActive);
+  }
+
   async function purchaseTierRc(tier) {
     const packageId = RC_PACKAGE_IDS[tier];
     if (!packageId) throw new Error(`Aucun packageId pour tier=${tier}`);
@@ -126,10 +179,12 @@
     await debugOfferingsOnce(`before purchase tier=${tier}`);
 
     const pkg = await findPackageById(packageId);
-    const res = await Purchases.purchasePackage(pkg);
+    // Ne pas appeler syncPurchases() après : sur iOS ça rouvre la feuille Apple.
+    return Purchases.purchasePackage(pkg);
+  }
 
-    try { await Purchases.syncPurchases(); } catch {}
-    return res;
+  async function restorePurchasesRc() {
+    return Purchases.restorePurchases();
   }
 
   async function openManageSubscriptions() {
@@ -165,7 +220,24 @@
     const nextTier = vipHas && proHas ? "pro" : null;
     const nextAtMs = vipHas && proHas ? (vipExpMs ?? null) : null;
 
-    return { effectiveTier, effectiveExpMs, nextTier, nextAtMs };
+    const cancelledTier =
+      effectiveTier === "vip" || effectiveTier === "pro" ? effectiveTier : null;
+    const cancelledEvent = cancelledTier
+      ? String(ent?.tiers?.[cancelledTier]?.lastEventType || ent?.lastEventType || "").toUpperCase()
+      : "";
+    const cancelledButActive =
+      cancelledEvent === "CANCELLATION" &&
+      effectiveTier !== "free" &&
+      effectiveExpMs != null &&
+      effectiveExpMs > now;
+
+    return {
+      effectiveTier,
+      effectiveExpMs,
+      nextTier,
+      nextAtMs,
+      cancelledButActive,
+    };
   }
 
   function formatMs(ms) {
@@ -177,6 +249,7 @@
   // SubscriptionStatusBanner (complet)
   // ======================================================
   function SubscriptionStatusBanner({ colors, entitlement, billingLive, onManage }) {
+    const { lang } = useLanguage();
     const ui = computeUiStatus(entitlement);
     const now = Date.now();
 
@@ -206,21 +279,47 @@
 
     // --- 3) VIP actif (avec ou sans downgrade)
     else if (ui.effectiveTier === "vip") {
-      title = i18n.t("subscriptions.banner.vipActiveTitle", { defaultValue: "VIP actif" });
+      title = ui.cancelledButActive
+        ? i18n.t("subscriptions.banner.vipCancelledTitle", {
+            defaultValue: "VIP actif (non renouvelé)",
+          })
+        : i18n.t("subscriptions.banner.vipActiveTitle", { defaultValue: "VIP actif" });
       icon = "crown-outline";
 
+      if (ui.cancelledButActive && ui.effectiveExpMs) {
+        const when = formatMs(ui.effectiveExpMs);
+        const remaining = formatRemaining(ui.effectiveExpMs, now);
+        body = i18n.t("subscriptions.banner.cancelledAccessUntil", {
+          date: when,
+          remaining: remaining
+            ? i18n.t("subscriptions.banner.remainingIn", {
+                time: remaining,
+                defaultValue: ` (dans ${remaining})`,
+              })
+            : "",
+          defaultValue: `Abonnement annulé. Tu gardes l'accès VIP jusqu'au ${when}${remaining ? ` (dans ${remaining})` : ""}, puis retour au forfait Gratuit.`,
+        });
+      }
       // Downgrade planifié → message prioritaire
-      if (ui.nextTier === "pro" && ui.nextAtMs) {
+      else if (ui.nextTier === "pro" && ui.nextAtMs) {
         const when = formatMs(ui.nextAtMs);
         const remaining = formatRemaining(ui.nextAtMs, now);
 
         body = i18n.t("subscriptions.banner.downgradeToProOn", {
-          defaultValue: `Downgrade vers PRO le ${when}${remaining ? ` (dans ${remaining})` : ""}.`,
+          date: when,
+          remaining: remaining
+            ? i18n.t("subscriptions.banner.remainingIn", {
+                time: remaining,
+                defaultValue: ` (dans ${remaining})`,
+              })
+            : "",
+          defaultValue: `Passage à PRO le ${when}${remaining ? ` (dans ${remaining})` : ""}.`,
         });
       } else {
         // Sinon renouvellement / expiration VIP
         body = ui.effectiveExpMs
           ? i18n.t("subscriptions.banner.renewsOn", {
+              date: formatMs(ui.effectiveExpMs),
               defaultValue: `Prochain renouvellement : ${formatMs(ui.effectiveExpMs)}`,
             })
           : i18n.t("subscriptions.banner.activeNoDate", {
@@ -231,16 +330,36 @@
 
     // --- 4) PRO actif
     else if (ui.effectiveTier === "pro") {
-      title = i18n.t("subscriptions.banner.proActiveTitle", { defaultValue: "PRO actif" });
+      title = ui.cancelledButActive
+        ? i18n.t("subscriptions.banner.proCancelledTitle", {
+            defaultValue: "PRO actif (non renouvelé)",
+          })
+        : i18n.t("subscriptions.banner.proActiveTitle", { defaultValue: "PRO actif" });
       icon = "check-decagram-outline";
 
-      body = ui.effectiveExpMs
-        ? i18n.t("subscriptions.banner.renewsOn", {
-            defaultValue: `Prochain renouvellement : ${formatMs(ui.effectiveExpMs)}`,
-          })
-        : i18n.t("subscriptions.banner.activeNoDate", {
-            defaultValue: "Renouvellement actif.",
-          });
+      if (ui.cancelledButActive && ui.effectiveExpMs) {
+        const when = formatMs(ui.effectiveExpMs);
+        const remaining = formatRemaining(ui.effectiveExpMs, now);
+        body = i18n.t("subscriptions.banner.cancelledAccessUntil", {
+          date: when,
+          remaining: remaining
+            ? i18n.t("subscriptions.banner.remainingIn", {
+                time: remaining,
+                defaultValue: ` (dans ${remaining})`,
+              })
+            : "",
+          defaultValue: `Abonnement annulé. Tu gardes l'accès PRO jusqu'au ${when}${remaining ? ` (dans ${remaining})` : ""}, puis retour au forfait Gratuit.`,
+        });
+      } else {
+        body = ui.effectiveExpMs
+          ? i18n.t("subscriptions.banner.renewsOn", {
+              date: formatMs(ui.effectiveExpMs),
+              defaultValue: `Prochain renouvellement : ${formatMs(ui.effectiveExpMs)}`,
+            })
+          : i18n.t("subscriptions.banner.activeNoDate", {
+              defaultValue: "Renouvellement actif.",
+            });
+      }
     }
 
     // --- 5) Fallback
@@ -254,6 +373,7 @@
 
     return (
       <View
+        key={`banner-${lang}`}
         style={{
           backgroundColor: colors.card,
           borderWidth: 1,
@@ -364,7 +484,7 @@
     );
   }
 
-  function PlanCard({ plan, isCurrent, onSelect, loading, colors }) {
+  function PlanCard({ plan, isCurrent, onSelect, loading, disabled, colors }) {
     const borderColor = isCurrent ? colors.primary : colors.border;
 
     return (
@@ -435,7 +555,7 @@
 
         {/* CTA */}
         <TouchableOpacity
-          disabled={loading || isCurrent}
+          disabled={loading || disabled || isCurrent}
           onPress={onSelect}
           activeOpacity={0.9}
           style={{
@@ -444,7 +564,7 @@
             paddingVertical: 12,
             borderRadius: 12,
             alignItems: "center",
-            opacity: loading ? 0.6 : 1,
+            opacity: loading || disabled ? 0.6 : 1,
           }}
         >
           {loading ? (
@@ -613,8 +733,12 @@
     const currentTier = ui.effectiveTier;
 
     const [pendingTier, setPendingTier] = useState(null);
+    const [restoring, setRestoring] = useState(false);
+    const purchaseInFlightRef = useRef(false);
 
     const { lang } = useLanguage();
+    const privacyUrl = privacyUrlForLang(lang);
+    const termsUrl = termsUrlForLang(lang);
     const { config } = useAppConfig();
     const billingLive = config?.billingLive === true;
 
@@ -622,6 +746,47 @@
       const rank = { free: 0, pro: 1, vip: 2 };
       return (rank[to] ?? 0) > (rank[from] ?? 0);
     };
+
+    const applyPostPurchaseSync = useCallback(async (customerInfo) => {
+      try {
+        const result = await syncSubscriptionEntitlement(customerInfo);
+        return result;
+      } catch (e) {
+        console.log("[RC] syncSubscriptionEntitlement error:", e?.message || e);
+        return null;
+      }
+    }, []);
+
+    const handleRestorePurchases = useCallback(async () => {
+      if (!user?.uid || restoring) return;
+
+      setRestoring(true);
+      try {
+        if (!rcReady) await waitForRcReady();
+        const info = await restorePurchasesRc();
+        const sync = await applyPostPurchaseSync(info);
+
+        Alert.alert(
+          i18n.t("subscriptions.restoreTitle", { defaultValue: "Achats restaurés" }),
+          sync?.tier && sync.tier !== "free"
+            ? i18n.t("subscriptions.restoreSuccessBody", {
+                tier: sync.tier.toUpperCase(),
+                defaultValue: "Ton forfait {{tier}} est actif.",
+              })
+            : i18n.t("subscriptions.restoreEmptyBody", {
+                defaultValue: "Aucun abonnement actif trouvé pour ce compte.",
+              })
+        );
+      } catch (e) {
+        if (isRcCancelled(e)) return;
+        Alert.alert(
+          i18n.t("common.unknownError", { defaultValue: "Erreur" }),
+          String(e?.message || e)
+        );
+      } finally {
+        setRestoring(false);
+      }
+    }, [user?.uid, restoring, rcReady, waitForRcReady, applyPostPurchaseSync]);
 
     const now = Date.now();
     const expMs = expiresAt?.toDate
@@ -635,21 +800,24 @@
           id: "free",
           title: i18n.t("subscriptions.plans.free.title", { defaultValue: "Gratuit" }),
           subtitle: i18n.t("subscriptions.plans.free.subtitle", {
-            defaultValue: "Essentiel pour débuter",
+            defaultValue: "Un groupe d'essai",
           }),
           price: "0 $",
-          priceNote: i18n.t("subscriptions.perMonth", { defaultValue: "/mois" }),
+          priceNote: "",
           badge: null,
           accent: colors.subtext,
           highlights: [
-            i18n.t("subscriptions.highlights.free.1", {
-              defaultValue: "1 groupe (owner et participant)",
+            i18n.t("subscriptions.highlights.free.ownedGroups", {
+              count: PLAN_LIMITS.free.ownedGroupsLimit,
+              defaultValue: "{{count}} groupe possédé · groupes rejoints illimités",
             }),
-            i18n.t("subscriptions.highlights.free.2", {
-              defaultValue: "Formats 1x1 à 3x3",
+            i18n.t("subscriptions.highlights.autopilotGroups", {
+              count: PLAN_LIMITS.free.autopilotGroupsLimit,
+              defaultValue: "{{count}} groupe en défis automatiques",
             }),
-            i18n.t("subscriptions.highlights.free.3", {
-              defaultValue: "Participation limitée (semaine)",
+            i18n.t("subscriptions.highlights.novaCoach", {
+              count: NOVA_COACH_MONTHLY_LIMITS.free,
+              defaultValue: "{{count}} conseils Nova Coach / mois",
             }),
           ],
           cta: i18n.t("subscriptions.chooseFree", { defaultValue: "Choisir Gratuit" }),
@@ -659,21 +827,24 @@
           id: "pro",
           title: i18n.t("subscriptions.plans.pro.title", { defaultValue: "Pro" }),
           subtitle: i18n.t("subscriptions.plans.pro.subtitle", {
-            defaultValue: "Pour suivre tes performances",
+            defaultValue: "Jouer entre parents et amis",
           }),
-          price: "6,99 $",
-          priceNote: i18n.t("subscriptions.perMonth", { defaultValue: "/mois" }),
+          price: "5,99 $",
+          priceNote: i18n.t("subscriptions.perMonth", { defaultValue: " / mois" }),
           badge: i18n.t("subscriptions.badge.popular", { defaultValue: "Populaire" }),
           accent: "#f59e0b",
           highlights: [
-            i18n.t("subscriptions.highlights.pro.1", {
-              defaultValue: "Accès au classement (avancé)",
+            i18n.t("subscriptions.highlights.pro.ownedGroups", {
+              count: PLAN_LIMITS.pro.ownedGroupsLimit,
+              defaultValue: "{{count}} groupes possédés · groupes rejoints illimités",
             }),
-            i18n.t("subscriptions.highlights.pro.2", {
-              defaultValue: "Formats 1x1 à 5x5",
+            i18n.t("subscriptions.highlights.autopilotGroups", {
+              count: PLAN_LIMITS.pro.autopilotGroupsLimit,
+              defaultValue: "{{count}} groupes en défis automatiques",
             }),
-            i18n.t("subscriptions.highlights.pro.3", {
-              defaultValue: "Plus de groupes et limites/semaine",
+            i18n.t("subscriptions.highlights.novaCoach", {
+              count: NOVA_COACH_MONTHLY_LIMITS.pro,
+              defaultValue: "{{count}} conseils Nova Coach / mois",
             }),
           ],
           cta: i18n.t("subscriptions.upgradePro", { defaultValue: "Passer à Pro" }),
@@ -683,21 +854,24 @@
           id: "vip",
           title: i18n.t("subscriptions.plans.vip.title", { defaultValue: "Vip" }),
           subtitle: i18n.t("subscriptions.plans.vip.subtitle", {
-            defaultValue: "Le plein potentiel Prophetik",
+            defaultValue: "Un vrai ambassadeur de Prophetik!",
           }),
-          price: "12,99 $",
-          priceNote: i18n.t("subscriptions.perMonth", { defaultValue: "/mois" }),
+          price: "10,99 $",
+          priceNote: i18n.t("subscriptions.perMonth", { defaultValue: " / mois" }),
           badge: i18n.t("subscriptions.badge.best", { defaultValue: "Meilleur" }),
           accent: "#60a5fa",
           highlights: [
-            i18n.t("subscriptions.highlights.vip.1", {
-              defaultValue: "Formats 1x1 à 6x7",
+            i18n.t("subscriptions.highlights.vip.ownedGroups", {
+              count: PLAN_LIMITS.vip.ownedGroupsLimit,
+              defaultValue: "{{count}} groupes possédés · groupes rejoints illimités",
             }),
-            i18n.t("subscriptions.highlights.vip.2", {
-              defaultValue: "Statistiques avancées + conseil IA",
+            i18n.t("subscriptions.highlights.autopilotGroups", {
+              count: PLAN_LIMITS.vip.autopilotGroupsLimit,
+              defaultValue: "{{count}} groupes en défis automatiques",
             }),
-            i18n.t("subscriptions.highlights.vip.3", {
-              defaultValue: "Nova IA optionnelle (peut être retirée)",
+            i18n.t("subscriptions.highlights.novaCoach", {
+              count: NOVA_COACH_MONTHLY_LIMITS.vip,
+              defaultValue: "{{count}} conseils Nova Coach / mois",
             }),
           ],
           cta: i18n.t("subscriptions.upgradeVip", { defaultValue: "Passer à Vip" }),
@@ -710,22 +884,31 @@
       // ✅ Aligné sur le tableau du PDF
       return [
         {
-          key: "ownerGroups",
-          label: i18n.t("subscriptions.compare.ownerGroups", {
-            defaultValue: "Groupes (Propriétaire)",
+          key: "groups",
+          label: i18n.t("subscriptions.compare.ownedGroups", {
+            defaultValue: "Groupes possédés",
           }),
-          free: "1",
-          pro: "3",
-          vip: "5",
+          free: String(PLAN_LIMITS.free.ownedGroupsLimit),
+          pro: String(PLAN_LIMITS.pro.ownedGroupsLimit),
+          vip: String(PLAN_LIMITS.vip.ownedGroupsLimit),
         },
         {
-          key: "memberGroups",
-          label: i18n.t("subscriptions.compare.memberGroups", {
-            defaultValue: "Groupes (Participant)",
+          key: "joinedGroups",
+          label: i18n.t("subscriptions.compare.joinedGroups", {
+            defaultValue: "Groupes rejoints",
           }),
-          free: "1",
-          pro: "5",
-          vip: "10",
+          free: i18n.t("subscriptions.compare.unlimited", { defaultValue: "Illimité" }),
+          pro: i18n.t("subscriptions.compare.unlimited", { defaultValue: "Illimité" }),
+          vip: i18n.t("subscriptions.compare.unlimited", { defaultValue: "Illimité" }),
+        },
+        {
+          key: "autopilotGroups",
+          label: i18n.t("subscriptions.compare.autopilotGroups", {
+            defaultValue: "Groupes en défis automatiques",
+          }),
+          free: String(PLAN_LIMITS.free.autopilotGroupsLimit),
+          pro: String(PLAN_LIMITS.pro.autopilotGroupsLimit),
+          vip: String(PLAN_LIMITS.vip.autopilotGroupsLimit),
         },
         {
           key: "nova",
@@ -743,22 +926,22 @@
           }),
         },
         {
-          key: "createPerWeek",
-          label: i18n.t("subscriptions.compare.createPerWeek", {
-            defaultValue: "Défis – Création / semaine",
+          key: "novaCoach",
+          label: i18n.t("subscriptions.compare.novaCoachLimit", {
+            defaultValue: "Conseils Nova Coach / mois",
           }),
-          free: "2",
-          pro: "7",
-          vip: "35",
-        },
-        {
-          key: "joinPerWeek",
-          label: i18n.t("subscriptions.compare.joinPerWeek", {
-            defaultValue: "Défis – Participation / semaine",
+          free: i18n.t("subscriptions.compare.novaCoachLimitValue", {
+            count: NOVA_COACH_MONTHLY_LIMITS.free,
+            defaultValue: "{{count}} / mois",
           }),
-          free: "3",
-          pro: "7",
-          vip: "70",
+          pro: i18n.t("subscriptions.compare.novaCoachLimitValue", {
+            count: NOVA_COACH_MONTHLY_LIMITS.pro,
+            defaultValue: "{{count}} / mois",
+          }),
+          vip: i18n.t("subscriptions.compare.novaCoachLimitValue", {
+            count: NOVA_COACH_MONTHLY_LIMITS.vip,
+            defaultValue: "{{count}} / mois",
+          }),
         },
         {
           key: "formats",
@@ -803,8 +986,8 @@
           key: "price",
           label: i18n.t("subscriptions.compare.price", { defaultValue: "Prix" }),
           free: "0 $",
-          pro: "6,99 $/mois",
-          vip: "12,99 $/mois",
+          pro: "5,99 $ / mois",
+          vip: "10,99 $ / mois",
         },
       ];
     }, [lang]);
@@ -872,26 +1055,69 @@
           return;
         }
       
-        // ✅ Achat via RevenueCat
+        // ✅ BETA: écriture directe Firestore (sans Apple/RC)
+        if (!billingLive && next !== "free") {
+          Alert.alert(
+            i18n.t("subscriptions.upgradeTitle", { defaultValue: "Changer de forfait ?" }),
+            i18n.t("subscriptions.upgradeBetaBody", {
+              defaultValue: "Mode test : le forfait sera activé sans facturation.",
+            }),
+            [
+              { text: i18n.t("common.cancel", { defaultValue: "Annuler" }), style: "cancel" },
+              {
+                text: i18n.t("common.continue", { defaultValue: "Continuer" }),
+                onPress: async () => {
+                  try {
+                    setPendingTier(next);
+                    await writeEntitlementTier(user.uid, next);
+                  } catch (e) {
+                    Alert.alert(
+                      i18n.t("common.unknownError", { defaultValue: "Erreur" }),
+                      String(e?.message || e)
+                    );
+                  } finally {
+                    setPendingTier(null);
+                  }
+                },
+              },
+            ]
+          );
+          return;
+        }
+
+        // ✅ Achat via RevenueCat (garde anti double-tap / double flux)
+        if (purchaseInFlightRef.current || pendingTier) return;
+
+        purchaseInFlightRef.current = true;
         setPendingTier(next);
 
         (async () => {
           try {
-             if (!rcReady) await waitForRcReady();
+            if (!rcReady) await waitForRcReady();
 
-            await purchaseTierRc(next);
+            const purchaseResult = await purchaseTierRc(next);
+            const customerInfo = purchaseResult?.customerInfo || null;
 
-            Alert.alert(
-              i18n.t("subscriptions.purchaseSuccessTitle", { defaultValue: "Abonnement activé" }),
-              i18n.t("subscriptions.purchaseSuccessBody", {
-                defaultValue: "Merci! Ton forfait sera mis à jour dans quelques secondes.",
-              })
-            );
+            let sync = await applyPostPurchaseSync(customerInfo);
 
-            // 🔁 Laisse Firestore se mettre à jour via webhook + useEntitlement
+            if (!sync?.applied && !hasActiveRcEntitlement(customerInfo)) {
+              await new Promise((r) => setTimeout(r, 1500));
+              try {
+                const retryInfo = await Purchases.getCustomerInfo();
+                sync = await applyPostPurchaseSync(retryInfo);
+              } catch {}
+            }
+
+            if (sync?.applied || hasActiveRcEntitlement(customerInfo)) {
+              Alert.alert(
+                i18n.t("subscriptions.purchaseSuccessTitle", { defaultValue: "Abonnement activé" }),
+                i18n.t("subscriptions.purchaseSuccessBody", {
+                  defaultValue: "Merci! Ton forfait a été mis à jour.",
+                })
+              );
+            }
           } catch (e) {
             if (isRcCancelled(e)) {
-              // l'utilisateur a annulé → silencieux ou petit toast
               return;
             }
             Alert.alert(
@@ -899,12 +1125,13 @@
               String(e?.message || e)
             );
           } finally {
+            purchaseInFlightRef.current = false;
             setPendingTier(null);
           }
         })();
 
       },
-      [user?.uid, currentTier, billingLive, rcReady, waitForRcReady]
+      [user?.uid, currentTier, billingLive, pendingTier, rcReady, waitForRcReady, applyPostPurchaseSync]
     );
 
     if (!user) {
@@ -927,6 +1154,8 @@
       );
     }
 
+    const planUsage = usePlanUsage(user?.uid);
+
     return (
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.background }}
@@ -939,6 +1168,8 @@
           billingLive={billingLive}
           onManage={openManageSubscriptions}
         />
+
+        <PlanUsageCard planUsage={planUsage} colors={colors} />
 
 
         {/* Current tier */}
@@ -980,9 +1211,35 @@
             colors={colors}
             isCurrent={p.id === currentTier}
             loading={pendingTier === p.id}
+            disabled={!!pendingTier}
             onSelect={() => selectTier(p.id)}
           />
         ))}
+
+        {billingLive ? (
+          <TouchableOpacity
+            onPress={handleRestorePurchases}
+            disabled={restoring || !!pendingTier}
+            activeOpacity={0.9}
+            style={{
+              alignItems: "center",
+              paddingVertical: 12,
+              opacity: restoring || pendingTier ? 0.6 : 1,
+            }}
+          >
+            {restoring ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={{ color: colors.primary, fontWeight: "800" }}>
+                {i18n.t("subscriptions.restorePurchases", {
+                  defaultValue: "Restaurer mes achats",
+                })}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
+
+        <SubscriptionLegalFooter colors={colors} privacyUrl={privacyUrl} termsUrl={termsUrl} />
 
       </ScrollView>
     );

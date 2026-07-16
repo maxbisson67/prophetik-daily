@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback ,useRef} from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -162,7 +163,7 @@ export default function NhlStandingsScreen() {
     const ref = firestore().doc("nhl_standings/current");
     const unsub = ref.onSnapshot(
       (snap) => {
-        const data = snap.data() || {};
+        const data = snapshotData(snap) || {};
         setRows(Array.isArray(data.standings) ? data.standings : []);
         setUpdatedAt(data.updatedAt?.toDate ? data.updatedAt.toDate() : null);
         setBusy(false);

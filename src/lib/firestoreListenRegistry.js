@@ -1,3 +1,4 @@
+import { snapshotExists } from "@src/lib/safeSnapshot";
 /**
  * Registre des listeners Firestore (Phase 0 — mesure).
  * Compte les listeners actifs et estime les lectures par snapshot.
@@ -24,8 +25,8 @@ function decCounter(map, key) {
 function countDocs(snap) {
   if (!snap) return 0;
   if (typeof snap.size === "number") return snap.size;
-  if (typeof snap.exists === "boolean") return snap.exists ? 1 : 0;
-  if (Array.isArray(snap.docs)) return snap.docs.length;
+  if (typeof snap.exists === "boolean") return snapshotExists(snap) ? 1 : 0;
+  if (Array.isArray((snap?.docs ?? []))) return (snap?.docs ?? []).length;
   return 1;
 }
 

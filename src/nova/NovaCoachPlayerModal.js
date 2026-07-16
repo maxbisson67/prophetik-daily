@@ -5,9 +5,10 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   Pressable,
   Image,
+  StyleSheet,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +20,6 @@ import { novaCoachService } from "@src/nova/novaCoachService";
 import { NOVA_COACH_BUBBLE_IMAGE, NOVA_COACH_HEADER_IMAGE } from "@src/nova/novaCoachAssets";
 import {
   NovaCoachLearnDrawer,
-  NovaCoachPlayerHero,
   NovaCoachSingleAdvice,
 } from "@src/nova/NovaCoachQuestionSections";
 import {
@@ -28,27 +28,22 @@ import {
   getNovaCoachPlayerAdvice,
   getNovaCoachSuggestionGroups,
   hasVisibleNovaContent,
-  mapNovaCoachError,
   normalizeNovaResponse,
   resolveNovaCapability,
 } from "@src/nova/novaCoachShared";
+import NovaCoachErrorNotice from "@src/nova/NovaCoachErrorNotice";
+import useNovaCoachQuotaGate from "@src/nova/useNovaCoachQuotaGate";
+import NovaCoachIndicatorView from "@src/nova/NovaCoachIndicatorView";
+import {
+  buildNovaIndicatorModel,
+  supportsNovaIndicatorView,
+} from "@src/nova/buildNovaIndicatorModel";
+import { opposingProbablePitcherForPlayer } from "@src/mlb/fgcBvpUtils";
 
 function playerIdFrom(item) {
   return String(item?.playerId ?? item?.id ?? "").trim();
 }
 
-function safeAbbr(v) {
-  return String(v ?? "").trim().toUpperCase();
-}
-
-function opposingPitcherForPlayer(player, probablePitchers, homeAbbr, awayAbbr) {
-  const team = safeAbbr(player?.teamAbbr);
-  const home = safeAbbr(homeAbbr);
-  const away = safeAbbr(awayAbbr);
-  if (team === away) return probablePitchers?.home || null;
-  if (team === home) return probablePitchers?.away || null;
-  return null;
-}
 
 export default function NovaCoachPlayerModal({
   visible,
@@ -66,14 +61,59 @@ export default function NovaCoachPlayerModal({
   const { colors, isDark } = useTheme();
   const { lang } = useLanguage();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const scrollRef = useRef(null);
+  const responseBlockY = useRef(0);
+  const sheetMaxHeight = Math.round(windowHeight * 0.92);
 
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
   const [response, setResponse] = useState(null);
+  const [indicatorsMeta, setIndicatorsMeta] = useState(null);
+  const [responseView, setResponseView] = useState("indicators");
 
   const pid = playerIdFrom(player);
+  const showIndicatorToggle = supportsNovaIndicatorView(domain, sport);
+  const {
+    error,
+    errorKey,
+    showIndicatorUi,
+    askDisabled,
+    quotaBlockedRef,
+    resetQuotaGate,
+    canStartAsk,
+    handleAskError,
+    shouldFetchIndicators,
+  } = useNovaCoachQuotaGate({ showIndicatorToggle });
+  const responseLang = lang === "en" ? "en" : "fr";
+
+  const indicatorModel = useMemo(() => {
+    if (!showIndicatorUi || !indicatorsMeta) return null;
+    return buildNovaIndicatorModel({
+      domain,
+      sport,
+      indicators: indicatorsMeta,
+      novaResponse: response,
+      player,
+      lang: responseLang,
+      probablePitchers,
+      homeAbbr,
+      awayAbbr,
+    });
+  }, [
+    showIndicatorUi,
+    domain,
+    sport,
+    indicatorsMeta,
+    response,
+    player,
+    responseLang,
+    probablePitchers,
+    homeAbbr,
+    awayAbbr,
+  ]);
+
+  const showResponseBlock = !!response || (showIndicatorUi && !!indicatorsMeta);
 
   const suggestionGroups = useMemo(
     () => getNovaCoachSuggestionGroups({ sport, domain, lang, player }),
@@ -88,89 +128,153 @@ export default function NovaCoachPlayerModal({
   const resetState = useCallback(() => {
     setSelectedQuestion(null);
     setBusy(false);
-    setError(null);
+    resetQuotaGate();
     setResponse(null);
-  }, []);
+    setIndicatorsMeta(null);
+    setResponseView("indicators");
+  }, [resetQuotaGate]);
 
   useEffect(() => {
     if (!visible) resetState();
   }, [visible, resetState, pid]);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToResponse = useCallback(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        scrollRef.current?.scrollToEnd({ animated: true });
+        const y = Math.max(0, responseBlockY.current - 8);
+        scrollRef.current?.scrollTo({ y, animated: true });
       });
     });
   }, []);
 
-  useEffect(() => {
-    if (!response && !error) return undefined;
-    scrollToBottom();
-    const t = setTimeout(scrollToBottom, 150);
-    return () => clearTimeout(t);
-  }, [response, error, scrollToBottom]);
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
 
   useEffect(() => {
-    if (busy && selectedQuestion) scrollToBottom();
-  }, [busy, selectedQuestion, scrollToBottom]);
+    if (!response && !error && !indicatorsMeta) return undefined;
+    scrollToResponse();
+    const t1 = setTimeout(scrollToResponse, 120);
+    const t2 = setTimeout(scrollToResponse, 320);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [response, error, indicatorsMeta, scrollToResponse]);
+
+  useEffect(() => {
+    if (busy && selectedQuestion && !indicatorsMeta) scrollToBottom();
+  }, [busy, selectedQuestion, indicatorsMeta, scrollToBottom]);
+
+  const handleResponseLayout = useCallback(
+    (e) => {
+      responseBlockY.current = e.nativeEvent.layout.y;
+      if (response || error || indicatorsMeta) scrollToResponse();
+    },
+    [response, error, indicatorsMeta, scrollToResponse]
+  );
 
   const askNova = useCallback(
     async (text, capability) => {
       const clean = String(text || "").trim();
-      if (!clean || busy || disabled || !pid) return;
+      if (!clean || busy || disabled || askDisabled || !pid || !canStartAsk()) return;
 
       setBusy(true);
-      setError(null);
+      setResponse(null);
+      setIndicatorsMeta(null);
       setSelectedQuestion(clean);
 
+      const lineupSlot =
+        player?.lineupSlot != null && Number.isFinite(Number(player.lineupSlot))
+          ? Number(player.lineupSlot)
+          : null;
+
+      const oppPitcher =
+        player?.opposingPitcherForBvp ||
+        opposingProbablePitcherForPlayer(player, probablePitchers, homeAbbr, awayAbbr);
+      const opposingPitcherHint =
+        oppPitcher?.id || oppPitcher?.name
+          ? {
+              id: oppPitcher?.id ?? null,
+              name: oppPitcher?.name ?? null,
+              wins: oppPitcher?.wins ?? null,
+              losses: oppPitcher?.losses ?? null,
+              era: oppPitcher?.era ?? null,
+              throwHand: oppPitcher?.throwHand ?? null,
+            }
+          : null;
+
+      const focusPlayerHint = {};
+      if (lineupSlot != null) focusPlayerHint.lineupSlot = lineupSlot;
+      if (opposingPitcherHint) focusPlayerHint.opposingPitcher = opposingPitcherHint;
+
+      const requestContext = {
+        domain,
+        sport,
+        challengeId,
+        gameId: gameId ? String(gameId) : undefined,
+        playerIds: [pid],
+        ...(Object.keys(focusPlayerHint).length ? { focusPlayerHint } : {}),
+      };
+
+      const requestLang = lang === "en" ? "en" : "fr";
+      let indicatorsReceived = false;
+
+      if (shouldFetchIndicators()) {
+        novaCoachService({
+          capability: "indicators",
+          message: clean,
+          lang: requestLang,
+          context: requestContext,
+        })
+          .then((raw) => {
+            if (quotaBlockedRef.current) return;
+            if (raw?.meta?.indicators) {
+              indicatorsReceived = true;
+              setIndicatorsMeta(raw.meta.indicators);
+              setResponseView("indicators");
+            }
+          })
+          .catch((e) => {
+            if (__DEV__) console.warn("[NovaCoachModal] indicators error", e);
+          });
+      }
+
       try {
-        const lineupSlot =
-          player?.lineupSlot != null && Number.isFinite(Number(player.lineupSlot))
-            ? Number(player.lineupSlot)
-            : null;
-
-        const oppPitcher = opposingPitcherForPlayer(player, probablePitchers, homeAbbr, awayAbbr);
-        const opposingPitcherHint =
-          oppPitcher?.id || oppPitcher?.name
-            ? {
-                id: oppPitcher?.id ?? null,
-                name: oppPitcher?.name ?? null,
-              }
-            : null;
-
-        const focusPlayerHint = {};
-        if (lineupSlot != null) focusPlayerHint.lineupSlot = lineupSlot;
-        if (opposingPitcherHint) focusPlayerHint.opposingPitcher = opposingPitcherHint;
-
         const raw = await novaCoachService({
           capability: resolveNovaCapability(clean, capability),
           message: clean,
-          lang: lang === "en" ? "en" : "fr",
-          context: {
-            domain,
-            sport,
-            challengeId,
-            gameId: gameId ? String(gameId) : undefined,
-            playerIds: [pid],
-            ...(Object.keys(focusPlayerHint).length ? { focusPlayerHint } : {}),
-          },
+          lang: requestLang,
+          context: requestContext,
         });
 
         const data = normalizeNovaResponse(raw);
         if (!hasVisibleNovaContent(data)) {
           throw new Error("EMPTY_NOVA_RESPONSE");
         }
+        if (raw?.meta?.indicators) {
+          indicatorsReceived = true;
+          setIndicatorsMeta(raw.meta.indicators);
+        }
+        setResponseView(showIndicatorUi ? "indicators" : "text");
         setResponse(data);
       } catch (e) {
         if (__DEV__) console.warn("[NovaCoachModal] error", e);
         setResponse(null);
-        setError(mapNovaCoachError(e));
+        handleAskError(e, {
+          indicatorsReceived,
+          onQuotaExceeded: () => {
+            setIndicatorsMeta(null);
+            setResponseView("text");
+          },
+        });
       } finally {
         setBusy(false);
       }
     },
-    [busy, disabled, pid, lang, domain, sport, challengeId, gameId, player?.lineupSlot, probablePitchers, homeAbbr, awayAbbr]
+    [busy, disabled, askDisabled, pid, canStartAsk, lang, domain, sport, challengeId, gameId, player?.lineupSlot, probablePitchers, homeAbbr, awayAbbr, shouldFetchIndicators, handleAskError, showIndicatorUi]
   );
 
   const headerBg = isDark ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.12)";
@@ -178,14 +282,14 @@ export default function NovaCoachPlayerModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
-        onPress={onClose}
-      >
+      <View style={{ flex: 1, justifyContent: "flex-end" }}>
         <Pressable
-          onPress={(e) => e.stopPropagation?.()}
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+          onPress={onClose}
+        />
+        <View
           style={{
-            maxHeight: "92%",
+            maxHeight: sheetMaxHeight,
             backgroundColor: colors.background,
             borderTopLeftRadius: 22,
             borderTopRightRadius: 22,
@@ -250,17 +354,17 @@ export default function NovaCoachPlayerModal({
 
           <ScrollView
             ref={scrollRef}
+            style={{ flexShrink: 1, minHeight: 0 }}
+            nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
             contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 28 }}
           >
-            <NovaCoachPlayerHero player={player} colors={colors} isDark={isDark} />
-
             <NovaCoachLearnDrawer
               items={suggestionGroups?.learn || []}
               selectedQuestion={selectedQuestion}
               busy={busy}
-              disabled={disabled}
+              disabled={disabled || askDisabled}
               onSelect={(s) => askNova(s.message, s.capability)}
               colors={colors}
               isDark={isDark}
@@ -268,41 +372,28 @@ export default function NovaCoachPlayerModal({
 
             <NovaCoachSingleAdvice
               advice={playerAdvice}
+              player={player}
+              sport={sport}
               selectedQuestion={selectedQuestion}
               busy={busy}
-              disabled={disabled}
+              disabled={disabled || askDisabled}
               onPress={(s) => askNova(s.message, s.capability)}
               colors={colors}
               isDark={isDark}
             />
 
-            {busy && !response ? (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: 12,
-                  borderRadius: 12,
-                  backgroundColor: isDark ? colors.card2 : "rgba(99,102,241,0.08)",
-                }}
-              >
-                <ActivityIndicator color={colors.primary} />
-                <Text style={{ color: colors.subtext, fontWeight: "700" }}>
-                  {i18n.t("novaCoach.thinking")}
-                </Text>
-              </View>
-            ) : null}
-
             {!!error && (
-              <Text style={{ color: colors.danger || "#ef4444", fontSize: 13, fontWeight: "700" }}>
-                {error}
-              </Text>
+              <NovaCoachErrorNotice
+                message={error}
+                errorKey={errorKey}
+                colors={colors}
+                onBeforeNavigate={onClose}
+              />
             )}
 
-            {!!response && (
+            {showResponseBlock && (
               <View
-                onLayout={scrollToBottom}
+                onLayout={handleResponseLayout}
                 style={{
                   borderWidth: 2,
                   borderColor: panelBorder,
@@ -312,12 +403,125 @@ export default function NovaCoachPlayerModal({
                   backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "rgba(239,68,68,0.06)",
                 }}
               >
-                <NovaBubble
-                  layout="coach"
-                  imageSource={NOVA_COACH_BUBBLE_IMAGE}
-                  title={coachTitle(response)}
-                  body={formatCoachBody(response)}
-                />
+                {showIndicatorUi ? (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      marginHorizontal: 6,
+                      marginTop: 6,
+                      marginBottom: 10,
+                      padding: 4,
+                      borderRadius: 12,
+                      backgroundColor: isDark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.95)",
+                      borderWidth: 1.5,
+                      borderColor: panelBorder,
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.08,
+                      shadowRadius: 4,
+                      elevation: 3,
+                    }}
+                  >
+                    {[
+                      {
+                        key: "indicators",
+                        label: i18n.t("novaCoach.viewIndicators", { defaultValue: "Indicateurs" }),
+                        icon: "stats-chart",
+                      },
+                      {
+                        key: "text",
+                        label: i18n.t("novaCoach.viewText", { defaultValue: "Texte" }),
+                        icon: "document-text-outline",
+                      },
+                    ].map((tab) => {
+                      const active = responseView === tab.key;
+                      return (
+                        <TouchableOpacity
+                          key={tab.key}
+                          onPress={() => {
+                            setResponseView(tab.key);
+                            setTimeout(scrollToResponse, 50);
+                          }}
+                          activeOpacity={0.85}
+                          style={{
+                            flex: 1,
+                            flexDirection: "row",
+                            paddingVertical: 10,
+                            borderRadius: 9,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 5,
+                            backgroundColor: active ? colors.primary : "transparent",
+                          }}
+                        >
+                          <Ionicons
+                            name={tab.icon}
+                            size={14}
+                            color={active ? "#fff" : colors.subtext}
+                          />
+                          <Text
+                            style={{
+                              color: active ? "#fff" : colors.subtext,
+                              fontWeight: "900",
+                              fontSize: 13,
+                            }}
+                          >
+                            {tab.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                {showIndicatorUi && responseView === "indicators" && indicatorModel ? (
+                  <View style={{ paddingHorizontal: 8, paddingBottom: 4 }}>
+                    <NovaCoachIndicatorView
+                      model={indicatorModel}
+                      colors={colors}
+                      isDark={isDark}
+                      lang={responseLang}
+                    />
+                  </View>
+                ) : response ? (
+                  <NovaBubble
+                    layout="coach"
+                    imageSource={NOVA_COACH_BUBBLE_IMAGE}
+                    title={coachTitle(response)}
+                    body={formatCoachBody(response)}
+                  />
+                ) : (
+                  <Text
+                    style={{
+                      color: colors.subtext,
+                      fontWeight: "700",
+                      fontSize: 13,
+                      paddingHorizontal: 12,
+                      paddingVertical: 16,
+                      textAlign: "center",
+                    }}
+                  >
+                    {i18n.t("novaCoach.draftingAnalysis", {
+                      defaultValue: "Nova rédige l'analyse…",
+                    })}
+                  </Text>
+                )}
+
+                {showIndicatorUi && responseView === "indicators" && response ? (
+                  <TouchableOpacity
+                    onPress={() => setResponseView("text")}
+                    activeOpacity={0.85}
+                    style={{ alignItems: "center", paddingTop: 8, paddingHorizontal: 8 }}
+                  >
+                    <Text style={{ color: colors.primary, fontWeight: "800", fontSize: 12 }}>
+                      {i18n.t("novaCoach.readFullAnalysis", {
+                        defaultValue: "Lire l'analyse complète →",
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {response ? (
                 <View
                   style={{
                     flexDirection: "row",
@@ -337,11 +541,12 @@ export default function NovaCoachPlayerModal({
                     })}
                   </Text>
                 </View>
+                ) : null}
               </View>
             )}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

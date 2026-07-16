@@ -17,7 +17,7 @@
  * - rbi, awayScore, homeScore, updatedAt
  */
 
-import { isMlbGamePostponed } from "./mlbGameStatus.js";
+import { isMlbGamePostponed, isMlbGameDelayed } from "./mlbGameStatus.js";
 
 export const MLB_LIVE_DOC_COMPARE_KEYS = [
   "awayAbbr",
@@ -156,10 +156,11 @@ export function shouldPollMlbGame(game = {}, existingDoc = null, nowMs = Date.no
   const status = game?.status || {};
   const abstract = String(status?.abstractGameState || "").toLowerCase();
   const postponed = isMlbGamePostponed(status);
+  const delayed = isMlbGameDelayed(status);
 
   if (postponed) return true;
 
-  if (abstract === "live") return true;
+  if (abstract === "live" || delayed) return true;
 
   if (abstract === "final") {
     const finalizedAt = Number(existingDoc?.finalizedAt || 0);

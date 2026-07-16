@@ -8,14 +8,12 @@ import i18n from "@src/i18n/i18n";
 
 import { useTheme } from "@src/theme/ThemeProvider";
 import { useAuth } from "@src/auth/SafeAuthProvider";
-import { MyGroupsProvider, useMyGroups } from "@src/groups/MyGroupsProvider";
+import { useMyGroups } from "@src/groups/MyGroupsProvider";
 import {
-  resolveLiveTabTitle,
-  SelectedGroupProvider,
+  useLiveTabTitle,
   useSelectedGroup,
 } from "@src/groups/SelectedGroupProvider";
 import { useGroupsUnreadTotal } from "@src/groupChat/useGroupUnreadCount";
-import FirestoreListenStats from "@src/components/FirestoreListenStats";
 
 function TabsLayoutInner() {
   const { colors } = useTheme();
@@ -24,10 +22,7 @@ function TabsLayoutInner() {
   const { selectedGroupId, selectedSport } = useSelectedGroup();
   const groupChatUnread = useGroupsUnreadTotal(groupIds, user?.uid);
 
-  const liveTabTitle = useMemo(
-    () => resolveLiveTabTitle(selectedGroupId, selectedSport),
-    [selectedGroupId, selectedSport]
-  );
+  const liveTabTitle = useLiveTabTitle();
 
   const todayTabBadge = useMemo(() => {
     if (!groupChatUnread || groupChatUnread <= 0) return undefined;
@@ -74,13 +69,26 @@ function TabsLayoutInner() {
         />
 
         <Tabs.Screen
+          name="LiveScreen"
+          options={{
+            title: liveTabTitle,
+            tabBarLabel: liveTabTitle,
+            headerLeft: (props) => <DrawerToggleButton {...props} />,
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="broadcast" color={color} size={size} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
           name="ChallengesScreen"
           options={{
-            title: i18n.t("tabs.challenges", { defaultValue: "Mes résultats" }),
+            title: i18n.t("tabs.challenges", { defaultValue: "Historique" }),
+            tabBarLabel: i18n.t("tabs.challenges", { defaultValue: "Historique" }),
             headerLeft: (props) => <DrawerToggleButton {...props} />,
             tabBarActiveTintColor: "#16a34a",
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="stats-chart-outline" color={color} size={size} />
+              <Ionicons name="time-outline" color={color} size={size} />
             ),
           }}
         />
@@ -96,35 +104,16 @@ function TabsLayoutInner() {
           }}
         />
 
-        <Tabs.Screen
-          name="LiveScreen"
-          options={{
-            title: liveTabTitle,
-            tabBarLabel: liveTabTitle,
-            headerLeft: (props) => <DrawerToggleButton {...props} />,
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="broadcast" color={color} size={size} />
-            ),
-          }}
-        />
-
         <Tabs.Screen name="BadgesScreen" options={{ href: null }} />
 
         <Tabs.Screen name="GroupsScreen" options={{ href: null }} />
         <Tabs.Screen name="sports" options={{ href: null }} />
         <Tabs.Screen name="index" options={{ href: null, headerShown: false }} />
       </Tabs>
-      {__DEV__ ? <FirestoreListenStats /> : null}
     </View>
   );
 }
 
 export default function TabsLayout() {
-  return (
-    <MyGroupsProvider>
-      <SelectedGroupProvider>
-        <TabsLayoutInner />
-      </SelectedGroupProvider>
-    </MyGroupsProvider>
-  );
+  return <TabsLayoutInner />;
 }

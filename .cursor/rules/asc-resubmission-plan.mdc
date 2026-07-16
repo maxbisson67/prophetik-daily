@@ -1,0 +1,40 @@
+---
+description: Plan de resoumission App Store Connect (build 3.0.3+) — Prophetik
+alwaysApply: true
+---
+
+# ASC Resubmission Plan — Prophetik
+
+## Contexte
+Rejet build **3.0.2 (60)** — 15 juil. 2026. Device review : iPad Air M3, iPadOS 26.5.2.
+
+## Auth MVS
+- **SMS seulement** pour la soumission (email link retiré de auth-choice).
+- Compte démo SMS à fournir dans App Review Information.
+
+## Phase 1 — Code (bloquants)
+- [x] Suppression de compte : Settings + Cloud Function `deleteAccount`
+- [x] Liens légaux abonnements : privacy + EULA dans écran Abonnements
+- [x] Page `/terms` sur Firebase Hosting
+- [ ] Deploy `functions:deleteAccount`, `functions:syncSubscriptionEntitlement`
+
+## Phase 2 — Build 3.0.3
+Correctifs déjà en repo à inclure dans le binaire :
+- Auth : waitForRcReady ref fix, reCAPTCHA SMS iPad
+- IAP : syncPurchases retiré, sync post-achat, anti double-tap
+
+## Phase 3 — ASC (sans code)
+- Supprimer ou remplacer image promo IAP (≠ icône app)
+- Privacy URL : https://capitaine.web.app/privacy
+- EULA dans description ou champ EULA ASC
+- Paid Apps Agreement actif
+- Notes review + vidéo suppression compte
+
+## Phase 4 — Tests pré-soumission
+- SMS login sur iPad
+- Passer à Pro (sandbox)
+- Supprimer compte (flow complet)
+- Liens légaux cliquables
+
+## Version cible
+`3.0.3` (build 61+) — **nouveau binaire requis** (OTA insuffisante pour review Apple).

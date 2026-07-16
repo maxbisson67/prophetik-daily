@@ -55,7 +55,7 @@ export default function useLeaderboards(groupIds) {
 
       const unsub = ref.onSnapshot(
         (snap) => {
-          const rows = snap.docs.map((d) => normalizeRow(d.id, d.data()));
+          const rows = (snap?.docs ?? []).map((d) => normalizeRow(d.id, d.data()));
           rows.sort((a, b) => (b.wins || 0) - (a.wins || 0));
 
           if (!alive) return;

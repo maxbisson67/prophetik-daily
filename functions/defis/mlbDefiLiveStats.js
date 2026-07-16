@@ -1,5 +1,5 @@
 /**
- * Stats live TS MLB — hits + RBI + bonus HR par joueur (par journée).
+ * Stats live TS MLB — hit + bonus extra-base + RBI + run par joueur (par journée).
  */
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
@@ -17,13 +17,24 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function mlbPlayerTsPoints({ hits = 0, rbi = 0, homeRuns = 0 } = {}) {
-  return num(hits) + num(rbi) + num(homeRuns);
+export function mlbPlayerTsPoints({
+  hits = 0,
+  doubles = 0,
+  triples = 0,
+  homeRuns = 0,
+  rbi = 0,
+  runs = 0,
+} = {}) {
+  const extraBase = num(doubles) + num(triples) + num(homeRuns);
+  return num(hits) + num(rbi) + num(runs) + extraBase;
 }
 
 export function aggregateMlbBattingFromLiveFeed(liveFeed) {
   const hitsByPlayer = new Map();
+  const doublesByPlayer = new Map();
+  const triplesByPlayer = new Map();
   const rbiByPlayer = new Map();
+  const runsByPlayer = new Map();
   const hrByPlayer = new Map();
   const pointsByPlayer = new Map();
 
@@ -38,22 +49,35 @@ export function aggregateMlbBattingFromLiveFeed(liveFeed) {
 
       const batting = p?.stats?.batting || {};
       const hits = num(batting.hits);
-      const rbi = num(batting.rbi);
+      const doubles = num(batting.doubles);
+      const triples = num(batting.triples);
       const homeRuns = num(batting.homeRuns);
+      const rbi = num(batting.rbi);
+      const runs = num(batting.runs);
 
-      if (hits === 0 && rbi === 0 && homeRuns === 0) continue;
+      if (hits === 0 && rbi === 0 && homeRuns === 0 && runs === 0) continue;
+
+      const gamePts = mlbPlayerTsPoints({ hits, doubles, triples, homeRuns, rbi, runs });
 
       hitsByPlayer.set(playerId, (hitsByPlayer.get(playerId) || 0) + hits);
+      doublesByPlayer.set(playerId, (doublesByPlayer.get(playerId) || 0) + doubles);
+      triplesByPlayer.set(playerId, (triplesByPlayer.get(playerId) || 0) + triples);
       rbiByPlayer.set(playerId, (rbiByPlayer.get(playerId) || 0) + rbi);
+      runsByPlayer.set(playerId, (runsByPlayer.get(playerId) || 0) + runs);
       hrByPlayer.set(playerId, (hrByPlayer.get(playerId) || 0) + homeRuns);
-      pointsByPlayer.set(
-        playerId,
-        (pointsByPlayer.get(playerId) || 0) + mlbPlayerTsPoints({ hits, rbi, homeRuns })
-      );
+      pointsByPlayer.set(playerId, (pointsByPlayer.get(playerId) || 0) + gamePts);
     }
   }
 
-  return { hitsByPlayer, rbiByPlayer, hrByPlayer, pointsByPlayer };
+  return {
+    hitsByPlayer,
+    doublesByPlayer,
+    triplesByPlayer,
+    rbiByPlayer,
+    runsByPlayer,
+    hrByPlayer,
+    pointsByPlayer,
+  };
 }
 
 function cleanObj(mapOrObj) {
@@ -91,7 +115,10 @@ export async function loadMlbGamePksForYmd(ymd) {
 export async function aggregateMlbDayBattingStats(ymd) {
   const gamePks = await loadMlbGamePksForYmd(ymd);
   const hitsByPlayer = new Map();
+  const doublesByPlayer = new Map();
+  const triplesByPlayer = new Map();
   const rbiByPlayer = new Map();
+  const runsByPlayer = new Map();
   const hrByPlayer = new Map();
   const pointsByPlayer = new Map();
 
@@ -106,7 +133,10 @@ export async function aggregateMlbDayBattingStats(ymd) {
       const feed = await fetchMlbLiveFeed(gamePk);
       const agg = aggregateMlbBattingFromLiveFeed(feed);
       mergeMaps(hitsByPlayer, agg.hitsByPlayer);
+      mergeMaps(doublesByPlayer, agg.doublesByPlayer);
+      mergeMaps(triplesByPlayer, agg.triplesByPlayer);
       mergeMaps(rbiByPlayer, agg.rbiByPlayer);
+      mergeMaps(runsByPlayer, agg.runsByPlayer);
       mergeMaps(hrByPlayer, agg.hrByPlayer);
       mergeMaps(pointsByPlayer, agg.pointsByPlayer);
     } catch (e) {
@@ -120,7 +150,10 @@ export async function aggregateMlbDayBattingStats(ymd) {
 
   return {
     playerHits: cleanObj(hitsByPlayer),
+    playerDoubles: cleanObj(doublesByPlayer),
+    playerTriples: cleanObj(triplesByPlayer),
     playerRbi: cleanObj(rbiByPlayer),
+    playerRuns: cleanObj(runsByPlayer),
     playerHomeRuns: cleanObj(hrByPlayer),
     playerPoints: cleanObj(pointsByPlayer),
   };
@@ -141,8 +174,11 @@ export async function updateMlbParticipationLivePoints(defiRef, pointsObj) {
       pts += Number(pointsObj[String(raw).trim()] ?? 0);
     }
 
+    const previousLive = Number(p.livePoints ?? 0);
+    const nextLive = Math.max(previousLive, pts);
+
     bw.update(pSnap.ref, {
-      livePoints: pts,
+      livePoints: nextLive,
       liveUpdatedAt: FieldValue.serverTimestamp(),
     });
   }

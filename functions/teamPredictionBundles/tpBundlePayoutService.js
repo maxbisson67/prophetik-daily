@@ -194,31 +194,40 @@ export async function applySlotPayoutForBundle({ bundleId, gameId }) {
         homeAbbr: slot.homeAbbr,
         awayScore: official.awayScore,
         homeScore: official.homeScore,
+        winnerAbbr: official.winnerAbbr,
       },
     };
   });
 
-  if (result?.ok && !result?.skipped && Array.isArray(result.exactScoreNotifications)) {
-    for (const row of result.exactScoreNotifications) {
-      try {
-        await notifyTpExactScore({
-          bundleId,
-          groupId: result.groupId,
-          gameId,
-          uid: row.uid,
-          awayAbbr: result.slotMeta?.awayAbbr,
-          homeAbbr: result.slotMeta?.homeAbbr,
-          awayScore: result.slotMeta?.awayScore,
-          homeScore: result.slotMeta?.homeScore,
-        });
-      } catch (pushErr) {
-        logger.warn("[TP bundle payout] exact score push failed", {
-          bundleId,
-          gameId,
-          uid: row.uid,
-          err: String(pushErr?.message || pushErr),
-        });
-      }
+  if (
+    result?.ok &&
+    !result?.skipped &&
+    Array.isArray(result.exactScoreNotifications) &&
+    result.exactScoreNotifications.length
+  ) {
+    try {
+      const bundleSnap = await db.doc(`team_prediction_bundles/${bundleId}`).get();
+      const bundleLeague = bundleSnap.data()?.league || "NHL";
+      const official = result.slotMeta || {};
+
+      await notifyTpExactScore({
+        bundleId,
+        groupId: result.groupId,
+        gameId,
+        winnerUids: result.exactScoreNotifications.map((row) => row.uid),
+        league: bundleLeague,
+        winnerAbbr: official.winnerAbbr,
+        awayAbbr: official.awayAbbr,
+        homeAbbr: official.homeAbbr,
+        awayScore: official.awayScore,
+        homeScore: official.homeScore,
+      });
+    } catch (pushErr) {
+      logger.warn("[TP bundle payout] exact score push failed", {
+        bundleId,
+        gameId,
+        err: String(pushErr?.message || pushErr),
+      });
     }
   }
 

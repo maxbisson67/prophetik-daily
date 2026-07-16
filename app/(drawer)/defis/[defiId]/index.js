@@ -2,6 +2,7 @@
 // Écran de participation à un défi NHL (RNFirebase)
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
   Text,
@@ -45,7 +46,9 @@ import {
 import Analytics from "@src/services/analytics";
 import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
 import { useTeamStandingsLookup } from "@src/sports/useTeamStandingsLookup";
-import { enrichMlbPoolPlayers } from "@src/mlb/enrichMlbPoolPlayers";
+import { enrichMlbPoolPlayers, poolHasEmbeddedMlbStats } from "@src/mlb/enrichMlbPoolPlayers";
+import NovaCoachPlayerModal from "@src/nova/NovaCoachPlayerModal";
+import { navigateToAccueilChallenge } from "@src/defis/results/navigateToMesResultats";
 
 /* ---------------- Logos NHL (local) ---------------- */
 const LOGO_MAP = {
@@ -202,6 +205,7 @@ export default function DefiParticipationScreen() {
 
   // playerPool figé
   const [players, setPlayers] = useState([]);
+  const [loadingPool, setLoadingPool] = useState(true);
 
   const [selected, setSelected] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -221,9 +225,28 @@ export default function DefiParticipationScreen() {
     return tierActive ? t : "free";
   }, [userTier, tierActive]);
 
-  // ✅ flags abonnement (pour CTA upgrade)
-  const tier = String(tierLower || "free").toLowerCase();
-  const isFree = tier === "free";
+  const leaveDefiPicker = useCallback(() => {
+    if (router.canGoBack?.()) {
+      router.back();
+      return;
+    }
+    navigateToAccueilChallenge(router, {
+      challengeId: String(defiId || ""),
+      kind: "ts",
+    });
+  }, [router, defiId]);
+
+  const [novaPlayer, setNovaPlayer] = useState(null);
+
+  const novaProbablePitchers = useMemo(() => {
+    if (!novaPlayer) return null;
+    const opp = novaPlayer.opponentProbablePitcher;
+    const isHome = novaPlayer.isHome === true;
+    return {
+      home: isHome ? null : opp,
+      away: isHome ? opp : null,
+    };
+  }, [novaPlayer]);
 
   // Charger défi
   useEffect(() => {
@@ -235,7 +258,7 @@ export default function DefiParticipationScreen() {
 
     const unsub = ref.onSnapshot(
       (snap) => {
-        const next = snap.exists ? { id: snap.id, ...snap.data() } : null;
+        const next = snapshotExists(snap) ? { id: snapshotId(snap), ...snapshotData(snap) } : null;
         if (!isEqual(next, lastDefi)) {
           lastDefi = next;
           setDefi(next);
@@ -263,6 +286,8 @@ export default function DefiParticipationScreen() {
     [defi?.sport, defi?.poolSport]
   );
 
+  const showNovaCoach = defiSport === "MLB" || defiSport === "NHL";
+
   const { formatLine: formatStandingsLine } = useTeamStandingsLookup(
     defiSport === "MLB" ? "MLB" : null
   );
@@ -284,8 +309,8 @@ export default function DefiParticipationScreen() {
         const ref = firestore().doc(`defis/${String(defi.id)}/participations/${user.uid}`);
         const snap = await ref.get();
 
-        if (snap.exists) {
-          const p = snap.data() || {};
+        if (snapshotExists(snap)) {
+          const p = snapshotData(snap) || {};
           const picks = Array.isArray(p.picks) ? p.picks : [];
 
           setHasSavedOnce(picks.length > 0);
@@ -313,6 +338,7 @@ export default function DefiParticipationScreen() {
 
     let cancelled = false;
     let enrichGen = 0;
+    setLoadingPool(true);
 
     const unsub = firestore()
       .collection(`defis/${defi.id}/playerPool`)
@@ -325,12 +351,23 @@ export default function DefiParticipationScreen() {
           if (defiSport !== "MLB") {
             if (!cancelled) {
               setPlayers((prev) => (isEqual(prev, list) ? prev : list));
+              setLoadingPool(false);
             }
             return;
           }
 
           const seasonId = defi?.poolSeasonId;
           const myGen = ++enrichGen;
+          const hasEmbeddedStats = poolHasEmbeddedMlbStats(list);
+
+          if (!cancelled) {
+            setPlayers((prev) => (isEqual(prev, list) ? prev : list));
+            setLoadingPool(false);
+          }
+
+          if (hasEmbeddedStats || !seasonId) {
+            return;
+          }
 
           try {
             const enriched = await enrichMlbPoolPlayers(list, seasonId);
@@ -338,12 +375,14 @@ export default function DefiParticipationScreen() {
             setPlayers((prev) => (isEqual(prev, enriched) ? prev : enriched));
           } catch (e) {
             if (!cancelled && myGen === enrichGen) {
-              setPlayers((prev) => (isEqual(prev, list) ? prev : list));
               setError(e);
             }
           }
         },
-        (e) => setError(e)
+        (e) => {
+          setError(e);
+          setLoadingPool(false);
+        }
       );
 
     return () => {
@@ -611,7 +650,7 @@ export default function DefiParticipationScreen() {
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <HeaderBackButton
                 tintColor={tintColor ?? colors.text}
-                onPress={() => router.replace("/(drawer)/(tabs)/ChallengesScreen")}
+                onPress={leaveDefiPicker}
               />
               <DrawerToggleButton tintColor={tintColor ?? colors.text} />
             </View>
@@ -648,6 +687,8 @@ export default function DefiParticipationScreen() {
                   teamLogo={teamLogo}
                   sport={defiSport}
                   formatStandingsLine={defiSport === "MLB" ? formatStandingsLine : null}
+                  showNovaButton={showNovaCoach}
+                  onNovaPress={setNovaPlayer}
                 />
               ))}
             </View>
@@ -671,30 +712,7 @@ export default function DefiParticipationScreen() {
               borderColor: colors.border,
             }}
           >
-            {/* ✅ CTA Abonnement (FREE seulement) */}
-            {isFree ? (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => router.push("../../subscriptions")} // <-- ajuste ta route
-                style={{
-                  padding: 12,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: "rgba(127,29,29,0.35)",
-                  backgroundColor: "rgba(127,29,29,0.10)",
-                  alignItems: "center",
-                }}
-              >
-              <Text style={{ color: colors.text, fontWeight: "900", textAlign: "center" }}>
-                {i18n.t("defi.paywall.ctaTitle")}
-              </Text>
-              <Text style={{ color: colors.subtext, fontWeight: "700", textAlign: "center", marginTop: 2, fontSize: 12 }}>
-                {i18n.t("defi.paywall.ctaBody")}
-              </Text>
-              </TouchableOpacity>
-            ) : null}
-
-            {/* ✅ Bouton Save original */}
+            {/* Bouton Save */}
             <TouchableOpacity
               disabled={locked || !selected.every(Boolean) || saving}
               onPress={save}
@@ -718,7 +736,7 @@ export default function DefiParticipationScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={leaveDefiPicker}
               style={{
                 padding: 12,
                 borderRadius: 10,
@@ -751,9 +769,24 @@ export default function DefiParticipationScreen() {
         pickerSlotIndex={pickerIndex}
         sport={defiSport}
         formatStandingsLine={defiSport === "MLB" ? formatStandingsLine : null}
+        loading={loadingPool}
       />
 
       <LoadingOverlay visible={saving} text={i18n.t("defi.actions.primarySaving")} />
+
+      <NovaCoachPlayerModal
+        visible={!!novaPlayer}
+        onClose={() => setNovaPlayer(null)}
+        player={novaPlayer}
+        challengeId={String(defiId || defi?.id || "")}
+        domain="ts"
+        sport={defiSport}
+        gameId={novaPlayer?.gamePk ? String(novaPlayer.gamePk) : null}
+        probablePitchers={novaProbablePitchers}
+        homeAbbr={novaPlayer?.homeAbbr}
+        awayAbbr={novaPlayer?.awayAbbr}
+        disabled={locked || saving}
+      />
     </>
   );
 }

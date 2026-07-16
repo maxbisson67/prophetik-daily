@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import i18n from "@src/i18n/i18n";
 
@@ -33,12 +34,15 @@ export default function useLeaderboardProfiles(uids) {
         .doc(uid)
         .onSnapshot(
           (snap) => {
-            if (!snap.exists) return;
-            const d = snap.data() || {};
+            if (!snapshotExists(snap)) return;
+            const d = snapshotData(snap) || {};
             mergeForUid({
               publicDisplayName:
                 d.displayName || i18n.t("common.guest", { defaultValue: "Invité" }),
               publicAvatarUrl: d.avatarUrl || null,
+              publicJerseyFrontUrl: d.jerseyFrontUrl || null,
+              publicJerseyBackUrl: d.jerseyBackUrl || null,
+              publicAvatarKind: d.avatarKind || null,
               publicUpdatedAt: d.updatedAt || null,
             });
           },
@@ -52,11 +56,14 @@ export default function useLeaderboardProfiles(uids) {
         .doc(uid)
         .onSnapshot(
           (snap) => {
-            if (!snap.exists) return;
-            const d = snap.data() || {};
+            if (!snapshotExists(snap)) return;
+            const d = snapshotData(snap) || {};
             mergeForUid({
               participantDisplayName: d.displayName || null,
               participantAvatarUrl: d.avatarUrl || null,
+              participantJerseyFrontUrl: d.jerseyFrontUrl || null,
+              participantJerseyBackUrl: d.jerseyBackUrl || null,
+              participantAvatarKind: d.avatarKind || null,
               participantUpdatedAt: d.updatedAt || null,
             });
           },
@@ -101,10 +108,32 @@ export function resolveLeaderboardMember(row, profiles) {
     row?.avatarUrl ||
     null;
 
+  const jerseyFrontUrl =
+    prof.participantJerseyFrontUrl ||
+    prof.publicJerseyFrontUrl ||
+    row?.jerseyFrontUrl ||
+    null;
+
+  const jerseyBackUrl =
+    prof.participantJerseyBackUrl ||
+    prof.publicJerseyBackUrl ||
+    row?.jerseyBackUrl ||
+    null;
+
+  const avatarKind =
+    prof.participantAvatarKind || prof.publicAvatarKind || row?.avatarKind || null;
+
   const updatedAt =
     prof.participantUpdatedAt ||
     prof.publicUpdatedAt ||
     null;
 
-  return { displayName, avatarUrl, updatedAt };
+  return {
+    displayName,
+    avatarUrl,
+    jerseyFrontUrl,
+    jerseyBackUrl,
+    avatarKind,
+    updatedAt,
+  };
 }

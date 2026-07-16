@@ -17,6 +17,11 @@ import {
   compactMlbBoardEntry,
   upsertLiveBoard,
 } from "../shared/liveBoard.js";
+import {
+  isWithinLiveCronSchedule,
+  LIVE_CRON_SCHEDULE,
+  LIVE_CRON_YESTERDAY_UNTIL_HOUR,
+} from "../shared/liveCronGate.js";
 import { fetchMlbLiveFeed } from "./mlbLiveFeed.js";
 import {
   MLB_LIVE_DOC_COMPARE_KEYS,
@@ -27,6 +32,10 @@ import {
   shouldPollMlbGame,
 } from "./mlbLiveGamesSchema.js";
 import { invalidateMlbBvpCacheForFinalGame } from "./mlbBvpInvalidate.js";
+import {
+  handleMlbGamePostponed,
+  shouldVoidChallengesForStatus,
+} from "./mlbPostponedGameHandler.js";
 
 function ymdCompact(ymd) {
   return String(ymd || "").replaceAll("-", "");
@@ -298,6 +307,22 @@ async function runUpdateMlbLiveGames(forYmd, options = {}) {
         stats.written += 1;
       }
 
+      if (shouldVoidChallengesForStatus(scheduleGame?.status || doc, existing)) {
+        try {
+          await handleMlbGamePostponed({
+            db,
+            gamePk,
+            ymd,
+            source: "mlbLive",
+          });
+        } catch (err) {
+          logger.warn("[mlbLive] postponed handler failed", {
+            gamePk,
+            error: err?.message || String(err),
+          });
+        }
+      }
+
       boardGames.push(compactMlbBoardEntry(doc, gamePk));
     } catch (err) {
       logger.error("[mlbLive] game failed", {
@@ -339,16 +364,21 @@ export const updateMlbLiveGamesNow = onCall({ region: "us-central1" }, async (re
 
 export const updateMlbLiveGamesCron = onSchedule(
   {
-    schedule: "*/1 * * * *",
+    schedule: LIVE_CRON_SCHEDULE,
     timeZone: "America/Toronto",
     region: "us-central1",
   },
   async () => {
     try {
+      if (!isWithinLiveCronSchedule()) {
+        logger.info("[mlbLive] cron skipped — outside active window");
+        return;
+      }
+
       const todayYmd = todayAppYmd();
       const hour = torontoCurrentHour();
 
-      if (hour < 3) {
+      if (hour < LIVE_CRON_YESTERDAY_UNTIL_HOUR) {
         const yesterdayYmd = addDaysToYmd(todayYmd, -1);
         await runUpdateMlbLiveGames(yesterdayYmd, { source: "cron" });
       }

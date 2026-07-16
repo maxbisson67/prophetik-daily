@@ -1,7 +1,7 @@
 import { db } from "../../../utils.js";
 import { getMlbCurrentSeason } from "../../../players/seasonHelpers.js";
 import { buildEmptyMlbPitcher } from "../../../mlb/mlbProbablePitchers.js";
-import { isSlotOpenForPick } from "../../../teamPredictionBundles/tpBundleUtils.js";
+import { isSlotOpenForPick, TP_BUNDLE_MAX_GAMES } from "../../../teamPredictionBundles/tpBundleUtils.js";
 import { MLB_TEAM_ID_TO_ABBR, resolveMlbAbbrFromTeam } from "../../../mlb/mlbTeamAbbr.js";
 
 const MLB_AL_ID = "103";
@@ -33,6 +33,10 @@ function str(v) {
 
 function safeAbbr(v) {
   return str(v).toUpperCase();
+}
+
+function ymdCompact(ymd) {
+  return str(ymd).replaceAll("-", "");
 }
 
 function normalizePitcher(raw) {
@@ -172,7 +176,7 @@ function teamIdFromScheduleTeam(team) {
 }
 
 /**
- * Contexte vérifié — TP MLB (bundle 3 matchs).
+ * Contexte vérifié — TP MLB (bundle, max 2 matchs).
  */
 export class TpMlbContextBuilder {
   async build({ uid, challengeId, gameId = null, focusSlot = null }) {
@@ -192,7 +196,7 @@ export class TpMlbContextBuilder {
     const entry = entrySnap?.exists ? entrySnap.data() || {} : null;
     const savedPicks = entry?.picks || {};
 
-    const gameYmd = str(bundle.gameYmd);
+    const gameYmd = ymdCompact(bundle.gameYmd);
     const gamesRaw = Array.isArray(bundle.games) ? [...bundle.games] : [];
     gamesRaw.sort((a, b) => (a.slot || 0) - (b.slot || 0));
 
@@ -206,7 +210,7 @@ export class TpMlbContextBuilder {
     }
 
     const games = [];
-    for (const slot of gamesRaw.slice(0, 3)) {
+    for (const slot of gamesRaw.slice(0, TP_BUNDLE_MAX_GAMES)) {
       const gid = str(slot.gameId);
       if (!gid) continue;
 
@@ -294,7 +298,7 @@ export class TpMlbContextBuilder {
         groupId: str(bundle.groupId) || null,
         gameYmd: gameYmd || null,
         gameCount: games.length,
-        scoring: bundle.scoring || { winnerPoints: 3, exactScorePoints: 3 },
+        scoring: bundle.scoring || { winnerPoints: 5, exactScorePoints: 5 },
       },
       participant: {
         uid,
