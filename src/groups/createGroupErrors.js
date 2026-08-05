@@ -10,19 +10,12 @@ export function parseCreateGroupError(e) {
   if (autopilotMessage) return autopilotMessage;
 
   if (
-    code.includes("failed-precondition") &&
-    (message.includes("OWNED_GROUP_LIMIT_REACHED") ||
-      message.includes("GROUP_LIMIT_REACHED") ||
-      message.includes("OWNER_GROUP_LIMIT_REACHED"))
+    code.includes("resource-exhausted") &&
+    message.includes("GROUP_CREATE_RATE_LIMITED")
   ) {
-    const max = Number(details.max ?? 0);
-    const current = Number(details.current ?? 0);
-
-    return i18n.t("subscriptions.ownedGroupsLimitMessage", {
-      max: max || "?",
-      current: current || "?",
+    return i18n.t("subscriptions.groupCreateRateLimitedMessage", {
       defaultValue:
-        "Votre forfait actuel permet de posséder {{max}} groupe(s). Vous possédez déjà {{current}} groupe(s). Passez à un forfait supérieur pour créer un nouveau groupe.",
+        "Tu as créé trop de groupes récemment. Réessaie un peu plus tard.",
     });
   }
 

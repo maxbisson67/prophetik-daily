@@ -43,10 +43,10 @@ export default function PlanUsageCard({ planUsage, colors }) {
             colors={colors}
           />
           <UsageRow
-            label={i18n.t("subscriptions.myPlan.ownedGroups", {
-              defaultValue: "Groupes possédés",
+            label={i18n.t("subscriptions.myPlan.activeGroups", {
+              defaultValue: "Groupes actifs (jeu)",
             })}
-            value={`${usage.ownedGroupsCount} / ${limits.ownedGroupsLimit}`}
+            value={`${usage.activeParticipationsCount} / ${limits.activeGroupsLimit}`}
             colors={colors}
           />
           <UsageRow
@@ -64,9 +64,9 @@ export default function PlanUsageCard({ planUsage, colors }) {
             colors={colors}
           />
           <Text style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>
-            {i18n.t("subscriptions.myPlan.joinUnlimitedHint", {
+            {i18n.t("subscriptions.myPlan.participationHint", {
               defaultValue:
-                "Tu peux rejoindre autant de groupes que tu veux. Seuls les groupes que tu possèdes comptent dans ton forfait.",
+                "Tu peux créer et administrer autant de groupes que tu veux. Seuls les groupes où tu joues activement comptent dans ton forfait.",
             })}
           </Text>
         </>

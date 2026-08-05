@@ -192,12 +192,12 @@ export default function SportsHubScreen({ initialLeague = "NHL", hideSportTabs =
                   defaultValue: "Liste des joueurs et statistiques",
                 })
               : i18n.t("sports.hub.leadersMlb", {
-                  defaultValue: "Bientôt disponible",
+                  defaultValue: "Liste des frappeurs et statistiques",
                 })
           }
           onPress={() => {
             if (isNhl) router.push("/(drawer)/sports/NhlSkaterLeadersScreen");
-            else router.push("/(drawer)/sports/MlbComingSoon");
+            else router.push("/(drawer)/sports/MlbBatterLeadersScreen");
           }}
         />
       </View>

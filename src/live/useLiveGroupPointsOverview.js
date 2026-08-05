@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
+import useLiveGameScores from "@src/defis/results/useLiveGameScores";
 import {
   isTsType,
   normalizeFgcDoc,
@@ -21,6 +22,7 @@ export default function useLiveGroupPointsOverview({
   league,
   gameYmd,
   enabled = true,
+  inferDailyBonus = false,
 }) {
   const gid = String(groupId || "").trim();
   const lg = String(league || "NHL").toUpperCase();
@@ -34,6 +36,11 @@ export default function useLiveGroupPointsOverview({
   const [fgcEntries, setFgcEntries] = useState([]);
   const [tpEntries, setTpEntries] = useState([]);
   const [tsEntries, setTsEntries] = useState([]);
+  const [tpBundle, setTpBundle] = useState(null);
+  const [tsDefi, setTsDefi] = useState(null);
+  const [fgcChallenge, setFgcChallenge] = useState(null);
+  const [dailyBonusAward, setDailyBonusAward] = useState(null);
+  const [dailyTopScorerPush, setDailyTopScorerPush] = useState(null);
   const [loadingChallenges, setLoadingChallenges] = useState(!!active);
 
   useEffect(() => {
@@ -116,9 +123,48 @@ export default function useLiveGroupPointsOverview({
 
   useEffect(() => {
     if (!active) {
+      setDailyBonusAward(null);
+      setDailyTopScorerPush(null);
+      return undefined;
+    }
+
+    const unsubs = [];
+
+    unsubs.push(
+      firestore()
+        .doc(`groups/${gid}/daily_bonus_awards/${ymd}`)
+        .onSnapshot(
+          (snap) => setDailyBonusAward(snap?.exists ? snap.data() || null : null),
+          () => setDailyBonusAward(null)
+        )
+    );
+
+    unsubs.push(
+      firestore()
+        .doc(`groups/${gid}/daily_top_scorer_pushes/${ymd}`)
+        .onSnapshot(
+          (snap) => setDailyTopScorerPush(snap?.exists ? snap.data() || null : null),
+          () => setDailyTopScorerPush(null)
+        )
+    );
+
+    return () => {
+      unsubs.forEach((un) => {
+        try {
+          un?.();
+        } catch {}
+      });
+    };
+  }, [active, gid, ymd]);
+
+  useEffect(() => {
+    if (!active) {
       setFgcEntries([]);
       setTpEntries([]);
       setTsEntries([]);
+      setTpBundle(null);
+      setTsDefi(null);
+      setFgcChallenge(null);
       return undefined;
     }
 
@@ -141,8 +187,22 @@ export default function useLiveGroupPointsOverview({
             () => setFgcEntries([])
           )
       );
+
+      unsubs.push(
+        firestore()
+          .collection("first_goal_challenges")
+          .doc(fgcChallengeId)
+          .onSnapshot(
+            (snap) =>
+              setFgcChallenge(
+                snap?.exists ? { id: fgcChallengeId, ...(snap.data() || {}) } : null
+              ),
+            () => setFgcChallenge(null)
+          )
+      );
     } else {
       setFgcEntries([]);
+      setFgcChallenge(null);
     }
 
     if (tpBundleId) {
@@ -162,8 +222,19 @@ export default function useLiveGroupPointsOverview({
             () => setTpEntries([])
           )
       );
+
+      unsubs.push(
+        firestore()
+          .collection("team_prediction_bundles")
+          .doc(tpBundleId)
+          .onSnapshot(
+            (snap) => setTpBundle(snap?.exists ? snap.data() || null : null),
+            () => setTpBundle(null)
+          )
+      );
     } else {
       setTpEntries([]);
+      setTpBundle(null);
     }
 
     if (tsDefiId) {
@@ -183,8 +254,19 @@ export default function useLiveGroupPointsOverview({
             () => setTsEntries([])
           )
       );
+
+      unsubs.push(
+        firestore()
+          .collection("defis")
+          .doc(tsDefiId)
+          .onSnapshot(
+            (snap) => setTsDefi(snap?.exists ? snap.data() || null : null),
+            () => setTsDefi(null)
+          )
+      );
     } else {
       setTsEntries([]);
+      setTsDefi(null);
     }
 
     return () => {
@@ -196,22 +278,53 @@ export default function useLiveGroupPointsOverview({
     };
   }, [active, fgcChallengeId, tpBundleId, tsDefiId]);
 
+  const tpGameIds = useMemo(() => {
+    const games = Array.isArray(tpBundle?.games) ? tpBundle.games : [];
+    return games.map((slot) => String(slot?.gameId || "")).filter(Boolean);
+  }, [tpBundle]);
+
+  const liveScoresByGameId = useLiveGameScores(tpGameIds, lg, ymd);
+
   const rows = useMemo(
     () =>
       mergeParticipantRows({
         fgcEntries,
         tpEntries,
         tsEntries,
+        tpBundle,
+        liveScoresByGameId,
+        tsDefi,
+        dailyBonusAward,
+        dailyTopScorerPush,
+        inferDailyBonus,
       }),
-    [fgcEntries, tpEntries, tsEntries]
+    [
+      fgcEntries,
+      tpEntries,
+      tsEntries,
+      tpBundle,
+      liveScoresByGameId,
+      tsDefi,
+      dailyBonusAward,
+      dailyTopScorerPush,
+      inferDailyBonus,
+    ]
   );
 
   const hasAnyChallenge = !!(fgcChallengeId || tpBundleId || tsDefiId);
+  const tsPot = Number(tsDefi?.pot ?? 0) || 0;
 
   return {
     rows,
     loading: loadingChallenges,
     hasAnyChallenge,
+    tsPot,
+    fgcChallenge,
+    tpBundle,
+    tsDefi,
+    fgcEntries,
+    tpEntries,
+    tsEntries,
     challengeIds: {
       fgcChallengeId,
       tpBundleId,

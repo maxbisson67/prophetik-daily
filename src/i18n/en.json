@@ -253,15 +253,14 @@
     "todayChallengeInfoBody": "Each top scores challenge asks you to pick a certain number of players based on the format (e.g., 2x2, 3x3). Your players earn real points based on their performance, and the highest total wins the challenge.",
     "tsInfoTitle": "How this challenge works",
     "tsInfoFunctioningTitle": "How it works",
-    "tsInfoFunctioning1": "Outpick your friends by selecting 3 players playing today.",
-    "tsInfoFunctioning2": "The participant(s) with the most combined points share the pot.",
-    "tsInfoFunctioning3": "The pot grows by 3 points for each entry.",
+    "tsInfoFunctioning1": "Pick 3 players playing today.",
+    "tsInfoFunctioning2": "Your players earn points in real time based on their performances.",
     "tsInfoScoringTitle": "How to score points",
     "tsInfoScoringMlb": "Baseball: 1 point per hit, 1 bonus point per extra-base hit (double, triple, or home run), 1 point per RBI, and 1 point per run scored.",
     "tsInfoScoringNhl": "Hockey: 1 point per goal and 1 point per assist.",
     "tsPickOnePlayerTitle": "Pick 1 player",
     "tsPickPlayersTitle": "Pick {{count}} players",
-    "tsMyPrediction": "My prediction",
+    "tsMyChoices": "My picks",
     "create":"Create",
     "challenge": "Challenge",
     "challengeDate": "NHL date",
@@ -286,6 +285,19 @@
     "groupChatTitle": "Group chat",
     "groupChatUnavailable": "Chat unavailable for this group.",
     "dailyDefisAllEnrolled": "Nice work — you're signed up for all of today's challenges!",
+    "seasonTransition": {
+      "championTitle": "Regular season champion",
+      "championBody": "{{names}} wins the {{sport}} regular season with {{points}} points.",
+      "playoffsTitle": "Playoffs are underway!",
+      "playoffsBody": "Daily challenges now include playoff games. A new {{sport}} playoff leaderboard is open.",
+      "playoffsCta": "View playoff standings"
+    },
+    "sportSwitch": {
+      "title": "New {{sport}} season",
+      "body": "You are active in \"{{activeGroup}}\". Enable \"{{inactiveGroup}}\" to play {{sport}} challenges — your other group will switch to inactive.",
+      "activateCta": "Enable {{group}}",
+      "dismiss": "Not now"
+    },
     "dailyDefisResultsHintPrefix": "Check your performance in the ",
     "defiTab1": "Challenge 1",
     "defiTab2": "Challenge 2",
@@ -296,7 +308,8 @@
       "one": "{{count}} expired",
       "other": "{{count}} expired"
     },
-    "dailyDefisProgress": "{{count}} / {{total}} challenges completed",
+    "dailyDefisProgress": "{{count}} / {{total}} challenges entered",
+    "autopilotChallengePending": "This challenge isn't available yet. With automatic creation enabled, it will be created at 6:30 AM.",
     "nextActionLabel": "Next action",
     "nextActionCta": "Continue",
     "nextActionCtaScroll": "View challenge",
@@ -368,6 +381,10 @@
       "upcoming": "Upcoming",
       "myPrediction": "My prediction",
       "infoTitle": "How this challenge works",
+      "infoTitleMlbPrefix": "How the 1",
+      "infoTitleMlbOrdinal": "st",
+      "infoTitleMlbSuffix": " RBI challenge works",
+      "infoTitleNhl": "How the first goal challenge works",
       "infoBody":"• Choose the player who will score the first goal or first run batted in of the game.\n• 10 points are awarded to the participant who correctly predicts the scorer."
     },
     "create":{
@@ -435,6 +452,8 @@
       "noWinner": "No winner",
       "noEntriesYet": "No entries yet.",
       "picksTitle": "Participants & picks",
+      "pickHidden": "Pick hidden until game start",
+      "participantsOnlyTitle": "Registered participants",
       "pending": "Provisional / under NHL review…",
       "locked": "Locked (pre-game)",
       "open": "Open"
@@ -540,6 +559,11 @@
         "ownerCreatedOn": "Owner, group created on {{date}}",
         "roleOwner": "Owner",
         "roleMember": "Member",
+        "participationStatusActive": "Active",
+        "participationStatusInactive": "Inactive",
+        "participationStatusAdminOnly": "Admin only",
+        "novaAiParticipant": "AI participant · joins group challenges",
+        "novaAiBadge": "AI",
 
         "actionsSection": "Actions",
         "actionCreateChallenge": "Create a challenge",
@@ -640,6 +664,22 @@
           "manual": "Manual challenges"
         },
 
+        "participation": {
+          "label": "Challenge participation",
+          "enabled": "enabled",
+          "disabled": "disabled",
+          "activate": "Enable participation",
+          "switchGroup": "Play in this group",
+          "activating": "Enabling…",
+          "activateSuccessTitle": "Participation enabled",
+          "activateSuccessMessage": "You can play this group's challenges again.",
+          "switchSuccessMessage": "You are now playing this group's challenges.",
+          "activateLimitTitle": "Limit reached",
+          "activateLimitMessage": "Your {{tier}} plan allows {{max}} active group(s). Upgrade your plan or disable another group.",
+          "managePlan": "Manage my plan →",
+          "managePlanAdmin": "Enable participation → Plans"
+        },
+
         "emptyTitle": "Create your first group or join your friends",
         "emptyText": "Organize your challenges, invite your friends, and start earning points.",
         "emptyCreate": "Create a group",
@@ -684,6 +724,10 @@
             "alertGenericErrorTitle": "Error",
             "alertLimitTitle": "Limit reached",
             "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} group(s) total (owner or member). You currently have {{current}}. Upgrade to PRO/VIP to increase the limit.",
+            "joinedInactiveTitle": "Joined as inactive member",
+            "joinedInactiveMessage": "You are in this group, but you are still actively playing in another group. Enable this group when you are ready to play there.",
+            "joinedInactiveLater": "Not now",
+            "joinedInactiveActivate": "Enable this group",
             "scanBtn": "Scan a QR",
             "scanTitle": "Scan a QR",
             "scanHint": "Place the QR inside the frame",
@@ -915,12 +959,18 @@
             "successMessage": "Good luck! {{potMessage}}",
             "successPotMessage": "Pot: {{count}} points",
             "successPotMessageSimple": "Entry saved.",
+            "savedChoiceMessage": "Your picks are saved. What would you like to do?",
             "genericErrorTitle": "Error"
         },
         "actions": {
             "primarySaving": "Creating your entry…",
             "primaryLocked": "Signup closed",
-            "primaryDefault": "Save my entry"
+            "primaryDefault": "Save my entry",
+            "autoSaving": "Saving…",
+            "autoSaved": "Entry saved",
+            "autoSaveHint": "Your entry will be saved automatically.",
+            "modifyAnotherPick": "Edit a player",
+            "backToHome": "Back to Today"
         },
         "results": {
             "header": {
@@ -985,7 +1035,9 @@
       "loading": "Loading points…",
       "noChallenges": "No challenges today for this group.",
       "noParticipants": "No entries yet.",
-      "hint": "Provisional points based on confirmed or in-progress results. Trio scores can change during games."
+      "hint": "Provisional points based on confirmed or in-progress results. Tap SOLO, DUO, or TRIO to see details.",
+      "tsWinnerBonusShort": "+{{bonus}} bonus",
+      "dailyBonusNote": "Best night bonus: +{{bonus}} pts for the highest cumulative SOLO + DUO + TRIO total (shown as superscript on the Total column).",
     },
     "badge": {
       "rbi": "SOLO",
@@ -1108,8 +1160,8 @@
         "morningChallengesHint": "When autopilot creates the day's challenges in your groups.",
         "tpExactScore": "Predict match outcomes",
         "tpExactScoreHint": "When you predict the exact final score of a game.",
-        "tsWin": "The daily trio",
-        "tsWinHint": "When you win the daily Trio challenge.",
+        "tsWin": "Most points yesterday",
+        "tsWinHint": "When a participant earns the most points for the day across SOLO, DUO and TRIO.",
         "fgcWin": "Correct player (first run / goal)",
         "fgcWinHint": "When you pick the right player in the first run or goal challenge.",
         "leaderboardRankUp": "Leaderboard progress",
@@ -1638,6 +1690,17 @@
     "autopilotLimitMessage": "Your plan allows up to {{max}} automated group(s). Turn off Autopilot on another group or upgrade your plan.",
     "autopilotResolutionRequiredMessage": "Your plan allows {{max}} group(s) with automatic challenges. Choose which groups to keep in the management screen.",
 
+    "groupCreateRateLimitedMessage": "You created too many groups recently. Please try again later.",
+
+    "participationDowngrade": {
+      "title": "Active groups",
+      "body": "Your plan lets you play in {{max}} group(s) at a time. Choose where you want to keep participating in challenges.",
+      "selectedCount": "{{count}} / {{max}} selected",
+      "confirm": "Confirm my choice",
+      "selectRequiredTitle": "Selection required",
+      "selectRequiredBody": "Pick at least one group (maximum {{max}}) where you want to keep playing."
+    },
+
     "autopilotDowngrade": {
       "title": "Automatic challenges",
       "body": "Your new plan allows {{max}} group(s) with automatic challenges. Choose which group(s) will keep this mode.",
@@ -1650,10 +1713,10 @@
     "myPlan": {
       "title": "My plan",
       "currentPlan": "Current plan",
-      "ownedGroups": "Groups owned",
+      "activeGroups": "Active groups (play)",
       "autopilotGroups": "Automated groups",
       "novaAdvice": "Nova Advice",
-      "joinUnlimitedHint": "You can join as many groups as you want. Only groups you own count toward your plan."
+      "participationHint": "You can create and manage as many groups as you want. Only groups where you actively play count toward your plan."
     },
 
     "perMonth": " / month",
@@ -1673,15 +1736,18 @@
       "novaCoach": "{{count}} Nova Coach tips / month",
       "autopilotGroups": "{{count}} group(s) with automatic challenges",
       "free": {
-        "groups": "1 group (participant or owner)",
+        "groups": "1 active group",
+        "activeGroups": "{{count}} active group · unlimited creation",
         "ownedGroups": "{{count}} group owned · unlimited joined groups"
       },
       "pro": {
-        "groups": "5 groups (participant or owner)",
+        "groups": "5 active groups",
+        "activeGroups": "{{count}} active groups · unlimited creation",
         "ownedGroups": "{{count}} groups owned · unlimited joined groups"
       },
       "vip": {
-        "groups": "20 groups (participant or owner)",
+        "groups": "20 active groups",
+        "activeGroups": "{{count}} active groups · unlimited creation",
         "ownedGroups": "{{count}} groups owned · unlimited joined groups"
       }
     },
@@ -1754,6 +1820,8 @@
       "feature": "Feature",
       "groups": "Groups (participant or owner)",
       "ownedGroups": "Groups owned",
+      "activeGroups": "Active groups (play)",
+      "createGroups": "Group creation",
       "joinedGroups": "Groups joined",
       "autopilotGroups": "Groups with automatic challenges",
       "unlimited": "Unlimited",
@@ -1816,7 +1884,8 @@
       "fgcNhl": "First goal",
       "fgc": "Predict the first goal",
       "tp": "Predict the match outcome",
-      "ts": "Daily trio"
+      "ts": "Daily trio",
+      "dailyBonus": "Best night bonus"
     },
 
     "columns": {
@@ -1830,6 +1899,7 @@
       "exactsShort": "Exact",
       "victories": "Wins",
       "victoriesShort": "Wins",
+      "dailyBonusWinsShort": "Nights",
       "correctPicks": "Correct picks",
       "shareFgc": "% of personal total (FGC)",
       "shareTp": "% of personal total (TP)",
@@ -1858,7 +1928,8 @@
         "fgcNhl": "No first goal data for this competition.",
         "fgc": "No Predict the first goal data for this season.",
         "tp": "No match outcome data for this competition.",
-        "ts": "No daily trio data for this competition."
+        "ts": "No daily trio data for this competition.",
+        "dailyBonus": "No best night bonus data for this competition."
       }
     },
 
@@ -2028,6 +2099,14 @@
     "noChallenges": "No challenges to display.",
     "selectDayLabel": "Select a day",
     "noDefiForSelectedDay": "No challenge for this day.",
+    "pointsOverview": {
+      "title": "Points — {{date}}",
+      "subtitle": "Summary by participant",
+      "hint": "Final confirmed points.",
+      "tsWinnerBonusShort": "+{{bonus}} bonus",
+      "tsBonusNote": "Trio: every participant earns their 3-player total. The winner gets an extra {{bonus}} pt bonus.",
+      "noChallenges": "No challenges for this day."
+    },
     "seeResults": "See results",
     "openChallenge": "Open",
     "viewParticipants": "View participants",
@@ -2098,8 +2177,8 @@
       "title": "Predict match outcomes",
       "subtitleEmpty": "Pick the winner and exact score.",
       "empty": "No match prediction challenge available today in your groups.",
-      "infoTitle": "How this challenge works",
-      "infoBody": "Pick the scores for the matchups offered and earn points for each correct prediction. Predict the exact score correctly to earn even more points.",
+      "infoTitle": "How the Predict the games challenge works",
+      "infoBody": "Pick the score for each matchup. A correctly predicted match earns 5 points; an exact score earns 5 additional points.",
       "infoLockHint": "Each match locks 5 minutes before puck/ball drop. You can complete your predictions one match at a time.",
       "participateBeforePrefix": "Participate before",
       "nextLockMatch": "Next lock: Match {{n}}",
@@ -2114,6 +2193,7 @@
       "seeResults": "See results",
       "viewResults": "See results",
       "viewMyPicks": "View my picks",
+      "myChoices": "My picks",
       "modifyTeam": "Edit my pick",
       "modifyTeams": "Edit my picks",
       "resultsAvailable": "Results available",
@@ -2297,6 +2377,26 @@
   },
 
   "mlb": {
+    "batters": {
+      "title": "MLB batter stats",
+      "rank": "Pos",
+      "player": "Player",
+      "loading": "Loading players…",
+      "loadingMore": "Loading more players…",
+      "loadMore": "Load more",
+      "end": "End of list.",
+      "empty": "No data.",
+      "error": "Could not load players.",
+      "previousSeasonNotice": "Season {{season}} — the next season has not started yet.",
+      "qualificationNotice": "Qualified: ≥ {{minPa}} PA (dynamic threshold based on season progress)",
+      "sort": {
+        "rbi": "RBI",
+        "hits": "H",
+        "homeRuns": "HR",
+        "battingAverage": "AVG",
+        "ops": "OPS"
+      }
+    },
     "bvp": {
       "careerLine": "vs {{pitcher}}: {{pa}} PA · {{hits}} H · {{hr}} HR · {{rbi}} RBI · OPS {{ops}}",
       "shortLine": "{{pa}} PA · {{hits}} H · {{hr}} HR · OPS {{ops}}",

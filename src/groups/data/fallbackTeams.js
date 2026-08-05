@@ -76,6 +76,12 @@ export function getFallbackTeams(sport) {
   return [];
 }
 
+export function lookupMlbTeamById(teamId) {
+  const id = String(teamId || "").trim();
+  if (!id) return null;
+  return MLB_FALLBACK_TEAMS.find((t) => String(t.teamId) === id) || null;
+}
+
 export function lookupTeamByAbbr(sport, abbr) {
   const s = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
   const a = String(abbr || "").trim().toUpperCase();

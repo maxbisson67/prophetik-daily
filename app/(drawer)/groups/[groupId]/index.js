@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  Image,
   Modal,
 } from 'react-native';
 import { useEffect, useMemo, useState, useCallback } from 'react';
@@ -35,6 +34,19 @@ import CreateDefiModal from '../../defis/CreateDefiModal';
 import InviteQrCard from "@src/groups/InviteQrCard";
 import GroupConfigSection from "@src/groups/components/GroupConfigSection";
 import GroupAvatar from "@src/groups/components/GroupAvatar";
+import {
+  resolveParticipation,
+  isParticipatingMember,
+  PARTICIPATION,
+} from "@src/groups/participationUtils";
+import LeaderboardParticipantProfileModal from "@src/leaderboard/LeaderboardParticipantProfileModal";
+import normalizeMemberRow from "@src/leaderboard/normalizeMemberRow";
+import useLeaderboardGroupMembers from "@src/leaderboard/useLeaderboardGroupMembers";
+import useLeaderboardProfiles, {
+  resolveLeaderboardMember,
+} from "@src/leaderboard/useLeaderboardProfiles";
+import useActiveCompetition from "@src/hooks/useActiveCompetition";
+import ParticipantAvatar from "@src/ui/ParticipantAvatar";
 
 import {
   leaveGroupService,
@@ -267,7 +279,64 @@ function chooseNameAvatar(profile, membershipItem) {
   return { displayName: name, avatarUrl: avatar };
 }
 
-function MemberRow({ uid, role, item, group }) {
+function participationStatusMeta(m) {
+  const mode = resolveParticipation(m);
+  if (mode === PARTICIPATION.ACTIVE) {
+    return {
+      mode,
+      label: i18n.t("groups.detail.participationStatusActive", { defaultValue: "Actif" }),
+      color: "#16a34a",
+      bg: "#16a34a18",
+    };
+  }
+  if (mode === PARTICIPATION.ADMIN_ONLY) {
+    return {
+      mode,
+      label: i18n.t("groups.detail.participationStatusAdminOnly", {
+        defaultValue: "Admin seulement",
+      }),
+      color: "#d97706",
+      bg: "#d9770618",
+    };
+  }
+  return {
+    mode,
+    label: i18n.t("groups.detail.participationStatusInactive", { defaultValue: "Inactif" }),
+    color: "#64748b",
+    bg: "#64748b18",
+  };
+}
+
+function StatusChip({ label, color, bg, colors }) {
+  return (
+    <View
+      style={{
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: bg || colors.card2,
+        borderWidth: 1,
+        borderColor: color || colors.border,
+      }}
+    >
+      <Text style={{ color: color || colors.subtext, fontSize: 10, fontWeight: "800" }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function MemberRow({
+  uid,
+  role,
+  item,
+  group,
+  profiles,
+  isAiMember = false,
+  isOwnerRow = false,
+  isMe = false,
+  onPress,
+}) {
   const { colors } = useTheme();
   const pubRaw = usePublicProfile(uid);
   const profile = unwrapProfileShape(pubRaw);
@@ -275,7 +344,7 @@ function MemberRow({ uid, role, item, group }) {
   let utilName = null,
     utilAvatar = null;
   try {
-    if (typeof _getNameAvatarFrom === 'function') {
+    if (typeof _getNameAvatarFrom === "function") {
       const extracted = _getNameAvatarFrom(profile) || {};
       utilName = extracted.displayName || null;
       utilAvatar = extracted.avatarUrl || null;
@@ -283,49 +352,103 @@ function MemberRow({ uid, role, item, group }) {
   } catch {}
 
   const fallback = chooseNameAvatar(profile, item);
-  const displayName = utilName || fallback.displayName || 'Invité';
-  const avatarUrl = utilAvatar || fallback.avatarUrl || null;
-  const subtitle = formatMemberSubtitle({ role, item, group });
+  const lbIdentity = resolveLeaderboardMember({ uid, id: uid }, profiles || {});
+  const displayName =
+    utilName || lbIdentity.displayName || fallback.displayName || "Invité";
+  const participationMeta = participationStatusMeta(item);
+  const subtitle = isAiMember
+    ? i18n.t("groups.detail.novaAiParticipant", {
+        defaultValue: "Participant IA · assiste aux défis du groupe",
+      })
+    : formatMemberSubtitle({ role, item, group });
+  const version = lbIdentity.updatedAt?.toMillis?.() ? lbIdentity.updatedAt.toMillis() : 0;
+
+  const accentColor = isOwnerRow
+    ? "#FACC15"
+    : isAiMember
+    ? "#8b5cf6"
+    : isParticipatingMember(item)
+    ? "#16a34a"
+    : colors.subtext;
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.82}
+      onPress={onPress}
+      disabled={!onPress}
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 10,
         paddingHorizontal: 10,
-        borderRadius: 10,
+        borderRadius: 12,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: isMe ? colors.primary : colors.border,
+        borderLeftWidth: 4,
+        borderLeftColor: accentColor,
         marginBottom: 8,
-        backgroundColor: colors.card,
+        backgroundColor: isMe ? colors.rowAlt || colors.card2 : colors.card,
+        shadowColor: "#000",
+        shadowOpacity: 0.08,
+        shadowOffset: { width: 0, height: 2 },
+        shadowRadius: 5,
+        elevation: 2,
       }}
     >
-      <Image
-        source={
-          avatarUrl
-            ? { uri: avatarUrl }
-            : require('@src/assets/avatar-placeholder.png')
-        }
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: colors.card2,
-          marginRight: 10,
-        }}
-      />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontWeight: '700', color: colors.text }}>
-          {displayName || 'Invité'}
-        </Text>
+      <View style={{ marginRight: 10, flexShrink: 0 }}>
+        <ParticipantAvatar
+          photoURL={lbIdentity.avatarUrl || utilAvatar || fallback.avatarUrl}
+          avatarUrl={lbIdentity.avatarUrl || utilAvatar || fallback.avatarUrl}
+          jerseyFrontUrl={lbIdentity.jerseyFrontUrl}
+          jerseyBackUrl={lbIdentity.jerseyBackUrl}
+          avatarKind={lbIdentity.avatarKind}
+          name={displayName}
+          size={40}
+          colors={colors}
+          version={version}
+        />
+      </View>
+
+      <View style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <Text style={{ fontWeight: "800", color: colors.text, fontSize: 15 }} numberOfLines={1}>
+            {displayName}
+          </Text>
+          {isOwnerRow ? (
+            <Ionicons name="star" size={14} color="#FACC15" />
+          ) : null}
+          {isAiMember ? (
+            <StatusChip
+              label={i18n.t("groups.detail.novaAiBadge", { defaultValue: "IA" })}
+              color="#8b5cf6"
+              bg="#8b5cf618"
+              colors={colors}
+            />
+          ) : null}
+        </View>
+
         {!!subtitle && (
-          <Text style={{ color: colors.subtext, fontSize: 12 }}>
+          <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
             {subtitle}
           </Text>
         )}
+
+        {!isAiMember ? (
+          <View style={{ marginTop: 6, alignSelf: "flex-start" }}>
+            <StatusChip
+              label={participationMeta.label}
+              color={participationMeta.color}
+              bg={participationMeta.bg}
+              colors={colors}
+            />
+          </View>
+        ) : null}
       </View>
-    </View>
+
+      {onPress ? (
+        <Ionicons name="chevron-forward" size={18} color={colors.subtext} style={{ flexShrink: 0 }} />
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
@@ -363,6 +486,7 @@ export default function GroupDetailScreen() {
 
   // Transfer ownership modal
   const [transferOpen, setTransferOpen] = useState(false);
+  const [profileRow, setProfileRow] = useState(null);
   const [transferring, setTransferring] = useState(false);
   const [draftFavoriteTeam, setDraftFavoriteTeam] = useState(null);
 
@@ -462,12 +586,83 @@ export default function GroupDetailScreen() {
     [memberships, group]
   );
 
+  const isAi = useCallback((m) => {
+    const uidX = String(m?.uidNorm || m?.uid || "");
+    const typeX = String(m?.type || "").toLowerCase();
+    return uidX === "ai" || typeX === "ai";
+  }, []);
+
   const memberList = useMemo(
     () =>
       normalizedMemberships.filter((m) =>
         ['member', 'owner'].includes(m.role)
       ),
     [normalizedMemberships]
+  );
+
+  const sortedMemberList = useMemo(() => {
+    const list = [...memberList];
+    list.sort((a, b) => {
+      const tier = (m) => {
+        if (String(m.role || "").toLowerCase() === "owner") return 0;
+        if (isAi(m)) return 2;
+        return 1;
+      };
+      const tierDiff = tier(a) - tier(b);
+      if (tierDiff !== 0) return tierDiff;
+
+      const activeDiff =
+        Number(isParticipatingMember(b)) - Number(isParticipatingMember(a));
+      if (activeDiff !== 0) return activeDiff;
+
+      const nameA = String(a.displayName || a.uidNorm || "");
+      const nameB = String(b.displayName || b.uidNorm || "");
+      return nameA.localeCompare(nameB, "fr");
+    });
+    return list;
+  }, [memberList, isAi]);
+
+  const memberUids = useMemo(
+    () => sortedMemberList.map((m) => String(m.uidNorm)).filter(Boolean),
+    [sortedMemberList]
+  );
+  const memberProfiles = useLeaderboardProfiles(memberUids);
+
+  const groupSport = String(group?.sport || group?.league || "NHL").toUpperCase();
+  const { competitionKey: activeCompetitionKey } = useActiveCompetition({
+    sport: groupSport,
+    enabled: !!group?.id,
+  });
+  const { rows: rawLeaderboardRows } = useLeaderboardGroupMembers({
+    groupId: id,
+    competitionKey: activeCompetitionKey,
+    sport: groupSport,
+    enabled: !!id && !!activeCompetitionKey,
+  });
+  const leaderboardRows = useMemo(
+    () => (rawLeaderboardRows || []).map(normalizeMemberRow),
+    [rawLeaderboardRows]
+  );
+
+  const openMemberProfile = useCallback(
+    (uid) => {
+      const uidStr = String(uid || "").trim();
+      if (!uidStr) return;
+      const lbRow = leaderboardRows.find((r) => String(r.id || r.uid) === uidStr);
+      setProfileRow(
+        lbRow || {
+          id: uidStr,
+          uid: uidStr,
+          pointsTotal: 0,
+          fgcPoints: 0,
+          tpPoints: 0,
+          tsPoints: 0,
+          wins: 0,
+          participations: 0,
+        }
+      );
+    },
+    [leaderboardRows]
   );
 
   const humanMembers = memberList.filter(
@@ -479,12 +674,6 @@ export default function GroupDetailScreen() {
   const effectivePrice = getGroupEffectivePrice(group);
 
   const isOwner = isGroupOwner(group, user?.uid);
-
-  const isAi = useCallback((m) => {
-    const uidX = String(m?.uidNorm || m?.uid || '');
-    const typeX = String(m?.type || '').toLowerCase();
-    return uidX === 'ai' || typeX === 'ai';
-  }, []);
 
   const activeMembers = useMemo(() => {
     return normalizedMemberships.filter((m) => {
@@ -829,6 +1018,16 @@ export default function GroupDetailScreen() {
         </View>
       </Modal>
 
+      <LeaderboardParticipantProfileModal
+        visible={!!profileRow}
+        row={profileRow}
+        peerRows={leaderboardRows}
+        profiles={memberProfiles}
+        sport={groupSport}
+        colors={colors}
+        onClose={() => setProfileRow(null)}
+      />
+
       <CreateDefiModal
         visible={openCreate}
         onClose={() => setOpenCreate(false)}
@@ -892,18 +1091,23 @@ export default function GroupDetailScreen() {
               </Text>
             </View>
 
-            {memberList.length === 0 ? (
+            {sortedMemberList.length === 0 ? (
               <Text style={{ paddingHorizontal: 4, color: colors.subtext }}>
                 {i18n.t('groups.detail.noMembers')}
               </Text>
             ) : (
-              memberList.map((m) => (
+              sortedMemberList.map((m) => (
                 <MemberRow
                   key={m.id || m.uidNorm}
                   uid={m.uidNorm}
                   role={m.role}
                   item={m}
                   group={group}
+                  profiles={memberProfiles}
+                  isAiMember={isAi(m)}
+                  isOwnerRow={String(m.role || "").toLowerCase() === "owner"}
+                  isMe={!!user?.uid && String(m.uidNorm) === String(user.uid)}
+                  onPress={() => openMemberProfile(m.uidNorm)}
                 />
               ))
             )}

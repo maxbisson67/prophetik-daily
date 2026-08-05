@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { isParticipatingMember } from "../groups/participationUtils.js";
 import { getDateValue, normalizeLeague, safeUpper } from "./tpGameSources.js";
 
 if (!getApps().length) initializeApp();
@@ -15,12 +16,6 @@ function toNumber(v, def = null) {
   if (typeof v === "number") return v;
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
-}
-
-function isActiveMembership(data = {}) {
-  const st = String(data.status || "").toLowerCase();
-  if (st) return ["open", "active", "approved"].includes(st);
-  return data.active !== false;
 }
 
 function deriveWinnerAbbr({ awayAbbr, homeAbbr, awayScore, homeScore }) {
@@ -126,8 +121,11 @@ export const submitTeamPredictionEntry = onCall(
     const membershipRef = db.doc(`group_memberships/${groupId}_${uid}`);
     const membershipSnap = await membershipRef.get();
 
-    if (!membershipSnap.exists || !isActiveMembership(membershipSnap.data() || {})) {
-      throw new HttpsError("permission-denied", "Tu n'es pas membre actif de ce groupe.");
+    if (!membershipSnap.exists || !isParticipatingMember(membershipSnap.data() || {})) {
+      throw new HttpsError("failed-precondition", "PARTICIPATION_ACTIVE_REQUIRED", {
+        reason: "PARTICIPATION_ACTIVE_REQUIRED",
+        groupId,
+      });
     }
 
     const status = String(challenge.status || "").toLowerCase();

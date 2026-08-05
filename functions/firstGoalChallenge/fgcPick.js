@@ -4,6 +4,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { assertCanParticipateInGroup } from "../groups/participationEnforcement.js";
 import { isMlbGamePostponedFromLiveFeed } from "../mlb/mlbGameStatus.js";
 
 if (!getApps().length) initializeApp();
@@ -102,6 +103,10 @@ export const fgcPick = onCall(
     const chPreviewSnap = await chRef.get();
     if (!chPreviewSnap.exists) throw new HttpsError("not-found", "Challenge introuvable.");
     const chPreview = chPreviewSnap.data() || {};
+    const groupId = str(chPreview.groupId);
+    if (groupId) {
+      await assertCanParticipateInGroup(db, groupId, uid);
+    }
     const postponed = await isMlbChallengePostponed(chPreview);
 
     try {

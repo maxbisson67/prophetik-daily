@@ -75,6 +75,11 @@ export async function assertCanSetAutopilot(db, uid, tier, { currentlyEnabled, n
   return { tier: normalizedTier, allowed: true, action: "enable" };
 }
 
+export function isActiveParticipationOverLimit(activeCount, tier) {
+  const max = getPlanLimits(tier).activeGroupsLimit;
+  return activeCount > max;
+}
+
 export function isAutopilotOverLimit(autopilotCount, tier) {
   const max = getPlanLimits(tier).autopilotGroupsLimit;
   return autopilotCount > max;

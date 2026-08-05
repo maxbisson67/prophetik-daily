@@ -1,3 +1,5 @@
+import { isMlbChallengeEligibleGameType } from "@src/mlb/mlbGameTypeUtils";
+
 /** Statut MLB reporté — abstractGameState peut rester "Final" avec detailedState "Postponed". */
 export function isMlbGamePostponed(status = {}) {
   const detailed = String(status?.detailedState || "").toLowerCase();
@@ -21,8 +23,7 @@ export function isMlbGameDelayed(statusOrGame = {}) {
 }
 
 export function isMlbScheduleGameSelectable(game = {}) {
-  const gameType = String(game?.gameType || "R");
-  if (gameType && gameType !== "R") return false;
+  if (!isMlbChallengeEligibleGameType(game?.gameType)) return false;
 
   const abstractState = String(game?.status?.abstractGameState || "");
   if (["Cancelled", "Postponed"].includes(abstractState)) return false;

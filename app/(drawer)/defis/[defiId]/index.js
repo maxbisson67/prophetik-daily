@@ -217,6 +217,8 @@ export default function DefiParticipationScreen() {
 
   const savedPicksRef = useRef(null);
   const [hasSavedOnce, setHasSavedOnce] = useState(false);
+  const [participationLoaded, setParticipationLoaded] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
 
   const { tier: userTier, active: tierActive } = useEntitlement(user?.uid);
 
@@ -301,6 +303,11 @@ export default function DefiParticipationScreen() {
     setSelected((prev) => Array.from({ length: maxChoices }, (_, i) => prev?.[i] ?? null));
   }, [maxChoices]);
 
+  useEffect(() => {
+    setParticipationLoaded(false);
+    setSaveStatus("idle");
+  }, [defi?.id, user?.uid]);
+
   // Participation existante
   useEffect(() => {
     (async () => {
@@ -328,6 +335,8 @@ export default function DefiParticipationScreen() {
         }
       } catch (e) {
         setError(e);
+      } finally {
+        setParticipationLoaded(true);
       }
     })();
   }, [defi?.id, user?.uid, maxChoices]);
@@ -476,10 +485,15 @@ export default function DefiParticipationScreen() {
           return prev;
         }
 
+        if (next.filter(Boolean).length === maxChoices) {
+          setPickerOpen(false);
+          setPickerTier(null);
+        }
+
         return next;
       });
     },
-    [pickerIndex, defi?.type, playerById]
+    [pickerIndex, defi?.type, playerById, maxChoices]
   );
 
   const allChosen = useMemo(() => selected.filter(Boolean).length === maxChoices, [selected, maxChoices]);
@@ -502,81 +516,131 @@ export default function DefiParticipationScreen() {
       }));
   }
 
-  const save = useCallback(async () => {
-    if (!user?.uid || !defi?.id) return;
+  const save = useCallback(
+    async ({ auto = false } = {}) => {
+      if (!user?.uid || !defi?.id) return false;
 
-    if (locked) {
-      Alert.alert(i18n.t("defi.alerts.lockedTitle"), i18n.t("defi.alerts.lockedMessage"));
-      return;
-    }
-    if (!allChosen) {
-      Alert.alert(i18n.t("defi.alerts.incompleteTitle"), i18n.t("defi.alerts.incompleteMessage", { count: maxChoices }));
-      return;
-    }
-    if (savingRef.current) return;
+      if (locked) {
+        if (!auto) {
+          Alert.alert(i18n.t("defi.alerts.lockedTitle"), i18n.t("defi.alerts.lockedMessage"));
+        }
+        return false;
+      }
+      if (!allChosen) {
+        if (!auto) {
+          Alert.alert(
+            i18n.t("defi.alerts.incompleteTitle"),
+            i18n.t("defi.alerts.incompleteMessage", { count: maxChoices })
+          );
+        }
+        return false;
+      }
+      if (savingRef.current) return false;
 
-    savingRef.current = true;
-    setSaving(true);
-
-    try {
       const savedIds = Array.isArray(savedPicksRef.current)
         ? savedPicksRef.current.map((x) => String(x.playerId ?? ""))
         : null;
-
       const currentIds = normalizeCurrentPickIds(selected);
+      if (savedIds && sameIds(savedIds, currentIds)) return true;
 
-      const _isEditAfterFirstSave =
-        hasSavedOnce && savedIds && savedIds.length === currentIds.length && !sameIds(savedIds, currentIds);
+      savingRef.current = true;
+      setSaving(true);
+      setSaveStatus("saving");
 
-      const clientMutationId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const wasFirstSave = !hasSavedOnce;
 
-      const payloadPicks = toCallablePicks(selected);
-      const rulesNow = getDefiRules(defi?.type);
-      const chosenHydrated = selectedHydrated.filter(Boolean);
+      try {
+        const _isEditAfterFirstSave =
+          hasSavedOnce &&
+          savedIds &&
+          savedIds.length === currentIds.length &&
+          !sameIds(savedIds, currentIds);
 
-      const err = validatePicks(chosenHydrated, rulesNow, i18n);
-      if (err) {
-        Alert.alert(i18n.t("defi.rules.title", { defaultValue: "Règles de tiers" }), err, [{ text: i18n.t("common.ok") }]);
-        return;
-      }
+        const clientMutationId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        const payloadPicks = toCallablePicks(selected);
+        const rulesNow = getDefiRules(defi?.type);
+        const chosenHydrated = selectedHydrated.filter(Boolean);
 
-      const res = await joinDefi(defi.id, { picks: payloadPicks, clientMutationId });
+        const err = validatePicks(chosenHydrated, rulesNow, i18n);
+        if (err) {
+          Alert.alert(i18n.t("defi.rules.title", { defaultValue: "Règles de tiers" }), err, [
+            { text: i18n.t("common.ok") },
+          ]);
+          setSaveStatus("error");
+          return false;
+        }
 
-      if (res?.ok === true) {
-        setHasSavedOnce(true);
-        savedPicksRef.current = selected.map((p) => ({ playerId: String(p?.playerId ?? "") }));
+        const res = await joinDefi(defi.id, { picks: payloadPicks, clientMutationId });
 
-        Analytics.submitPick({
-          challengeType: "standard",
-          challengeId: String(defi.id),
-          format: `${defi?.type}x${defi?.type}`,
-          picksCount: payloadPicks.length,
-          isEdit: !!_isEditAfterFirstSave,
-        });
+        if (res?.ok === true) {
+          setHasSavedOnce(true);
+          savedPicksRef.current = selected.map((p) => ({ playerId: String(p?.playerId ?? "") }));
+          setSaveStatus("saved");
 
-        Alert.alert(
-          i18n.t("defi.alerts.successTitle"),
-          i18n.t("defi.alerts.successMessage", { potMessage: i18n.t("defi.alerts.successPotMessageSimple") }),
-          [{ text: i18n.t("common.ok"), onPress: () => router.replace("/(drawer)/(tabs)/AccueilScreen") }]
-        );
-      } else {
+          Analytics.submitPick({
+            challengeType: "standard",
+            challengeId: String(defi.id),
+            format: `${defi?.type}x${defi?.type}`,
+            picksCount: payloadPicks.length,
+            isEdit: !!_isEditAfterFirstSave,
+          });
+
+          const showSavedChoiceAlert = () => {
+            Alert.alert(
+              i18n.t("defi.alerts.successTitle"),
+              i18n.t("defi.alerts.savedChoiceMessage", {
+                defaultValue: "Tes sélections sont enregistrées. Que veux-tu faire?",
+              }),
+              [
+                {
+                  text: i18n.t("defi.actions.modifyAnotherPick", {
+                    defaultValue: "Modifier un joueur",
+                  }),
+                  style: "cancel",
+                },
+                {
+                  text: i18n.t("defi.actions.backToHome", {
+                    defaultValue: "Retour à Aujourd'hui",
+                  }),
+                  onPress: () => router.replace("/(drawer)/(tabs)/AccueilScreen"),
+                },
+              ]
+            );
+          };
+
+          if ((auto && wasFirstSave) || !auto) {
+            showSavedChoiceAlert();
+          }
+
+          return true;
+        }
+
         const reason = res?.error?.reason;
         let msg = i18n.t("common.genericError");
         if (reason === "PLAN_NOT_ALLOWED") msg = i18n.t("defi.errors.planNotAllowed");
-        else if (reason === "JOIN_LIMIT_REACHED") msg = i18n.t("defi.errors.joinLimitReached", { max: res?.error?.max });
+        else if (reason === "JOIN_LIMIT_REACHED")
+          msg = i18n.t("defi.errors.joinLimitReached", { max: res?.error?.max });
         else if (reason === "SUBSCRIPTION_INACTIVE")
           msg = i18n.t("defi.errors.subscriptionInactive", { defaultValue: "Abonnement inactif." });
         else if (reason === "DEFI_NOT_OPEN")
           msg = i18n.t("defi.alerts.lockedMessage", { defaultValue: "Défi verrouillé." });
         throw new Error(msg);
+      } catch (e) {
+        setSaveStatus("error");
+        Alert.alert(i18n.t("defi.alerts.genericErrorTitle"), String(e?.message || e));
+        return false;
+      } finally {
+        setSaving(false);
+        savingRef.current = false;
       }
-    } catch (e) {
-      Alert.alert(i18n.t("defi.alerts.genericErrorTitle"), String(e?.message || e));
-    } finally {
-      setSaving(false);
-      savingRef.current = false;
-    }
-  }, [user?.uid, defi?.id, selected, maxChoices, locked, allChosen, router, hasSavedOnce, selectedHydrated]);
+    },
+    [user?.uid, defi?.id, defi?.type, selected, maxChoices, locked, allChosen, router, hasSavedOnce, selectedHydrated]
+  );
+
+  useEffect(() => {
+    if (!participationLoaded || !allChosen || locked) return;
+    save({ auto: true });
+  }, [participationLoaded, allChosen, locked, selected, save]);
 
   // ----- states -----
   if (loadingDefi) {
@@ -699,6 +763,29 @@ export default function DefiParticipationScreen() {
                 max: maxChoices,
               })}
             </Text>
+
+            {saveStatus === "saving" ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>
+                  {i18n.t("defi.actions.autoSaving", { defaultValue: "Enregistrement…" })}
+                </Text>
+              </View>
+            ) : null}
+
+            {saveStatus === "saved" && hasSavedOnce ? (
+              <Text style={{ marginTop: 10, color: "#16a34a", fontWeight: "700", fontSize: 13 }}>
+                {i18n.t("defi.actions.autoSaved", { defaultValue: "Participation enregistrée" })}
+              </Text>
+            ) : null}
+
+            {!locked && allChosen && saveStatus === "idle" && !hasSavedOnce ? (
+              <Text style={{ marginTop: 10, color: colors.subtext, fontSize: 12, fontWeight: "600" }}>
+                {i18n.t("defi.actions.autoSaveHint", {
+                  defaultValue: "Ta participation sera enregistrée automatiquement.",
+                })}
+              </Text>
+            ) : null}
           </SectionCard>
 
           {/* Actions */}
@@ -712,41 +799,24 @@ export default function DefiParticipationScreen() {
               borderColor: colors.border,
             }}
           >
-            {/* Bouton Save */}
-            <TouchableOpacity
-              disabled={locked || !selected.every(Boolean) || saving}
-              onPress={save}
-              style={{
-                padding: 14,
-                borderRadius: 10,
-                alignItems: "center",
-                backgroundColor: locked || !selected.every(Boolean) || saving ? colors.subtext : colors.primary,
-              }}
-            >
-              {saving ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700" }}>{i18n.t("defi.actions.primarySaving")}</Text>
-                </View>
-              ) : (
-                <Text style={{ color: "#fff", fontWeight: "700" }}>
-                  {locked ? i18n.t("defi.actions.primaryLocked") : i18n.t("defi.actions.primaryDefault")}
-                </Text>
-              )}
-            </TouchableOpacity>
-
             <TouchableOpacity
               onPress={leaveDefiPicker}
+              disabled={saving}
               style={{
-                padding: 12,
+                padding: 14,
                 borderRadius: 10,
                 borderWidth: 1,
                 alignItems: "center",
                 backgroundColor: colors.background,
                 borderColor: colors.border,
+                opacity: saving ? 0.7 : 1,
               }}
             >
-              <Text style={{ color: colors.text }}>{i18n.t("common.cancel")}</Text>
+              <Text style={{ color: colors.text, fontWeight: "700" }}>
+                {hasSavedOnce
+                  ? i18n.t("common.back", { defaultValue: "Retour" })
+                  : i18n.t("common.cancel")}
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

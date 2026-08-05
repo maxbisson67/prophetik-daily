@@ -17,6 +17,9 @@ import { resolveLeaderboardMember } from "./useLeaderboardProfiles";
 import {
   buildLeaderboardRankMaps,
   buildParticipantChallengeStats,
+  buildDailyRankMaps,
+  buildDailyParticipantChallengeStats,
+  toDailyProfileRow,
 } from "./leaderboardParticipantRanks";
 import { isMlbSport } from "./leaderboardDashboardHelpers";
 
@@ -140,7 +143,7 @@ function withCacheBust(url, tsMillis) {
   return url.includes("?") ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
 }
 
-function ChallengeStatCard({ kind, title, accent, stats, colors, t, memberCount, tpExtra = null }) {
+function ChallengeStatCard({ kind, title, accent, stats, colors, t, memberCount, tpExtra = null, showTpExacts = true }) {
   const hasActivity =
     Number(stats?.points ?? 0) > 0 ||
     Number(stats?.wins ?? 0) > 0 ||
@@ -196,7 +199,7 @@ function ChallengeStatCard({ kind, title, accent, stats, colors, t, memberCount,
             label={t("leaderboard.participantProfile.wins", { defaultValue: "Victoires" })}
             value={String(stats.wins ?? 0)}
           />
-          {tpExtra ? (
+          {showTpExacts && tpExtra ? (
             <StatPill
               colors={colors}
               label={t("leaderboard.columns.exactsShort", { defaultValue: "Exact." })}
@@ -251,6 +254,7 @@ export default function LeaderboardParticipantProfileModal({
   profiles = {},
   sport,
   colors,
+  variant = "season",
 }) {
   const t = i18n.t.bind(i18n);
   const insets = useSafeAreaInsets();
@@ -263,11 +267,19 @@ export default function LeaderboardParticipantProfileModal({
     return resolveLeaderboardMember(row, profiles);
   }, [row, profiles]);
 
+  const isDaily = variant === "daily";
+
   const stats = useMemo(() => {
     if (!row) return null;
+    if (isDaily) {
+      const dailyRow = toDailyProfileRow(row);
+      const dailyPeers = (peerRows || []).map(toDailyProfileRow);
+      const rankMaps = buildDailyRankMaps(dailyPeers);
+      return buildDailyParticipantChallengeStats(dailyRow, rankMaps);
+    }
     const rankMaps = buildLeaderboardRankMaps(peerRows);
     return buildParticipantChallengeStats(row, rankMaps);
-  }, [row, peerRows]);
+  }, [row, peerRows, isDaily]);
 
   const sectionTitles = useMemo(
     () => ({
@@ -312,7 +324,9 @@ export default function LeaderboardParticipantProfileModal({
           }}
         >
           <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
-            {t("leaderboard.participantProfile.title", { defaultValue: "Profil participant" })}
+            {isDaily
+              ? t("live.participantProfile.title", { defaultValue: "Points du jour" })
+              : t("leaderboard.participantProfile.title", { defaultValue: "Profil participant" })}
           </Text>
           <TouchableOpacity
             onPress={onClose}
@@ -414,7 +428,9 @@ export default function LeaderboardParticipantProfileModal({
                 <Text style={{ fontSize: 14 }}>🏆</Text>
               </View>
               <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}>
-                {t("leaderboard.sections.topScorers", { defaultValue: "Meilleurs pointeurs" })}
+                {isDaily
+                  ? t("live.participantProfile.totalToday", { defaultValue: "Total du jour" })
+                  : t("leaderboard.sections.topScorers", { defaultValue: "Meilleurs pointeurs" })}
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
@@ -434,9 +450,13 @@ export default function LeaderboardParticipantProfileModal({
           </View>
 
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>
-            {t("leaderboard.participantProfile.byChallenge", {
-              defaultValue: "Classement par défi",
-            })}
+            {isDaily
+              ? t("live.participantProfile.byChallenge", {
+                  defaultValue: "Points par défi aujourd'hui",
+                })
+              : t("leaderboard.participantProfile.byChallenge", {
+                  defaultValue: "Classement par défi",
+                })}
           </Text>
 
           <ChallengeStatCard
@@ -456,6 +476,7 @@ export default function LeaderboardParticipantProfileModal({
             stats={stats?.tp}
             memberCount={memberCount}
             tpExtra={{ exacts: stats?.tp?.exacts ?? 0 }}
+            showTpExacts={!isDaily}
             colors={colors}
             t={t}
           />

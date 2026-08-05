@@ -1,13 +1,14 @@
 import { db, FieldValue } from "../utils.js";
 import { fetchMlbLiveFeed } from "./mlbLiveFeed.js";
 import { mlbTeamIdFromAbbr } from "./mlbTeamAbbr.js";
+import { MLB_CHALLENGE_ELIGIBLE_GAME_TYPES } from "./mlbGameTypeUtils.js";
 
 const MLB_BOXSCORE_URL = (gamePk) =>
   `https://statsapi.mlb.com/api/v1/game/${encodeURIComponent(String(gamePk))}/boxscore`;
 
 const MLB_SCHEDULE_URL = ({ teamId, startDate, endDate }) =>
   `https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${encodeURIComponent(String(teamId))}` +
-  `&startDate=${startDate}&endDate=${endDate}&gameTypes=R`;
+  `&startDate=${startDate}&endDate=${endDate}&gameTypes=${MLB_CHALLENGE_ELIGIBLE_GAME_TYPES}`;
 
 const CACHE_COL = "mlb_game_lineups";
 const CACHE_TTL_MS = 45 * 60 * 1000;

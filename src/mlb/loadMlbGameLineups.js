@@ -1,5 +1,6 @@
 import functions from "@react-native-firebase/functions";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import { MLB_CHALLENGE_ELIGIBLE_GAME_TYPES } from "@src/mlb/mlbGameTypeUtils";
 
 const MLB_BOXSCORE_URL = (gamePk) =>
   `https://statsapi.mlb.com/api/v1/game/${encodeURIComponent(String(gamePk))}/boxscore`;
@@ -178,7 +179,7 @@ async function fetchPreviousGameLineupForTeam({ teamAbbr, beforeYmd, excludeGame
 
   const url =
     `https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${encodeURIComponent(teamId)}` +
-    `&startDate=${startDate}&endDate=${endDate}&gameTypes=R`;
+    `&startDate=${startDate}&endDate=${endDate}&gameTypes=${MLB_CHALLENGE_ELIGIBLE_GAME_TYPES}`;
 
   const json = await fetchJson(url);
   const finals = [];

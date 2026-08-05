@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import i18n from "@src/i18n/i18n";
 
 const LIVE_BADGE_ACCENTS = {
@@ -16,67 +16,79 @@ function hexWithAlpha(hex, alphaHex = "22") {
   return `#${clean}${alphaHex}`;
 }
 
-function badgeTextStyle({ accent, compact, letterSpacing = 0.5 }) {
+function badgeTextStyle({ accent, compact, tableHeader, letterSpacing = 0.5, inverted = false }) {
   return {
-    color: accent,
-    fontSize: compact ? 13 : 15,
-    lineHeight: compact ? 14 : 16,
-    letterSpacing,
+    color: inverted ? "#fff" : accent,
+    fontSize: tableHeader ? 9 : compact ? 13 : 15,
+    lineHeight: tableHeader ? 10 : compact ? 14 : 16,
+    letterSpacing: tableHeader ? 0.4 : letterSpacing,
     fontWeight: "800",
     includeFontPadding: false,
     textAlign: "center",
   };
 }
 
-function BadgeFrame({ accent, colors, children, compact = false }) {
-  const borderColor = accent || colors.primary || "#ef4444";
-  const minHeight = compact ? 30 : 34;
-  const radius = 10;
-  const innerRadius = Math.max(radius - 2, 6);
+function BadgeFrame({
+  accent,
+  colors,
+  children,
+  compact = false,
+  tableHeader = false,
+  inverted = false,
+}) {
+  const borderColor = inverted
+    ? "rgba(255,255,255,0.85)"
+    : accent || colors.primary || "#ef4444";
+  const minHeight = tableHeader ? 22 : compact ? 30 : 34;
+  const radius = tableHeader ? 7 : 10;
+  const innerRadius = Math.max(radius - 2, 4);
+  const borderWidth = tableHeader ? 1.5 : 2;
 
   return (
     <View
       style={{
-        minWidth: compact ? 52 : 48,
+        minWidth: tableHeader ? 34 : compact ? 52 : 48,
         minHeight,
         borderRadius: radius,
-        borderWidth: 2,
+        borderWidth,
         borderColor,
-        backgroundColor: hexWithAlpha(borderColor, "1A"),
+        backgroundColor: inverted ? "rgba(255,255,255,0.14)" : hexWithAlpha(borderColor, "1A"),
         alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: compact ? 6 : 8,
-        paddingVertical: 4,
+        paddingHorizontal: tableHeader ? 3 : compact ? 6 : 8,
+        paddingVertical: tableHeader ? 2 : 4,
         flexShrink: 0,
         overflow: "hidden",
-        shadowColor: borderColor,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowColor: inverted || tableHeader ? "transparent" : borderColor,
+        shadowOffset: { width: 0, height: inverted || tableHeader ? 0 : 2 },
+        shadowOpacity: inverted || tableHeader ? 0 : 0.25,
+        shadowRadius: inverted || tableHeader ? 0 : 4,
+        elevation: inverted || tableHeader ? 0 : 3,
       }}
     >
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          top: 1,
-          left: 1,
-          right: 1,
-          bottom: 1,
-          borderRadius: innerRadius,
-          borderWidth: 1,
-          borderColor: hexWithAlpha(borderColor, "28"),
-          borderTopColor: hexWithAlpha(borderColor, "50"),
-          borderBottomColor: hexWithAlpha(borderColor, "14"),
-        }}
-      />
+      {!inverted ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 1,
+            left: 1,
+            right: 1,
+            bottom: 1,
+            borderRadius: innerRadius,
+            borderWidth: 1,
+            borderColor: hexWithAlpha(borderColor, "28"),
+            borderTopColor: hexWithAlpha(borderColor, "50"),
+            borderBottomColor: hexWithAlpha(borderColor, "14"),
+          }}
+        />
+      ) : null}
       {children}
     </View>
   );
 }
 
-function FgcBadge({ colors, sport, compact }) {
+function FgcBadge({ colors, sport, compact, tableHeader, inverted = false }) {
   const accent = LIVE_BADGE_ACCENTS.fgc;
   const league = String(sport || "MLB").toUpperCase();
   const label =
@@ -85,11 +97,17 @@ function FgcBadge({ colors, sport, compact }) {
       : i18n.t("live.badge.goal", { defaultValue: "SOLO" });
 
   return (
-    <BadgeFrame accent={accent} colors={colors} compact={compact}>
+    <BadgeFrame
+      accent={accent}
+      colors={colors}
+      compact={compact}
+      tableHeader={tableHeader}
+      inverted={inverted}
+    >
       <Text
-        style={badgeTextStyle({ accent, compact, letterSpacing: 0.8 })}
+        style={badgeTextStyle({ accent, compact, tableHeader, letterSpacing: 0.8, inverted })}
         numberOfLines={1}
-        adjustsFontSizeToFit
+        adjustsFontSizeToFit={!tableHeader}
         minimumFontScale={0.85}
       >
         {label}
@@ -98,16 +116,22 @@ function FgcBadge({ colors, sport, compact }) {
   );
 }
 
-function TpBadge({ colors, compact }) {
+function TpBadge({ colors, compact, tableHeader, inverted = false }) {
   const accent = LIVE_BADGE_ACCENTS.tp;
   const label = i18n.t("live.badge.score", { defaultValue: "DUO" });
 
   return (
-    <BadgeFrame accent={accent} colors={colors} compact={compact}>
+    <BadgeFrame
+      accent={accent}
+      colors={colors}
+      compact={compact}
+      tableHeader={tableHeader}
+      inverted={inverted}
+    >
       <Text
-        style={badgeTextStyle({ accent, compact })}
+        style={badgeTextStyle({ accent, compact, tableHeader, inverted })}
         numberOfLines={1}
-        adjustsFontSizeToFit
+        adjustsFontSizeToFit={!tableHeader}
         minimumFontScale={0.85}
       >
         {label}
@@ -116,31 +140,58 @@ function TpBadge({ colors, compact }) {
   );
 }
 
-function TsBadge({ colors, compact }) {
+function TsBadge({ colors, compact, tableHeader, inverted = false }) {
   const accent = LIVE_BADGE_ACCENTS.ts;
   const label = i18n.t("live.badge.trio", { defaultValue: "TRIO" });
 
   return (
-    <BadgeFrame accent={accent} colors={colors} compact={compact}>
-      <Text style={badgeTextStyle({ accent, compact, letterSpacing: 0.3 })}>{label}</Text>
+    <BadgeFrame
+      accent={accent}
+      colors={colors}
+      compact={compact}
+      tableHeader={tableHeader}
+      inverted={inverted}
+    >
+      <Text style={badgeTextStyle({ accent, compact, tableHeader, letterSpacing: 0.3, inverted })}>
+        {label}
+      </Text>
     </BadgeFrame>
   );
 }
 
-export default function LiveChallengeKindBadge({ kind, colors, sport = "MLB", compact = false }) {
+export default function LiveChallengeKindBadge({
+  kind,
+  colors,
+  sport = "MLB",
+  compact = false,
+  tableHeader = false,
+  inverted = false,
+  onPress = null,
+}) {
   const key = String(kind || "").toLowerCase();
 
-  if (key === "fgc") {
-    return <FgcBadge colors={colors} sport={sport} compact={compact} />;
-  }
+  const badge =
+    key === "fgc" ? (
+      <FgcBadge
+        colors={colors}
+        sport={sport}
+        compact={compact}
+        tableHeader={tableHeader}
+        inverted={inverted}
+      />
+    ) : key === "tp" ? (
+      <TpBadge colors={colors} compact={compact} tableHeader={tableHeader} inverted={inverted} />
+    ) : key === "ts" ? (
+      <TsBadge colors={colors} compact={compact} tableHeader={tableHeader} inverted={inverted} />
+    ) : null;
 
-  if (key === "tp") {
-    return <TpBadge colors={colors} compact={compact} />;
-  }
+  if (!badge) return null;
 
-  if (key === "ts") {
-    return <TsBadge colors={colors} compact={compact} />;
-  }
+  if (!onPress) return badge;
 
-  return null;
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+      {badge}
+    </TouchableOpacity>
+  );
 }

@@ -1,5 +1,27 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, FieldValue } from "../utils.js";
+import { readUserPlanTier } from "../subscriptions/planLimits.js";
+import { assertCanSetParticipationActive } from "./participationEnforcement.js";
+import { PARTICIPATION, resolveParticipation } from "./participationUtils.js";
+
+async function resolveJoinParticipation(db, uid, tier) {
+  try {
+    await assertCanSetParticipationActive(db, uid, tier);
+    return {
+      participation: PARTICIPATION.ACTIVE,
+      joinedAsInactive: false,
+    };
+  } catch (err) {
+    const msg = String(err?.message || "");
+    if (msg.includes("ACTIVE_GROUP_LIMIT_REACHED")) {
+      return {
+        participation: PARTICIPATION.INACTIVE,
+        joinedAsInactive: true,
+      };
+    }
+    throw err;
+  }
+}
 
 export const joinGroupWithCap = onCall(async (req) => {
   try {
@@ -36,9 +58,22 @@ export const joinGroupWithCap = onCall(async (req) => {
         await db.doc(`groups/${groupId}`).set({ updatedAt: now }, { merge: true });
 
         const g = snap.data() || {};
-        return { ok: true, groupId, groupName: g.name ?? null, alreadyMember: true };
+        return {
+          ok: true,
+          groupId,
+          groupName: g.name ?? null,
+          alreadyMember: true,
+          participation: resolveParticipation(ex),
+        };
       }
     }
+
+    const tier = await readUserPlanTier(db, uid);
+    const { participation: joinParticipation, joinedAsInactive } = await resolveJoinParticipation(
+      db,
+      uid,
+      tier
+    );
 
     const isAlreadyOwner =
       existing.exists && String((existing.data() || {}).role || "").toLowerCase() === "owner";
@@ -71,6 +106,8 @@ export const joinGroupWithCap = onCall(async (req) => {
         role: isAlreadyOwner ? "owner" : "member",
         active: true,
         status: "active",
+        participation: joinParticipation,
+        participationChangedReason: joinedAsInactive ? "join_inactive_slot_full" : "join",
         displayName,
         avatarUrl,
         joinedAt: now,
@@ -82,7 +119,13 @@ export const joinGroupWithCap = onCall(async (req) => {
     await db.doc(`groups/${groupId}`).set({ updatedAt: now }, { merge: true });
 
     const g = snap.data() || {};
-    return { ok: true, groupId, groupName: g.name ?? null };
+    return {
+      ok: true,
+      groupId,
+      groupName: g.name ?? null,
+      participation: joinParticipation,
+      joinedAsInactive,
+    };
   } catch (err) {
     if (err instanceof HttpsError) throw err;
     throw new HttpsError("internal", err?.message || "joinGroupWithCap failed");

@@ -12,13 +12,18 @@ import {
 } from "./mlbProbablePitchers.js";
 import { isMlbScheduleGameFinal } from "./mlbGameStatus.js";
 import { invalidateMlbBvpCacheForFinalGame } from "./mlbBvpInvalidate.js";
+import {
+  MLB_CHALLENGE_ELIGIBLE_GAME_TYPES,
+  isMlbChallengeEligibleGameType,
+  mlbSeasonPhaseFromGameType,
+  normalizeMlbGameType,
+} from "./mlbGameTypeUtils.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule";
 const MLB_SPORT_ID = 1;
-const MLB_REGULAR_GAME_TYPE = "R";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -86,8 +91,12 @@ function normalizeGame(game, forcedYmd = null) {
   const awayTeamId = toNum(away?.team?.id, null);
   const homeTeamId = toNum(home?.team?.id, null);
 
+  const gameType = normalizeMlbGameType(game?.gameType);
+
   return {
     gamePk,
+    gameType,
+    seasonPhase: mlbSeasonPhaseFromGameType(gameType),
     gameDateYmd: ymd,
 
     startTimeUTC: startDate || null,
@@ -154,11 +163,11 @@ function normalizeGame(game, forcedYmd = null) {
 
 /* ----------------------------- fetch ----------------------------- */
 
-function buildScheduleUrl({ startDate, endDate, gameType = MLB_REGULAR_GAME_TYPE }) {
+function buildScheduleUrl({ startDate, endDate, gameTypes = MLB_CHALLENGE_ELIGIBLE_GAME_TYPES }) {
   const url = new URL(MLB_SCHEDULE_URL);
 
   url.searchParams.set("sportId", String(MLB_SPORT_ID));
-  url.searchParams.set("gameType", String(gameType));
+  url.searchParams.set("gameTypes", String(gameTypes));
   url.searchParams.set("hydrate", "team,linescore,venue,probablePitcher");
   url.searchParams.set("startDate", String(startDate));
   url.searchParams.set("endDate", String(endDate));
@@ -167,8 +176,8 @@ function buildScheduleUrl({ startDate, endDate, gameType = MLB_REGULAR_GAME_TYPE
   return url;
 }
 
-async function fetchScheduleWindow({ startDate, endDate, gameType = MLB_REGULAR_GAME_TYPE }) {
-  const url = buildScheduleUrl({ startDate, endDate, gameType });
+async function fetchScheduleWindow({ startDate, endDate, gameTypes = MLB_CHALLENGE_ELIGIBLE_GAME_TYPES }) {
+  const url = buildScheduleUrl({ startDate, endDate, gameTypes });
 
   const res = await fetch(url.toString(), {
     headers: { Accept: "application/json" },
@@ -198,6 +207,7 @@ async function buildEnrichedGames(payload) {
     const games = Array.isArray(dateBlock?.games) ? dateBlock.games : [];
 
     for (const rawGame of games) {
+      if (!isMlbChallengeEligibleGameType(rawGame?.gameType)) continue;
       const row = normalizeGame(rawGame, ymd);
       if (!row.gamePk) continue;
 
@@ -330,7 +340,7 @@ async function ingestMlbScheduleWindow({ startYmd, endYmd }) {
   const payload = await fetchScheduleWindow({
     startDate: startYmd,
     endDate: endYmd,
-    gameType: MLB_REGULAR_GAME_TYPE,
+    gameTypes: MLB_CHALLENGE_ELIGIBLE_GAME_TYPES,
   });
 
   const games = await buildEnrichedGames(payload);

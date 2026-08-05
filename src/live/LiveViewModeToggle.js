@@ -6,12 +6,12 @@ export default function LiveViewModeToggle({ value, onChange, colors }) {
   const t = i18n.t.bind(i18n);
   const modes = [
     {
-      key: "games",
-      label: t("live.viewMode.games", { defaultValue: "Matchs" }),
-    },
-    {
       key: "points",
       label: t("live.viewMode.points", { defaultValue: "Points" }),
+    },
+    {
+      key: "games",
+      label: t("live.viewMode.games", { defaultValue: "Matchs" }),
     },
   ];
 

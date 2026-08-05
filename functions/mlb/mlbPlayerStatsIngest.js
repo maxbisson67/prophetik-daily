@@ -13,7 +13,35 @@ if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1/stats";
+const MLB_TEAMS_URL = "https://statsapi.mlb.com/api/v1/teams?sportId=1&activeStatus=Y";
 const PAGE_SIZE = 1000; // MVP: assez grand pour couvrir les batters saisonniers
+
+let cachedTeamAbbrById = null;
+let cachedTeamAbbrAt = 0;
+const TEAM_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+async function fetchMlbTeamAbbrById() {
+  if (cachedTeamAbbrById && Date.now() - cachedTeamAbbrAt < TEAM_CACHE_TTL_MS) {
+    return cachedTeamAbbrById;
+  }
+
+  const res = await fetch(MLB_TEAMS_URL, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    throw new Error(`MLB teams HTTP ${res.status}`);
+  }
+
+  const json = await res.json();
+  const map = {};
+  for (const team of json?.teams || []) {
+    const id = toStr(team?.id, "");
+    const abbr = toStr(team?.abbreviation, "").toUpperCase();
+    if (id && abbr) map[id] = abbr;
+  }
+
+  cachedTeamAbbrById = map;
+  cachedTeamAbbrAt = Date.now();
+  return map;
+}
 
 function toNum(v, def = 0) {
   const n = Number(v);
@@ -65,7 +93,7 @@ async function fetchStatsPage(season, offset = 0) {
   return res.json();
 }
 
-function normalizeSplit(split, seasonId) {
+function normalizeSplit(split, seasonId, teamAbbrById = {}) {
   const stat = split?.stat || {};
   const person = split?.player || split?.person || {};
   const team = split?.team || {};
@@ -74,13 +102,15 @@ function normalizeSplit(split, seasonId) {
   const fullName = toStr(person?.fullName || person?.name, "");
   const lastName = fullName ? fullName.split(" ").slice(-1).join(" ") : "";
 
+  const teamId = toStr(team?.id, "");
   const teamAbbr = toStr(
     team?.abbreviation ||
+      teamAbbrById[teamId] ||
       team?.teamCode ||
       team?.fileCode ||
       team?.shortName,
     ""
-  );
+  ).toUpperCase();
 
   const gamesPlayed = toNum(stat?.gamesPlayed);
   const atBats = toNum(stat?.atBats);
@@ -110,6 +140,7 @@ function normalizeSplit(split, seasonId) {
 
     fullName,
     lastName,
+    teamId,
     teamAbbr,
 
     gamesPlayed,
@@ -136,7 +167,7 @@ function normalizeSplit(split, seasonId) {
   };
 }
 
-async function fetchAllBattersForSeason(seasonId) {
+async function fetchAllBattersForSeason(seasonId, teamAbbrById = {}) {
   const all = [];
 
   for (let offset = 0; ; offset += PAGE_SIZE) {
@@ -160,7 +191,7 @@ async function fetchAllBattersForSeason(seasonId) {
   }
 
   const rows = all
-    .map((split) => normalizeSplit(split, seasonId))
+    .map((split) => normalizeSplit(split, seasonId, teamAbbrById))
     .filter((r) => r.playerId && r.fullName);
 
   const dedup = Object.values(
@@ -217,7 +248,8 @@ async function ingestSeason(seasonId) {
 
   logger.info("[mlbPlayerStats] ingest start", { seasonId });
 
-  const rows = await fetchAllBattersForSeason(seasonId);
+  const teamAbbrById = await fetchMlbTeamAbbrById();
+  const rows = await fetchAllBattersForSeason(seasonId, teamAbbrById);
 
   logger.info("[mlbPlayerStats] fetched", {
     seasonId,

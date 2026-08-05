@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import i18n from "@src/i18n/i18n";
 import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import { competitionTimelineStatus } from "@src/season/seasonCompetitionCore";
@@ -80,10 +80,12 @@ export default function CompetitionPhasePicker({
         })}
       </Text>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+      <View
+        style={{
+          flexDirection: "row",
+          gap: 8,
+          alignItems: "stretch",
+        }}
       >
         {options.map((option) => {
           const active = value === option.competitionKey;
@@ -94,38 +96,45 @@ export default function CompetitionPhasePicker({
               onPress={() => onChange?.(option.competitionKey)}
               activeOpacity={0.85}
               style={{
-                paddingVertical: 8,
-                paddingHorizontal: 14,
+                flex: 1,
+                paddingVertical: 10,
+                paddingHorizontal: 8,
                 borderRadius: 6,
                 borderWidth: 1.5,
                 borderColor: active ? accent : colors.border,
                 backgroundColor: active ? accent : colors.card2,
-                minWidth: 120,
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 52,
               }}
             >
               <Text
                 style={{
                   color: active ? "#fff" : colors.text,
                   fontWeight: "900",
-                  fontSize: 13,
+                  fontSize: 12,
+                  textAlign: "center",
                 }}
+                numberOfLines={2}
               >
                 {option.shortLabel}
               </Text>
               <Text
                 style={{
-                  marginTop: 2,
+                  marginTop: 3,
                   color: active ? "rgba(255,255,255,0.85)" : colors.subtext,
                   fontWeight: "700",
                   fontSize: 10,
+                  textAlign: "center",
                 }}
+                numberOfLines={1}
               >
                 {statusLabel(option.timelineStatus)}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
 
       {selected ? (
         <Text

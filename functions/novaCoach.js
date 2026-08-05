@@ -49,6 +49,11 @@ function throwNovaError(result) {
       ...(result.quota || {}),
     });
   }
+  if (reason === "PARTICIPATION_ACTIVE_REQUIRED") {
+    throw new HttpsError("failed-precondition", "PARTICIPATION_ACTIVE_REQUIRED", {
+      reason: "PARTICIPATION_ACTIVE_REQUIRED",
+    });
+  }
   if (reason === "OPENAI_NOT_CONFIGURED" || reason === "OPENAI_KEY_INVALID_FORMAT") {
     throw new HttpsError("failed-precondition", reason, { reason, message: detailMessage });
   }

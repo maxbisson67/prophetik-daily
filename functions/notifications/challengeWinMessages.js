@@ -92,6 +92,8 @@ export function buildTsWinPush({
   lang = "fr",
   groupName,
   winnerNames = [],
+  winnerScore = null,
+  bonusPerWinner = null,
   potTotal,
   sharePerWinner = null,
   shareMax = null,
@@ -99,14 +101,33 @@ export function buildTsWinPush({
 } = {}) {
   const lg = normalizeLang(lang);
   const names = formatNameList(winnerNames, lg);
+  const score = Number(winnerScore);
+  const bonus = Number(bonusPerWinner);
+  const hasScore = Number.isFinite(score) && score >= 0;
+  const hasBonus = Number.isFinite(bonus) && bonus > 0;
+  const isTie = winnerNames.length > 1;
+
+  const title = titleWithGroup(lg === "en" ? "Trio of the day" : "Trio du jour", groupName);
+
+  if (hasScore && hasBonus) {
+    if (lg === "en") {
+      const body = isTie
+        ? `Congrats to ${names}! They tied for today's Trio with ${score} pts (+${bonus} winner bonus each).`
+        : `Congrats to ${names} for the top Trio score today: ${score} pts (+${bonus} winner bonus).`;
+      return { title, body };
+    }
+
+    const body = isTie
+      ? `Bravo à ${names} ! Égalité au Trio du jour avec ${score} pts (+${bonus} bonus gagnant chacun).`
+      : `Bravo à ${names} ! Meilleur score du Trio du jour : ${score} pts (+${bonus} bonus gagnant).`;
+    return { title, body };
+  }
+
   const pot = Number(potTotal);
   const share = Number(sharePerWinner);
   const shareHigh = Number(shareMax);
   const hasPot = Number.isFinite(pot) && pot > 0;
   const hasShare = Number.isFinite(share) && share > 0;
-  const isTie = winnerNames.length > 1;
-
-  const title = titleWithGroup(lg === "en" ? "Trio of the day" : "Trio du jour", groupName);
 
   function shareSuffixFr() {
     if (!hasShare) return "";
@@ -169,4 +190,49 @@ export function buildTsWinPush({
     title,
     body: `Bravo à ${names} pour sa victoire au Trio du jour !`,
   };
+}
+
+export function buildDailyTopScorerPush({
+  lang = "fr",
+  groupName,
+  winnerNames = [],
+  totalPoints = null,
+  bonusPoints = 5,
+  gameDateYmd = null,
+} = {}) {
+  const lg = normalizeLang(lang);
+  const names = formatNameList(winnerNames, lg);
+  const pts = Number(totalPoints);
+  const bonus = Number(bonusPoints);
+  const hasPts = Number.isFinite(pts) && pts > 0;
+  const hasBonus = Number.isFinite(bonus) && bonus > 0;
+  const isTie = winnerNames.length > 1;
+
+  const title = titleWithGroup(
+    lg === "en" ? "Most points yesterday" : "Plus de points hier",
+    groupName
+  );
+
+  if (lg === "en") {
+    const bonusSuffix = hasBonus ? ` (+${bonus} bonus pts)` : "";
+    const body = hasPts
+      ? isTie
+        ? `Congrats to ${names}! They tied for the most points yesterday across SOLO, DUO and TRIO: ${pts} pts${bonusSuffix}.`
+        : `Congrats to ${names} for the most points yesterday across SOLO, DUO and TRIO: ${pts} pts${bonusSuffix}.`
+      : isTie
+      ? `Congrats to ${names}! They tied for the most points yesterday across SOLO, DUO and TRIO.`
+      : `Congrats to ${names} for the most points yesterday across SOLO, DUO and TRIO.`;
+    return { title, body, gameDateYmd };
+  }
+
+  const bonusSuffix = hasBonus ? ` (+${bonus} pts bonus)` : "";
+  const body = hasPts
+    ? isTie
+      ? `Bravo à ${names} ! Égalité pour le plus de points hier (SOLO + DUO + TRIO) : ${pts} pts${bonusSuffix}.`
+      : `Bravo à ${names} ! Plus de points hier (SOLO + DUO + TRIO) : ${pts} pts${bonusSuffix}.`
+    : isTie
+    ? `Bravo à ${names} ! Égalité pour le plus de points hier (SOLO + DUO + TRIO).`
+    : `Bravo à ${names} pour le plus de points hier (SOLO + DUO + TRIO).`;
+
+  return { title, body, gameDateYmd };
 }

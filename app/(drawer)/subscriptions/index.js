@@ -93,12 +93,14 @@
   async function debugOfferingsOnce(label = "") {
   try {
     const o = await Purchases.getOfferings();
-    const ids = (o?.current?.availablePackages || [])
+    const current = resolveRcOffering(o);
+    const ids = (current?.availablePackages || [])
       .map((p) => p?.product?.identifier)
       .filter(Boolean);
 
     console.log(`[RC] offerings ${label}`, {
-      currentOfferingId: o?.current?.identifier,
+      currentOfferingId: current?.identifier,
+      rcCurrentFlag: o?.current?.identifier || null,
       availableProducts: ids,
     });
   } catch (e) {
@@ -106,18 +108,30 @@
   }
 }
 
+  function resolveRcOffering(offerings) {
+    if (offerings?.current) return offerings.current;
+    const all = offerings?.all || {};
+    if (all.default) return all.default;
+    const keys = Object.keys(all);
+    if (keys.length === 1) return all[keys[0]];
+    return null;
+  }
+
   // Option A (recommandée): prendre le package par productIdentifier
 
   async function findPackageById(packageId) {
     const offerings = await Purchases.getOfferings();
-    const current = offerings?.current;
+    const current = resolveRcOffering(offerings);
     const allPkgs = current?.availablePackages || [];
+    const offeringKeys = Object.keys(offerings?.all || {});
 
     const norm = (s) => String(s || "").trim().toLowerCase();
     const target = norm(packageId);
 
     console.log("[RC] offerings current", {
       currentOfferingId: current?.identifier,
+      rcCurrentFlag: offerings?.current?.identifier || null,
+      allOfferingIds: offeringKeys,
       availablePackages: allPkgs.map((p) => ({
         pkg: p?.identifier,
         product: p?.product?.identifier,
@@ -125,7 +139,11 @@
     });
 
     if (!current) {
-      throw new Error("Aucun offering 'current' dans RevenueCat. Vérifie l'API key (Test vs Live) et l'offering 'default'.");
+      throw new Error(
+        offeringKeys.length
+          ? `Aucun offering 'current' dans RevenueCat. Offerings trouvés: ${offeringKeys.join(", ")}. Marque 'default' comme Current dans le dashboard RC.`
+          : "Aucun offering dans RevenueCat. Vérifie l'API key (Test vs Live) et le projet Prophetik."
+      );
     }
 
     const pkg = allPkgs.find((p) => norm(p?.identifier) === target);
@@ -807,9 +825,9 @@
           badge: null,
           accent: colors.subtext,
           highlights: [
-            i18n.t("subscriptions.highlights.free.ownedGroups", {
-              count: PLAN_LIMITS.free.ownedGroupsLimit,
-              defaultValue: "{{count}} groupe possédé · groupes rejoints illimités",
+            i18n.t("subscriptions.highlights.free.activeGroups", {
+              count: PLAN_LIMITS.free.activeGroupsLimit,
+              defaultValue: "{{count}} groupe actif · création illimitée",
             }),
             i18n.t("subscriptions.highlights.autopilotGroups", {
               count: PLAN_LIMITS.free.autopilotGroupsLimit,
@@ -834,9 +852,9 @@
           badge: i18n.t("subscriptions.badge.popular", { defaultValue: "Populaire" }),
           accent: "#f59e0b",
           highlights: [
-            i18n.t("subscriptions.highlights.pro.ownedGroups", {
-              count: PLAN_LIMITS.pro.ownedGroupsLimit,
-              defaultValue: "{{count}} groupes possédés · groupes rejoints illimités",
+            i18n.t("subscriptions.highlights.pro.activeGroups", {
+              count: PLAN_LIMITS.pro.activeGroupsLimit,
+              defaultValue: "{{count}} groupes actifs · création illimitée",
             }),
             i18n.t("subscriptions.highlights.autopilotGroups", {
               count: PLAN_LIMITS.pro.autopilotGroupsLimit,
@@ -861,9 +879,9 @@
           badge: i18n.t("subscriptions.badge.best", { defaultValue: "Meilleur" }),
           accent: "#60a5fa",
           highlights: [
-            i18n.t("subscriptions.highlights.vip.ownedGroups", {
-              count: PLAN_LIMITS.vip.ownedGroupsLimit,
-              defaultValue: "{{count}} groupes possédés · groupes rejoints illimités",
+            i18n.t("subscriptions.highlights.vip.activeGroups", {
+              count: PLAN_LIMITS.vip.activeGroupsLimit,
+              defaultValue: "{{count}} groupes actifs · création illimitée",
             }),
             i18n.t("subscriptions.highlights.autopilotGroups", {
               count: PLAN_LIMITS.vip.autopilotGroupsLimit,
@@ -884,18 +902,18 @@
       // ✅ Aligné sur le tableau du PDF
       return [
         {
-          key: "groups",
-          label: i18n.t("subscriptions.compare.ownedGroups", {
-            defaultValue: "Groupes possédés",
+          key: "activeGroups",
+          label: i18n.t("subscriptions.compare.activeGroups", {
+            defaultValue: "Groupes actifs (jeu)",
           }),
-          free: String(PLAN_LIMITS.free.ownedGroupsLimit),
-          pro: String(PLAN_LIMITS.pro.ownedGroupsLimit),
-          vip: String(PLAN_LIMITS.vip.ownedGroupsLimit),
+          free: String(PLAN_LIMITS.free.activeGroupsLimit),
+          pro: String(PLAN_LIMITS.pro.activeGroupsLimit),
+          vip: String(PLAN_LIMITS.vip.activeGroupsLimit),
         },
         {
-          key: "joinedGroups",
-          label: i18n.t("subscriptions.compare.joinedGroups", {
-            defaultValue: "Groupes rejoints",
+          key: "createGroups",
+          label: i18n.t("subscriptions.compare.createGroups", {
+            defaultValue: "Création de groupes",
           }),
           free: i18n.t("subscriptions.compare.unlimited", { defaultValue: "Illimité" }),
           pro: i18n.t("subscriptions.compare.unlimited", { defaultValue: "Illimité" }),

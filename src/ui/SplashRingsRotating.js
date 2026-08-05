@@ -7,8 +7,11 @@ const logoPImg = require('@src/assets/logoP.png');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 const LOGO_LETTER_MS = 100; // ~0,9 s pour « Prophetik » (9 lettres)
-const RING_ROTATION_MS = 2800;
+/** ~1,9 s par tour — une révolution complète pendant le splash (~1,95 s). */
+const RING_ROTATION_MS = 1900;
 const ORBIT_ICON_SIZE = 28;
+const ORBIT_SPEED_BASEBALL = 1;
+const ORBIT_SPEED_PUCK = -1;
 
 function OrbitSportIcon({ center, radius, speed, startDeg, icon, color, t }) {
   const spin = t.interpolate({
@@ -200,8 +203,8 @@ export default function SplashRingsRotating({
         <OrbitSportIcon
           center={r}
           radius={radii[0]}
-          speed={speeds[0]}
-          startDeg={28}
+          speed={ORBIT_SPEED_BASEBALL}
+          startDeg={270}
           icon="baseball"
           color="#b91c1c"
           t={t}
@@ -211,8 +214,8 @@ export default function SplashRingsRotating({
         <OrbitSportIcon
           center={r}
           radius={radii[1]}
-          speed={speeds[1]}
-          startDeg={210}
+          speed={ORBIT_SPEED_PUCK}
+          startDeg={90}
           icon="hockey-puck"
           color="#111"
           t={t}

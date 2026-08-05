@@ -11,10 +11,14 @@ import { runIngestStatsForDate } from "./ingest.js";
 // 🔁 Date/fuseau centralisés
 import { APP_TZ, appYmd, addDaysToYmd, formatDebug } from "./ProphetikDate.js";
 import { recordParticipantProgressionSafe } from "./achievements/achievementService.js";
-import { notifyTsWinners } from "./notifications/notifyChallengeWin.js";
+import {
+  collectGroupDayPairsForDates,
+  notifyDailyTopScorer,
+} from "./notifications/dailyTopScorer.js";
 import { computeMemberSeasonRank } from "./leaderboard/leaderboardRankUtils.js";
 import { notifyLeaderboardRankUpAfterPointsCredit } from "./notifications/notifyLeaderboardRankUp.js";
 import { resolveCompetitionForGroupCredit } from "./leaderboard/currentSeason.js";
+import { TS_WIN_BONUS_POINTS } from "./challengeScoringConstants.js";
 
 /* ------------------------- Admin init ------------------------- */
 if (getApps().length === 0) initializeApp();
@@ -55,15 +59,28 @@ function pickDeterministicFromValues(defiId, values = []) {
 }
 
 function computeBonusPerWinner(defiId, defiDoc) {
+  const defiType = Number(defiDoc?.type ?? 0);
+  if (defiType === 3) return 0;
+
   const br = defiDoc?.bonusReward;
-  if (!br || typeof br !== "object") return 0;
+  if (br && typeof br === "object") {
+    const type = String(br.type || "").toLowerCase();
+    if (type === "fixed") {
+      const v = Number(br.value ?? br.points ?? TS_WIN_BONUS_POINTS);
+      return v > 0 ? v : 0;
+    }
+    if (type === "random") {
+      const values = br.values || [6, 7];
+      const bonus = pickDeterministicFromValues(defiId, values);
+      return bonus > 0 ? bonus : 0;
+    }
+  }
 
-  const type = String(br.type || "").toLowerCase();
-  if (type !== "random") return 0;
+  if (Number.isFinite(defiType) && defiType >= 1 && defiType <= 7) {
+    return TS_WIN_BONUS_POINTS;
+  }
 
-  const values = br.values || [6, 7];
-  const bonus = pickDeterministicFromValues(defiId, values);
-  return bonus > 0 ? bonus : 0;
+  return 0;
 }
 
 function normalizeUidArray(v) {
@@ -156,53 +173,6 @@ function cycleMemberRefFor(groupId, cycleId, uid) {
   );
 }
 
-async function resolveTsWinnerUids({ defiId, defiData, txResult }) {
-  let winnerUids = normalizeUidArray(txResult?.progressionContext?.winners);
-  if (!winnerUids.length) {
-    winnerUids = normalizeUidArray(defiData?.winners);
-  }
-  if (!winnerUids.length) {
-    try {
-      const snap = await db.collection("defis").doc(defiId).get();
-      winnerUids = normalizeUidArray(snap.data()?.winners);
-    } catch (e) {
-      logger.warn("resolveTsWinnerUids: read failed", {
-        defiId,
-        error: String(e?.message || e),
-      });
-    }
-  }
-  // Inclure Nova ("ai") : le message push affiche "Nova" via loadParticipantDisplayNames.
-  return winnerUids;
-}
-
-async function shouldAttemptTsWinPush(txResult, defiRef) {
-  if (!txResult?.groupId) return { attempt: false, reason: "no-groupId" };
-  if (txResult?.cancelled) return { attempt: false, reason: "cancelled" };
-  if (!(txResult?.applied === true || txResult?.skippedAlreadyApplied === true)) {
-    return { attempt: false, reason: "not-applicable" };
-  }
-
-  try {
-    const snap = await defiRef.get();
-    const defiData = snap.data() || {};
-    if (defiData.groupWinPushSentAt) {
-      return { attempt: false, reason: "already-sent", defiData };
-    }
-    return { attempt: true, defiData };
-  } catch (e) {
-    logger.warn("shouldAttemptTsWinPush: read failed", {
-      defiId: defiRef.id,
-      error: String(e?.message || e),
-    });
-    return { attempt: true, defiData: {} };
-  }
-}
-
-function isTsDefiType(typeVal) {
-  return Number(typeVal) === 3;
-}
-
 /* -------------------- FINALIZATION (daily 5AM) ----------------- */
 export const finalizeDefiWinners = onSchedule(
   {
@@ -282,6 +252,14 @@ export const finalizeDefiWinners = onSchedule(
     let skippedAlreadyApplied = 0;
     let cancelledNoParticipants = 0;
     let cancelledNoHumans = 0;
+    const groupDayPairs = new Map();
+
+    function trackGroupDay(groupId, gameDate) {
+      const gid = String(groupId || "").trim();
+      const ymd = String(gameDate || "").slice(0, 10);
+      if (!gid || !ymd) return;
+      groupDayPairs.set(`${gid}|${ymd}`, { groupId: gid, gameDateYmd: ymd });
+    }
 
     for (const docSnap of candidates) {
       const defiId = docSnap.id;
@@ -306,6 +284,9 @@ export const finalizeDefiWinners = onSchedule(
 
       const preGroupId = String(d.groupId || "");
       const defiGameYmd = String(d.gameDate || d.gameYmd || todayYmd).slice(0, 10);
+      if (preGroupId && defiGameYmd) {
+        trackGroupDay(preGroupId, defiGameYmd);
+      }
       const competition = preGroupId
         ? await resolveCompetitionForGroupCredit({ db, groupId: preGroupId, gameYmd: defiGameYmd })
         : null;
@@ -392,6 +373,7 @@ export const finalizeDefiWinners = onSchedule(
         // --- CAS: Nova seule
         if (!humanParts.length) {
           const originalPot = Number(cur.pot ?? 0);
+          const aiPart = partsAll.find((x) => String(x.uid).toLowerCase() === "ai");
 
           tx.set(
             dRef,
@@ -411,15 +393,91 @@ export const finalizeDefiWinners = onSchedule(
             { merge: true }
           );
 
-          tx.set(
-            dRef.collection("participations").doc("ai"),
-            {
-              payout: 0,
-              finalizedAt: FieldValue.serverTimestamp(),
-              cancelled: true,
-            },
-            { merge: true }
-          );
+          if (aiPart) {
+            tx.set(
+              dRef.collection("participations").doc(String(aiPart.uid)),
+              {
+                finalPoints: Number(aiPart.livePoints ?? 0),
+                payout: 0,
+                cancelled: true,
+                cancelReason: "NO_HUMANS",
+                finalizedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+
+          if (aiPart && competitionKey) {
+            const cumulPoints = Number(aiPart.livePoints ?? 0) || 0;
+            const uid = String(aiPart.uid);
+            const typeKeyVal = ensureTypeKey(cur.type);
+
+            if (cumulPoints > 0) {
+              const memberRef = db
+                .collection("groups")
+                .doc(groupId)
+                .collection("leaderboards")
+                .doc(String(competitionKey))
+                .collection("members")
+                .doc(uid);
+
+              const memberSnap = await tx.get(memberRef);
+              const prev = memberSnap.exists ? memberSnap.data() || {} : {};
+
+              const prevPlays = readNumberSafe(prev.participations ?? prev.plays, 0);
+              const prevWins = readNumberSafe(prev.wins, 0);
+              const prevPointsTotal = readNumberSafe(prev.pointsTotal, 0);
+              const nextPlays = prevPlays + 1;
+              const nextPointsTotal = prevPointsTotal + cumulPoints;
+              const nextWinRate = nextPlays > 0 ? prevWins / nextPlays : 0;
+
+              const winsByType = readWinsByTypeSafe(prev.winsByType);
+              const prevType = readWinsByTypeSafe(winsByType[typeKeyVal]);
+              winsByType[typeKeyVal] = {
+                plays: readNumberSafe(prevType.plays, 0) + 1,
+                wins: readNumberSafe(prevType.wins, 0),
+                pointsTotal: readNumberSafe(prevType.pointsTotal, 0) + cumulPoints,
+              };
+
+              const prevTsFamily =
+                prev.families && typeof prev.families.ts === "object" ? prev.families.ts : {};
+              const nextTsPlays = readNumberSafe(prev.tsPlays ?? prevTsFamily.plays, 0) + 1;
+              const nextTsWins = readNumberSafe(prev.tsWins ?? prevTsFamily.wins, 0);
+              const nextTsPoints =
+                readNumberSafe(prev.tsPoints ?? prevTsFamily.points, 0) + cumulPoints;
+
+              tx.set(
+                memberRef,
+                {
+                  uid,
+                  participations: nextPlays,
+                  pointsTotal: nextPointsTotal,
+                  wins: prevWins,
+                  winRate: nextWinRate,
+                  winsByType,
+                  tsPoints: nextTsPoints,
+                  tsWins: nextTsWins,
+                  tsPlays: nextTsPlays,
+                  "families.ts.plays": nextTsPlays,
+                  "families.ts.wins": nextTsWins,
+                  "families.ts.points": nextTsPoints,
+                  updatedAt: FieldValue.serverTimestamp(),
+                  createdAt: prev.createdAt || FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
+
+            tx.set(
+              db.collection("groups").doc(groupId),
+              {
+                leaderboardSeasonDirty: true,
+                leaderboardSeasonDirtyAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
 
           return {
             applied: true,
@@ -526,7 +584,10 @@ export const finalizeDefiWinners = onSchedule(
             ...(bonusPerWinner > 0
               ? {
                   bonusPerWinner,
-                  bonusReward: cur.bonusReward || { type: "random", values: [6, 7] },
+                  bonusReward: cur.bonusReward || {
+                    type: "fixed",
+                    value: TS_WIN_BONUS_POINTS,
+                  },
                 }
               : {}),
             updatedAt: FieldValue.serverTimestamp(),
@@ -542,6 +603,7 @@ export const finalizeDefiWinners = onSchedule(
             {
               finalPoints: p.livePoints,
               payout,
+              ...(winners.includes(p.uid) ? { isWinner: true } : {}),
               ...(bonusPerWinner > 0 && winners.includes(p.uid) ? { bonus: bonusPerWinner } : {}),
               finalizedAt: FieldValue.serverTimestamp(),
             },
@@ -561,6 +623,7 @@ export const finalizeDefiWinners = onSchedule(
             {
               finalPoints: aiPart.livePoints,
               payout: aiPayout,
+              ...(aiIsWinner ? { isWinner: true } : {}),
               ...(bonusPerWinner > 0 && aiIsWinner ? { bonus: bonusPerWinner } : {}),
               finalizedAt: FieldValue.serverTimestamp(),
             },
@@ -574,9 +637,9 @@ export const finalizeDefiWinners = onSchedule(
           const uid = String(p.uid);
           const isWinner = winners.includes(uid);
 
-          const shareAmount = isWinner ? Number(winnerShares[uid] || 0) : 0;
+          const cumulPoints = Number(p.livePoints ?? 0) || 0;
           const bonusAmount = isWinner ? Number(bonusPerWinner || 0) : 0;
-          const addPoints = (shareAmount > 0 ? shareAmount : 0) + (bonusAmount > 0 ? bonusAmount : 0);
+          const addPoints = cumulPoints + bonusAmount;
 
           const memberRef = db
             .collection("groups")
@@ -772,55 +835,6 @@ export const finalizeDefiWinners = onSchedule(
         }
       }
 
-      const tsPushGate = await shouldAttemptTsWinPush(txResult, docSnap.ref);
-      const tsDefiType = isTsDefiType(tsPushGate.defiData?.type ?? d.type);
-
-      if (tsDefiType && tsPushGate.attempt) {
-        const winnerUids = await resolveTsWinnerUids({
-          defiId,
-          defiData: tsPushGate.defiData || d,
-          txResult,
-        });
-
-        if (winnerUids.length) {
-          try {
-            const pushRes = await notifyTsWinners({
-              defiId,
-              groupId: txResult.groupId,
-              winnerUids,
-              seasonId: competitionKey,
-            });
-            logger.info("finalizeDefiWinners: ts win push", {
-              defiId,
-              groupId: txResult.groupId,
-              winners: winnerUids.length,
-              winnerUids,
-              sent: pushRes?.sent || 0,
-              skipped: pushRes?.skipped || false,
-              reason: pushRes?.reason || null,
-            });
-          } catch (e) {
-            logger.warn("finalizeDefiWinners: ts win push failed", {
-              defiId,
-              groupId: txResult.groupId,
-              error: String(e?.message || e),
-            });
-          }
-        } else {
-          logger.warn("finalizeDefiWinners: ts win push skipped (no winners)", {
-            defiId,
-            groupId: txResult.groupId,
-            rawWinners: normalizeUidArray(tsPushGate.defiData?.winners ?? d.winners),
-          });
-        }
-      } else if (tsDefiType && !tsPushGate.attempt) {
-        logger.info("finalizeDefiWinners: ts win push not attempted", {
-          defiId,
-          groupId: txResult.groupId,
-          reason: tsPushGate.reason,
-        });
-      }
-
       if (
         txResult?.applied &&
         !txResult?.skippedAlreadyApplied &&
@@ -866,6 +880,53 @@ export const finalizeDefiWinners = onSchedule(
       if (txResult?.cancelled === "NO_HUMANS") cancelledNoHumans++;
     }
 
+    const dailyPushTargets = new Map(groupDayPairs);
+    try {
+      const discoveredPairs = await collectGroupDayPairsForDates([yYMD]);
+      for (const pair of discoveredPairs) {
+        dailyPushTargets.set(`${pair.groupId}|${pair.gameDateYmd}`, pair);
+      }
+    } catch (e) {
+      logger.warn("finalizeDefiWinners: daily top scorer discovery failed", {
+        error: String(e?.message || e),
+        gameDate: yYMD,
+      });
+    }
+
+    let dailyTopScorerSent = 0;
+    let dailyTopScorerSkipped = 0;
+
+    for (const pair of dailyPushTargets.values()) {
+      if (pair.gameDateYmd !== yYMD) continue;
+
+      try {
+        const pushRes = await notifyDailyTopScorer({
+          groupId: pair.groupId,
+          gameDateYmd: pair.gameDateYmd,
+        });
+        if (pushRes?.skipped) {
+          dailyTopScorerSkipped += 1;
+        } else if ((pushRes?.sent || 0) > 0) {
+          dailyTopScorerSent += 1;
+        }
+        logger.info("finalizeDefiWinners: daily top scorer push", {
+          groupId: pair.groupId,
+          gameDate: pair.gameDateYmd,
+          sent: pushRes?.sent || 0,
+          skipped: pushRes?.skipped || false,
+          reason: pushRes?.reason || null,
+          winners: pushRes?.winnerUids?.length || 0,
+          topScore: pushRes?.topScore ?? null,
+        });
+      } catch (e) {
+        logger.warn("finalizeDefiWinners: daily top scorer push failed", {
+          groupId: pair.groupId,
+          gameDate: pair.gameDateYmd,
+          error: String(e?.message || e),
+        });
+      }
+    }
+
     logger.info("finalizeDefiWinners: done", {
       processed,
       payoutApplied,
@@ -873,6 +934,8 @@ export const finalizeDefiWinners = onSchedule(
       skippedAlreadyApplied,
       cancelledNoParticipants,
       cancelledNoHumans,
+      dailyTopScorerSent,
+      dailyTopScorerSkipped,
       reason,
       version: PAYOUT_APPLIED_VERSION,
       catchupDays: CATCHUP_DAYS,

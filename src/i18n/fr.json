@@ -248,15 +248,14 @@
       "todayChallengeInfoBody":"Chaque défi Meilleurs pointeurs te demande de choisir un certain nombre de joueurs selon le format (ex. 2x2, 3x3). Tes joueurs accumulent des points réels selon leurs performances, et le meilleur total remporte le défi.",
       "tsInfoTitle": "Comment fonctionne ce défi",
       "tsInfoFunctioningTitle": "Fonctionnement",
-      "tsInfoFunctioning1": "Sois meilleur que tes amis en sélectionnant 3 joueurs qui jouent aujourd'hui.",
-      "tsInfoFunctioning2": "Le(s) participant(s) ayant cumulé le plus de points se partagent la cagnotte.",
-      "tsInfoFunctioning3": "La cagnotte augmente de 3 points par inscription.",
+      "tsInfoFunctioning1": "Choisis 3 joueurs qui jouent aujourd'hui.",
+      "tsInfoFunctioning2": "Tes joueurs cumulent des points en temps réel selon leurs performances.",
       "tsInfoScoringTitle": "Comment cumuler des points",
       "tsInfoScoringMlb": "Baseball : 1 point par coup sûr, 1 point boni par extra-base (double, triple ou circuit), 1 point par RBI et 1 point par run marqué.",
       "tsInfoScoringNhl": "Hockey : 1 point par but et 1 point par passe.",
       "tsPickOnePlayerTitle": "1 joueur à choisir",
       "tsPickPlayersTitle": "{{count}} joueurs à choisir",
-      "tsMyPrediction": "Ma prédiction",
+      "tsMyChoices": "Mes choix",
       "create":"Créer",
       "challengeDate": "Date NHL",
       "challengeLimit": "Limite d’inscription :",
@@ -280,6 +279,19 @@
       "groupChatTitle": "Chat du groupe",
       "groupChatUnavailable": "Chat indisponible pour ce groupe.",
       "dailyDefisAllEnrolled": "Bravo, tu es inscrit à tous les défis!",
+      "seasonTransition": {
+        "championTitle": "Champion·ne de la saison régulière",
+        "championBody": "{{names}} remporte la saison régulière {{sport}} avec {{points}} points.",
+        "playoffsTitle": "Les séries éliminatoires sont lancées!",
+        "playoffsBody": "Les défis quotidiens incluent maintenant les matchs de séries. Un nouveau classement {{sport}} est ouvert.",
+        "playoffsCta": "Voir le classement séries"
+      },
+      "sportSwitch": {
+        "title": "Nouvelle saison {{sport}}",
+        "body": "Tu es actif dans « {{activeGroup}} ». Active « {{inactiveGroup}} » pour jouer les défis {{sport}} — ton autre groupe passera en mode inactif.",
+        "activateCta": "Activer {{group}}",
+        "dismiss": "Plus tard"
+      },
       "dailyDefisResultsHintPrefix": "Regarde tes performances dans l'onglet ",
       "defiTab1": "Défi 1",
       "defiTab2": "Défi 2",
@@ -290,7 +302,8 @@
         "one": "{{count}} expiré",
         "other": "{{count}} expirés"
       },
-      "dailyDefisProgress": "{{count}} / {{total}} défis complétés",
+      "dailyDefisProgress": "{{count}} / {{total}} défis inscrits",
+      "autopilotChallengePending": "Ce défi n'est pas encore disponible. Avec la création automatique activée, il sera créé à 6 h 30.",
       "nextActionLabel": "Prochaine action",
       "nextActionCta": "Continuer",
       "nextActionCtaScroll": "Voir le défi",
@@ -361,6 +374,10 @@
         "upcoming": "À venir",
         "myPrediction": "Ma prédiction",
         "infoTitle": "Comment fonctionne ce défi",
+        "infoTitleMlbPrefix": "Fonctionnement du défi 1",
+        "infoTitleMlbOrdinal": "ier",
+        "infoTitleMlbSuffix": " point produit",
+        "infoTitleNhl": "Fonctionnement du défi premier but",
         "infoBody":"• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 10 points seront alloués à celui qui a prédit le bon joueur."
       },
       "create":{
@@ -427,6 +444,8 @@
         "noWinner": "Aucun gagnant",
         "noEntriesYet": "Aucune participation encore.",
         "picksTitle": "Participants & choix",
+        "pickHidden": "Choix caché jusqu'au début du match",
+        "participantsOnlyTitle": "Participants inscrits",
         "pending": "Provisoire / en révision NHL…",
         "locked": "Verrouillé (avant-match)",
         "open": "Ouvert"
@@ -532,6 +551,11 @@
           "ownerCreatedOn": "Propriétaire, groupe créé le {{date}}",
           "roleOwner": "Propriétaire",
           "roleMember": "Membre",
+          "participationStatusActive": "Actif",
+          "participationStatusInactive": "Inactif",
+          "participationStatusAdminOnly": "Admin seulement",
+          "novaAiParticipant": "Participant IA · assiste aux défis du groupe",
+          "novaAiBadge": "IA",
 
           "actionsSection": "Actions",
           "actionCreateChallenge": "Créer un défi",
@@ -635,6 +659,22 @@
         "manual": "Défis manuels"
       },
 
+      "participation": {
+        "label": "Participation aux défis",
+        "enabled": "activée",
+        "disabled": "désactivée",
+        "activate": "Activer la participation",
+        "switchGroup": "Jouer dans ce groupe",
+        "activating": "Activation…",
+        "activateSuccessTitle": "Participation activée",
+        "activateSuccessMessage": "Tu peux à nouveau jouer les défis de ce groupe.",
+        "switchSuccessMessage": "Tu participes maintenant aux défis de ce groupe.",
+        "activateLimitTitle": "Limite atteinte",
+        "activateLimitMessage": "Ton forfait {{tier}} permet {{max}} groupe(s) actif(s). Passe à un forfait supérieur ou désactive un autre groupe.",
+        "managePlan": "Gérer mon forfait →",
+        "managePlanAdmin": "Activer la participation → Forfaits"
+      },
+
       "emptyTitle": "Crée ton premier groupe ou rejoins tes amis",
       "emptyText": "Organise vos défis, invite tes amis et commence à gagner des points.",
       "emptyCreate": "Créer un groupe",
@@ -679,6 +719,10 @@
           "alertGenericErrorTitle": "Erreur",
           "alertLimitTitle": "Limite atteinte",
           "alertLimitMessage": "Ton abonnement {{tier}} permet max {{max}} groupe(s) au total (propriétaire ou membre). Tu en as déjà {{current}}. Passe à PRO/VIP pour augmenter la limite.",
+          "joinedInactiveTitle": "Groupe rejoint en mode inactif",
+          "joinedInactiveMessage": "Tu es membre de ce groupe, mais tu joues encore dans un autre groupe actif. Active ce groupe quand tu seras prêt à y jouer.",
+          "joinedInactiveLater": "Plus tard",
+          "joinedInactiveActivate": "Activer ce groupe",
           "scanBtn": "Scanner un QR",
           "scanTitle": "Scanner un QR",
           "scanHint": "Place le QR dans le cadre",
@@ -910,12 +954,18 @@
               "successMessage": "Bonne chance ! {{potMessage}}",
               "successPotMessage": "Cagnotte: {{count}} points",
               "successPotMessageSimple": "Participation enregistrée.",
+              "savedChoiceMessage": "Tes sélections sont enregistrées. Que veux-tu faire?",
               "genericErrorTitle": "Erreur"
           },
           "actions": {
               "primarySaving": "Création de la participation…",
               "primaryLocked": "Inscription fermée",
-              "primaryDefault": "Enregistrer ma participation"
+              "primaryDefault": "Enregistrer ma participation",
+              "autoSaving": "Enregistrement…",
+              "autoSaved": "Participation enregistrée",
+              "autoSaveHint": "Ta participation sera enregistrée automatiquement.",
+              "modifyAnotherPick": "Modifier un joueur",
+              "backToHome": "Retour à Aujourd'hui"
           },
           "results": {
               "header": {
@@ -976,8 +1026,8 @@
               "morningChallengesHint": "Rappel quand l'autopilote crée les défis du jour dans tes groupes.",
               "tpExactScore": "Prédire l'issue des matchs",
               "tpExactScoreHint": "Quand tu prédis le pointage exact d'un match.",
-              "tsWin": "Le trio du jour",
-              "tsWinHint": "Quand tu gagnes le défi Trio du jour.",
+              "tsWin": "Plus de points hier",
+              "tsWinHint": "Quand un participant remporte le plus de points de la soirée (SOLO + DUO + TRIO).",
               "fgcWin": "Bon joueur (premier point / but)",
               "fgcWinHint": "Quand tu prédis le bon joueur au défi premier point ou but.",
               "leaderboardRankUp": "Progression au classement",
@@ -1508,6 +1558,17 @@
       "autopilotLimitMessage": "Votre forfait permet d'automatiser jusqu'à {{max}} groupe(s). Désactivez Autopilot sur un autre groupe ou passez à un forfait supérieur.",
       "autopilotResolutionRequiredMessage": "Votre forfait permet {{max}} groupe(s) en défis automatiques. Choisissez les groupes à conserver dans l'écran de gestion.",
 
+      "groupCreateRateLimitedMessage": "Tu as créé trop de groupes récemment. Réessaie un peu plus tard.",
+
+      "participationDowngrade": {
+        "title": "Groupes actifs",
+        "body": "Ton forfait permet de jouer dans {{max}} groupe(s) à la fois. Choisis où tu veux continuer à participer aux défis.",
+        "selectedCount": "{{count}} / {{max}} sélectionné(s)",
+        "confirm": "Confirmer mon choix",
+        "selectRequiredTitle": "Sélection requise",
+        "selectRequiredBody": "Choisis au moins un groupe (maximum {{max}}) où tu veux continuer à jouer."
+      },
+
       "autopilotDowngrade": {
         "title": "Défis automatiques",
         "body": "Votre nouveau forfait permet {{max}} groupe(s) en défis automatiques. Choisissez le(s) groupe(s) qui conservera(ont) ce mode.",
@@ -1520,10 +1581,10 @@
       "myPlan": {
         "title": "Mon forfait",
         "currentPlan": "Plan actuel",
-        "ownedGroups": "Groupes possédés",
+        "activeGroups": "Groupes actifs (jeu)",
         "autopilotGroups": "Groupes automatisés",
         "novaAdvice": "Nova Advice",
-        "joinUnlimitedHint": "Tu peux rejoindre autant de groupes que tu veux. Seuls les groupes que tu possèdes comptent dans ton forfait."
+        "participationHint": "Tu peux créer et administrer autant de groupes que tu veux. Seuls les groupes où tu joues activement comptent dans ton forfait."
       },
 
       "perMonth": " / mois",
@@ -1543,15 +1604,18 @@
         "novaCoach": "{{count}} conseils Nova Coach / mois",
         "autopilotGroups": "{{count}} groupe(s) en défis automatiques",
         "free": {
-          "groups": "1 groupe (participant ou propriétaire)",
+          "groups": "1 groupe actif",
+          "activeGroups": "{{count}} groupe actif · création illimitée",
           "ownedGroups": "{{count}} groupe possédé · groupes rejoints illimités"
         },
         "pro": {
-          "groups": "5 groupes (participant ou propriétaire)",
+          "groups": "5 groupes actifs",
+          "activeGroups": "{{count}} groupes actifs · création illimitée",
           "ownedGroups": "{{count}} groupes possédés · groupes rejoints illimités"
         },
         "vip": {
-          "groups": "20 groupes (participant ou propriétaire)",
+          "groups": "20 groupes actifs",
+          "activeGroups": "{{count}} groupes actifs · création illimitée",
           "ownedGroups": "{{count}} groupes possédés · groupes rejoints illimités"
         }
       },
@@ -1624,6 +1688,8 @@
         "feature": "Fonctionnalité",
         "groups": "Groupes (participant ou propriétaire)",
         "ownedGroups": "Groupes possédés",
+        "activeGroups": "Groupes actifs (jeu)",
+        "createGroups": "Création de groupes",
         "joinedGroups": "Groupes rejoints",
         "autopilotGroups": "Groupes en défis automatiques",
         "unlimited": "Illimité",
@@ -1685,7 +1751,8 @@
         "fgcNhl": "Premier but",
         "fgc": "Prédire le premier but",
         "tp": "Prédire l'issue du match",
-        "ts": "Trio du jour"
+        "ts": "Trio du jour",
+        "dailyBonus": "Bonus meilleure soirée"
       },
 
       "columns": {
@@ -1699,6 +1766,7 @@
         "exactsShort": "Exact.",
         "victories": "Victoires",
         "victoriesShort": "Vict.",
+        "dailyBonusWinsShort": "Soirs",
         "correctPicks": "Bonnes prédictions",
         "shareFgc": "% du total (FGC)",
         "shareTp": "% du total (TP)",
@@ -1727,7 +1795,8 @@
           "fgcNhl": "Aucune donnée Premier but pour cette compétition.",
           "fgc": "Aucune donnée Prédire le premier but pour cette saison.",
           "tp": "Aucune donnée Prédire l'issue du match pour cette compétition.",
-          "ts": "Aucune donnée Trio du jour pour cette compétition."
+          "ts": "Aucune donnée Trio du jour pour cette compétition.",
+          "dailyBonus": "Aucun bonus meilleure soirée pour cette compétition."
         }
       },
 
@@ -1841,7 +1910,9 @@
       "loading": "Chargement des points…",
       "noChallenges": "Aucun défi du jour pour ce groupe.",
       "noParticipants": "Aucune participation pour l'instant.",
-      "hint": "Points provisoires selon les résultats confirmés ou en cours. Le trio peut évoluer pendant les matchs."
+      "hint": "Points provisoires selon les résultats confirmés ou en cours. Clique sur SOLO, DUO ou TRIO pour voir le détail.",
+      "tsWinnerBonusShort": "+{{bonus}} bonus",
+      "dailyBonusNote": "Bonus meilleure soirée : +{{bonus}} pts pour le plus haut total cumulé SOLO + DUO + TRIO (affiché en exposant sur la colonne Total)."
     },
     "badge": {
       "rbi": "SOLO",
@@ -2010,6 +2081,12 @@
     "noChallenges": "Aucun défi à afficher.",
     "selectDayLabel": "Sélectionne une journée",
     "noDefiForSelectedDay": "Aucun défi pour cette journée.",
+    "pointsOverview": {
+      "title": "Points — {{date}}",
+      "subtitle": "Récapitulatif par participant",
+      "hint": "Points finaux selon les résultats confirmés.",
+      "noChallenges": "Aucun défi pour cette journée."
+    },
     "seeResults": "Voir les résultats",
     "openChallenge": "Ouvrir",
     "viewParticipants": "Voir les participants",
@@ -2080,8 +2157,8 @@
       "title": "Prédire l'issue des matchs",
       "subtitleEmpty": "Choisis le gagnant et le pointage exact.",
       "empty": "Aucune prédiction de matchs disponible aujourd'hui dans tes groupes.",
-      "infoTitle": "Comment fonctionne ce défi",
-      "infoBody": "Choisis le pointage des confrontations proposées et cumule des points pour chaque bonne prédiction. Avec la bonne prédiction du pointage, cumule encore plus de points.",
+      "infoTitle": "Fonctionnement du défi Prédire les matchs",
+      "infoBody": "Choisis le pointage de chaque confrontation. Un match bien prédit donne 5 points ; un score exact donne 5 points supplémentaires.",
       "infoLockHint": "Chaque match se verrouille 5 minutes avant le début. Tu peux compléter tes prédictions progressivement.",
       "participateBeforePrefix": "Participer avant",
       "nextLockMatch": "Prochain verrouillage : Match {{n}}",
@@ -2096,6 +2173,7 @@
       "seeResults": "Voir le résultat",
       "viewResults": "Voir les résultats",
       "viewMyPicks": "Voir mes choix",
+      "myChoices": "Mes choix",
       "modifyTeam": "Modifier mon équipe",
       "modifyTeams": "Modifier mes équipes",
       "resultsAvailable": "Résultats disponibles",
@@ -2279,6 +2357,26 @@
   },
 
   "mlb": {
+    "batters": {
+      "title": "Statistiques frappeurs MLB",
+      "rank": "Pos",
+      "player": "Joueur",
+      "loading": "Chargement des joueurs…",
+      "loadingMore": "Chargement de plus de joueurs…",
+      "loadMore": "Charger plus",
+      "end": "Fin de la liste.",
+      "empty": "Aucune donnée.",
+      "error": "Impossible de charger les joueurs.",
+      "previousSeasonNotice": "Saison {{season}} — la prochaine saison n'a pas encore débuté.",
+      "qualificationNotice": "Qualifiés : ≥ {{minPa}} PA (seuil dynamique selon la progression de la saison)",
+      "sort": {
+        "rbi": "RBI",
+        "hits": "H",
+        "homeRuns": "HR",
+        "battingAverage": "%",
+        "ops": "OPS"
+      }
+    },
     "bvp": {
       "careerLine": "vs {{pitcher}} : {{pa}} PA · {{hits}} H · {{hr}} HR · {{rbi}} RBI · OPS {{ops}}",
       "shortLine": "{{pa}} PA · {{hits}} H · {{hr}} HR · OPS {{ops}}",

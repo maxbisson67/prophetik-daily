@@ -9,6 +9,7 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import TpParticipantsModal from "@src/defis/results/TpParticipantsModal";
+import TpParticipantsList from "@src/defis/results/TpParticipantsList";
 import { tpEntryHasParticipation } from "@src/defis/results/challengeResultsModel";
 import {
   formatParticipantTaskLabel,
@@ -549,6 +550,7 @@ export default function TpResultDetailBlock({
   accentColor = RESULTS_ACCENT,
   dividerColor = RESULTS_ACCENT_DIVIDER,
   dividerColorStrong = RESULTS_ACCENT_DIVIDER_STRONG,
+  showParticipantsInline = false,
 }) {
   const { user } = useAuth();
   const uid = String(user?.uid || "");
@@ -694,7 +696,15 @@ export default function TpResultDetailBlock({
         </Text>
       )}
 
-      {!loading && entries.length > 0 ? (
+      {showParticipantsInline ? (
+        <TpParticipantsList
+          bundle={bundle}
+          entries={entries}
+          loading={loading}
+          currentUid={uid}
+          colors={colors}
+        />
+      ) : !loading && entries.length > 0 ? (
         <TouchableOpacity
           onPress={() => setShowParticipantsModal(true)}
           activeOpacity={0.85}
@@ -721,15 +731,17 @@ export default function TpResultDetailBlock({
         </View>
       ) : null}
 
-      <TpParticipantsModal
-        visible={showParticipantsModal}
-        onClose={() => setShowParticipantsModal(false)}
-        bundle={bundle}
-        entries={entries}
-        loading={loading}
-        currentUid={uid}
-        colors={colors}
-      />
+      {!showParticipantsInline ? (
+        <TpParticipantsModal
+          visible={showParticipantsModal}
+          onClose={() => setShowParticipantsModal(false)}
+          bundle={bundle}
+          entries={entries}
+          loading={loading}
+          currentUid={uid}
+          colors={colors}
+        />
+      ) : null}
     </View>
   );
 }

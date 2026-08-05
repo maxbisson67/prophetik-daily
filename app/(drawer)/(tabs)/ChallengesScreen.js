@@ -1,5 +1,5 @@
 // app/(drawer)/(tabs)/ChallengesScreen.js
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
@@ -7,16 +7,14 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";
 
 import i18n from "@src/i18n/i18n";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
-import { ChallengeItemCard } from "@src/defis/list/ChallengeDayCard";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
-import HomeDefisToggle from "@src/home/components/HomeDefisToggle";
 import ResultsDayPicker from "@src/defis/results/ResultsDayPicker";
 import {
   getTpBundleFirstDeadline,
@@ -28,21 +26,16 @@ import {
   getProphetikBusinessYmd,
   addDaysToYmd,
 } from "@src/lib/prophetikBusinessDate";
-import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
-import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
+import HistoryDayDetailSections from "@src/defis/results/HistoryDayDetailSections";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 import { useMyGroups } from "@src/groups/MyGroupsProvider";
 import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
 import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
-import { isSignupDeadlinePassed } from "@src/home/homeUtils";
-import { buildTpBundleTabProgress } from "@src/defis/tpTabProgress";
 import {
   RESULTS_ACCENT,
-  RESULTS_ACCENT_MUTED,
 } from "@src/defis/results/resultsTheme";
-
-const GROUP_PLACEHOLDER = require("@src/assets/group-placeholder.png");
+import GroupPointsOverviewBlock from "@src/live/GroupPointsOverviewBlock";
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -125,15 +118,6 @@ function leftAccentCardStyle(colors, accent = RESULTS_ACCENT) {
   };
 }
 
-function withTabExpiry(progress, deadline) {
-  if (!progress?.total || progress.done >= progress.total) return progress;
-  if (progress.enrolled) return progress;
-  if (isSignupDeadlinePassed(deadline)) {
-    return { ...progress, expired: true };
-  }
-  return progress;
-}
-
 function prettyDateLabel(ymd) {
   const today = getProphetikBusinessYmd();
   const yesterday = ymdLocal(addDays(getProphetikBusinessDate(), -1));
@@ -170,12 +154,6 @@ function challengeSortValue(item) {
     tsToMillis(item?.createdAt) ||
     0
   );
-}
-
-function getWinnerUids(raw) {
-  if (Array.isArray(raw?.winnersPreviewUids)) return raw.winnersPreviewUids.map(String);
-  if (Array.isArray(raw?.winners)) return raw.winners.map(String);
-  return [];
 }
 
 /* ---------------------------- Normalization ------------------------------ */
@@ -290,7 +268,6 @@ function normalizeTpBundleDoc(doc) {
 
 export default function ChallengesScreen() {
   const { user, authReady } = useAuth();
-  const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
   const isFocused = useIsFocused();
@@ -307,9 +284,6 @@ export default function ChallengesScreen() {
   const paramGroupId = String(params?.groupId || "").trim();
   const paramOpenChallengeId = String(params?.openChallengeId || "").trim();
   const paramKind = String(params?.kind || "").trim().toLowerCase();
-
-  const [fgcModalItem, setFgcModalItem] = useState(null);
-  const [tpModalItem, setTpModalItem] = useState(null);
   const handledOpenRef = useRef("");
 
   const [loading, setLoading] = useState(true);
@@ -322,14 +296,11 @@ export default function ChallengesScreen() {
   const [selectedYmd, setSelectedYmd] = useState(() =>
     addDaysToYmd(getProphetikBusinessYmd(), -1)
   );
-  const [selectedDefiTab, setSelectedDefiTab] = useState("fgc");
 
   const tpItems = useMemo(
     () => mergeTpItemsByDate(tpBundleItems, tpLegacyItems),
     [tpBundleItems, tpLegacyItems]
   );
-
-  const [winnerInfoMap, setWinnerInfoMap] = useState({});
 
   const currentGroupUnsubsRef = useRef({
     ts: [],
@@ -337,7 +308,6 @@ export default function ChallengesScreen() {
     tp: [],
     tpBundle: [],
   });
-  const winnerUnsubsRef = useRef(new Map());
 
   const dayKeys = useMemo(() => buildResultsDayOptions(), []);
   const dayYmdSet = useMemo(() => new Set(dayKeys.map((d) => d.ymd)), [dayKeys]);
@@ -449,6 +419,16 @@ export default function ChallengesScreen() {
     [groupIds, groupsMap]
   );
 
+  const currentSport = useMemo(() => {
+    const g = groupsMap[currentGroupId] || {};
+    return String(g.sport || g.league || "NHL").toUpperCase();
+  }, [groupsMap, currentGroupId]);
+
+  const selectedDayLabel = useMemo(
+    () => dayOptions.find((d) => d.ymd === selectedYmd)?.label || selectedYmd,
+    [dayOptions, selectedYmd]
+  );
+
   useEffect(() => {
     if (!paramGroupId || !groupIds.includes(paramGroupId)) return;
     if (String(currentGroupId) !== paramGroupId) {
@@ -468,18 +448,6 @@ export default function ChallengesScreen() {
 
     if (item.dateKey) {
       setSelectedYmd(item.dateKey);
-    }
-    if (item.kind === "fgc" || item.kind === "tp" || item.kind === "ts") {
-      setSelectedDefiTab(item.kind);
-    }
-
-    if (item.kind === "fgc") {
-      setFgcModalItem(item);
-      return;
-    }
-
-    if (item.kind === "tp" && item.subtype === "bundle") {
-      setTpModalItem(item);
     }
   }, [paramOpenChallengeId, paramKind, allItems, loading]);
 
@@ -613,58 +581,7 @@ export default function ChallengesScreen() {
     return cleanup;
   }, [listenersEnabled, currentGroupId, dayKeys, dayYmdSet, groupsMap]);
 
-  /* ---------------- 5) winners info listeners ---------------- */
-
-  useEffect(() => {
-    const all = [...tsItems, ...fgcItems, ...tpItems];
-    const neededUids = Array.from(
-      new Set(all.flatMap((item) => getWinnerUids(item.raw)).filter(Boolean))
-    );
-
-    for (const [uid, un] of winnerUnsubsRef.current) {
-      if (!neededUids.includes(uid)) {
-        try {
-          un?.();
-        } catch {}
-        winnerUnsubsRef.current.delete(uid);
-      }
-    }
-
-    neededUids.forEach((uid) => {
-      if (winnerUnsubsRef.current.has(uid)) return;
-
-      const ref = firestore().collection("profiles_public").doc(uid);
-      const un = ref.onSnapshot(
-        (snap) => {
-          if (snapshotExists(snap)) {
-            const v = snapshotData(snap) || {};
-            setWinnerInfoMap((prev) => ({
-              ...prev,
-              [uid]: {
-                name: v.displayName || v.name || uid,
-                photoURL: v.avatarUrl || v.photoURL || null,
-              },
-            }));
-          } else {
-            setWinnerInfoMap((prev) => ({
-              ...prev,
-              [uid]: { name: uid, photoURL: null },
-            }));
-          }
-        },
-        () => {
-          setWinnerInfoMap((prev) => ({
-            ...prev,
-            [uid]: { name: uid, photoURL: null },
-          }));
-        }
-      );
-
-      winnerUnsubsRef.current.set(uid, un);
-    });
-  }, [tsItems, fgcItems, tpItems]);
-
-  /* ---------------- 6) items for selected day + tab ---------------- */
+  /* ---------------- 6) items for selected day ---------------- */
 
   const visibleItemsForDay = useMemo(() => {
     return [...fgcItems, ...tpItems, ...tsItems]
@@ -684,52 +601,6 @@ export default function ChallengesScreen() {
         return challengeSortValue(a) - challengeSortValue(b);
       });
   }, [fgcItems, tpItems, tsItems, selectedYmd, todayKey, fgcScheduleByChallengeId]);
-
-  const defiCompletionByTab = useMemo(() => {
-    const fgcItemsForDay = visibleItemsForDay.filter((item) => item.kind === "fgc");
-    const fgcHasChallenge = fgcItemsForDay.length > 0;
-    const fgcDone = fgcItemsForDay.some((item) => fgcParticipationMap[item.id]?.hasPick);
-    const fgc = fgcHasChallenge
-      ? withTabExpiry(
-          { done: fgcDone ? 1 : 0, total: 1 },
-          fgcItemsForDay[0]?.signupDeadline
-        )
-      : { done: 0, total: 0 };
-
-    const tpItem = visibleItemsForDay.find((item) => item.kind === "tp");
-    let tp = { done: 0, total: 0 };
-
-    if (tpItem) {
-      const entry = tpParticipationMap[tpItem.id];
-
-      if (tpItem.subtype === "bundle") {
-        const games = Array.isArray(tpItem.raw?.games) ? tpItem.raw.games : [];
-        tp = buildTpBundleTabProgress({
-          games,
-          picks: entry?.picks || {},
-          picksCompletedCount: entry?.picksCompletedCount,
-          scheduleByGameId,
-        });
-      } else {
-        tp = withTabExpiry(
-          { done: entry ? 1 : 0, total: 1 },
-          tpItem.signupDeadline
-        );
-      }
-    }
-
-    const tsItemsForDay = visibleItemsForDay.filter((item) => item.kind === "ts");
-    const tsHasChallenge = tsItemsForDay.length > 0;
-    const tsDone = tsItemsForDay.some((item) => !!tsParticipationMap[item.id]);
-    const ts = tsHasChallenge
-      ? withTabExpiry(
-          { done: tsDone ? 1 : 0, total: 1 },
-          tsItemsForDay[0]?.signupDeadline
-        )
-      : { done: 0, total: 0 };
-
-    return { fgc, tp, ts };
-  }, [visibleItemsForDay, fgcParticipationMap, tpParticipationMap, tsParticipationMap, scheduleByGameId]);
 
   /* ---------------- 6b) participation listeners ---------------- */
 
@@ -850,96 +721,8 @@ export default function ChallengesScreen() {
         });
         currentGroupUnsubsRef.current[k] = [];
       });
-
-      for (const [, un] of winnerUnsubsRef.current) {
-        try {
-          un?.();
-        } catch {}
-      }
-      winnerUnsubsRef.current.clear();
     };
   }, []);
-
-  /* ---------------- open card ---------------- */
-
-  const openChallenge = useCallback(
-    (item, _isToday, _participantTask = null, options = {}) => {
-      if (item.kind === "ts") {
-        router.push(`/(drawer)/defis/${item.id}/results`);
-        return;
-      }
-
-      if (item.kind === "fgc") {
-        setFgcModalItem(item);
-        return;
-      }
-
-      if (item.kind === "tp" && item.subtype === "bundle") {
-        setTpModalItem(item);
-      }
-    },
-    [router]
-  );
-
-  const renderDefiTabContent = useCallback(
-    (tab) => {
-      const items = visibleItemsForDay.filter((item) => item.kind === tab);
-
-      if (!items.length) {
-        return (
-          <Text
-            style={{
-              color: colors.subtext,
-              marginTop: 8,
-              textAlign: "center",
-              lineHeight: 20,
-            }}
-          >
-            {i18n.t("challenges.noDefiForSelectedDay", {
-              defaultValue: "Aucun défi pour cette journée.",
-            })}
-          </Text>
-        );
-      }
-
-      return items.map((item, index) => (
-        <View key={`${item.kind}-${item.id}`}>
-          {index > 0 ? (
-            <View
-              style={{
-                height: 4,
-                backgroundColor: RESULTS_ACCENT_MUTED,
-                marginTop: 10,
-                marginBottom: 8,
-                marginHorizontal: 2,
-              }}
-            />
-          ) : null}
-
-          <ChallengeItemCard
-            item={item}
-            isToday={isSelectedToday}
-            colors={colors}
-            winnerInfoMap={winnerInfoMap}
-            participationMaps={participationMaps}
-            scheduleByChallengeId={fgcScheduleByChallengeId}
-            scheduleByGameId={scheduleByGameId}
-            onOpen={openChallenge}
-          />
-        </View>
-      ));
-    },
-    [
-      visibleItemsForDay,
-      isSelectedToday,
-      colors,
-      winnerInfoMap,
-      participationMaps,
-      fgcScheduleByChallengeId,
-      scheduleByGameId,
-      openChallenge,
-    ]
-  );
 
   /* ---------------- UI states ---------------- */
 
@@ -999,22 +782,6 @@ export default function ChallengesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <FgcChallengeModal
-        visible={!!fgcModalItem}
-        item={fgcModalItem}
-        colors={colors}
-        onClose={() => setFgcModalItem(null)}
-      />
-
-      <TpMyPicksModal
-        visible={!!tpModalItem}
-        item={tpModalItem}
-        myEntry={tpModalItem ? tpParticipationMap[String(tpModalItem.id)] : null}
-        colors={colors}
-        scheduleByGameId={scheduleByGameId}
-        onClose={() => setTpModalItem(null)}
-      />
-
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
@@ -1033,27 +800,35 @@ export default function ChallengesScreen() {
           onChange={setSelectedYmd}
         />
 
+        {currentGroupId ? (
+          <View style={[cardShadow(), { marginTop: 12 }]}>
+            <GroupPointsOverviewBlock
+              groupId={currentGroupId}
+              sport={currentSport}
+              gameYmd={selectedYmd}
+              colors={colors}
+              variant="history"
+              dateLabel={selectedDayLabel}
+            />
+          </View>
+        ) : null}
+
         <View style={[cardShadow(), { marginTop: 12 }]}>
           <View style={leftAccentCardStyle(colors, RESULTS_ACCENT)}>
-            <HomeDefisToggle
-              accentColor={RESULTS_ACCENT}
-              value={selectedDefiTab}
-              onChange={setSelectedDefiTab}
+            <Text style={{ fontSize: 18, fontWeight: "900", color: colors.text, marginBottom: 4 }}>
+              {i18n.t("challenges.pastDaySummary", {
+                defaultValue: "Résultats des défis de cette journée",
+              })}
+            </Text>
+
+            <HistoryDayDetailSections
+              items={visibleItemsForDay}
+              isToday={isSelectedToday}
               colors={colors}
-              completedByTab={defiCompletionByTab}
+              participationMaps={participationMaps}
+              scheduleByChallengeId={fgcScheduleByChallengeId}
+              scheduleByGameId={scheduleByGameId}
             />
-
-            <View style={selectedDefiTab === "fgc" ? undefined : { display: "none" }}>
-              {renderDefiTabContent("fgc")}
-            </View>
-
-            <View style={selectedDefiTab === "tp" ? undefined : { display: "none" }}>
-              {renderDefiTabContent("tp")}
-            </View>
-
-            <View style={selectedDefiTab === "ts" ? undefined : { display: "none" }}>
-              {renderDefiTabContent("ts")}
-            </View>
           </View>
         </View>
       </ScrollView>

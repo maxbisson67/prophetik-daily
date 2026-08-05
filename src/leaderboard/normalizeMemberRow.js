@@ -12,11 +12,13 @@ export default function normalizeMemberRow(row) {
   const tsPlays = tsStats.plays;
 
   const pointsTotal =
-    Number(r.pointsTotal ?? fgcPoints + tpPoints + tsPoints) || 0;
+    Number(r.pointsTotal ?? fgcPoints + tpPoints + tsPoints + dailyBonusPoints) || 0;
 
   const fgcWins = Number(r.fgcWins ?? r?.families?.fgc?.wins ?? 0) || 0;
   const tpWins = Number(r.tpWins ?? r?.families?.tp?.wins ?? 0) || 0;
   const tpExactWins = Number(r.tpExactWins ?? r?.families?.tp?.exacts ?? 0) || 0;
+  const dailyBonusWins = Number(r.dailyBonusWins ?? r?.families?.daily?.wins ?? 0) || 0;
+  const dailyBonusPoints = Number(r.dailyBonusPoints ?? r?.families?.daily?.points ?? 0) || 0;
 
   const wins = Number(r.wins ?? fgcWins + tpWins + tsWins) || 0;
   const participations = Number(r.participations ?? 0) || 0;
@@ -41,6 +43,8 @@ export default function normalizeMemberRow(row) {
     fgcWins,
     tpWins,
     tpExactWins,
+    dailyBonusWins,
+    dailyBonusPoints,
     wins,
     participations,
     winRate,

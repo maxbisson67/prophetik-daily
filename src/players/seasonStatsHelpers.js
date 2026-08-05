@@ -1,5 +1,8 @@
 /** Saison MLB (année civile) et NHL (YYYYYYYY, bascule juillet). */
 
+import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
+import { defaultMlbSeasonBounds } from "@src/season/seasonCompetitionCore";
+
 export function getMlbCurrentSeason(date = new Date()) {
   return String(date.getUTCFullYear());
 }
@@ -23,6 +26,90 @@ export function getNhlPreviousSeasonId(seasonId) {
   return `${start - 1}${start}`;
 }
 
+/**
+ * Saison NHL à afficher pour les leaders patineurs.
+ * Avant le début de la saison régulière calendaire, on retombe sur la saison précédente.
+ */
+export function resolveNhlLeadersSeasonId({
+  date = new Date(),
+  seasonConfig = null,
+  todayYmd = null,
+} = {}) {
+  const calendarSeasonId = getNhlCurrentSeasonId(date);
+  const ymd = String(todayYmd || getProphetikBusinessYmd(date)).slice(0, 10);
+
+  const calStartYear = Number(calendarSeasonId.slice(0, 4));
+  let rsStart = `${calStartYear}-10-01`;
+
+  const cfg = seasonConfig || {};
+  if (String(cfg.seasonId || "") === calendarSeasonId) {
+    rsStart = String(
+      cfg.regularSeasonStartYmd ||
+        cfg.regularSeasonStartDate ||
+        cfg.fromYmd ||
+        rsStart
+    ).slice(0, 10);
+  }
+
+  const previousId = getNhlPreviousSeasonId(calendarSeasonId);
+  if (previousId && ymd < rsStart) {
+    return {
+      seasonId: previousId,
+      calendarSeasonId,
+      isPreviousSeason: true,
+    };
+  }
+
+  return {
+    seasonId: calendarSeasonId,
+    calendarSeasonId,
+    isPreviousSeason: false,
+  };
+}
+
+/**
+ * Saison MLB à afficher pour les leaders frappeurs.
+ * Avant l'ouverture de la saison régulière, on retombe sur la saison précédente.
+ */
+export function resolveMlbLeadersSeasonId({
+  date = new Date(),
+  seasonConfig = null,
+  todayYmd = null,
+} = {}) {
+  const calendarSeasonId = getMlbCurrentSeason(date);
+  const ymd = String(todayYmd || getProphetikBusinessYmd(date)).slice(0, 10);
+  const bounds = defaultMlbSeasonBounds(calendarSeasonId);
+  let rsStart = bounds.regular.fromYmd;
+
+  const cfg = seasonConfig || {};
+  if (
+    String(cfg.sport || "").toLowerCase() === "mlb" &&
+    String(cfg.seasonId || "") === calendarSeasonId
+  ) {
+    rsStart = String(
+      cfg.regularSeasonStartYmd ||
+        cfg.regularSeasonStartDate ||
+        cfg.fromYmd ||
+        rsStart
+    ).slice(0, 10);
+  }
+
+  const previousId = getMlbPreviousSeason(date);
+  if (previousId && ymd < rsStart) {
+    return {
+      seasonId: previousId,
+      calendarSeasonId,
+      isPreviousSeason: true,
+    };
+  }
+
+  return {
+    seasonId: calendarSeasonId,
+    calendarSeasonId,
+    isPreviousSeason: false,
+  };
+}
+
 export function getSeasonPairForLeague(league, date = new Date()) {
   const L = String(league || "NHL").toUpperCase();
   if (L === "MLB") {
@@ -39,6 +126,108 @@ export function formatSeasonLabel(league, seasonId) {
   if (L === "MLB") return s;
   if (!/^\d{8}$/.test(s)) return s;
   return `${s.slice(0, 4)}-${s.slice(6, 8)}`;
+}
+
+/** Seuil dynamique de qualification pour % et OPS (règle MLB : 3,1 PA par match d'équipe). */
+export const MLB_REGULAR_SEASON_GAMES = 162;
+export const MLB_PA_PER_TEAM_GAME = 3.1;
+export const MLB_RATE_STAT_MIN_PA_FLOOR = 50;
+
+export const MLB_RATE_STAT_SORT_FIELDS = new Set(["battingAverage", "ops"]);
+
+export function isMlbRateStatSortField(sortField) {
+  return MLB_RATE_STAT_SORT_FIELDS.has(String(sortField || ""));
+}
+
+function ymdToUtcDate(ymd) {
+  const s = String(ymd || "").slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+export function resolveMlbRegularSeasonBounds(seasonId, seasonConfig = null) {
+  const bounds = defaultMlbSeasonBounds(seasonId);
+  let rsStart = bounds.regular.fromYmd;
+  let rsEnd = bounds.regular.toYmd;
+
+  const cfg = seasonConfig || {};
+  if (
+    String(cfg.sport || "").toLowerCase() === "mlb" &&
+    String(cfg.seasonId || "") === String(seasonId)
+  ) {
+    rsStart = String(
+      cfg.regularSeasonStartYmd ||
+        cfg.regularSeasonStartDate ||
+        cfg.fromYmd ||
+        rsStart
+    ).slice(0, 10);
+    rsEnd = String(cfg.regularSeasonEndYmd || cfg.toYmd || rsEnd).slice(0, 10);
+  }
+
+  return { rsStart, rsEnd };
+}
+
+/** Estime les matchs joués par une équipe selon la progression calendaire de la saison. */
+export function estimateMlbTeamGamesPlayedFromCalendar({
+  todayYmd,
+  seasonStartYmd,
+  seasonEndYmd,
+  totalGames = MLB_REGULAR_SEASON_GAMES,
+} = {}) {
+  const today = String(todayYmd || "").slice(0, 10);
+  const start = String(seasonStartYmd || "").slice(0, 10);
+  const end = String(seasonEndYmd || "").slice(0, 10);
+
+  if (!start || !end) return 0;
+  if (today <= start) return 0;
+  if (today >= end) return totalGames;
+
+  const startDt = ymdToUtcDate(start);
+  const endDt = ymdToUtcDate(end);
+  const todayDt = ymdToUtcDate(today);
+  if (!startDt || !endDt || !todayDt) return 0;
+
+  const totalMs = endDt.getTime() - startDt.getTime();
+  const elapsedMs = todayDt.getTime() - startDt.getTime();
+  if (totalMs <= 0) return 0;
+
+  const ratio = Math.min(1, Math.max(0, elapsedMs / totalMs));
+  return Math.min(totalGames, Math.round(ratio * totalGames));
+}
+
+export function computeMlbRateStatMinPlateAppearances({
+  date = new Date(),
+  seasonConfig = null,
+  seasonId = null,
+  isPreviousSeason = false,
+  todayYmd = null,
+} = {}) {
+  if (isPreviousSeason) {
+    return Math.ceil(MLB_PA_PER_TEAM_GAME * MLB_REGULAR_SEASON_GAMES);
+  }
+
+  const ymd = String(todayYmd || getProphetikBusinessYmd(date)).slice(0, 10);
+  const { rsStart, rsEnd } = resolveMlbRegularSeasonBounds(seasonId, seasonConfig);
+  const teamGames = estimateMlbTeamGamesPlayedFromCalendar({
+    todayYmd: ymd,
+    seasonStartYmd: rsStart,
+    seasonEndYmd: rsEnd,
+  });
+
+  const minPa = Math.round(teamGames * MLB_PA_PER_TEAM_GAME);
+  return Math.max(MLB_RATE_STAT_MIN_PA_FLOOR, minPa);
+}
+
+export function isMlbBatterQualifiedForRateStat(row, minPa) {
+  const threshold = Number(minPa) || 0;
+  const pa = Number(row?.plateAppearances);
+  if (Number.isFinite(pa) && pa >= threshold) return true;
+
+  const ab = Number(row?.atBats);
+  if (Number.isFinite(ab) && ab >= threshold) return true;
+
+  return false;
 }
 
 export function normalizeStatsBySeason(raw) {

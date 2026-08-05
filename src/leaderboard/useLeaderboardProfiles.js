@@ -94,13 +94,15 @@ export default function useLeaderboardProfiles(uids) {
 }
 
 export function resolveLeaderboardMember(row, profiles) {
-  const prof = profiles[String(row?.id)] || {};
+  const memberId = String(row?.uid || row?.id || "").trim();
+  const prof = profiles[memberId] || {};
 
   const displayName =
     prof.participantDisplayName ||
     prof.publicDisplayName ||
     row?.displayName ||
-    row?.id;
+    memberId ||
+    i18n.t("common.guest", { defaultValue: "Invité" });
 
   const avatarUrl =
     prof.participantAvatarUrl ||

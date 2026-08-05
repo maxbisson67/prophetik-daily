@@ -5,3 +5,10 @@ export function isActiveMembership(m = {}) {
   if (st) return ["open", "active", "approved"].includes(st);
   return m?.active !== false;
 }
+
+export {
+  PARTICIPATION,
+  canManageGroup,
+  isParticipatingMember,
+  resolveParticipation,
+} from "./participationUtils.js";

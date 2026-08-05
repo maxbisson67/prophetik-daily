@@ -76,7 +76,13 @@ function ColumnHeader({ columns, colors }) {
     >
       <View style={{ width: 36 }} />
       <View style={{ flex: nameFlex, minWidth: 0, paddingRight: 6 }}>
-        <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800" }}>
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: columns[0]?.headerSize || 11,
+            fontWeight: "800",
+          }}
+        >
           {columns[0]?.label || ""}
         </Text>
       </View>
@@ -106,6 +112,28 @@ function ColumnHeader({ columns, colors }) {
   );
 }
 
+function SeeAllFooter({ visible, expanded, onPress, colors, t }) {
+  if (!visible) return null;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={{
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        alignItems: "flex-end",
+      }}
+    >
+      <Text style={{ color: colors.primary, fontWeight: "900", fontSize: 13 }}>
+        {expanded ? t("leaderboard.actions.showLess") : t("leaderboard.actions.showAll")}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function ChallengeCard({
   sport,
   challengeKind,
@@ -123,14 +151,19 @@ function ChallengeCard({
 }) {
   const [showAll, setShowAll] = useState(false);
 
-  const sorted = useMemo(() => {
+  const allSorted = useMemo(() => {
     const copy = [...(rows || [])];
     copy.sort((a, b) => Number(sortValue(b) ?? 0) - Number(sortValue(a) ?? 0));
-    return copy.filter((row) => hasActivity(row));
-  }, [rows, sortValue, hasActivity]);
+    return copy;
+  }, [rows, sortValue]);
 
-  const visibleRows = showAll ? sorted : sorted.slice(0, 5);
-  const hasMore = sorted.length > 5;
+  const activeSorted = useMemo(
+    () => allSorted.filter((row) => hasActivity(row)),
+    [allSorted, hasActivity]
+  );
+
+  const visibleRows = showAll ? allSorted : activeSorted.slice(0, 5);
+  const hasMore = allSorted.length > 5;
 
   return (
     <View style={[cardStyle(colors, accent), { marginBottom: 16 }]}>
@@ -157,26 +190,15 @@ function ChallengeCard({
         profiles={profiles}
         onParticipantPress={onParticipantPress}
         emptyText={emptyText}
+        compact
       />
-      {hasMore ? (
-        <TouchableOpacity
-          onPress={() => setShowAll((v) => !v)}
-          activeOpacity={0.85}
-          style={{
-            paddingVertical: 12,
-            paddingHorizontal: 14,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            alignItems: "flex-end",
-          }}
-        >
-          <Text style={{ color: colors.primary, fontWeight: "900", fontSize: 13 }}>
-            {showAll
-              ? t("leaderboard.actions.showLess")
-              : t("leaderboard.actions.showAll")}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
+      <SeeAllFooter
+        visible={hasMore}
+        expanded={showAll}
+        onPress={() => setShowAll((v) => !v)}
+        colors={colors}
+        t={t}
+      />
     </View>
   );
 }
@@ -189,17 +211,20 @@ function RankedRows({
   profiles,
   onParticipantPress,
   emptyText,
+  compact = false,
 }) {
   if (!rows?.length) {
     return (
       <View style={{ padding: 20, alignItems: "center" }}>
-        <Text style={{ color: colors.subtext, fontWeight: "700" }}>{emptyText}</Text>
+        <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: compact ? 12 : 14 }}>
+          {emptyText}
+        </Text>
       </View>
     );
   }
 
   const nameFlex = playerColumnFlex(columns);
-  const compactStats = columns.length > 3;
+  const compactStats = compact || columns.length > 3;
   const avatarSize = compactStats ? 26 : 30;
 
   return rows.map((row, idx) => {
@@ -292,9 +317,9 @@ function RankedRows({
               ) : (
                 <Text
                   style={{
-                    color: col.color || colors.text,
-                    fontWeight: col.bold ? "900" : "700",
-                    fontSize: col.small ? 11 : compactStats ? 12 : 14,
+                    color: col.bold ? colors.text : col.color || colors.text,
+                    fontWeight: col.bold ? "900" : "600",
+                    fontSize: col.bold ? (compactStats ? 13 : 15) : col.small ? 11 : compactStats ? 12 : 14,
                     textAlign: col.align === "right" ? "right" : "center",
                   }}
                   numberOfLines={1}
@@ -312,61 +337,74 @@ function RankedRows({
   });
 }
 
-function buildChallengeColumns({ t, accent, variant }) {
-  const statColumn = (key, label, render, options = {}) => ({
+function statColumn(key, label, render, options = {}) {
+  return {
     key,
     label,
-    flex: options.flex ?? 1,
-    headerSize: options.headerSize,
+    flex: options.flex ?? 0.55,
+    headerSize: options.headerSize ?? 10,
     align: options.align,
     render,
-    color: accent,
-    bold: true,
-    small: options.small,
-  });
+    color: options.color,
+    bold: options.bold ?? false,
+    small: options.small ?? true,
+  };
+}
+
+function buildChallengeColumns({ t, accent, variant }) {
+  const pointsLabel = t("leaderboard.columns.pointsShort", { defaultValue: "Pts" });
+  const pointsColumn = (render) =>
+    statColumn("points", pointsLabel, render, { bold: true, color: accent });
 
   if (variant === "fgc") {
     return [
-      { key: "player", label: t("leaderboard.columns.player"), flex: 1.8 },
-      statColumn("successes", t("leaderboard.columns.successesShort", { defaultValue: "Réuss." }), (row) =>
-        String(Number(row?.fgcWins ?? 0) || 0),
-        { flex: 0.75 }
+      { key: "player", label: t("leaderboard.columns.player"), flex: 2.2 },
+      statColumn(
+        "successes",
+        t("leaderboard.columns.successesShort", { defaultValue: "Réuss." }),
+        (row) => String(Number(row?.fgcWins ?? 0) || 0)
       ),
-      statColumn("points", t("leaderboard.columns.pointsShort", { defaultValue: "Pts" }), (row) =>
-        String(fgcDisplayPoints(row)),
-        { flex: 0.75 }
-      ),
+      pointsColumn((row) => String(fgcDisplayPoints(row))),
     ];
   }
 
   if (variant === "tp") {
     return [
       { key: "player", label: t("leaderboard.columns.player"), flex: 2.2 },
-      statColumn("successes", t("leaderboard.columns.successesShort", { defaultValue: "Réuss." }), (row) =>
-        String(Number(row?.tpWins ?? 0) || 0),
-        { flex: 0.55, small: true }
+      statColumn(
+        "successes",
+        t("leaderboard.columns.successesShort", { defaultValue: "Réuss." }),
+        (row) => String(Number(row?.tpWins ?? 0) || 0)
       ),
-      statColumn("exacts", t("leaderboard.columns.exactsShort", { defaultValue: "Exact." }), (row) =>
-        String(deriveTpExactCount(row)),
-        { flex: 0.55, small: true }
+      statColumn(
+        "exacts",
+        t("leaderboard.columns.exactsShort", { defaultValue: "Exact." }),
+        (row) => String(deriveTpExactCount(row))
       ),
-      statColumn("points", t("leaderboard.columns.pointsShort", { defaultValue: "Pts" }), (row) =>
-        String(Number(row?.tpPoints ?? 0) || 0),
-        { flex: 0.55, small: true }
+      pointsColumn((row) => String(Number(row?.tpPoints ?? 0) || 0)),
+    ];
+  }
+
+  if (variant === "dailyBonus") {
+    return [
+      { key: "player", label: t("leaderboard.columns.player"), flex: 2.2 },
+      statColumn(
+        "dailyBonusWins",
+        t("leaderboard.columns.dailyBonusWinsShort", { defaultValue: "Soirs" }),
+        (row) => String(Number(row?.dailyBonusWins ?? 0) || 0)
       ),
+      pointsColumn((row) => String(Number(row?.dailyBonusPoints ?? 0) || 0)),
     ];
   }
 
   return [
-    { key: "player", label: t("leaderboard.columns.player"), flex: 1.8 },
-    statColumn("victories", t("leaderboard.columns.victoriesShort", { defaultValue: "Vict." }), (row) =>
-      String(Number(row?.tsWins ?? 0) || 0),
-      { flex: 0.75 }
+    { key: "player", label: t("leaderboard.columns.player"), flex: 2.2 },
+    statColumn(
+      "victories",
+      t("leaderboard.columns.victoriesShort", { defaultValue: "Vict." }),
+      (row) => String(Number(row?.tsWins ?? 0) || 0)
     ),
-    statColumn("points", t("leaderboard.columns.pointsShort", { defaultValue: "Pts" }), (row) =>
-      String(Number(row?.tsPoints ?? 0) || 0),
-      { flex: 0.75 }
-    ),
+    pointsColumn((row) => String(Number(row?.tsPoints ?? 0) || 0)),
   ];
 }
 
@@ -394,6 +432,9 @@ export default function LeaderboardGroupDashboard({
         : t("leaderboard.sections.fgcNhl", { defaultValue: "Premier but" }),
       tp: t("leaderboard.sections.tp", { defaultValue: "Prédire l'issue du match" }),
       ts: t("leaderboard.sections.ts", { defaultValue: "Trio du jour" }),
+      dailyBonus: t("leaderboard.sections.dailyBonus", {
+        defaultValue: "Bonus meilleure soirée",
+      }),
     }),
     [mlb, t]
   );
@@ -413,6 +454,9 @@ export default function LeaderboardGroupDashboard({
       ts: t("leaderboard.challenge.noStats.ts", {
         defaultValue: "Aucune donnée Trio du jour pour cette compétition.",
       }),
+      dailyBonus: t("leaderboard.challenge.noStats.dailyBonus", {
+        defaultValue: "Aucun bonus meilleure soirée pour cette compétition.",
+      }),
     }),
     [mlb, t]
   );
@@ -427,13 +471,15 @@ export default function LeaderboardGroupDashboard({
   const hasMoreTotals = totalsSorted.length > 5;
 
   const totalsColumns = [
-    { key: "player", label: t("leaderboard.columns.player"), flex: 1.8 },
+    { key: "player", label: t("leaderboard.columns.player"), flex: 2.2 },
     {
       key: "pointsTotal",
       label: t("leaderboard.columns.total"),
-      flex: 0.9,
+      flex: 0.55,
       align: "right",
       bold: true,
+      small: true,
+      headerSize: 10,
       render: (row) => formatPts(row?.pointsTotal ?? 0),
     },
   ];
@@ -463,26 +509,15 @@ export default function LeaderboardGroupDashboard({
           profiles={profiles}
           onParticipantPress={onParticipantPress}
           emptyText={emptyText}
+          compact
         />
-        {hasMoreTotals ? (
-          <TouchableOpacity
-            onPress={() => setShowAllTotals((v) => !v)}
-            activeOpacity={0.85}
-            style={{
-              paddingVertical: 12,
-              paddingHorizontal: 14,
-              borderTopWidth: 1,
-              borderTopColor: colors.border,
-              alignItems: "flex-end",
-            }}
-          >
-            <Text style={{ color: colors.primary, fontWeight: "900", fontSize: 13 }}>
-              {showAllTotals
-                ? t("leaderboard.actions.showLess")
-                : t("leaderboard.actions.showAll")}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
+        <SeeAllFooter
+          visible={hasMoreTotals}
+          expanded={showAllTotals}
+          onPress={() => setShowAllTotals((v) => !v)}
+          colors={colors}
+          t={t}
+        />
       </View>
 
       <ChallengeCard
@@ -543,6 +578,30 @@ export default function LeaderboardGroupDashboard({
         profiles={profiles}
         onParticipantPress={onParticipantPress}
         emptyText={emptyTexts.ts}
+        t={t}
+      />
+
+      <ChallengeCard
+        sport={sport}
+        challengeKind={null}
+        title={sectionTitles.dailyBonus}
+        accent={colors.primary || "#ef4444"}
+        rows={normalizedRows}
+        columns={buildChallengeColumns({
+          t,
+          accent: colors.primary || "#ef4444",
+          variant: "dailyBonus",
+        })}
+        sortValue={(row) => Number(row?.dailyBonusWins ?? 0) || 0}
+        hasActivity={(row) => {
+          const wins = Number(row?.dailyBonusWins ?? 0) || 0;
+          const pts = Number(row?.dailyBonusPoints ?? 0) || 0;
+          return wins > 0 || pts > 0;
+        }}
+        colors={colors}
+        profiles={profiles}
+        onParticipantPress={onParticipantPress}
+        emptyText={emptyTexts.dailyBonus}
         t={t}
       />
     </View>

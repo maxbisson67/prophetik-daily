@@ -10,7 +10,8 @@ import {
   countOwnedGroups,
   listOwnedGroups,
 } from "./groupOwnership.js";
-import { isAutopilotOverLimit } from "./planEnforcement.js";
+import { isAutopilotOverLimit, isActiveParticipationOverLimit } from "./planEnforcement.js";
+import { countActiveParticipations } from "./participationUtils.js";
 
 export { getPlanLimits, getUserPlanLimits, normalizePlanTier, readUserPlanTier };
 export {
@@ -42,27 +43,39 @@ export async function readNovaAdviceUsage(db, uid, period = novaQuotaPeriodKey()
 }
 
 export async function getUserPlanUsage(db, uid) {
-  const { tier, ownedGroupsLimit, autopilotGroupsLimit, novaAdviceMonthlyLimit } =
-    await getUserPlanLimits(db, uid);
+  const {
+    tier,
+    activeGroupsLimit,
+    ownedGroupsLimit,
+    autopilotGroupsLimit,
+    novaAdviceMonthlyLimit,
+  } = await getUserPlanLimits(db, uid);
   const ownedGroupsCount = await countOwnedGroups(db, uid);
   const autopilotGroupsCount = await countAutopilotOwnedGroups(db, uid);
+  const activeParticipationsCount = await countActiveParticipations(db, uid);
   const novaUsage = await readNovaAdviceUsage(db, uid);
 
   return {
     tier,
     limits: {
+      activeGroupsLimit,
       ownedGroupsLimit,
       autopilotGroupsLimit,
       novaAdviceMonthlyLimit,
     },
     usage: {
+      activeParticipationsCount,
       ownedGroupsCount,
       autopilotGroupsCount,
       novaAdviceUsed: novaUsage.novaAdviceUsed,
     },
     flags: {
+      needsParticipationResolution: isActiveParticipationOverLimit(
+        activeParticipationsCount,
+        tier
+      ),
       needsAutopilotResolution: isAutopilotOverLimit(autopilotGroupsCount, tier),
-      canCreateOwnedGroup: ownedGroupsCount < ownedGroupsLimit,
+      canJoinOrActivateParticipation: activeParticipationsCount < activeGroupsLimit,
     },
     period: novaUsage.period,
   };

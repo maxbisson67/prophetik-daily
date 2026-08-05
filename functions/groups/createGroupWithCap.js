@@ -5,10 +5,15 @@ import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { parseAutopilotEnabled, parseFavoriteTeam } from "./groupConfigUtils.js";
 import {
-  assertCanCreateOwnedGroup,
   assertCanSetAutopilot,
   readUserPlanTier,
 } from "./groupTierLimits.js";
+import { assertCanCreateGroup, recordGroupCreation } from "./groupCreationGuard.js";
+import {
+  assertCanSetParticipationActive,
+  initialOwnerParticipation,
+} from "./participationEnforcement.js";
+import { countActiveParticipations, PARTICIPATION } from "./participationUtils.js";
 
 initializeApp();
 const db = getFirestore();
@@ -47,7 +52,14 @@ export const createGroupWithCap = onCall(async (req) => {
   });
 
   const tier = await readUserPlanTier(db, uid);
-  await assertCanCreateOwnedGroup(db, uid, tier);
+  const createRateState = await assertCanCreateGroup(db, uid);
+
+  const activeCount = await countActiveParticipations(db, uid);
+  const ownerParticipation = initialOwnerParticipation(activeCount, tier);
+
+  if (ownerParticipation === PARTICIPATION.ACTIVE) {
+    await assertCanSetParticipationActive(db, uid, tier);
+  }
 
   if (autopilotEnabled) {
     await assertCanSetAutopilot(db, uid, tier, {
@@ -104,6 +116,8 @@ export const createGroupWithCap = onCall(async (req) => {
       role: "owner",
       active: true,
       status: "active",
+      participation: ownerParticipation,
+      participationChangedReason: "create",
       displayName,
       avatarUrl: avatarUrl || null,
       createdAt: now,
@@ -111,5 +125,7 @@ export const createGroupWithCap = onCall(async (req) => {
     });
   });
 
-  return { groupId, codeInvitation, sport, autopilotEnabled, favoriteTeam };
+  await recordGroupCreation(db, uid, createRateState);
+
+  return { groupId, codeInvitation, sport, autopilotEnabled, favoriteTeam, participation: ownerParticipation };
 });

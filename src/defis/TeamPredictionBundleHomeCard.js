@@ -26,6 +26,12 @@ import {
 } from "@src/defis/participant/participantTaskStatus";
 import { PARTICIPANT_MODIFY_CTA, PARTICIPANT_PRIMARY_CTA } from "@src/defis/participant/participantCtaStyles";
 import TpHomePredictionRow, { isCompleteTpPick } from "@src/defis/TpHomePredictionRow";
+import ParticipantPredictionFrame from "@src/defis/participant/ParticipantPredictionFrame";
+import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import {
+  getChallengeAccent,
+  paleChallengeBackground,
+} from "@src/home/components/HomeDefisToggle";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
@@ -90,7 +96,6 @@ function BundleMatchRow({ slot, league, pick, pickResult, colors, scheduleInfo =
           colors={colors}
           startTimeLabel={startTimeLabel}
           showStartTime={showStartTime}
-          matchTask={matchTask}
         />
       </View>
 
@@ -100,15 +105,23 @@ function BundleMatchRow({ slot, league, pick, pickResult, colors, scheduleInfo =
             <PostponedLabel colors={colors} />
           </View>
         ) : (
-          <TpHomePredictionRow
-            variant="scoreGrid"
-            pick={pick}
-            awayAbbr={awayAbbr}
-            homeAbbr={homeAbbr}
-            league={league}
-            lockDeadline={getSlotLockedAt(slot)}
+          <ParticipantPredictionFrame
             colors={colors}
-          />
+            accentColor={getChallengeAccent("tp")}
+            backgroundColor={paleChallengeBackground("tp")}
+            statusChip={<MatchTaskStatusChip task={matchTask} colors={colors} compact />}
+            style={{ marginTop: 2 }}
+          >
+            <TpHomePredictionRow
+              variant="scoreGrid"
+              pick={pick}
+              awayAbbr={awayAbbr}
+              homeAbbr={homeAbbr}
+              league={league}
+              lockDeadline={getSlotLockedAt(slot)}
+              colors={colors}
+            />
+          </ParticipantPredictionFrame>
         )
       ) : slotDecided && officialLine ? (
         <View style={{ alignItems: "flex-end", marginTop: 4 }}>

@@ -4,6 +4,7 @@ import { View, Text, ActivityIndicator } from "react-native";
 import i18n from "@src/i18n/i18n";
 import DefiListItem from "./DefiListItem";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
+import { resolveChallengeEmptyMessage } from "@src/home/components/AutopilotPendingChallengeHint";
 
 export default function DefiListSection(props) {
   const {
@@ -18,6 +19,7 @@ export default function DefiListSection(props) {
     tierLower,
     onOpenDefi,
     onUpgrade,
+    autopilotEnabled = false,
   } = props;
 
   const routeForItem = (item) => item.id;
@@ -70,9 +72,23 @@ export default function DefiListSection(props) {
       {!groupIds?.length && !loadingGroups ? (
         <Text style={{ color: colors.subtext }}>{i18n.t("home.noGroups")}</Text>
       ) : !activeDefis?.length && !loadingDefis ? (
-        <Text style={{ color: colors.subtext }}>
-          {i18n.t("home.noActiveChallenges")}
-        </Text>
+        <View
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+          }}
+        >
+          <Text style={{ color: colors.subtext, fontSize: 13 }}>
+            {resolveChallengeEmptyMessage({
+              autopilotEnabled,
+              fallbackKey: "home.noActiveChallenges",
+              fallbackDefault: "Aucun défi actif pour le moment.",
+            })}
+          </Text>
+        </View>
       ) : (
         <View>
           {activeDefis.map((item) => {

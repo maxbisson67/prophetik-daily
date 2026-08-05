@@ -15,13 +15,9 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
-import {
-  getFgcTitle,
-  getFgcMode,
-} from "@src/firstGoal/fgcChallengeUtils";
+import { getFgcMode } from "@src/firstGoal/fgcChallengeUtils";
 import { isFgcChallengeParticipationOpen } from "@src/firstGoal/fgcGameScheduleUtils";
 import useFgcGameSchedules from "@src/firstGoal/useFgcGameSchedules";
-import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
 import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
 import {
   formatParticipantCtaLabel,
@@ -38,6 +34,10 @@ import {
   normalizeFgcGameYmd,
   shouldShowFgcOnHome,
 } from "@src/firstGoal/fgcHomeVisibility";
+import {
+  resolveChallengeEmptyMessage,
+} from "@src/home/components/AutopilotPendingChallengeHint";
+import ParticipantPredictionFrame from "@src/defis/participant/ParticipantPredictionFrame";
 
 function chunk(arr, size = 10) {
   const out = [];
@@ -114,57 +114,6 @@ function listenMyPickForChallenge({ challengeId, uid, onData, onError }) {
   );
 }
 
-/* ------------------------------ UI subcomponents --------------------------- */
-
-function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors, prominent = false }) {
-  const away = safeAbbr(awayAbbr);
-  const home = safeAbbr(homeAbbr);
-  const league = String(sport || "NHL").toUpperCase() === "MLB" ? "MLB" : "NHL";
-  const awayTeam = lookupTeamByAbbr(league, away);
-  const homeTeam = lookupTeamByAbbr(league, home);
-  const logoSize = prominent ? 28 : 22;
-  const abbrSize = prominent ? 16 : undefined;
-
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <TeamLogoBadge team={awayTeam} size={logoSize} colors={colors} />
-      <Text
-        style={{
-          color: colors.text,
-          fontWeight: "900",
-          marginLeft: 8,
-          fontSize: abbrSize,
-        }}
-      >
-        {away || "—"}
-      </Text>
-
-      <Text
-        style={{
-          color: colors.subtext,
-          marginHorizontal: 10,
-          fontWeight: "900",
-          fontSize: abbrSize,
-        }}
-      >
-        @
-      </Text>
-
-      <Text
-        style={{
-          color: colors.text,
-          fontWeight: "900",
-          marginRight: 8,
-          fontSize: abbrSize,
-        }}
-      >
-        {home || "—"}
-      </Text>
-      <TeamLogoBadge team={homeTeam} size={logoSize} colors={colors} />
-    </View>
-  );
-}
-
 /* -------------------------------- Component -------------------------------- */
 
 export default function FirstGoalHomeSection({
@@ -174,6 +123,7 @@ export default function FirstGoalHomeSection({
   currentSport = "NHL",
   listenersEnabled = true,
   hintChallengeId = null,
+  autopilotEnabled = false,
   onHasChallengeChange,
   onUserParticipatedChange,
 }) {
@@ -429,16 +379,17 @@ export default function FirstGoalHomeSection({
             }}
           >
             <Text style={{ color: colors.subtext, fontSize: 13 }}>
-              {i18n.t("firstGoal.home.empty", {
-                defaultValue: "Aucun défi 'premier but' aujourd’hui dans tes groupes.",
+              {resolveChallengeEmptyMessage({
+                autopilotEnabled,
+                fallbackKey: "firstGoal.home.empty",
+                fallbackDefault:
+                  "Aucun défi 'premier but' aujourd’hui dans tes groupes.",
               })}
             </Text>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
             {items.slice(0, 6).map((ch) => {
-              const awayAbbr = safeAbbr(ch?.awayAbbr);
-              const homeAbbr = safeAbbr(ch?.homeAbbr);
               const challengeLeague =
                 String(ch?.league || sportLeague).toUpperCase() === "MLB" ? "MLB" : "NHL";
 
@@ -541,6 +492,10 @@ export default function FirstGoalHomeSection({
                 router.push(`/(first-goal)/pick/${challengeId}`);
               };
 
+              const predictionLabel = i18n.t("firstGoal.home.myPrediction", {
+                defaultValue: "Ma prédiction",
+              });
+
               return (
                 <View
                   key={String(ch.id)}
@@ -552,74 +507,57 @@ export default function FirstGoalHomeSection({
                     backgroundColor: colors.card,
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <MatchupRow
-                        awayAbbr={awayAbbr}
-                        homeAbbr={homeAbbr}
-                        sport={challengeLeague}
-                        colors={colors}
-                        prominent
-                      />
-                    </View>
-
-                    <MatchTaskStatusChip task={matchTask} colors={colors} compact />
-                  </View>
-
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Text
-                      style={{ color: colors.text, fontWeight: "900", fontSize: 17, flex: 1 }}
-                      numberOfLines={2}
+                  {hasMyPick ? (
+                    <ParticipantPredictionFrame
+                      colors={colors}
+                      label={predictionLabel}
+                      statusChip={<MatchTaskStatusChip task={matchTask} colors={colors} compact />}
+                      style={{ marginBottom: 8 }}
                     >
-                      {getFgcTitle(ch, i18n.t.bind(i18n))}
-                    </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", minWidth: 0 }}>
+                        {pickedTeamAbbr ? (
+                          <TeamLogoBadge
+                            team={lookupTeamByAbbr(challengeLeague, pickedTeamAbbr)}
+                            size={20}
+                            colors={colors}
+                          />
+                        ) : null}
 
-                    {!isDecided ? (
-                      <ParticipantTaskStatusChip
-                        task={participantTask}
-                        colors={colors}
-                        compact
-                      />
-                    ) : null}
-                  </View>
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            flex: 1,
+                            color: colors.text,
+                            fontWeight: "900",
+                            fontSize: 14,
+                            marginLeft: pickedTeamAbbr ? 8 : 0,
+                          }}
+                        >
+                          {pickedPlayerName}
+                        </Text>
+                      </View>
+                    </ParticipantPredictionFrame>
+                  ) : (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "flex-end",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <MatchTaskStatusChip task={matchTask} colors={colors} compact />
+                    </View>
+                  )}
 
-                  {!(deadlinePassed || isDecided) && !participation.showPostponed ? (
+                  {!(deadlinePassed || isDecided) && !participation.showPostponed && showPrimaryCta ? (
                     <View style={{ marginTop: 12, gap: 8 }}>
-                      {showPrimaryCta ? (
-                        <TouchableOpacity
-                          onPress={onPressCta}
-                          activeOpacity={0.9}
-                          style={PARTICIPANT_PRIMARY_CTA.button}
-                        >
-                          <Text style={PARTICIPANT_PRIMARY_CTA.text}>{ctaLabel}</Text>
-                        </TouchableOpacity>
-                      ) : null}
-
-                      {showModifyCta ? (
-                        <TouchableOpacity
-                          onPress={onPressCta}
-                          activeOpacity={0.9}
-                          style={PARTICIPANT_MODIFY_CTA.button}
-                        >
-                          <Text style={PARTICIPANT_MODIFY_CTA.text}>{ctaLabel}</Text>
-                        </TouchableOpacity>
-                      ) : null}
+                      <TouchableOpacity
+                        onPress={onPressCta}
+                        activeOpacity={0.9}
+                        style={PARTICIPANT_PRIMARY_CTA.button}
+                      >
+                        <Text style={PARTICIPANT_PRIMARY_CTA.text}>{ctaLabel}</Text>
+                      </TouchableOpacity>
                     </View>
                   ) : null}
 
@@ -661,44 +599,21 @@ export default function FirstGoalHomeSection({
                     </Text>
                   </View>
 
-                  {hasMyPick ? (
-                    <View
-                      style={{
-                        marginTop: 8,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                        {i18n.t("firstGoal.home.myPrediction", { defaultValue: "Ma prédiction" })}
-                        {": "}
-                      </Text>
-
-                      {pickedTeamAbbr ? (
-                        <TeamLogoBadge
-                          team={lookupTeamByAbbr(challengeLeague, pickedTeamAbbr)}
-                          size={18}
-                          colors={colors}
-                        />
-                      ) : null}
-
-                      <Text
-                        style={{
-                          color: colors.text,
-                          fontWeight: "900",
-                          fontSize: 13,
-                          marginLeft: pickedTeamAbbr ? 6 : 0,
-                        }}
-                      >
-                        {pickedPlayerName}
-                      </Text>
-                    </View>
-                  ) : null}
-
                   <View style={{ marginTop: 8, gap: 8 }}>
                     {!participation.showPostponed ? (
                       <ResultsTabHint colors={colors} groupId={currentGroupId} />
+                    ) : null}
+
+                    {showModifyCta &&
+                    !(deadlinePassed || isDecided) &&
+                    !participation.showPostponed ? (
+                      <TouchableOpacity
+                        onPress={onPressCta}
+                        activeOpacity={0.9}
+                        style={PARTICIPANT_MODIFY_CTA.button}
+                      >
+                        <Text style={PARTICIPANT_MODIFY_CTA.text}>{ctaLabel}</Text>
+                      </TouchableOpacity>
                     ) : null}
                   </View>
                 </View>

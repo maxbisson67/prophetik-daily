@@ -1,18 +1,30 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TouchableOpacity, Animated } from "react-native";
+import React from "react";
+import { View, Text, TouchableOpacity } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
 import i18n from "@src/i18n/i18n";
+import LiveChallengeKindBadge, { LIVE_BADGE_ACCENTS } from "@src/live/LiveChallengeKindBadge";
 
 const DEFI_TABS = [
-  { value: "fgc", number: 1 },
-  { value: "tp", number: 2 },
-  { value: "ts", number: 3 },
+  { value: "fgc", kind: "fgc" },
+  { value: "tp", kind: "tp" },
+  { value: "ts", kind: "ts" },
 ];
 
 const COMPLETE_GREEN = "#16a34a";
-const DISPLAY_FONT = "BebasNeue_400Regular";
-const CHEVRON_HALF = 9;
+
+function hexWithAlpha(hex, alphaHex = "22") {
+  const clean = String(hex || "").replace("#", "");
+  if (clean.length !== 6) return hex;
+  return `#${clean}${alphaHex}`;
+}
+
+export function getChallengeAccent(kind) {
+  return LIVE_BADGE_ACCENTS[String(kind || "").toLowerCase()] || LIVE_BADGE_ACCENTS.fgc;
+}
+
+export function paleChallengeBackground(kind, alphaHex = "16") {
+  return hexWithAlpha(getChallengeAccent(kind), alphaHex);
+}
 
 function resolveTabProgress(value) {
   if (value && typeof value === "object" && "done" in value) {
@@ -30,6 +42,10 @@ function resolveTabProgress(value) {
   return { done: 0, total: 0, expired: false, expiredCount: 0, enrolled: false };
 }
 
+function tagAccent(kind) {
+  return getChallengeAccent(kind);
+}
+
 export function isHomeDefiTabComplete(value) {
   const { done, total, enrolled } = resolveTabProgress(value);
   if (enrolled) return true;
@@ -40,28 +56,35 @@ export function areAllHomeDefisComplete(completedByTab = {}) {
   return DEFI_TABS.every((tab) => isHomeDefiTabComplete(completedByTab?.[tab.value]));
 }
 
-export function countCompletedHomeDefis(completedByTab = {}) {
+export function countEnrolledHomeDefis(completedByTab = {}) {
   return DEFI_TABS.filter((tab) => isHomeDefiTabComplete(completedByTab?.[tab.value])).length;
 }
 
-function ExpiredTag({ active, colors }) {
+/** @deprecated use countEnrolledHomeDefis */
+export function countCompletedHomeDefis(completedByTab = {}) {
+  return countEnrolledHomeDefis(completedByTab);
+}
+
+function ExpiredTag({ onAccent, colors }) {
   return (
     <View
       style={{
+        marginTop: 6,
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 999,
         borderWidth: 1,
-        borderColor: active ? "rgba(255,255,255,0.45)" : colors.border,
-        backgroundColor: active ? "rgba(255,255,255,0.12)" : colors.card,
+        borderColor: onAccent ? "rgba(255,255,255,0.45)" : colors.border,
+        backgroundColor: onAccent ? "rgba(255,255,255,0.12)" : colors.card,
       }}
     >
       <Text
         style={{
-          color: active ? "#fff" : colors.subtext,
+          color: onAccent ? "#fff" : colors.subtext,
           fontSize: 10,
           fontWeight: "900",
           letterSpacing: 0.2,
+          textAlign: "center",
         }}
       >
         {i18n.t("home.defiTabExpired")}
@@ -70,24 +93,26 @@ function ExpiredTag({ active, colors }) {
   );
 }
 
-function TodoTag({ active, colors }) {
+function TodoTag({ onAccent, colors }) {
   return (
     <View
       style={{
+        marginTop: 6,
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 999,
         borderWidth: 1,
-        borderColor: active ? "rgba(255,255,255,0.45)" : colors.border,
-        backgroundColor: active ? "rgba(255,255,255,0.12)" : colors.card,
+        borderColor: onAccent ? "rgba(255,255,255,0.45)" : colors.border,
+        backgroundColor: onAccent ? "rgba(255,255,255,0.12)" : colors.card,
       }}
     >
       <Text
         style={{
-          color: active ? "#fff" : colors.subtext,
+          color: onAccent ? "#fff" : colors.subtext,
           fontSize: 10,
           fontWeight: "900",
           letterSpacing: 0.2,
+          textAlign: "center",
         }}
       >
         {i18n.t("home.defiTabTodo")}
@@ -96,7 +121,25 @@ function TodoTag({ active, colors }) {
   );
 }
 
-function TabCompletionBadge({ progress, active, colors }) {
+function StatusLine({ children, onAccent, colors }) {
+  return (
+    <Text
+      style={{
+        color: onAccent ? "rgba(255,255,255,0.92)" : colors.subtext,
+        fontSize: 10,
+        fontWeight: "800",
+        textAlign: "center",
+        lineHeight: 13,
+        marginTop: 6,
+      }}
+      numberOfLines={2}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function TabCompletionBadge({ progress, onAccent, colors }) {
   const { done, total, expired, expiredCount, enrolled } = progress;
   if (!total) return null;
 
@@ -105,72 +148,69 @@ function TabCompletionBadge({ progress, active, colors }) {
 
   if (showCheck) {
     return (
-      <View style={{ alignItems: "center", maxWidth: 56 }}>
+      <View style={{ alignItems: "center", marginTop: 6 }}>
         <MaterialCommunityIcons
           name="check-circle"
-          size={20}
-          color={active ? "#fff" : COMPLETE_GREEN}
+          size={18}
+          color={onAccent ? "#fff" : COMPLETE_GREEN}
         />
         {expiredCount > 0 ? (
-          <Text
-            style={{
-              color: active ? "rgba(255,255,255,0.88)" : colors.subtext,
-              fontSize: 8,
-              fontWeight: "900",
-              marginTop: 2,
-              textAlign: "center",
-              lineHeight: 10,
-            }}
-            numberOfLines={2}
-          >
+          <StatusLine onAccent={onAccent} colors={colors}>
             {i18n.t("home.defiTabExpiredMatches", { count: expiredCount })}
-          </Text>
+          </StatusLine>
         ) : null}
       </View>
     );
   }
 
   if (expired) {
-    return <ExpiredTag active={active} colors={colors} />;
+    return <ExpiredTag onAccent={onAccent} colors={colors} />;
   }
 
-  return <TodoTag active={active} colors={colors} />;
+  return <TodoTag onAccent={onAccent} colors={colors} />;
 }
 
-function StyledTabNumber({ number, active, colors, displayFontLoaded }) {
-  const numberColor = active ? "#fff" : colors.text;
+function DefiTabCell({ tab, active, sport, colors, progress, onPress }) {
+  const accent = tagAccent(tab.kind);
+  const indicatorColor = active
+    ? colors.primary || "#ef4444"
+    : colors.border || "#D1D5DB";
 
   return (
-    <Text
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.88}
       style={{
-        color: numberColor,
-        fontSize: 32,
-        lineHeight: 34,
-        letterSpacing: 0.5,
-        fontFamily: displayFontLoaded ? DISPLAY_FONT : undefined,
-        fontWeight: displayFontLoaded ? "400" : "900",
-        includeFontPadding: false,
+        flex: 1,
+        minHeight: 58,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: accent,
+        backgroundColor: active ? accent : hexWithAlpha(accent, "14"),
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 8,
+        paddingHorizontal: 6,
       }}
     >
-      {number}
-    </Text>
-  );
-}
-
-function TabPointer({ color }) {
-  return (
-    <View
-      style={{
-        width: 0,
-        height: 0,
-        borderLeftWidth: CHEVRON_HALF,
-        borderRightWidth: CHEVRON_HALF,
-        borderTopWidth: CHEVRON_HALF,
-        borderLeftColor: "transparent",
-        borderRightColor: "transparent",
-        borderTopColor: color,
-      }}
-    />
+      <LiveChallengeKindBadge
+        kind={tab.kind}
+        colors={colors}
+        sport={sport}
+        compact
+        inverted={active}
+      />
+      <View
+        style={{
+          marginTop: 5,
+          height: 3,
+          width: "70%",
+          borderRadius: 999,
+          backgroundColor: indicatorColor,
+        }}
+      />
+      <TabCompletionBadge progress={progress} onAccent={active} colors={colors} />
+    </TouchableOpacity>
   );
 }
 
@@ -178,108 +218,42 @@ export default function HomeDefisToggle({
   value = "fgc",
   onChange,
   colors,
+  sport = "NHL",
   completedByTab = {},
   title = null,
-  headerBleed = 12,
-  accentColor,
-  neutralHeader = true,
 }) {
-  const accent = accentColor || colors.primary;
-  const [displayFontLoaded] = useFonts({ BebasNeue_400Regular });
-  const [toggleWidth, setToggleWidth] = useState(0);
-  const chevronX = useRef(new Animated.Value(0)).current;
-
-  const activeIndex = Math.max(
-    0,
-    DEFI_TABS.findIndex((tab) => tab.value === value)
-  );
-
-  useEffect(() => {
-    if (!toggleWidth) return;
-    const targetX = (toggleWidth / DEFI_TABS.length) * (activeIndex + 0.5) - CHEVRON_HALF;
-    Animated.spring(chevronX, {
-      toValue: targetX,
-      useNativeDriver: true,
-      friction: 9,
-      tension: 90,
-    }).start();
-  }, [activeIndex, toggleWidth, chevronX]);
-
-  const showHeader = Boolean(title);
-  const useNeutralHeader = showHeader && neutralHeader;
-
   return (
-    <View style={{ marginBottom: showHeader && !useNeutralHeader ? 0 : 12 }}>
-      {showHeader && useNeutralHeader ? (
-        <Text
-          style={{
-            color: colors.text,
-            fontWeight: "900",
-            fontSize: 16,
-            textAlign: "center",
-            marginBottom: 12,
-            lineHeight: 22,
-          }}
-        >
-          {title}
-        </Text>
-      ) : null}
-
-      {showHeader && !useNeutralHeader ? (
-        <View
-          style={{
-            marginHorizontal: -headerBleed,
-            marginTop: -headerBleed,
-            backgroundColor: accent,
-            paddingTop: 14,
-            paddingBottom: 4,
-            paddingHorizontal: headerBleed,
-            marginBottom: 2,
-          }}
-        >
+    <View style={{ marginBottom: 12 }}>
+      {title ? (
+        <View style={{ marginBottom: 14, alignItems: "center" }}>
           <Text
             style={{
-              color: "#fff",
+              color: colors.primary || "#ef4444",
               fontWeight: "900",
-              fontSize: 16,
+              fontSize: 20,
               textAlign: "center",
-              lineHeight: 22,
+              lineHeight: 26,
+              letterSpacing: 0.15,
             }}
           >
             {title}
           </Text>
-          <View style={{ height: CHEVRON_HALF + 2, marginTop: 6 }}>
-            <Animated.View
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                transform: [{ translateX: chevronX }],
-              }}
-            >
-              <TabPointer color={accent} />
-            </Animated.View>
-          </View>
+          <View
+            style={{
+              marginTop: 6,
+              height: 3,
+              width: 56,
+              borderRadius: 999,
+              backgroundColor: colors.primary || "#ef4444",
+            }}
+          />
         </View>
       ) : null}
 
       <View
-        onLayout={(event) => {
-          const nextWidth = event.nativeEvent.layout.width;
-          if (nextWidth > 0 && nextWidth !== toggleWidth) {
-            setToggleWidth(nextWidth);
-            const initialX =
-              (nextWidth / DEFI_TABS.length) * (activeIndex + 0.5) - CHEVRON_HALF;
-            chevronX.setValue(initialX);
-          }
-        }}
         style={{
           flexDirection: "row",
-          borderWidth: 1,
-          borderColor: colors.border,
-          borderRadius: 12,
-          overflow: "hidden",
-          backgroundColor: colors.card2,
+          gap: 8,
           marginBottom: 12,
         }}
       >
@@ -288,30 +262,15 @@ export default function HomeDefisToggle({
           const progress = resolveTabProgress(completedByTab?.[tab.value]);
 
           return (
-            <TouchableOpacity
+            <DefiTabCell
               key={tab.value}
+              tab={tab}
+              active={active}
+              sport={sport}
+              colors={colors}
+              progress={progress}
               onPress={() => onChange?.(tab.value)}
-              activeOpacity={0.85}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                paddingHorizontal: 8,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: active ? accent : "transparent",
-                minHeight: 44,
-              }}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <StyledTabNumber
-                  number={tab.number}
-                  active={active}
-                  colors={colors}
-                  displayFontLoaded={displayFontLoaded}
-                />
-                <TabCompletionBadge progress={progress} active={active} colors={colors} />
-              </View>
-            </TouchableOpacity>
+            />
           );
         })}
       </View>

@@ -267,29 +267,16 @@ export function resolveTsWinnerBadge(defiRaw = {}, leaderboard = [], namesMap = 
   if (!isFinalized || !winnerUids.length) return null;
 
   const rows = Array.isArray(leaderboard) ? leaderboard.filter(Boolean) : [];
-  const pot = Number(defiRaw?.pot ?? 0);
-  const bonusPerWinner = Number(defiRaw?.bonusPerWinner ?? 0);
-  const winnerShares =
-    defiRaw?.winnerShares && typeof defiRaw.winnerShares === "object" ? defiRaw.winnerShares : {};
 
   const winners = winnerUids.map((uid) => {
     const row = rows.find((r) => String(r.uid) === String(uid));
     const score = Number(row?.finalPoints ?? row?.livePoints ?? 0);
-    let share = Number(winnerShares[uid] ?? 0);
-    if (share <= 0 && row?.payout != null) {
-      share = Number(row.payout) || 0;
-    }
-    if (share <= 0 && pot > 0) {
-      share = splitEvenPot(pot, winnerUids.length);
-    }
-    const bonus = Number(row?.bonus ?? 0) || (bonusPerWinner > 0 ? bonusPerWinner : 0);
-    const payout = share + bonus;
     return {
       uid,
       name: resolveWinnerDisplayName(uid, namesMap),
       score,
-      share,
-      payout,
+      share: 0,
+      payout: score,
     };
   });
 
@@ -304,6 +291,7 @@ export function resolveTsWinnerBadge(defiRaw = {}, leaderboard = [], namesMap = 
   }
 
   const sharePerWinner =
-    displayWinners[0]?.payout ?? displayWinners[0]?.share ?? splitEvenPot(pot, displayWinners.length);
+    displayWinners[0]?.payout ??
+    Number(displayWinners[0]?.score ?? 0);
   return { kind: "multiple", count: displayWinners.length, sharePerWinner };
 }

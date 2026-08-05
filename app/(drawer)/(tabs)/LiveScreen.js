@@ -9,7 +9,6 @@ import {
 } from "@src/groups/SelectedGroupProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
-import LiveChallengesLegend from "@src/live/LiveChallengesLegend";
 import LivePointsOverviewPanel from "@src/live/LivePointsOverviewPanel";
 import LiveViewModeToggle from "@src/live/LiveViewModeToggle";
 import MatchLiveScreen from "../sports/MatchLiveScreen";
@@ -32,10 +31,10 @@ export default function LiveScreen() {
   }, [paramGroupId, readableGroupIds.join("|"), selectedGroupId, setSelectedGroupId]);
 
   const sport = selectedSport === "MLB" ? "MLB" : "NHL";
-  const [viewMode, setViewMode] = useState("games");
+  const [viewMode, setViewMode] = useState("points");
 
   useEffect(() => {
-    setViewMode("games");
+    setViewMode("points");
   }, [selectedGroupId]);
 
   const userGroups = useMemo(
@@ -78,7 +77,6 @@ export default function LiveScreen() {
           compact
         />
         <LiveViewModeToggle value={viewMode} onChange={setViewMode} colors={colors} />
-        {viewMode === "games" ? <LiveChallengesLegend colors={colors} /> : null}
       </View>
 
       <View style={{ flex: 1 }}>

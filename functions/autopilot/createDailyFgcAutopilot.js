@@ -11,6 +11,7 @@ import {
   createAutopilotTsDefiForGroup,
   hasExistingTsForGroupDay,
 } from "../defis/autopilotTsCreate.js";
+import { isMlbChallengeEligibleGameType } from "../mlb/mlbGameTypeUtils.js";
 
 const MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule";
 
@@ -99,8 +100,7 @@ async function fetchMlbScheduleForYmd(gameYmd) {
     if (["Cancelled", "Postponed"].includes(abstractState)) continue;
     if (String(game?.status?.detailedState || "").toLowerCase().includes("postpon")) continue;
 
-    const gameType = String(game?.gameType || "");
-    if (gameType && gameType !== "R") continue;
+    if (!isMlbChallengeEligibleGameType(game?.gameType)) continue;
 
     if (!gamePk || !start || !homeAbbr || !awayAbbr || homeAbbr.length < 2 || awayAbbr.length < 2) {
       continue;

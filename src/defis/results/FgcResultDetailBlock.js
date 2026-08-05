@@ -7,6 +7,7 @@ import i18n from "@src/i18n/i18n";
 import { useTheme } from "@src/theme/ThemeProvider";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import FgcParticipantsModal from "@src/defis/results/FgcParticipantsModal";
+import FgcParticipantsList from "@src/defis/results/FgcParticipantsList";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import {
@@ -14,6 +15,8 @@ import {
   getFgcResultPlayerId,
   getFgcResultPrefix,
   getFgcResultOutcomeLabel,
+  resolveFgcHideOthersPicks,
+  resolveFgcRevealTimeLabel,
 } from "@src/firstGoal/fgcChallengeUtils";
 import {
   resolveFgcEffectiveResult,
@@ -118,6 +121,7 @@ export default function FgcResultDetailBlock({
   colors,
   scheduleStatus = null,
   accentColor = RESULTS_ACCENT,
+  showParticipantsInline = false,
 }) {
   const { isDark } = useTheme();
   const { user } = useAuth();
@@ -198,6 +202,9 @@ export default function FgcResultDetailBlock({
     ? getPickBravoHighlightTheme(isDark, { provisional: false })
     : null;
 
+  const hideOthersPicks = resolveFgcHideOthersPicks(challenge, scheduleStatus);
+  const revealTimeLabel = resolveFgcRevealTimeLabel(challenge);
+
   return (
     <View style={{ marginTop: 10 }}>
       <MatchupRow
@@ -227,7 +234,7 @@ export default function FgcResultDetailBlock({
             {winnerTeam ? (
               <TeamLogoBadge
                 team={lookupTeamByAbbr(challengeLeague, safeAbbr(winnerTeam))}
-                size={18}
+                size={22}
                 colors={colors}
               />
             ) : null}
@@ -235,7 +242,7 @@ export default function FgcResultDetailBlock({
               style={{
                 color: colors.text,
                 fontWeight: "900",
-                marginLeft: winnerTeam ? 6 : 0,
+                marginLeft: winnerTeam ? 8 : 0,
                 flexShrink: 1,
               }}
               numberOfLines={1}
@@ -269,7 +276,7 @@ export default function FgcResultDetailBlock({
               {myTeamAbbr ? (
                 <TeamLogoBadge
                   team={lookupTeamByAbbr(challengeLeague, myTeamAbbr)}
-                  size={18}
+                  size={22}
                   colors={colors}
                 />
               ) : null}
@@ -278,7 +285,7 @@ export default function FgcResultDetailBlock({
                   color: colors.text,
                   fontWeight: "900",
                   fontSize: 13,
-                  marginLeft: myTeamAbbr ? 6 : 0,
+                  marginLeft: myTeamAbbr ? 8 : 0,
                   flexShrink: 1,
                 }}
                 numberOfLines={1}
@@ -304,7 +311,18 @@ export default function FgcResultDetailBlock({
         </Text>
       )}
 
-      {!loading && entries.length > 0 ? (
+      {showParticipantsInline ? (
+        <FgcParticipantsList
+          entries={entries}
+          loading={loading}
+          winnerPlayerId={winnerPlayerId}
+          currentUid={uid}
+          colors={colors}
+          league={challengeLeague}
+          hideOthersPicks={hideOthersPicks}
+          revealTimeLabel={revealTimeLabel}
+        />
+      ) : !loading && entries.length > 0 ? (
         <TouchableOpacity
           onPress={() => setShowParticipantsModal(true)}
           activeOpacity={0.85}
@@ -331,16 +349,18 @@ export default function FgcResultDetailBlock({
         </View>
       ) : null}
 
-      <FgcParticipantsModal
-        visible={showParticipantsModal}
-        onClose={() => setShowParticipantsModal(false)}
-        challenge={challenge}
-        entries={entries}
-        loading={loading}
-        currentUid={uid}
-        matchTask={matchTask}
-        colors={colors}
-      />
+      {!showParticipantsInline ? (
+        <FgcParticipantsModal
+          visible={showParticipantsModal}
+          onClose={() => setShowParticipantsModal(false)}
+          challenge={challenge}
+          entries={entries}
+          loading={loading}
+          currentUid={uid}
+          matchTask={matchTask}
+          colors={colors}
+        />
+      ) : null}
     </View>
   );
 }

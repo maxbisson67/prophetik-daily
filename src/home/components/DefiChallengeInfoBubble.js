@@ -4,26 +4,79 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import { useTheme } from "@src/theme/ThemeProvider";
 
-function getBubbleCopy(kind) {
+function OrdinalSuperscript({ text, colors, baseSize = 14 }) {
+  return (
+    <View style={{ transform: [{ translateY: -Math.round(baseSize * 0.38) }] }}>
+      <Text
+        style={{
+          fontSize: Math.round(baseSize * 0.62),
+          fontWeight: "900",
+          color: colors.text,
+          lineHeight: Math.round(baseSize * 0.68),
+          includeFontPadding: false,
+        }}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function FgcInfoTitle({ sport, colors }) {
+  const isMlb = String(sport || "NHL").toUpperCase() === "MLB";
+  const textStyle = { color: colors.text, fontWeight: "900" };
+
+  if (isMlb) {
+    return (
+      <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Text style={textStyle}>
+          {i18n.t("firstGoal.home.infoTitleMlbPrefix", {
+            defaultValue: "Fonctionnement du défi 1",
+          })}
+        </Text>
+        <OrdinalSuperscript
+          text={i18n.t("firstGoal.home.infoTitleMlbOrdinal", { defaultValue: "ier" })}
+          colors={colors}
+        />
+        <Text style={textStyle}>
+          {i18n.t("firstGoal.home.infoTitleMlbSuffix", {
+            defaultValue: " point produit",
+          })}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Text style={{ ...textStyle, flex: 1 }}>
+      {i18n.t("firstGoal.home.infoTitleNhl", {
+        defaultValue: "Fonctionnement du défi premier but",
+      })}
+    </Text>
+  );
+}
+
+function getBubbleCopy(kind, sport) {
   if (kind === "fgc") {
     return {
-      title: i18n.t("firstGoal.home.infoTitle", { defaultValue: "Comment fonctionne ce défi" }),
+      titleNode: "fgc",
       body: i18n.t("firstGoal.home.infoBody", {
         defaultValue:
           "• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 10 points seront alloués à celui qui a prédit le bon joueur.",
       }),
       extra: null,
+      sport,
     };
   }
 
   if (kind === "tp") {
     return {
       title: i18n.t("tp.home.infoTitle", {
-        defaultValue: "Comment fonctionne ce défi",
+        defaultValue: "Fonctionnement du défi Prédire les matchs",
       }),
       body: i18n.t("tp.home.infoBody", {
         defaultValue:
-          "Choisis le pointage des confrontations proposées et cumule des points pour chaque bonne prédiction. Avec la bonne prédiction du pointage, cumule encore plus de points.",
+          "Choisis le pointage de chaque confrontation. Un match bien prédit donne 5 points ; un score exact donne 5 points supplémentaires.",
       }),
       extra: i18n.t("tp.home.infoLockHint", {
         defaultValue:
@@ -45,14 +98,11 @@ function getBubbleCopy(kind) {
           bullets: [
             i18n.t("home.tsInfoFunctioning1", {
               defaultValue:
-                "Sois meilleur que tes amis en sélectionnant 3 joueurs qui jouent aujourd'hui.",
+                "Choisis 3 joueurs qui jouent aujourd'hui.",
             }),
             i18n.t("home.tsInfoFunctioning2", {
               defaultValue:
-                "Le(s) participant(s) ayant cumulé le plus de points se partagent la cagnotte.",
-            }),
-            i18n.t("home.tsInfoFunctioning3", {
-              defaultValue: "La cagnotte augmente de 3 points par inscription.",
+                "Tes joueurs cumulent des points en temps réel selon leurs performances.",
             }),
           ],
         },
@@ -86,10 +136,16 @@ function getBubbleCopy(kind) {
   };
 }
 
-export default function DefiChallengeInfoBubble({ kind, colors, inIntroBand = false }) {
+export default function DefiChallengeInfoBubble({
+  kind,
+  colors,
+  sport = "NHL",
+  inIntroBand = false,
+  footerContent = null,
+}) {
   const { isDark } = useTheme();
   const [open, setOpen] = useState(false);
-  const copy = getBubbleCopy(kind);
+  const copy = getBubbleCopy(kind, sport);
 
   const shellStyle = inIntroBand
     ? {
@@ -130,9 +186,13 @@ export default function DefiChallengeInfoBubble({ kind, colors, inIntroBand = fa
             color={colors.subtext}
             style={{ marginTop: 1 }}
           />
-          <Text style={{ color: colors.text, fontWeight: "900", marginLeft: 8, flex: 1 }}>
-            {copy.title}
-          </Text>
+          <View style={{ marginLeft: 8, flex: 1 }}>
+            {copy.titleNode === "fgc" ? (
+              <FgcInfoTitle sport={copy.sport || sport} colors={colors} />
+            ) : (
+              <Text style={{ color: colors.text, fontWeight: "900", flex: 1 }}>{copy.title}</Text>
+            )}
+          </View>
         </View>
 
         <MaterialCommunityIcons
@@ -176,6 +236,18 @@ export default function DefiChallengeInfoBubble({ kind, colors, inIntroBand = fa
           )}
           {copy.extra ? (
             <Text style={{ color: colors.subtext, marginTop: 10, lineHeight: 18 }}>{copy.extra}</Text>
+          ) : null}
+          {footerContent ? (
+            <View
+              style={{
+                marginTop: 14,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: inIntroBand ? shellStyle.borderColor : colors.border,
+              }}
+            >
+              {footerContent}
+            </View>
           ) : null}
         </View>
       ) : null}

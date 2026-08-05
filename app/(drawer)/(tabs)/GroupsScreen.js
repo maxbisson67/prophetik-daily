@@ -14,6 +14,9 @@ import GroupAvatar from '@src/groups/components/GroupAvatar';
 import GroupAutopilotModeBadge from '@src/groups/components/GroupAutopilotModeBadge';
 import { useMyGroups } from '@src/groups/MyGroupsProvider';
 import { isGroupOwner } from '@src/groups/groupOwnership';
+import { PARTICIPATION } from '@src/groups/participationUtils';
+import { setMembershipParticipationService } from '@src/groups/setMembershipParticipationService';
+import usePlanUsage from '@src/subscriptions/usePlanUsage';
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)
@@ -131,6 +134,8 @@ export default function GroupsScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
   const { userGroups, loading: loadingGroups } = useMyGroups();
+  const planUsage = usePlanUsage(user?.uid);
+  const [activatingGroupId, setActivatingGroupId] = useState(null);
 
   // Création → écran dédié (évite Modal iOS + picker d'équipe)
   function openCreateGroup() {
@@ -187,6 +192,52 @@ export default function GroupsScreen() {
   ------------------------- */
   function openGroup(g) {
     router.push({ pathname: `/(drawer)/groups/${encodeURIComponent(String(g.id))}`, params: { initial: JSON.stringify(g) } });
+  }
+
+  async function activateParticipation(groupId, { switchMode = false } = {}) {
+    if (!user?.uid || !groupId) return;
+    setActivatingGroupId(groupId);
+    try {
+      await setMembershipParticipationService({
+        groupId,
+        participation: PARTICIPATION.ACTIVE,
+      });
+      Alert.alert(
+        i18n.t('groups.participation.activateSuccessTitle', {
+          defaultValue: 'Participation activée',
+        }),
+        switchMode
+          ? i18n.t('groups.participation.switchSuccessMessage', {
+              defaultValue: 'Tu participes maintenant aux défis de ce groupe.',
+            })
+          : i18n.t('groups.participation.activateSuccessMessage', {
+              defaultValue: 'Tu peux à nouveau jouer les défis de ce groupe.',
+            })
+      );
+    } catch (e) {
+      const code = String(e?.code || e?.message || e || '').toLowerCase();
+      const details = e?.details || {};
+      if (code.includes('active_group_limit_reached')) {
+        Alert.alert(
+          i18n.t('groups.participation.activateLimitTitle', {
+            defaultValue: 'Limite atteinte',
+          }),
+          i18n.t('groups.participation.activateLimitMessage', {
+            defaultValue:
+              'Ton forfait {{tier}} permet {{max}} groupe(s) actif(s). Passe à un forfait supérieur ou désactive un autre groupe.',
+            tier: String(details.tier || planUsage.tier || 'free').toUpperCase(),
+            max: details.max ?? planUsage.limits.activeGroupsLimit,
+          })
+        );
+      } else {
+        Alert.alert(
+          i18n.t('groups.alertErrorTitle', { defaultValue: 'Erreur' }),
+          String(e?.message || e)
+        );
+      }
+    } finally {
+      setActivatingGroupId(null);
+    }
   }
 
   async function toggleFavorite(gid) {
@@ -288,16 +339,13 @@ export default function GroupsScreen() {
       {/* Header */}
       <View
         style={{
-          padding: 16,
+          paddingHorizontal: 16,
+          paddingBottom: 8,
           flexDirection: 'row',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           alignItems: 'center',
         }}
       >
-        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>
-          {i18n.t('groups.title')}
-        </Text>
-
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
             onPress={openCreateGroup}
@@ -466,6 +514,104 @@ export default function GroupsScreen() {
                         colors={colors}
                       />
                     ) : null}
+
+                    <View style={{ marginTop: 6 }}>
+                      <Text style={{ color: colors.subtext, fontSize: 12 }}>
+                        {i18n.t('groups.participation.label', {
+                          defaultValue: 'Participation aux défis',
+                        })}
+                        {': '}
+                        <Text
+                          style={{
+                            fontWeight: '800',
+                            color: item.canParticipateInChallenges
+                              ? colors.primary
+                              : colors.subtext,
+                          }}
+                        >
+                          {item.canParticipateInChallenges
+                            ? i18n.t('groups.participation.enabled', {
+                                defaultValue: 'activée',
+                              })
+                            : i18n.t('groups.participation.disabled', {
+                                defaultValue: 'désactivée',
+                              })}
+                        </Text>
+                      </Text>
+                      {!item.canParticipateInChallenges ? (
+                        (() => {
+                          const slotsAvailable =
+                            planUsage.usage.activeParticipationsCount <
+                            planUsage.limits.activeGroupsLimit;
+                          const canActivate = slotsAvailable;
+                          const canSwitch =
+                            !slotsAvailable && planUsage.limits.activeGroupsLimit <= 1;
+                          const isActivating = activatingGroupId === item.id;
+
+                          if (canActivate || canSwitch) {
+                            return (
+                              <TouchableOpacity
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  activateParticipation(item.id, { switchMode: canSwitch });
+                                }}
+                                disabled={isActivating}
+                                hitSlop={{ top: 6, left: 6, right: 6, bottom: 6 }}
+                              >
+                                <Text
+                                  style={{
+                                    color: colors.primary,
+                                    fontSize: 12,
+                                    fontWeight: '700',
+                                    marginTop: 2,
+                                    opacity: isActivating ? 0.6 : 1,
+                                  }}
+                                >
+                                  {isActivating
+                                    ? i18n.t('groups.participation.activating', {
+                                        defaultValue: 'Activation…',
+                                      })
+                                    : canSwitch
+                                      ? i18n.t('groups.participation.switchGroup', {
+                                          defaultValue: 'Jouer dans ce groupe',
+                                        })
+                                      : i18n.t('groups.participation.activate', {
+                                          defaultValue: 'Activer la participation',
+                                        })}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          }
+
+                          return (
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                router.push('/(drawer)/subscriptions');
+                              }}
+                              hitSlop={{ top: 6, left: 6, right: 6, bottom: 6 }}
+                            >
+                              <Text
+                                style={{
+                                  color: colors.primary,
+                                  fontSize: 12,
+                                  fontWeight: '700',
+                                  marginTop: 2,
+                                }}
+                              >
+                                {item.participation === PARTICIPATION.ADMIN_ONLY
+                                  ? i18n.t('groups.participation.managePlanAdmin', {
+                                      defaultValue: 'Activer la participation → Forfaits',
+                                    })
+                                  : i18n.t('groups.participation.managePlan', {
+                                      defaultValue: 'Gérer mon forfait →',
+                                    })}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()
+                      ) : null}
+                    </View>
                   </View>
                 </View>
 

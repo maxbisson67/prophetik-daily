@@ -63,6 +63,7 @@ export default function TsResultDetailBlock({
   myEntry = null,
   compact = true,
   onOpenFullResults,
+  hideWinnerBadge = false,
 }) {
   const { user } = useAuth();
   const defiRaw = item?.raw || {};
@@ -73,7 +74,7 @@ export default function TsResultDetailBlock({
   const hasMyPicks = Array.isArray(myEntry?.picks) && myEntry.picks.length > 0;
   const showLiveData =
     hasMyPicks ||
-    ["live", "locked", "closed", "awaiting_result", "completed"].includes(
+    ["open", "live", "locked", "closed", "awaiting_result", "completed"].includes(
       String(displayStatus || "").toLowerCase()
     );
 
@@ -116,7 +117,8 @@ export default function TsResultDetailBlock({
     return resolveTsWinnerBadge(defiRaw, leaderboard, namesMap);
   }, [isFinalized, defiRaw, leaderboard, namesMap]);
 
-  const winnerBadgeBlock = isFinalized ? <TsWinnerBadge summary={winnerBadge} /> : null;
+  const winnerBadgeBlock =
+    isFinalized && !hideWinnerBadge ? <TsWinnerBadge summary={winnerBadge} /> : null;
 
   if (!showLiveData) return null;
 

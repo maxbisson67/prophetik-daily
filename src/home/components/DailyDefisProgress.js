@@ -3,9 +3,9 @@ import { View, Text } from "react-native";
 import i18n from "@src/i18n/i18n";
 import { PROPHETIK_RED, HOME_SPACING } from "@src/achievements/components/prophetikCardStyles";
 
-export default function DailyDefisProgress({ completedCount, colors }) {
+export default function DailyDefisProgress({ enrolledCount, colors }) {
   const total = 3;
-  const count = Math.max(0, Math.min(total, Number(completedCount) || 0));
+  const count = Math.max(0, Math.min(total, Number(enrolledCount) || 0));
 
   return (
     <View
@@ -42,7 +42,7 @@ export default function DailyDefisProgress({ completedCount, colors }) {
         {i18n.t("home.dailyDefisProgress", {
           count,
           total,
-          defaultValue: "{{count}} / {{total}} défis complétés",
+          defaultValue: "{{count}} / {{total}} défis inscrits",
         })}
       </Text>
     </View>

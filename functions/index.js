@@ -66,6 +66,8 @@ export { createGroupWithCap } from "./groups/createGroupWithCap.js";
 export { joinGroupWithCap } from "./groups/joinGroupWithCap.js";
 export { getUserPlanUsageCallable as getUserPlanUsage } from "./subscriptions/getUserPlanUsage.js";
 export { resolveAutopilotGroups } from "./groups/resolveAutopilotGroups.js";
+export { resolveActiveGroups } from "./groups/resolveActiveGroups.js";
+export { setMembershipParticipation } from "./groups/setMembershipParticipation.js";
 
 // Prophetik IA et création de défi
 export { onDefiCreated } from "./defis/onDefiCreated.js";

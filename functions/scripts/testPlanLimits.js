@@ -8,12 +8,14 @@ import {
   normalizePlanTier,
   PLAN_LIMITS,
 } from "../subscriptions/planLimits.js";
-import { getOwnedGroupsLimitForTier } from "../groups/groupTierLimits.js";
-import { isAutopilotOverLimit } from "../groups/planEnforcement.js";
+import {
+  isAutopilotOverLimit,
+  isActiveParticipationOverLimit,
+} from "../groups/planEnforcement.js";
 
-function canCreateOwnedGroup(ownedCount, tier) {
-  const max = getOwnedGroupsLimitForTier(tier);
-  return ownedCount < max;
+function canActivateParticipation(activeCount, tier) {
+  const max = getPlanLimits(tier).activeGroupsLimit;
+  return activeCount < max;
 }
 
 function canEnableAutopilot(autopilotCount, tier, { currentlyEnabled = false } = {}) {
@@ -24,13 +26,13 @@ function canEnableAutopilot(autopilotCount, tier, { currentlyEnabled = false } =
 }
 
 function testPlanLimitsConfig() {
-  assert.equal(getPlanLimits("free").ownedGroupsLimit, 1);
+  assert.equal(getPlanLimits("free").activeGroupsLimit, 1);
   assert.equal(getPlanLimits("free").autopilotGroupsLimit, 1);
   assert.equal(getPlanLimits("free").novaAdviceMonthlyLimit, 30);
-  assert.equal(getPlanLimits("pro").ownedGroupsLimit, 5);
+  assert.equal(getPlanLimits("pro").activeGroupsLimit, 5);
   assert.equal(getPlanLimits("pro").autopilotGroupsLimit, 5);
   assert.equal(getPlanLimits("pro").novaAdviceMonthlyLimit, 100);
-  assert.equal(getPlanLimits("vip").ownedGroupsLimit, 20);
+  assert.equal(getPlanLimits("vip").activeGroupsLimit, 20);
   assert.equal(getPlanLimits("vip").autopilotGroupsLimit, 20);
   assert.equal(getPlanLimits("vip").novaAdviceMonthlyLimit, 250);
 }
@@ -40,15 +42,16 @@ function testDowngradeTierNormalization() {
   assert.equal(normalizePlanTier("vip", false), "free");
   assert.equal(getPlanLimits("pro", false).novaAdviceMonthlyLimit, 30);
   assert.equal(getPlanLimits("pro", false).autopilotGroupsLimit, 1);
+  assert.equal(getPlanLimits("pro", false).activeGroupsLimit, 1);
 }
 
-function testOwnedGroupCreateGate() {
-  assert.equal(canCreateOwnedGroup(0, "free"), true);
-  assert.equal(canCreateOwnedGroup(1, "free"), false);
-  assert.equal(canCreateOwnedGroup(4, "pro"), true);
-  assert.equal(canCreateOwnedGroup(5, "pro"), false);
-  assert.equal(canCreateOwnedGroup(19, "vip"), true);
-  assert.equal(canCreateOwnedGroup(20, "vip"), false);
+function testActiveParticipationGate() {
+  assert.equal(canActivateParticipation(0, "free"), true);
+  assert.equal(canActivateParticipation(1, "free"), false);
+  assert.equal(canActivateParticipation(4, "pro"), true);
+  assert.equal(canActivateParticipation(5, "pro"), false);
+  assert.equal(canActivateParticipation(19, "vip"), true);
+  assert.equal(canActivateParticipation(20, "vip"), false);
 }
 
 function testAutopilotEnableGate() {
@@ -57,11 +60,6 @@ function testAutopilotEnableGate() {
   assert.equal(canEnableAutopilot(1, "free", { currentlyEnabled: true }), true);
   assert.equal(canEnableAutopilot(4, "pro"), true);
   assert.equal(canEnableAutopilot(5, "pro"), false);
-  assert.equal(canDisableAutopilotAlways(), true);
-}
-
-function canDisableAutopilotAlways() {
-  return true;
 }
 
 function testAutopilotOverLimitAfterDowngrade() {
@@ -71,9 +69,10 @@ function testAutopilotOverLimitAfterDowngrade() {
   assert.equal(canEnableAutopilot(3, "free", { currentlyEnabled: true }), false);
 }
 
-function testDowngradeKeepsExistingGroups() {
-  const ownedAfterDowngrade = 5;
-  assert.equal(canCreateOwnedGroup(ownedAfterDowngrade, "free"), false);
+function testParticipationOverLimitAfterDowngrade() {
+  assert.equal(isActiveParticipationOverLimit(3, "free"), true);
+  assert.equal(isActiveParticipationOverLimit(1, "free"), false);
+  assert.equal(canActivateParticipation(5, "free"), false);
 }
 
 function testNovaQuotaAfterDowngrade() {
@@ -83,9 +82,9 @@ function testNovaQuotaAfterDowngrade() {
   assert.equal(used >= limit, true);
 }
 
-function testJoinUnlimited() {
+function testCreateUnlimitedMembershipJoin() {
   const joinedGroups = 25;
-  assert.ok(joinedGroups > PLAN_LIMITS.free.ownedGroupsLimit);
+  assert.ok(joinedGroups > PLAN_LIMITS.free.activeGroupsLimit);
 }
 
 function testNovaBlocksAtLimit() {
@@ -97,12 +96,12 @@ function testNovaBlocksAtLimit() {
 function run() {
   testPlanLimitsConfig();
   testDowngradeTierNormalization();
-  testOwnedGroupCreateGate();
+  testActiveParticipationGate();
   testAutopilotEnableGate();
   testAutopilotOverLimitAfterDowngrade();
-  testDowngradeKeepsExistingGroups();
+  testParticipationOverLimitAfterDowngrade();
   testNovaQuotaAfterDowngrade();
-  testJoinUnlimited();
+  testCreateUnlimitedMembershipJoin();
   testNovaBlocksAtLimit();
   console.log("testPlanLimits: all checks passed");
 }

@@ -35,7 +35,7 @@ function ScoreFrame({ value, colors, empty = false }) {
         borderRadius: 8,
         borderWidth: 1.5,
         borderColor: colors.border,
-        backgroundColor: colors.card2,
+        backgroundColor: colors.card,
         alignItems: "center",
         justifyContent: "center",
       }}

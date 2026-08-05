@@ -5,6 +5,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { APP_TZ, weekAnchorDate } from "../ProphetikDate.js";
 import { recordParticipantProgressionSafe } from "../achievements/achievementService.js";
+import { isParticipatingMember } from "../groups/participationUtils.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -211,26 +212,15 @@ export const defisJoin = onCall({ region: "us-central1" }, async (req) => {
 
       // ✅ membership/owner check dans tx
       const gmRef = db.doc(`group_memberships/${groupId}_${uid}`);
-      const gRef = db.doc(`groups/${groupId}`);
 
       const gmSnap = await tx.get(gmRef);
-      let okMember = false;
+      let okMember = gmSnap.exists && isParticipatingMember(gmSnap.data() || {});
 
-      if (gmSnap.exists) {
-        const d = gmSnap.data() || {};
-        const isActive = d.active !== false;
-        const role = String(d.role || "member").toLowerCase();
-        okMember = isActive && (role === "member" || role === "owner");
-      }
       if (!okMember) {
-        const gSnap = await tx.get(gRef);
-        if (gSnap.exists) {
-          const gd = gSnap.data() || {};
-          okMember = String(gd.ownerId || gd.createdBy || "") === String(uid);
-        }
-      }
-      if (!okMember) {
-        throw new HttpsError("permission-denied", "Participation refusée: non membre/owner actif.");
+        throw new HttpsError("failed-precondition", "PARTICIPATION_ACTIVE_REQUIRED", {
+          reason: "PARTICIPATION_ACTIVE_REQUIRED",
+          groupId,
+        });
       }
 
       const partSnap = await tx.get(partRef);

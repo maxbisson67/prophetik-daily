@@ -1,3 +1,5 @@
+import { toDateAny } from "@src/defis/results/tsResultsUtils";
+
 export function getFgcMode(challenge) {
   if (challenge?.fgcMode) return String(challenge.fgcMode);
   if (String(challenge?.league || "").toUpperCase() === "MLB") return "first_rbi";
@@ -119,6 +121,23 @@ export function getFgcLivePendingText(ch, t, { name, team }) {
     name,
     team,
   });
+}
+
+/** Masquer les choix des autres tant que le défi est ouvert et le match n'a pas commencé. */
+export function resolveFgcHideOthersPicks(challenge = {}, scheduleStatus = null) {
+  const status = String(scheduleStatus || challenge?.status || "").toLowerCase();
+  if (status !== "open") return false;
+  const start = toDateAny(challenge?.gameStartTimeUTC);
+  if (start && Date.now() >= start.getTime()) return false;
+  return true;
+}
+
+export function resolveFgcRevealTimeLabel(challenge = {}) {
+  const d = toDateAny(challenge?.gameStartTimeUTC);
+  if (!d) return null;
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 export function getFgcLiveConfirmedText(ch, t, { name, team }) {

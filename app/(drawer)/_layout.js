@@ -21,6 +21,7 @@ import useMeDoc from "@src/home/hooks/useMeDoc";
 import i18n from "@src/i18n/i18n";
 import { useLanguage } from "@src/i18n/LanguageProvider";
 import { AutopilotDowngradeGate } from "@src/subscriptions/AutopilotDowngradeModal";
+import { ParticipationDowngradeGate } from "@src/subscriptions/ParticipationDowngradeModal";
 import { MyGroupsProvider } from "@src/groups/MyGroupsProvider";
 import { SelectedGroupProvider } from "@src/groups/SelectedGroupProvider";
 
@@ -434,6 +435,7 @@ export default function DrawerLayout() {
       </SelectedGroupProvider>
     </MyGroupsProvider>
     <AutopilotDowngradeGate />
+    <ParticipationDowngradeGate />
     </>
   );
 }

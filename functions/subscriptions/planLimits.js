@@ -6,18 +6,21 @@ export const PLAN_TIERS = ["free", "pro", "vip"];
 
 export const PLAN_LIMITS = {
   free: {
+    activeGroupsLimit: 1,
     ownedGroupsLimit: 1,
     autopilotGroupsLimit: 1,
     novaAdviceMonthlyLimit: 30,
     novaExplainLlmMonthlyLimit: 30,
   },
   pro: {
+    activeGroupsLimit: 5,
     ownedGroupsLimit: 5,
     autopilotGroupsLimit: 5,
     novaAdviceMonthlyLimit: 100,
     novaExplainLlmMonthlyLimit: 60,
   },
   vip: {
+    activeGroupsLimit: 20,
     ownedGroupsLimit: 20,
     autopilotGroupsLimit: 20,
     novaAdviceMonthlyLimit: 250,

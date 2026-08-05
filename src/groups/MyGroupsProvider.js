@@ -11,12 +11,18 @@ import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
 import { listenRNFB } from "@src/dev/fsListen";
 import { snapshotExists } from "@src/lib/safeSnapshot";
-import { isActiveGroup, isActiveMembership } from "@src/groups/groupOwnership";
+import { isActiveGroup, isGroupOwner } from "@src/groups/groupOwnership";
+import {
+  isParticipatingMember,
+  isMembershipEligibleForParticipationChange,
+  PARTICIPATION,
+  resolveParticipation,
+} from "@src/groups/participationUtils";
 
 const MyGroupsContext = createContext(null);
 
-function isMembershipActive(m) {
-  return isActiveMembership(m);
+function isMembershipListed(m) {
+  return isMembershipEligibleForParticipationChange(m);
 }
 
 export function normalizeGroupMeta(gid, data = {}) {
@@ -41,6 +47,7 @@ export function MyGroupsProvider({ children, enabled = true }) {
 
   const [groupIds, setGroupIds] = useState([]);
   const [groupsMeta, setGroupsMeta] = useState({});
+  const [membershipsByGroupId, setMembershipsByGroupId] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -65,6 +72,7 @@ export function MyGroupsProvider({ children, enabled = true }) {
     groupMetaUnsubs.current.clear();
 
     if (!shouldListen) {
+      setMembershipsByGroupId({});
       setLoading(false);
       return;
     }
@@ -74,6 +82,7 @@ export function MyGroupsProvider({ children, enabled = true }) {
 
     const uid = user.uid;
     const qByUid = firestore().collection("group_memberships").where("uid", "==", uid);
+    const qByUserId = firestore().collection("group_memberships").where("userId", "==", uid);
     const qByPid = firestore()
       .collection("group_memberships")
       .where("participantId", "==", uid);
@@ -81,12 +90,23 @@ export function MyGroupsProvider({ children, enabled = true }) {
     const qOwnerOwnerId = firestore().collection("groups").where("ownerId", "==", uid);
 
     let rowsByUid = [];
+    let rowsByUserId = [];
     let rowsByPid = [];
     let rowsOwnerCreated = [];
     let rowsOwnerOwnerId = [];
 
     const recompute = () => {
-      const memberships = [...rowsByUid, ...rowsByPid].filter(isMembershipActive);
+      const memberships = [...rowsByUid, ...rowsByUserId, ...rowsByPid].filter(isMembershipListed);
+      const byGroupId = {};
+
+      memberships.forEach((m) => {
+        const gid = String(m.groupId || m.id?.split("_")[0] || "").trim();
+        if (!gid) return;
+        byGroupId[gid] = m;
+      });
+
+      setMembershipsByGroupId(byGroupId);
+
       const gidsFromMemberships = memberships.map((m) => m.groupId).filter(Boolean);
       const gidsFromOwner = [...rowsOwnerCreated, ...rowsOwnerOwnerId]
         .filter(isActiveGroup)
@@ -107,6 +127,19 @@ export function MyGroupsProvider({ children, enabled = true }) {
           recompute();
         },
         "group_memberships:uid",
+        (e) => {
+          setError(e);
+          setLoading(false);
+        },
+        opts
+      ),
+      listenRNFB(
+        qByUserId,
+        (snap) => {
+          rowsByUserId = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }));
+          recompute();
+        },
+        "group_memberships:userId",
         (e) => {
           setError(e);
           setLoading(false);
@@ -220,15 +253,29 @@ export function MyGroupsProvider({ children, enabled = true }) {
     () =>
       readableGroupIds.map((gid) => {
         const g = groupsMeta[gid] || {};
+        const membership = membershipsByGroupId[gid];
+        const owner = isGroupOwner(g, user?.uid);
+        const participation = membership
+          ? resolveParticipation(membership)
+          : owner
+            ? PARTICIPATION.ADMIN_ONLY
+            : null;
+        const canParticipateInChallenges = membership
+          ? isParticipatingMember(membership)
+          : false;
+
         return {
+          ...g,
           id: gid,
           name: g.name || gid,
           avatarUrl: g.avatarUrl || null,
           sport: g.sport || "NHL",
-          ...g,
+          participation,
+          hasMembershipDoc: Boolean(membership),
+          canParticipateInChallenges,
         };
       }),
-    [readableGroupIds, groupsMeta]
+    [readableGroupIds, groupsMeta, membershipsByGroupId, user?.uid]
   );
 
   const value = useMemo(

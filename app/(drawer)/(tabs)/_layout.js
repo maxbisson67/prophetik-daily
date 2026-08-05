@@ -106,7 +106,14 @@ function TabsLayoutInner() {
 
         <Tabs.Screen name="BadgesScreen" options={{ href: null }} />
 
-        <Tabs.Screen name="GroupsScreen" options={{ href: null }} />
+        <Tabs.Screen
+          name="GroupsScreen"
+          options={{
+            href: null,
+            title: i18n.t("groups.title", { defaultValue: "Mes groupes" }),
+            headerLeft: (props) => <DrawerToggleButton {...props} />,
+          }}
+        />
         <Tabs.Screen name="sports" options={{ href: null }} />
         <Tabs.Screen name="index" options={{ href: null, headerShown: false }} />
       </Tabs>

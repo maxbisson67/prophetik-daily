@@ -47,21 +47,25 @@ import CreateAscensionModal from "@src/ascensions/CreateAscensionModal";
 import useEntitlement from "../subscriptions/useEntitlement";
 import useLeaderboardCompetitionKey from "@src/hooks/useLeaderboardCompetitionKey";
 import useGroupLeaderboardSummary from "@src/leaderboard/useGroupLeaderboardSummary";
-import DefiTypeLeading from "@src/home/components/DefiTypeLeading";
 import DefiSectionIntroBand from "@src/home/components/DefiSectionIntroBand";
 import DefiChallengeInfoBubble from "@src/home/components/DefiChallengeInfoBubble";
 import HomeDefisToggle, {
   areAllHomeDefisComplete,
-  countCompletedHomeDefis,
+  countEnrolledHomeDefis,
+  getChallengeAccent,
+  paleChallengeBackground,
 } from "@src/home/components/HomeDefisToggle";
 import DailyDefisProgress from "@src/home/components/DailyDefisProgress";
 import GroupChatSection from "@src/home/components/GroupChatSection";
+import SeasonTransitionBanners from "@src/home/components/SeasonTransitionBanners";
+import SportSeasonSwitchBanner from "@src/home/components/SportSeasonSwitchBanner";
+import useSeasonTransitionBanners from "@src/home/hooks/useSeasonTransitionBanners";
+import useSportSeasonSwitchPrompt from "@src/home/hooks/useSportSeasonSwitchPrompt";
 import { openLiveResultsTab } from "@src/defis/results/navigateToMesResultats";
-import { BADGES_TAB_HREF } from "@src/achievements/screens/ProgressionScreen";
-
 import { listenRNFB } from "@src/dev/fsListen";
 import { useMyGroups } from "@src/groups/MyGroupsProvider";
 import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
+import { isGroupAutopilotEnabled } from "@src/groups/groupAutopilotUtils";
 import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
 import {
   PROPHETIK_RED,
@@ -413,6 +417,10 @@ export default function AccueilScreen() {
 
   const currentGroupMeta = currentGroupId ? groupsMeta[currentGroupId] || null : null;
   const currentSport = String(currentGroupMeta?.sport || currentGroupMeta?.league || "NHL").toUpperCase();
+  const autopilotEnabled = useMemo(
+    () => isGroupAutopilotEnabled(currentGroupMeta),
+    [currentGroupMeta]
+  );
 
   const {
     competitionKey,
@@ -452,7 +460,36 @@ export default function AccueilScreen() {
       loadingCompetition,
     ]
   );
-  
+
+  const {
+    championBanner,
+    playoffsBanner,
+    loading: loadingSeasonBanners,
+  } = useSeasonTransitionBanners({
+    sport: currentSport,
+    groupId: currentGroupId,
+    enabled: listenersEnabled && !!currentGroupId,
+  });
+
+  const onOpenSeasonLeaderboard = useCallback(() => {
+    router.push("/(drawer)/(tabs)/ClassementScreen");
+  }, [router]);
+
+  const {
+    prompt: sportSwitchPrompt,
+    loading: loadingSportSwitchPrompt,
+    dismiss: dismissSportSwitchPrompt,
+  } = useSportSeasonSwitchPrompt({
+    userGroups,
+    enabled: listenersEnabled && !!user?.uid,
+  });
+
+  const onSportSwitchActivated = useCallback(
+    (groupId) => {
+      if (groupId) setSelectedGroupId(String(groupId));
+    },
+    [setSelectedGroupId]
+  );
 
   const [showFirstGoalModal, setShowFirstGoalModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -695,8 +732,8 @@ useEffect(() => {
     [defiCompletionByTab]
   );
 
-  const dailyDefisCompletedCount = useMemo(
-    () => countCompletedHomeDefis(defiCompletionByTab),
+  const dailyDefisEnrolledCount = useMemo(
+    () => countEnrolledHomeDefis(defiCompletionByTab),
     [defiCompletionByTab]
   );
 
@@ -1002,11 +1039,26 @@ const avatarUrl =
                 onSelectGroup={onSelectGroup}
                 stats={meDoc?.stats}
                 achievements={meDoc?.achievements}
-                onPressProgression={() => router.push(BADGES_TAB_HREF)}
                 groupSummary={streakGroupSummary}
               />
               </View>
             </View>
+
+            {!loadingSeasonBanners && (championBanner || playoffsBanner) ? (
+              <SeasonTransitionBanners
+                championBanner={championBanner}
+                playoffsBanner={playoffsBanner}
+                onOpenLeaderboard={onOpenSeasonLeaderboard}
+              />
+            ) : null}
+
+            {!loadingSportSwitchPrompt && sportSwitchPrompt ? (
+              <SportSeasonSwitchBanner
+                prompt={sportSwitchPrompt}
+                onDismiss={dismissSportSwitchPrompt}
+                onActivated={onSportSwitchActivated}
+              />
+            ) : null}
 
             {allDailyDefisEnrolled ? (
               <TouchableOpacity
@@ -1052,42 +1104,44 @@ const avatarUrl =
             ) : null}
 
             <View style={[prophetikCardShadow()]}>
-              <View style={prophetikLeftAccentCardStyle(colors, PROPHETIK_RED)}>
+              <View
+                style={prophetikLeftAccentCardStyle(colors, getChallengeAccent(selectedDefiTab))}
+              >
                 <HomeDefisToggle
                   title={i18n.t("home.dailyDefisTitle")}
-                  headerBleed={12}
-                  accentColor={PROPHETIK_RED}
-                  neutralHeader
+                  sport={currentSport}
                   value={selectedDefiTab}
                   onChange={setSelectedDefiTab}
                   colors={colors}
                   completedByTab={defiCompletionByTab}
                 />
 
-                <DailyDefisProgress completedCount={dailyDefisCompletedCount} colors={colors} />
+                <View
+                  style={{
+                    backgroundColor: paleChallengeBackground(selectedDefiTab),
+                    borderRadius: 12,
+                    padding: 12,
+                    marginTop: 4,
+                  }}
+                >
+                  <DailyDefisProgress enrolledCount={dailyDefisEnrolledCount} colors={colors} />
 
-                <View style={hiddenDefiTabPanelStyle(selectedDefiTab === "fgc")}>
+                  <View style={hiddenDefiTabPanelStyle(selectedDefiTab === "fgc")}>
                   <DefiSectionIntroBand>
-                    <SectionHeader
-                      flat
-                      compact
+                    {isCurrentGroupOwner && !hasFirstGoalForGroup ? (
+                      <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 }}>
+                        <SectionCreateAction
+                          onPress={onPressCreateFirstGoal}
+                          label={i18n.t("common.create")}
+                        />
+                      </View>
+                    ) : null}
+                    <DefiChallengeInfoBubble
+                      kind="fgc"
+                      sport={currentSport}
                       colors={colors}
-                      title={
-                        currentSport === "MLB"
-                          ? i18n.t("firstGoal.firstRbi.title", { defaultValue: "Premier point produit" })
-                          : i18n.t("firstGoal.home.title")
-                      }
-                      leftIcon={<DefiTypeLeading kind="fgc" sport={currentSport} colors={colors} glyphSize={20} />}
-                      rightAction={
-                        isCurrentGroupOwner && !hasFirstGoalForGroup ? (
-                          <SectionCreateAction
-                            onPress={onPressCreateFirstGoal}
-                            label={i18n.t("common.create")}
-                          />
-                        ) : null
-                      }
+                      inIntroBand
                     />
-                    <DefiChallengeInfoBubble kind="fgc" colors={colors} inIntroBand />
                   </DefiSectionIntroBand>
                   <FirstGoalHomeSection
                     key={`fgc-${dailyDefisSectionKey}`}
@@ -1097,6 +1151,7 @@ const avatarUrl =
                     colors={colors}
                     listenersEnabled={listenersEnabled}
                     hintChallengeId={fgcHintChallengeId}
+                    autopilotEnabled={autopilotEnabled}
                     onHasChallengeChange={setHasFirstGoalForGroup}
                     onUserParticipatedChange={setFgcProgress}
                   />
@@ -1104,22 +1159,14 @@ const avatarUrl =
 
                 <View style={hiddenDefiTabPanelStyle(selectedDefiTab === "tp")}>
                   <DefiSectionIntroBand>
-                    <SectionHeader
-                      flat
-                      compact
-                      colors={colors}
-                      leftIcon={<DefiTypeLeading kind="tp" sport={currentSport} colors={colors} glyphSize={20} />}
-                      title={i18n.t("tp.home.title", { defaultValue: "Prédire l'issue des matchs" })}
-                      rightAction={
-                        isCurrentGroupOwner && canCreateTpBundle ? (
-                          <SectionCreateAction
-                            onPress={onPressCreateTeamPrediction}
-                            label={i18n.t("common.create", { defaultValue: "Créer" })}
-                          />
-                        ) : null
-                      }
-                    />
-                    <DefiChallengeInfoBubble kind="tp" colors={colors} inIntroBand />
+                    {isCurrentGroupOwner && canCreateTpBundle ? (
+                      <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 }}>
+                        <SectionCreateAction
+                          onPress={onPressCreateTeamPrediction}
+                          label={i18n.t("common.create", { defaultValue: "Créer" })}
+                        />
+                      </View>
+                    ) : null}
                   </DefiSectionIntroBand>
                   <TeamPredictionHomeSection
                     key={`tp-${dailyDefisSectionKey}`}
@@ -1129,6 +1176,7 @@ const avatarUrl =
                     currentSport={currentSport}
                     listenersEnabled={listenersEnabled}
                     hintBundleId={tpBundleHintId}
+                    autopilotEnabled={autopilotEnabled}
                     onHasChallengeChange={setHasTeamPredictionForGroup}
                     onCanCreateBundleChange={setCanCreateTpBundle}
                     onUserParticipatedChange={setTpProgress}
@@ -1141,7 +1189,6 @@ const avatarUrl =
                       flat
                       compact
                       colors={colors}
-                      leftIcon={<DefiTypeLeading kind="ts" sport={currentSport} colors={colors} glyphSize={20} />}
                       title={i18n.t("home.todayChallenge", { defaultValue: "Le trio du jour" })}
                       rightAction={
                         isCurrentGroupOwner && !hasTsForGroup ? (
@@ -1164,9 +1211,11 @@ const avatarUrl =
                     activeDefis={tsDefisForHome}
                     groupsMeta={groupsMeta}
                     tierLower={tierLower}
+                    autopilotEnabled={autopilotEnabled}
                     onOpenDefi={(defiId) => router.push("/(drawer)/defis/" + defiId)}
                     onUpgrade={() => router.push("/(drawer)/subscriptions")}
                   />
+                </View>
                 </View>
               </View>
             </View>

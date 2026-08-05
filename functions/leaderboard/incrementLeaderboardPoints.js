@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
+import { resolveFgcEntryPoints, isFgcEntryWinner } from "../fgc/fgcEntryPoints.js";
 import { db, toNumber } from "./leaderboard.js";
 import { resolveCompetitionForGroupCredit } from "./seasonCompetitions.js";
 import { computeMemberSeasonRank } from "./leaderboardRankUtils.js";
@@ -195,14 +196,9 @@ export async function incrementLeaderboardTpSlotPoints({
 }
 
 function parseFgcLeaderboardPoints(entry = {}, winnersPreviewUids = []) {
-  const payout = toNumber(entry?.payout, 0);
   const uid = String(entry?.uid || entry?.pickedBy || "");
-  const won =
-    entry?.won === true ||
-    payout > 0 ||
-    winnersPreviewUids.includes(uid);
-
-  const points = payout > 0 ? payout : won ? FGC_WIN_POINTS : 0;
+  const won = isFgcEntryWinner({ ...entry, uid }, { winnersPreviewUids });
+  const points = resolveFgcEntryPoints({ ...entry, uid }, { winnersPreviewUids });
   return { points, won };
 }
 

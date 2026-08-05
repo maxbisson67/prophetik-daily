@@ -1,4 +1,5 @@
 import { mapMlbScheduleGameToLiveGame } from "@src/mlb/mapMlbScheduleToLiveGame";
+import { MLB_CHALLENGE_ELIGIBLE_GAME_TYPES, isMlbChallengeEligibleGameType } from "@src/mlb/mlbGameTypeUtils";
 
 function toApiDateYmd(ymd) {
   const s = String(ymd || "").trim();
@@ -52,7 +53,7 @@ export async function fetchMlbScheduleGamesForYmd(ymd) {
 
   const url =
     `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(date)}` +
-    "&gameTypes=R&hydrate=team,linescore";
+    `&gameTypes=${MLB_CHALLENGE_ELIGIBLE_GAME_TYPES}&hydrate=team,linescore`;
 
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -66,6 +67,7 @@ export async function fetchMlbScheduleGamesForYmd(ymd) {
     for (const raw of block?.games || []) {
       const row = normalizeMlbApiScheduleGame(raw);
       if (!row.gamePk) continue;
+      if (!isMlbChallengeEligibleGameType(row.gameType)) continue;
       out.push(mapMlbScheduleGameToLiveGame(row, date));
     }
   }

@@ -5,33 +5,22 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import i18n from "@src/i18n/i18n";
 import {
+  getFgcLeague,
   getFgcResultPlayerId,
   getFgcResultPrefix,
   getFgcResultOutcomeLabel,
   getFgcTitle,
+  resolveFgcHideOthersPicks,
+  resolveFgcRevealTimeLabel,
 } from "@src/firstGoal/fgcChallengeUtils";
 import { resolveFgcEffectiveResult } from "@src/firstGoal/fgcMutualizedGameUtils";
 import useFgcMutualizedGame from "@src/firstGoal/useFgcMutualizedGame";
-
-function entryPickName(entry) {
-  return (
-    entry?.playerName ||
-    entry?.selectedPlayerName ||
-    entry?.pickPlayerName ||
-    "—"
-  );
-}
-
-function isCorrectPick(entry, winnerPlayerId) {
-  if (!winnerPlayerId || !entry?.playerId) return false;
-  return String(entry.playerId) === String(winnerPlayerId);
-}
+import FgcParticipantsList from "@src/defis/results/FgcParticipantsList";
 
 export default function FgcParticipantsModal({
   visible,
@@ -49,7 +38,8 @@ export default function FgcParticipantsModal({
   const winnerName = effectiveResult?.playerName || null;
   const winnerTeam = effectiveResult?.teamAbbr || null;
   const awaitingFinalConfirmation = !!effectiveResult?.awaitingFinalConfirmation;
-  const uid = String(currentUid || "");
+  const hideOthersPicks = resolveFgcHideOthersPicks(challenge);
+  const revealTimeLabel = resolveFgcRevealTimeLabel(challenge);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -111,68 +101,17 @@ export default function FgcParticipantsModal({
             </TouchableOpacity>
           </View>
 
-          <Text style={{ color: colors.text, fontWeight: "800", marginBottom: 8 }}>
-            {i18n.t("firstGoal.live.picksTitle", { defaultValue: "Participants & choix" })}
-            {!loading && entries.length > 0 ? ` (${entries.length})` : ""}
-          </Text>
-
           <ScrollView contentContainerStyle={{ paddingBottom: 18 }} keyboardShouldPersistTaps="handled">
-            {loading ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <ActivityIndicator size="small" color={colors.subtext} />
-                <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                  {i18n.t("common.loading", { defaultValue: "Chargement…" })}
-                </Text>
-              </View>
-            ) : entries.length === 0 ? (
-              <Text style={{ color: colors.subtext, fontSize: 13 }}>
-                {i18n.t("firstGoal.live.noEntriesYet", { defaultValue: "Aucune participation encore." })}
-              </Text>
-            ) : (
-              <View style={{ gap: 6 }}>
-                {entries.map((entry) => {
-                  const who =
-                    entry.displayName || entry.name || String(entry.uid || "").slice(0, 6);
-                  const pick = entryPickName(entry);
-                  const correct = isCorrectPick(entry, winnerPlayerId);
-                  const isMe = String(entry.uid) === uid;
-
-                  return (
-                    <View
-                      key={String(entry.uid)}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        paddingVertical: 8,
-                        paddingHorizontal: 10,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: isMe ? "rgba(22,163,74,0.35)" : colors.border,
-                        backgroundColor: isMe ? colors.card2 : colors.card,
-                      }}
-                    >
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={{ color: colors.text, fontWeight: "900" }} numberOfLines={1}>
-                          {who}
-                          {isMe
-                            ? ` ${i18n.t("challenges.youSuffix", { defaultValue: "(toi)" })}`
-                            : ""}
-                        </Text>
-                        <Text style={{ color: colors.subtext, fontSize: 12 }} numberOfLines={1}>
-                          {pick}
-                        </Text>
-                      </View>
-
-                      <Ionicons
-                        name={correct ? "checkmark-circle" : "close-circle"}
-                        size={20}
-                        color={correct ? "#16a34a" : "#dc2626"}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-            )}
+            <FgcParticipantsList
+              entries={entries}
+              loading={loading}
+              winnerPlayerId={winnerPlayerId}
+              currentUid={currentUid}
+              colors={colors}
+              league={getFgcLeague(challenge)}
+              hideOthersPicks={hideOthersPicks}
+              revealTimeLabel={revealTimeLabel}
+            />
           </ScrollView>
         </View>
       </View>

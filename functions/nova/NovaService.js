@@ -8,6 +8,8 @@ import { QuotaManager } from "./quotas/QuotaManager.js";
 import { CacheLayer } from "./cache/CacheLayer.js";
 import { AuditLogger } from "./audit/AuditLogger.js";
 import { buildIndicatorsMeta } from "./indicators/buildIndicatorsMeta.js";
+import { assertCanParticipateInGroup } from "../groups/participationEnforcement.js";
+import { getFirestore } from "firebase-admin/firestore";
 
 function normalizeCapability(value) {
   const v = String(value || "coach").trim().toLowerCase();
@@ -30,6 +32,20 @@ function resolveChallengeType(ctx, verifiedContext) {
   if (d === "tp") return "TP";
   if (d === "ts") return "TS";
   return "FGC";
+}
+
+function resolveGroupIdFromContext(verifiedContext) {
+  return (
+    verifiedContext?.challenge?.groupId ||
+    verifiedContext?.groupId ||
+    null
+  );
+}
+
+async function assertGroupParticipationForNova(uid, verifiedContext) {
+  const groupId = resolveGroupIdFromContext(verifiedContext);
+  if (!groupId) return;
+  await assertCanParticipateInGroup(getFirestore(), groupId, uid);
 }
 
 function guessFocusSlotFromMessage(message) {
@@ -99,8 +115,12 @@ export class NovaService {
           focusPlayerHint: ctx.focusPlayerHint || null,
         });
         domain = `${verifiedContext.domain}_${verifiedContext.sport}`.toLowerCase();
+        await assertGroupParticipationForNova(uid, verifiedContext);
       } catch (e) {
         const code = String(e?.message || e);
+        if (code === "PARTICIPATION_ACTIVE_REQUIRED") {
+          return { ok: false, error: "PARTICIPATION_ACTIVE_REQUIRED" };
+        }
         if (capability === "indicators") {
           return { ok: false, error: code || "CONTEXT_UNAVAILABLE" };
         }

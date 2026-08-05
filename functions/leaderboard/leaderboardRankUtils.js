@@ -1,5 +1,5 @@
 import { db } from "./leaderboard.js";
-import { isActiveMembership } from "../groups/groupMembership.js";
+import { isActiveMembership, isParticipatingMember } from "../groups/groupMembership.js";
 
 function chunk(arr, size) {
   const out = [];
@@ -33,8 +33,26 @@ export async function fetchActiveMemberUids(groupId) {
   return Array.from(uids);
 }
 
+export async function fetchParticipatingMemberUids(groupId) {
+  const gid = String(groupId || "").trim();
+  if (!gid) return [];
+
+  const snap = await db.collection("group_memberships").where("groupId", "==", gid).get();
+  const uids = new Set();
+
+  snap.forEach((docSnap) => {
+    const m = docSnap.data() || {};
+    if (!isParticipatingMember(m)) return;
+    const uid = pickMembershipUid(docSnap.id, m);
+    if (!uid) return;
+    uids.add(uid);
+  });
+
+  return Array.from(uids);
+}
+
 export async function fetchActiveHumanMemberUids(groupId) {
-  const uids = await fetchActiveMemberUids(groupId);
+  const uids = await fetchParticipatingMemberUids(groupId);
   return uids.filter((uid) => String(uid).toLowerCase() !== "ai");
 }
 

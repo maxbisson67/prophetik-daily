@@ -1,7 +1,9 @@
 // functions/leaderboard/leaderboard.js
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
+import { FGC_WIN_POINTS, DAILY_TOP_BONUS_POINTS } from "../challengeScoringConstants.js";
+import { resolveFgcEntryPoints, isFgcEntryWinner } from "../fgc/fgcEntryPoints.js";
+import { tsDefiCountsForStats } from "../defis/tsDefiStatsEligibility.js";
 
 if (!getApps().length) initializeApp();
 export const db = getFirestore();
@@ -25,25 +27,26 @@ export const typeKey = (defiType) => {
 };
 
 /**
- * Règle "win" (alignée avec finalize.js):
- * - potInc = payout + bonus
- * - won si potInc > 0
+ * Règle TS (Trio) :
+ * - finalPoints = cumul des stats réelles des picks
+ * - potInc (Prophetik) = finalPoints (bonus quotidien séparé)
  *
- * ✅ Ajout:
- * - nhlPoints: somme des points NHL réels de la sélection
+ * Rétrocompat : won si isWinner, bonus > 0 ou payout > 0.
  */
 export const parseParticipation = (data = {}) => {
   const payout = toNumber(data.payout, 0);
   const bonus = toNumber(data.bonus, 0);
-  const potInc = payout + bonus;
+  const finalPoints =
+    toNumber(data.finalPoints, 0) || toNumber(data.livePoints, 0);
+  const potInc = finalPoints;
 
-  // ✅ NHL réel (qualité de sélection)
-  const finalPoints = toNumber(data.finalPoints, 0);
-
-  // ✅ “games” = nb de picks (plus fiable que defi.type)
   const picksLen = Array.isArray(data.picks) ? data.picks.length : 0;
 
-  const won = potInc > 0;
+  const won =
+    data.won === true ||
+    data.isWinner === true ||
+    bonus > 0 ||
+    payout > 0;
   const displayName = data.displayName || null;
 
   return { payout, bonus, potInc, finalPoints, won, displayName, picksLen };
@@ -327,6 +330,9 @@ function makeEmptyAgg(uid) {
     ts: emptyFamilyStats(),
     },
 
+    dailyBonusWins: 0,
+    dailyBonusPoints: 0,
+
     displayName: null,
     avatarUrl: null,
     avatarId: null,
@@ -355,12 +361,9 @@ function ensureAgg(totals, uid) {
  */
 function parseFgcEntry({ entry = {}, winnersPreviewUids = [] }) {
   const payout = toNumber(entry?.payout, 0);
-  const won =
-    entry?.won === true ||
-    payout > 0 ||
-    winnersPreviewUids.includes(String(entry?.uid || entry?.pickedBy || ""));
-
-  const points = payout > 0 ? payout : won ? FGC_WIN_POINTS : 0;
+  const uid = String(entry?.uid || entry?.pickedBy || "");
+  const won = isFgcEntryWinner({ ...entry, uid }, { winnersPreviewUids });
+  const points = resolveFgcEntryPoints({ ...entry, uid }, { winnersPreviewUids });
 
   return {
     payout,
@@ -391,13 +394,29 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
   const totals = new Map();
 
   /* -------------------- 1) DEFIS: Standard + Ascension -------------------- */
-  const defisSnap = await db
-    .collection("defis")
-    .where("groupId", "==", groupId)
-    .where("status", "==", "completed")
-    .where("gameDate", ">=", from)
-    .where("gameDate", "<=", to)
-    .get();
+  const [defisCompletedSnap, defisCancelledSnap] = await Promise.all([
+    db
+      .collection("defis")
+      .where("groupId", "==", groupId)
+      .where("status", "==", "completed")
+      .where("gameDate", ">=", from)
+      .where("gameDate", "<=", to)
+      .get(),
+    db
+      .collection("defis")
+      .where("groupId", "==", groupId)
+      .where("status", "==", "cancelled")
+      .where("gameDate", ">=", from)
+      .where("gameDate", "<=", to)
+      .get(),
+  ]);
+
+  const defisSnapDocs = [
+    ...defisCompletedSnap.docs,
+    ...defisCancelledSnap.docs.filter((doc) => tsDefiCountsForStats(doc.data() || {})),
+  ];
+
+  const defisSnap = { docs: defisSnapDocs, size: defisSnapDocs.length };
 
   // ✅ summary global pour comparaison future avec moyenne des autres
 const summary = {
@@ -671,6 +690,32 @@ const summary = {
     }
   }
 
+  /* -------------------- 4b) Bonus quotidien (meilleur total SOLO+DUO+TRIO) -------------------- */
+  try {
+    const bonusSnap = await db
+      .collection(`groups/${groupId}/daily_bonus_awards`)
+      .where("gameDate", ">=", from)
+      .where("gameDate", "<=", to)
+      .get();
+
+    for (const bonusDoc of bonusSnap.docs) {
+      const award = bonusDoc.data() || {};
+      const winnerUids = Array.isArray(award.winnerUids)
+        ? award.winnerUids.map(String).filter(Boolean)
+        : [];
+      const bonusPts = toNumber(award.bonusPoints, DAILY_TOP_BONUS_POINTS);
+      if (!winnerUids.length || bonusPts <= 0) continue;
+
+      for (const uid of winnerUids) {
+        const cur = ensureAgg(totals, uid);
+        cur.dailyBonusWins += 1;
+        cur.dailyBonusPoints += bonusPts;
+      }
+    }
+  } catch {
+    // optional subcollection
+  }
+
   const allUids = [...totals.keys()];
   summary.membersCount = totals.size;
 
@@ -825,7 +870,8 @@ const summary = {
       const cleanPointsTotal =
         toNumber(fgc.points, 0) +
         toNumber(tp.points, 0) +
-        toNumber(ts.points, 0);
+        toNumber(ts.points, 0) +
+        toNumber(agg.dailyBonusPoints, 0);
 
       batch.set(
         db.doc(`${base}/${uid}`),
@@ -876,6 +922,9 @@ const summary = {
           fgcPlays: fgc.plays,
           tpPlays: tp.plays,
           tsPlays: ts.plays,
+
+          dailyBonusWins: toNumber(agg.dailyBonusWins, 0),
+          dailyBonusPoints: toNumber(agg.dailyBonusPoints, 0),
 
           // ✅ nettoyage legacy
           "families.standard": FieldValue.delete(),

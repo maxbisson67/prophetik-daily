@@ -19,6 +19,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { joinGroupService } from "@src/groups/joinGroupService";
+import { setMembershipParticipationService } from "@src/groups/setMembershipParticipationService";
+import { PARTICIPATION } from "@src/groups/participationUtils";
 import firestore from "@react-native-firebase/firestore";
 
 // Safe auth + thème
@@ -161,6 +163,52 @@ export default function JoinGroupScreen() {
         groupId,
       });
 
+      if (res?.joinedAsInactive) {
+        Alert.alert(
+          i18n.t("groups.join.joinedInactiveTitle", {
+            defaultValue: "Groupe rejoint en mode inactif",
+          }),
+          i18n.t("groups.join.joinedInactiveMessage", {
+            defaultValue:
+              "Tu es membre de ce groupe, mais tu joues encore dans un autre groupe actif. Active ce groupe quand tu seras prêt à y jouer.",
+          }),
+          [
+            {
+              text: i18n.t("groups.join.joinedInactiveLater", { defaultValue: "Plus tard" }),
+              style: "cancel",
+              onPress: () =>
+                router.replace({
+                  pathname: "/(drawer)/groups/[groupId]",
+                  params: { groupId },
+                }),
+            },
+            {
+              text: i18n.t("groups.join.joinedInactiveActivate", {
+                defaultValue: "Activer ce groupe",
+              }),
+              onPress: async () => {
+                try {
+                  await setMembershipParticipationService({
+                    groupId,
+                    participation: PARTICIPATION.ACTIVE,
+                  });
+                } catch (activateErr) {
+                  Alert.alert(
+                    i18n.t("groups.join.alertGenericErrorTitle"),
+                    String(activateErr?.message || activateErr)
+                  );
+                }
+                router.replace({
+                  pathname: "/(drawer)/groups/[groupId]",
+                  params: { groupId },
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       router.replace({
         pathname: "/(drawer)/groups/[groupId]",
         params: { groupId },
@@ -172,7 +220,28 @@ export default function JoinGroupScreen() {
 
       console.log("JOIN ERROR", { code: errCode, message: msg, details });
 
-      // ✅ Caps (abonnement)
+      // ✅ Cap participation active
+      if (
+        errCode.includes("failed-precondition") &&
+        (msg.includes("ACTIVE_GROUP_LIMIT_REACHED") ||
+          msg.includes("ACTIVE_GROUP_RESOLUTION_REQUIRED"))
+      ) {
+        const max = details?.max ?? 0;
+
+        Alert.alert(
+          i18n.t("groups.join.alertActiveGroupLimitTitle", {
+            defaultValue: "Limite de groupes actifs",
+          }),
+          i18n.t("groups.join.alertActiveGroupLimitMessage", {
+            max,
+            defaultValue:
+              "Ton forfait permet de jouer dans {{max}} groupe(s) à la fois. Bascule ta participation active ou passe à un forfait supérieur.",
+          })
+        );
+        return;
+      }
+
+      // Legacy caps (abonnement)
       if (
         errCode.includes("failed-precondition") &&
         (msg.includes("GROUP_LIMIT_REACHED") ||

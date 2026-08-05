@@ -13,6 +13,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import i18n from "@src/i18n/i18n";
+import useAppConfig from "@src/hooks/useAppConfig";
+import {
+  formatSeasonLabel,
+  getNhlPreviousSeasonId,
+  resolveNhlLeadersSeasonId,
+} from "@src/players/seasonStatsHelpers";
 
 /* ========================
    Logos NHL
@@ -68,14 +74,6 @@ function pickNumber(v, fallback = 0) {
 
 function pickStr(v, fallback = "") {
   return typeof v === "string" ? v : fallback;
-}
-
-function getCurrentSeasonId(date = new Date()) {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + 1;
-  const startYear = month >= 7 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `${startYear}${endYear}`;
 }
 
 function headshotUrl(abbr, playerId, seasonId) {
@@ -314,8 +312,10 @@ function PlayerRow({ item, index, colors, seasonId, sortField }) {
 
 export default function NhlSkaterLeadersScreen() {
   const { colors } = useTheme();
+  const { config: seasonConfig } = useAppConfig();
 
-  const [seasonId, setSeasonId] = useState(getCurrentSeasonId());
+  const [seasonId, setSeasonId] = useState("");
+  const [isPreviousSeason, setIsPreviousSeason] = useState(false);
   const [sortField, setSortField] = useState("points");
 
   const [rows, setRows] = useState([]);
@@ -358,11 +358,25 @@ export default function NhlSkaterLeadersScreen() {
       setError("");
       setBusy(true);
 
-      const currentSeason = getCurrentSeasonId();
-      setSeasonId(currentSeason);
+      const resolved = resolveNhlLeadersSeasonId({ seasonConfig });
+      let targetSeasonId = resolved.seasonId;
+      let showingPrevious = resolved.isPreviousSeason;
 
-      const snap = await buildQuery(currentSeason, sortField).get();
-      const docs = (snap?.docs ?? []) || [];
+      let snap = await buildQuery(targetSeasonId, sortField).get();
+      let docs = (snap?.docs ?? []) || [];
+
+      if (!docs.length && !showingPrevious) {
+        const previousId = getNhlPreviousSeasonId(resolved.calendarSeasonId);
+        if (previousId && previousId !== targetSeasonId) {
+          targetSeasonId = previousId;
+          showingPrevious = true;
+          snap = await buildQuery(targetSeasonId, sortField).get();
+          docs = (snap?.docs ?? []) || [];
+        }
+      }
+
+      setSeasonId(targetSeasonId);
+      setIsPreviousSeason(showingPrevious);
 
       const data = docs.map((doc) => ({
         id: doc.id,
@@ -386,7 +400,7 @@ export default function NhlSkaterLeadersScreen() {
       setBusy(false);
       setRefreshing(false);
     }
-  }, [buildQuery, sortField]);
+  }, [buildQuery, seasonConfig, sortField]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || busy || !hasMore || !lastDoc) return;
@@ -468,7 +482,25 @@ export default function NhlSkaterLeadersScreen() {
             onEndReached={loadMore}
             ListHeaderComponent={() => (
               <View style={{ marginBottom: 12, gap: 10 }}>
- 
+                {isPreviousSeason && !!seasonId ? (
+                  <View
+                    style={{
+                      padding: 12,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.card,
+                    }}
+                  >
+                    <Text style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>
+                      {i18n.t("nhl.skaters.previousSeasonNotice", {
+                        season: formatSeasonLabel("NHL", seasonId),
+                        defaultValue:
+                          "Saison {{season}} — la prochaine saison n'a pas encore débuté.",
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                   {SORT_OPTIONS.map((opt) => (

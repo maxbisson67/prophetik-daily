@@ -20,11 +20,19 @@ import TeamPredictionBundleHomeCard from "@src/defis/TeamPredictionBundleHomeCar
 import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
 import { listenRNFB } from "@src/home/firestoreListen";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
+import DefiChallengeInfoBubble from "@src/home/components/DefiChallengeInfoBubble";
+import { lookupPickByGameId } from "@src/defis/tpBundleDisplayHelpers";
 import { PARTICIPANT_MODIFY_CTA, PARTICIPANT_PRIMARY_CTA } from "@src/defis/participant/participantCtaStyles";
 import { resolveTpSlotMatchStatus } from "@src/defis/match/matchTaskStatus";
 import TpMatchMetaColumn from "@src/defis/TpMatchMetaColumn";
 import { buildTpBundleTabProgress } from "@src/defis/tpTabProgress";
-import TpHomePredictionRow from "@src/defis/TpHomePredictionRow";
+import TpHomePredictionRow, { isCompleteTpPick } from "@src/defis/TpHomePredictionRow";
+import ParticipantPredictionFrame from "@src/defis/participant/ParticipantPredictionFrame";
+import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
+import {
+  getChallengeAccent,
+  paleChallengeBackground,
+} from "@src/home/components/HomeDefisToggle";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
 import { getSlotLockedAt } from "@src/defis/tpDeadlineHelpers";
@@ -32,6 +40,7 @@ import {
   getPreviousProphetikBusinessYmdCompact,
 } from "@src/lib/prophetikBusinessDate";
 import { useProphetikBusinessYmdCompact } from "@src/hooks/useProphetikBusinessDate";
+import { resolveChallengeEmptyMessage } from "@src/home/components/AutopilotPendingChallengeHint";
 
 /* ---------------- Helpers ---------------- */
 
@@ -106,6 +115,73 @@ function shouldKeepVisible(challenge, businessYmdCompact) {
 }
 
 /* ---------------- UI subcomponents ---------------- */
+
+function TpMyChoicesDrawerFooter({
+  bundle,
+  bundleEntry,
+  legacyItems = [],
+  myEntries = {},
+  sportLeague,
+  colors,
+}) {
+  const rows = [];
+
+  if (bundle?.games?.length) {
+    const picks = bundleEntry?.picks || {};
+    for (const slot of bundle.games) {
+      const gameId = String(slot?.gameId || "").trim();
+      if (!gameId) continue;
+      const pick = lookupPickByGameId(picks, gameId);
+      if (!isCompleteTpPick(pick)) continue;
+      rows.push({
+        key: gameId,
+        awayAbbr: slot?.awayAbbr,
+        homeAbbr: slot?.homeAbbr,
+        pick,
+      });
+    }
+  } else {
+    for (const ch of legacyItems) {
+      const entry = myEntries[ch.id];
+      if (!isCompleteTpPick(entry)) continue;
+      rows.push({
+        key: ch.id,
+        awayAbbr: ch?.awayAbbr,
+        homeAbbr: ch?.homeAbbr,
+        pick: entry,
+      });
+    }
+  }
+
+  if (!rows.length) return null;
+
+  return (
+    <>
+      <Text style={{ color: colors.text, fontWeight: "900", marginBottom: 8 }}>
+        {i18n.t("tp.home.myChoices", { defaultValue: "Mes choix" })}
+      </Text>
+      <View style={{ gap: 8 }}>
+        {rows.map((row) => (
+          <View key={row.key}>
+            <MatchupRow
+              awayAbbr={row.awayAbbr}
+              homeAbbr={row.homeAbbr}
+              sport={sportLeague}
+              colors={colors}
+            />
+            <TpHomePredictionRow
+              pick={row.pick}
+              awayAbbr={row.awayAbbr}
+              homeAbbr={row.homeAbbr}
+              league={sportLeague}
+              colors={colors}
+            />
+          </View>
+        ))}
+      </View>
+    </>
+  );
+}
 
 function MatchupRow({ awayAbbr, homeAbbr, sport = "NHL", colors, prominent = false }) {
   const away = safeAbbr(awayAbbr);
@@ -203,6 +279,7 @@ export default function TeamPredictionHomeSection({
   currentSport = "NHL",
   hintBundleId = null,
   listenersEnabled = true,
+  autopilotEnabled = false,
   onHasChallengeChange,
   onCanCreateBundleChange,
   onUserParticipatedChange,
@@ -287,6 +364,20 @@ export default function TeamPredictionHomeSection({
 
     return progress;
   }, [bundle, bundleEntry, legacyItems, myEntries, scheduleByGameId]);
+
+  const tpChoicesFooter = useMemo(
+    () => (
+      <TpMyChoicesDrawerFooter
+        bundle={bundle}
+        bundleEntry={bundleEntry}
+        legacyItems={legacyItems}
+        myEntries={myEntries}
+        sportLeague={sportLeague}
+        colors={colors}
+      />
+    ),
+    [bundle, bundleEntry, legacyItems, myEntries, sportLeague, colors]
+  );
 
   useEffect(() => {
     if (typeof onUserParticipatedChange !== "function") return;
@@ -618,6 +709,7 @@ export default function TeamPredictionHomeSection({
   if (!hasAnyTpContent) {
     return (
       <>
+        <DefiChallengeInfoBubble kind="tp" colors={colors} inIntroBand />
         <View style={{ marginBottom: 14 }}>
           <View
             style={{
@@ -629,8 +721,11 @@ export default function TeamPredictionHomeSection({
             }}
           >
             <Text style={{ color: colors.subtext, fontSize: 13 }}>
-              {i18n.t("tp.home.empty", {
-                defaultValue: "Aucune prédiction de matchs disponible aujourd’hui dans tes groupes.",
+              {resolveChallengeEmptyMessage({
+                autopilotEnabled,
+                fallbackKey: "tp.home.empty",
+                fallbackDefault:
+                  "Aucune prédiction de matchs disponible aujourd’hui dans tes groupes.",
               })}
             </Text>
           </View>
@@ -641,6 +736,12 @@ export default function TeamPredictionHomeSection({
 
   return (
     <>
+      <DefiChallengeInfoBubble
+        kind="tp"
+        colors={colors}
+        inIntroBand
+        footerContent={tpChoicesFooter}
+      />
       <View style={{ marginBottom: 14 }}>
         <View style={{ gap: 10 }}>
           {bundle ? (
@@ -710,36 +811,34 @@ export default function TeamPredictionHomeSection({
                   backgroundColor: colors.card,
                 }}
               >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "flex-start",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <MatchupRow
-                      awayAbbr={awayAbbr}
-                      homeAbbr={homeAbbr}
-                      sport={challengeLeague}
-                      colors={colors}
-                      prominent
-                    />
-                  </View>
-
-                  <TpMatchMetaColumn colors={colors} matchTask={matchTask} />
+                <View style={{ marginBottom: 8 }}>
+                  <MatchupRow
+                    awayAbbr={awayAbbr}
+                    homeAbbr={homeAbbr}
+                    sport={challengeLeague}
+                    colors={colors}
+                    prominent
+                  />
                 </View>
 
-                <TpHomePredictionRow
-                  pick={entry}
-                  awayAbbr={awayAbbr}
-                  homeAbbr={homeAbbr}
-                  league={challengeLeague}
-                  lockDeadline={getSlotLockedAt(ch) || deadline}
+                <ParticipantPredictionFrame
                   colors={colors}
-                />
+                  accentColor={getChallengeAccent("tp")}
+                  backgroundColor={paleChallengeBackground("tp")}
+                  statusChip={<MatchTaskStatusChip task={matchTask} colors={colors} compact />}
+                  style={{ marginBottom: 8 }}
+                >
+                  <TpHomePredictionRow
+                    variant="scoreGrid"
+                    pick={entry}
+                    awayAbbr={awayAbbr}
+                    homeAbbr={homeAbbr}
+                    league={challengeLeague}
+                    lockDeadline={getSlotLockedAt(ch) || deadline}
+                    colors={colors}
+                    style={{ marginTop: 0 }}
+                  />
+                </ParticipantPredictionFrame>
 
                 <TpHomeDeadlineBlock
                   locked={locked}

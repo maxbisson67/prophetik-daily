@@ -1,6 +1,7 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { buildFgcWinPush, buildTpExactScorePush, buildTsWinPush } from "./challengeWinMessages.js";
+import { TS_WIN_BONUS_POINTS } from "../challengeScoringConstants.js";
 import { NOTIFICATION_PREF_KEYS } from "./notificationPrefs.js";
 import {
   fetchGroupName,
@@ -14,6 +15,39 @@ const TS_TYPE = 3;
 
 function normalizeGameDateYmd(defiData = {}) {
   return String(defiData.gameDate || defiData.gameYmd || "").slice(0, 10);
+}
+
+function resolveBonusPerWinner(defiData = {}, winnerScore = null) {
+  const fromDoc = Number(defiData.bonusPerWinner ?? 0);
+  if (Number.isFinite(fromDoc) && fromDoc > 0) return fromDoc;
+
+  const br = defiData.bonusReward;
+  if (br && typeof br === "object" && String(br.type || "").toLowerCase() === "fixed") {
+    const v = Number(br.value ?? br.points ?? TS_WIN_BONUS_POINTS);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
+
+  if (Number(defiData.type) === TS_TYPE && winnerScore != null) {
+    return TS_WIN_BONUS_POINTS;
+  }
+
+  return null;
+}
+
+async function resolveWinnerScore(defiId, winnerUids = [], hintScore = null) {
+  const hinted = Number(hintScore);
+  if (Number.isFinite(hinted) && hinted >= 0) return hinted;
+
+  const scores = [];
+  for (const uid of winnerUids) {
+    const snap = await db.doc(`defis/${defiId}/participations/${uid}`).get();
+    const v = snap.data() || {};
+    const pts = Number(v.finalPoints ?? v.livePoints ?? NaN);
+    if (Number.isFinite(pts)) scores.push(pts);
+  }
+
+  if (!scores.length) return null;
+  return Math.min(...scores);
 }
 
 /** True if any TS defi for this group+day already received the group win push. */
@@ -286,6 +320,8 @@ export async function notifyTsWinners({
   groupId,
   winnerUids = [],
   seasonId = null,
+  winnerScore = null,
+  bonusPerWinner = null,
 }) {
   const did = String(defiId || "").trim();
   const gid = String(groupId || "").trim();
@@ -330,6 +366,12 @@ export async function notifyTsWinners({
   const winnerNames = uids.map((uid) => nameByUid.get(uid) || uid);
   const groupName = await fetchGroupName(gid);
 
+  const resolvedWinnerScore = await resolveWinnerScore(did, uids, winnerScore);
+  const resolvedBonus =
+    bonusPerWinner != null && Number(bonusPerWinner) > 0
+      ? Number(bonusPerWinner)
+      : resolveBonusPerWinner(defiData, resolvedWinnerScore);
+
   const potTotal = Number(defiData.pot ?? 0) || 0;
   const winnerShares = defiData.winnerShares || {};
   const shareAmounts = uids
@@ -347,6 +389,8 @@ export async function notifyTsWinners({
         lang,
         groupName,
         winnerNames,
+        winnerScore: resolvedWinnerScore,
+        bonusPerWinner: resolvedBonus,
         potTotal,
         sharePerWinner,
         shareMax,

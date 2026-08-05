@@ -77,3 +77,55 @@ export function buildParticipantChallengeStats(row, rankMaps) {
     },
   };
 }
+
+export function buildDailyRankMaps(rows = []) {
+  const list = Array.isArray(rows) ? rows : [];
+  return {
+    overall: buildRankMap(list, (r) => r?.totalPoints ?? 0),
+    fgc: buildRankMap(list, (r) => r?.fgcPoints ?? 0),
+    tp: buildRankMap(list, (r) => r?.tpPoints ?? 0),
+    ts: buildRankMap(list, (r) => r?.tsPoints ?? 0),
+  };
+}
+
+export function buildDailyParticipantChallengeStats(row, rankMaps) {
+  const fgcPoints = Number(row?.fgcPoints ?? 0) || 0;
+  const tpPoints = Number(row?.tpPoints ?? 0) || 0;
+  const tsPoints = Number(row?.tsPoints ?? 0) || 0;
+
+  return {
+    overall: {
+      rank: getParticipantRank(rankMaps.overall, row),
+      points: Number(row?.totalPoints ?? 0) || 0,
+      wins:
+        (fgcPoints > 0 ? 1 : 0) +
+        (tpPoints > 0 ? 1 : 0) +
+        (tsPoints > 0 ? 1 : 0),
+    },
+    fgc: {
+      rank: getParticipantRank(rankMaps.fgc, row),
+      points: fgcPoints,
+      wins: fgcPoints > 0 ? 1 : 0,
+    },
+    tp: {
+      rank: getParticipantRank(rankMaps.tp, row),
+      points: tpPoints,
+      wins: tpPoints > 0 ? 1 : 0,
+      exacts: 0,
+    },
+    ts: {
+      rank: getParticipantRank(rankMaps.ts, row),
+      points: tsPoints,
+      wins: tsPoints > 0 ? 1 : 0,
+    },
+  };
+}
+
+export function toDailyProfileRow(row = {}) {
+  const uid = String(row?.uid || row?.id || "").trim();
+  return {
+    ...row,
+    id: uid,
+    uid,
+  };
+}

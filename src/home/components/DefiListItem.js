@@ -224,7 +224,7 @@ function TsSelectionBlock({ lines, colors, sport = "NHL" }) {
   return (
     <View style={{ marginTop: 8 }}>
       <Text style={{ color: colors.subtext, fontSize: 13, marginBottom: 6 }}>
-        {i18n.t("home.tsMyPrediction", { defaultValue: "Ma prédiction" })}:
+        {i18n.t("home.tsMyChoices", { defaultValue: "Mes choix" })}:
       </Text>
 
       <View style={{ gap: 6 }}>
@@ -435,6 +435,10 @@ export default function DefiListItem({
     (showResultsCta ||
       (signupDeadlinePassed && !showTsPrimaryCta && !showTsModifyCta));
 
+  const tsEnrolled = tsSelectionLines.length > 0;
+  const showTsLiveHint =
+    isTS && !lockedByPlan && (tsEnrolled || showTsResultsHint);
+
   if (isTS) {
     const cardStyle = {
       padding: 12,
@@ -546,16 +550,18 @@ export default function DefiListItem({
                 </View>
               </TouchableOpacity>
             </>
-          ) : showTsResultsHint ? (
-            <ResultsTabHint colors={colors} groupId={item?.groupId} />
           ) : (
             <>
+              {showTsLiveHint ? (
+                <ResultsTabHint colors={colors} groupId={item?.groupId} style={{ marginBottom: 8 }} />
+              ) : null}
+
               {showTsPrimaryCta ? (
                 <TouchableOpacity
                   disabled={!canJoin}
                   onPress={onPressParticipate}
                   activeOpacity={0.85}
-                  style={[PARTICIPANT_PRIMARY_CTA.button, { marginTop: 12 }, !canJoin && { opacity: 0.45 }]}
+                  style={[PARTICIPANT_PRIMARY_CTA.button, { marginTop: showTsLiveHint ? 0 : 12 }, !canJoin && { opacity: 0.45 }]}
                 >
                   <Text style={[PARTICIPANT_PRIMARY_CTA.text, { fontSize: 13 }]}>{ctaLabel}</Text>
                 </TouchableOpacity>

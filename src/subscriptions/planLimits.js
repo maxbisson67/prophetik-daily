@@ -1,17 +1,17 @@
 /** Limites d'abonnement — aligné sur functions/subscriptions/planLimits.js */
 export const PLAN_LIMITS = {
   free: {
-    ownedGroupsLimit: 1,
+    activeGroupsLimit: 1,
     autopilotGroupsLimit: 1,
     novaAdviceMonthlyLimit: 30,
   },
   pro: {
-    ownedGroupsLimit: 5,
+    activeGroupsLimit: 5,
     autopilotGroupsLimit: 5,
     novaAdviceMonthlyLimit: 100,
   },
   vip: {
-    ownedGroupsLimit: 20,
+    activeGroupsLimit: 20,
     autopilotGroupsLimit: 20,
     novaAdviceMonthlyLimit: 250,
   },

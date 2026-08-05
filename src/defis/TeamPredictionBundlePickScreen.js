@@ -10,6 +10,7 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  Keyboard,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { Stack, useRouter } from "expo-router";
@@ -64,16 +65,28 @@ function TeamStandingsLine({ line, colors }) {
   );
 }
 
-function ScoreInputBox({ value, onChangeText, editable, colors, onFocus }) {
+function ScoreInputBox({
+  inputRef,
+  value,
+  onChangeText,
+  editable,
+  colors,
+  onFocus,
+  isFocused = false,
+  onAdvance,
+}) {
   const active = editable;
-  const inputRef = useRef(null);
 
   return (
     <View
       style={[
         styles.scoreInputBox,
         {
-          borderColor: active ? "rgba(239,68,68,0.55)" : colors.border,
+          borderColor: isFocused
+            ? RED
+            : active
+            ? "rgba(239,68,68,0.55)"
+            : colors.border,
           backgroundColor: colors.background,
         },
       ]}
@@ -81,8 +94,16 @@ function ScoreInputBox({ value, onChangeText, editable, colors, onFocus }) {
       <TextInput
         ref={inputRef}
         value={value}
-        onChangeText={onChangeText}
-        onFocus={() => onFocus?.(inputRef.current)}
+        onChangeText={(txt) => {
+          const prevLen = String(value || "").length;
+          const normalized = normalizeScoreInput(txt);
+          onChangeText(normalized);
+          if (!editable || !onAdvance) return;
+          if ((prevLen === 0 && normalized.length >= 1) || normalized.length >= 2) {
+            setTimeout(() => onAdvance(), 0);
+          }
+        }}
+        onFocus={onFocus}
         editable={editable}
         keyboardType="number-pad"
         maxLength={2}
@@ -90,7 +111,7 @@ function ScoreInputBox({ value, onChangeText, editable, colors, onFocus }) {
           styles.scoreInput,
           {
             color: colors.text,
-            borderColor: colors.border,
+            borderColor: isFocused ? RED : colors.border,
             backgroundColor: colors.card2,
           },
         ]}
@@ -318,6 +339,13 @@ function BundleMatchPickSection({
   nowTick,
   scheduleInfo = null,
   onScoreFocus = null,
+  focusedFieldKey = null,
+  fieldKeyAway = "",
+  fieldKeyHome = "",
+  awayInputRef = null,
+  homeInputRef = null,
+  onAdvanceFromAway = null,
+  onAdvanceFromHome = null,
   showNovaButton = false,
   onNovaPress = null,
 }) {
@@ -432,11 +460,14 @@ function BundleMatchPickSection({
           <TeamStandingsLine line={formatTeamLine?.(gameId, "away", awayAbbr)} colors={colors} />
           {isMlb ? <PitcherBlock pitcher={slot?.awayProbablePitcher} colors={colors} /> : null}
           <ScoreInputBox
+            inputRef={awayInputRef}
             value={draft.away}
-            onChangeText={(txt) => onChangeDraft({ ...draft, away: normalizeScoreInput(txt) })}
+            onChangeText={(txt) => onChangeDraft({ ...draft, away: txt })}
             editable={!locked}
             colors={colors}
-            onFocus={onScoreFocus}
+            isFocused={focusedFieldKey === fieldKeyAway}
+            onFocus={() => onScoreFocus?.(awayInputRef?.current, fieldKeyAway)}
+            onAdvance={onAdvanceFromAway}
           />
         </View>
 
@@ -448,11 +479,14 @@ function BundleMatchPickSection({
           <TeamStandingsLine line={formatTeamLine?.(gameId, "home", homeAbbr)} colors={colors} />
           {isMlb ? <PitcherBlock pitcher={slot?.homeProbablePitcher} colors={colors} /> : null}
           <ScoreInputBox
+            inputRef={homeInputRef}
             value={draft.home}
-            onChangeText={(txt) => onChangeDraft({ ...draft, home: normalizeScoreInput(txt) })}
+            onChangeText={(txt) => onChangeDraft({ ...draft, home: txt })}
             editable={!locked}
             colors={colors}
-            onFocus={onScoreFocus}
+            isFocused={focusedFieldKey === fieldKeyHome}
+            onFocus={() => onScoreFocus?.(homeInputRef?.current, fieldKeyHome)}
+            onAdvance={onAdvanceFromHome}
           />
         </View>
       </View>
@@ -545,8 +579,37 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
   const saveInFlightRef = useRef(false);
   const pendingAfterFlightRef = useRef(false);
   const scrollRef = useRef(null);
+  const scoreInputRefs = useRef({});
+  const initialFocusDoneRef = useRef(false);
+  const [focusedScoreKey, setFocusedScoreKey] = useState(null);
 
-  const scrollToScoreInput = useCallback((inputRef) => {
+  const getScoreInputRef = useCallback((key) => {
+    if (!scoreInputRefs.current[key]) {
+      scoreInputRefs.current[key] = React.createRef();
+    }
+    return scoreInputRefs.current[key];
+  }, []);
+
+  const focusScoreField = useCallback((key) => {
+    const ref = scoreInputRefs.current[key];
+    if (!ref?.current) return;
+    ref.current.focus();
+    setFocusedScoreKey(key);
+    requestAnimationFrame(() => {
+      try {
+        scrollRef.current?.scrollToFocusedInput?.(
+          ref.current,
+          Platform.OS === "ios" ? 120 : 160
+        );
+      } catch {
+        scrollRef.current?.scrollToEnd?.({ animated: true });
+      }
+    });
+  }, []);
+
+  const scrollToScoreInput = useCallback((inputRef, fieldKey) => {
+    if (fieldKey) setFocusedScoreKey(fieldKey);
+
     if (!inputRef || !scrollRef.current?.scrollToFocusedInput) return;
 
     requestAnimationFrame(() => {
@@ -674,6 +737,27 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     },
     [isMlb, nowTick, scheduleByGameId]
   );
+
+  useEffect(() => {
+    initialFocusDoneRef.current = false;
+  }, [bundleId]);
+
+  useEffect(() => {
+    if (initialFocusDoneRef.current || loading || showResults || !games.length) return undefined;
+
+    const firstEditable = games.find((slot) => isSlotEditable(slot));
+    if (!firstEditable?.gameId) return undefined;
+
+    const awayKey = `${String(firstEditable.gameId)}:away`;
+    getScoreInputRef(awayKey);
+
+    const timer = setTimeout(() => {
+      focusScoreField(awayKey);
+      initialFocusDoneRef.current = true;
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [loading, showResults, games, isSlotEditable, getScoreInputRef, focusScoreField, bundleId]);
 
   const buildDirtyPicksPayload = useCallback(() => {
     const payload = {};
@@ -873,8 +957,12 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                 gap: 12,
               }}
             >
-              {games.map((slot) => {
+              {games.map((slot, gameIndex) => {
                 const gameId = String(slot.gameId);
+                const awayKey = `${gameId}:away`;
+                const homeKey = `${gameId}:home`;
+                const nextGame = games[gameIndex + 1];
+                const nextAwayKey = nextGame ? `${String(nextGame.gameId)}:away` : null;
                 const draft = draftByGameId[gameId] || emptyDraftPick();
                 const decided = isSlotDecided(slot);
                 const editable = isSlotEditable(slot);
@@ -904,6 +992,16 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                     colors={colors}
                     scheduleInfo={scheduleByGameId[gameId] || null}
                     onScoreFocus={scrollToScoreInput}
+                    focusedFieldKey={focusedScoreKey}
+                    fieldKeyAway={awayKey}
+                    fieldKeyHome={homeKey}
+                    awayInputRef={getScoreInputRef(awayKey)}
+                    homeInputRef={getScoreInputRef(homeKey)}
+                    onAdvanceFromAway={() => focusScoreField(homeKey)}
+                    onAdvanceFromHome={() => {
+                      if (nextAwayKey) focusScoreField(nextAwayKey);
+                      else Keyboard.dismiss();
+                    }}
                     showNovaButton={isMlb && !showResults}
                     onNovaPress={setNovaMatch}
                   />
