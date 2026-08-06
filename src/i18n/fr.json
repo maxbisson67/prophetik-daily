@@ -1914,6 +1914,13 @@
       "tsWinnerBonusShort": "+{{bonus}} bonus",
       "dailyBonusNote": "Bonus meilleure soirée : +{{bonus}} pts pour le plus haut total cumulé SOLO + DUO + TRIO (affiché en exposant sur la colonne Total)."
     },
+    "participantProfile": {
+      "title": "Points du jour",
+      "totalToday": "Total du jour",
+      "byChallenge": "Points par défi aujourd'hui",
+      "successes": "Réussites",
+      "totalSuccesses": "{{count}} réussites au total"
+    },
     "badge": {
       "rbi": "SOLO",
       "goal": "SOLO",

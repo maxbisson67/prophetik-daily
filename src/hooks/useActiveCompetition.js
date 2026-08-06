@@ -8,6 +8,7 @@ import {
   normalizeCompetitionEntry,
   normalizeSport,
   pickCompetitionForDate,
+  competitionTimelineStatus,
 } from "@src/season/seasonCompetitionCore";
 import {
   currentSeasonDocRef,
@@ -21,6 +22,21 @@ function deriveFallbackEntries(sport, nhlConfig, gameYmd) {
   }
   const year = String(gameYmd || getProphetikBusinessYmd()).slice(0, 4);
   return deriveMlbCompetitionEntries(year);
+}
+
+function emptyActiveCompetition(loading = false) {
+  return {
+    loading,
+    competition: null,
+    competitionKey: "",
+    seasonId: "",
+    phase: "",
+    label: "",
+    fromYmd: "",
+    toYmd: "",
+    daysRemaining: null,
+    timelineStatus: "",
+  };
 }
 
 export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled = true } = {}) {
@@ -70,6 +86,10 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
   }, [enabled]);
 
   return useMemo(() => {
+    if (!enabled) {
+      return emptyActiveCompetition(false);
+    }
+
     const sportNorm = normalizeSport(sport);
     const sportCatalog = catalog.filter(
       (e) => e.sport === sportNorm && String(e.status || "").toLowerCase() !== "finalized"
@@ -84,20 +104,11 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
     }
 
     if (!active) {
-      return {
-        loading,
-        competition: null,
-        competitionKey: "",
-        seasonId: "",
-        phase: "",
-        label: "",
-        fromYmd: "",
-        toYmd: "",
-        daysRemaining: null,
-      };
+      return emptyActiveCompetition(loading);
     }
 
     const daysRemaining = daysRemainingUntil(active.toYmd, todayYmd);
+    const timelineStatus = competitionTimelineStatus(active, todayYmd);
 
     return {
       loading,
@@ -109,6 +120,7 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
       fromYmd: active.fromYmd,
       toYmd: active.toYmd,
       daysRemaining,
+      timelineStatus,
     };
-  }, [catalog, nhlConfig, sport, todayYmd, loading]);
+  }, [catalog, nhlConfig, sport, todayYmd, loading, enabled]);
 }

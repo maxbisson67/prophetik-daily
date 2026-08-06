@@ -359,6 +359,10 @@ function StreakCompactBar({
   const showGroupStats = groupSummary?.show === true;
   const loadingGroup = !!groupSummary?.loading;
 
+  if (!showGroupStats && homeMinimal) {
+    return null;
+  }
+
   const pointsTarget = Math.round(Number(groupSummary?.myPoints || 0));
   const rankDisplay = formatRankDisplay(groupSummary?.myRank);
   const daysRemaining = groupSummary?.daysRemaining;
@@ -435,18 +439,20 @@ function StreakCompactBar({
             </>
           ) : null}
 
-          <DashboardColumn
-            icon="calendar-clock"
-            columnTheme={ui.competition}
-            ui={ui}
-            title={i18n.t("progression.statsDaysRemainingTitle", {
-              defaultValue: "RESTE",
-            })}
-            value={competitionDaysValue}
-            valueSuffix={daysRemainingUnitSuffix}
-            loading={loadingGroup && daysRemaining == null}
-            pillLabel={i18n.t("progression.statsSeasonPill", { defaultValue: "SAISON" })}
-          />
+          {showGroupStats ? (
+            <DashboardColumn
+              icon="calendar-clock"
+              columnTheme={ui.competition}
+              ui={ui}
+              title={i18n.t("progression.statsDaysRemainingTitle", {
+                defaultValue: "RESTE",
+              })}
+              value={competitionDaysValue}
+              valueSuffix={daysRemainingUnitSuffix}
+              loading={loadingGroup && daysRemaining == null}
+              pillLabel={i18n.t("progression.statsSeasonPill", { defaultValue: "SAISON" })}
+            />
+          ) : null}
         </View>
 
         {!homeMinimal ? (

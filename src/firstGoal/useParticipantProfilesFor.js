@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
+import { hasCompleteJersey } from "@src/ui/resolveJerseyAvatar";
 
 function mergeParticipantProfile(prev = {}, participant = {}, pub = {}) {
   const displayName =
@@ -121,13 +122,16 @@ export function resolveParticipantIdentity(entry, profile) {
   const avatarKind = profile?.avatarKind || null;
 
   const avatarUrl =
-    entry?.photoURL ||
-    entry?.avatarUrl ||
-    profile?.avatarUrl ||
-    jerseyFrontUrl ||
-    null;
+    avatarKind === "jersey"
+      ? null
+      : participant.avatarUrl ||
+        pub.avatarUrl ||
+        participant.photoURL ||
+        pub.photoURL ||
+        null;
 
-  const useJersey = !!jerseyFrontUrl;
+  const useJersey =
+    avatarKind === "jersey" || hasCompleteJersey(jerseyFrontUrl, jerseyBackUrl);
 
-  return { who, avatarUrl, jerseyFrontUrl, jerseyBackUrl, useJersey };
+  return { who, avatarUrl, jerseyFrontUrl, jerseyBackUrl, avatarKind, useJersey };
 }

@@ -1,14 +1,15 @@
-import React from "react";
-import { View, Image } from "react-native";
+import React, { useState } from "react";
+import { View } from "react-native";
 import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
-
-const AVATAR_PLACEHOLDER = require("@src/assets/avatar-placeholder.png");
-
-function withCacheBust(url, version) {
-  if (!url) return null;
-  const v = Number.isFinite(version) ? version : Date.now();
-  return url.includes("?") ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
-}
+import JerseyPlaceholder from "@src/ui/JerseyPlaceholder";
+import JerseyImage from "@src/ui/JerseyImage";
+import LegacyAvatar from "@src/ui/LegacyAvatar";
+import {
+  hasCompleteJersey,
+  hasJerseyFrontOnly,
+  shouldShowLegacyAvatar,
+  resolveCatalogAvatarUrl,
+} from "@src/ui/resolveJerseyAvatar";
 
 export default function ParticipantAvatar({
   photoURL,
@@ -19,25 +20,30 @@ export default function ParticipantAvatar({
   name,
   size = 40,
   colors = {},
-  version,
   squareJersey = true,
 }) {
+  const [frontFailed, setFrontFailed] = useState(false);
   const front = jerseyFrontUrl || null;
   const back = jerseyBackUrl || null;
-  const fallbackUri = photoURL || avatarUrl || front || null;
-  const uri = withCacheBust(fallbackUri, version);
-  const isJersey = avatarKind === "jersey" || !!front;
+  const catalogUrl = resolveCatalogAvatarUrl({ avatarKind, avatarUrl, photoURL });
+  const showLegacy = shouldShowLegacyAvatar({
+    avatarKind,
+    avatarUrl: catalogUrl,
+    jerseyFrontUrl: front,
+    jerseyBackUrl: back,
+  });
   const borderColor = colors.border || "#e5e7eb";
   const backgroundColor = colors.card2 || colors.border || "#f3f4f6";
+  const frameRadius = squareJersey ? Math.max(6, Math.round(size * 0.22)) : size / 2;
 
-  if (isJersey && front && back) {
+  if (hasCompleteJersey(front, back)) {
     const jerseySize = squareJersey ? size - 4 : size;
     return (
       <View
         style={{
           width: size,
           height: size,
-          borderRadius: squareJersey ? 8 : size / 2,
+          borderRadius: frameRadius,
           overflow: "hidden",
           backgroundColor,
           borderWidth: 1,
@@ -45,6 +51,7 @@ export default function ParticipantAvatar({
           alignItems: "center",
           justifyContent: "center",
         }}
+        collapsable={false}
       >
         <JerseyFlipAvatar
           frontUrl={front}
@@ -58,13 +65,25 @@ export default function ParticipantAvatar({
     );
   }
 
-  if (isJersey && front) {
+  if (hasJerseyFrontOnly(front, back)) {
+    if (frontFailed) {
+      return (
+        <JerseyPlaceholder
+          size={size}
+          colors={colors}
+          name={name}
+          borderRadius={frameRadius}
+          square={squareJersey}
+        />
+      );
+    }
+
     return (
       <View
         style={{
           width: size,
           height: size,
-          borderRadius: squareJersey ? 8 : size / 2,
+          borderRadius: frameRadius,
           overflow: "hidden",
           backgroundColor,
           borderWidth: 1,
@@ -72,28 +91,30 @@ export default function ParticipantAvatar({
           alignItems: "center",
           justifyContent: "center",
         }}
+        collapsable={false}
       >
-        <Image
-          source={{ uri: withCacheBust(front, version) }}
-          style={{ width: size - 4, height: size - 4 }}
-          resizeMode="contain"
+        <JerseyImage
+          uri={front}
+          size={size - 4}
+          onError={() => setFrontFailed(true)}
         />
       </View>
     );
   }
 
+  if (showLegacy) {
+    return (
+      <LegacyAvatar uri={catalogUrl} name={name} size={size} colors={colors} />
+    );
+  }
+
   return (
-    <Image
-      source={uri ? { uri } : AVATAR_PLACEHOLDER}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor,
-        borderWidth: 1,
-        borderColor,
-      }}
-      accessibilityLabel={name || "avatar"}
+    <JerseyPlaceholder
+      size={size}
+      colors={colors}
+      name={name}
+      borderRadius={frameRadius}
+      square={squareJersey}
     />
   );
 }
@@ -105,7 +126,6 @@ export function participantInfoToAvatarProps(info = {}, size) {
     jerseyFrontUrl: info.jerseyFrontUrl || null,
     jerseyBackUrl: info.jerseyBackUrl || null,
     avatarKind: info.avatarKind || null,
-    version: info.version,
     size,
   };
 }

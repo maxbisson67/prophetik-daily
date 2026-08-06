@@ -9,6 +9,9 @@ import {
   Alert,
   BackHandler,
   ScrollView,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -157,10 +160,16 @@ export default function CreateGroupScreen() {
         }}
       />
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+      >
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
-        keyboardShouldPersistTaps="always"
+        contentContainerStyle={{ padding: 20, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         nestedScrollEnabled
       >
         <View
@@ -210,6 +219,9 @@ export default function CreateGroupScreen() {
               onChangeText={setName}
               placeholder={i18n.t("groups.fieldNamePlaceholder", { defaultValue: "Ex. Les Snipers du Nord" })}
               placeholderTextColor={colors.subtext}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => Keyboard.dismiss()}
               style={{
                 borderWidth: 1,
                 borderColor: colors.border,
@@ -232,6 +244,9 @@ export default function CreateGroupScreen() {
                 defaultValue: "Ex. Notre pool du samedi entre amis",
               })}
               placeholderTextColor={colors.subtext}
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={() => Keyboard.dismiss()}
               style={{
                 borderWidth: 1,
                 borderColor: colors.border,
@@ -256,7 +271,10 @@ export default function CreateGroupScreen() {
                 return (
                   <TouchableOpacity
                     key={value}
-                    onPress={() => setSport(value)}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setSport(value);
+                    }}
                     style={{
                       flex: 1,
                       paddingVertical: 12,
@@ -292,7 +310,10 @@ export default function CreateGroupScreen() {
 
           <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
             <TouchableOpacity
-              onPress={safeBack}
+              onPress={() => {
+                Keyboard.dismiss();
+                safeBack();
+              }}
               style={{
                 flex: 1,
                 padding: 14,
@@ -310,7 +331,10 @@ export default function CreateGroupScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={onCreate}
+              onPress={() => {
+                Keyboard.dismiss();
+                onCreate();
+              }}
               style={{
                 flex: 1,
                 padding: 14,
@@ -346,6 +370,7 @@ export default function CreateGroupScreen() {
           })}
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
     </>
   );
 }

@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
@@ -26,7 +25,7 @@ import useFgcMutualizedGamesMap from "@src/firstGoal/useFgcMutualizedGamesMap";
 import useParticipantProfilesFor, {
   resolveParticipantIdentity,
 } from "@src/firstGoal/useParticipantProfilesFor";
-import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
+import ParticipantAvatar from "@src/ui/ParticipantAvatar";
 
 function shouldShowParticipants(status) {
   const st = String(status || "").toLowerCase();
@@ -61,32 +60,6 @@ function initials(name) {
   const a = parts[0]?.[0] || "";
   const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
   return (a + b).toUpperCase();
-}
-
-function AvatarBubble({ uri, name, colors, size = 34 }) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        overflow: "hidden",
-        backgroundColor: colors.card2,
-        borderWidth: 1,
-        borderColor: colors.border,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {uri ? (
-        <Image source={{ uri }} style={{ width: size, height: size }} resizeMode="cover" />
-      ) : (
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 12 }}>
-          {initials(name)}
-        </Text>
-      )}
-    </View>
-  );
 }
 
 function StatusChip({ status, colors }) {
@@ -209,64 +182,21 @@ function ResultBanner({ status, challenge, mutualizedGame, colors }) {
   );
 }
 
-function ParticipantAvatar({ entry, profile, colors, size = 34 }) {
-  const { who, avatarUrl, jerseyFrontUrl, jerseyBackUrl, useJersey } = resolveParticipantIdentity(
-    entry,
-    profile
+function FgcEntryAvatar({ entry, profile, colors, size = 34 }) {
+  const { who, avatarUrl, jerseyFrontUrl, jerseyBackUrl, avatarKind } =
+    resolveParticipantIdentity(entry, profile);
+
+  return (
+    <ParticipantAvatar
+      avatarUrl={avatarUrl}
+      jerseyFrontUrl={jerseyFrontUrl}
+      jerseyBackUrl={jerseyBackUrl}
+      avatarKind={avatarKind}
+      name={who}
+      colors={colors}
+      size={size}
+    />
   );
-
-  if (useJersey && jerseyFrontUrl && jerseyBackUrl) {
-    return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 8,
-          overflow: "hidden",
-          backgroundColor: colors.card2,
-          borderWidth: 1,
-          borderColor: colors.border,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <JerseyFlipAvatar
-          frontUrl={jerseyFrontUrl}
-          backUrl={jerseyBackUrl}
-          size={size - 4}
-          holdMs={2200}
-          fadeDurationMs={450}
-          backgroundColor={colors.card2}
-        />
-      </View>
-    );
-  }
-
-  if (useJersey && jerseyFrontUrl) {
-    return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 8,
-          overflow: "hidden",
-          backgroundColor: colors.card2,
-          borderWidth: 1,
-          borderColor: colors.border,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Image
-          source={{ uri: jerseyFrontUrl }}
-          style={{ width: size - 4, height: size - 4 }}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-
-  return <AvatarBubble uri={avatarUrl} name={who} colors={colors} size={size} />;
 }
 
 function EntryRow({ entry, profile, revealPick, isWinner, isMe, sport = "NHL", colors }) {
@@ -290,7 +220,7 @@ function EntryRow({ entry, profile, revealPick, isWinner, isMe, sport = "NHL", c
         backgroundColor: isWinner ? colors.card : colors.background,
       }}
     >
-      <ParticipantAvatar entry={entry} profile={profile} colors={colors} size={34} />
+      <FgcEntryAvatar entry={entry} profile={profile} colors={colors} size={34} />
 
       <View style={{ flex: 1, marginLeft: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}>

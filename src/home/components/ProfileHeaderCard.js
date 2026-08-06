@@ -1,10 +1,19 @@
 // ProfileHeaderCard.js
-import React from "react";
-import { View, Text, Image, TouchableOpacity } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
 import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
+import JerseyPlaceholder from "@src/ui/JerseyPlaceholder";
+import JerseyImage from "@src/ui/JerseyImage";
+import LegacyAvatar from "@src/ui/LegacyAvatar";
+import {
+  hasCompleteJersey,
+  hasJerseyFrontOnly,
+  shouldShowLegacyAvatar,
+  resolveCatalogAvatarUrl,
+} from "@src/ui/resolveJerseyAvatar";
 import { useTheme } from "@src/theme/ThemeProvider";
 import StreakHeroCard from "@src/achievements/components/StreakHeroCard";
 
@@ -27,10 +36,20 @@ export default function ProfileHeaderCard({
   groupSummary = null,
 }) {
   const { isDark } = useTheme();
+  const [jerseyFrontFailed, setJerseyFrontFailed] = useState(false);
 
   const avatarFrameBg = isDark ? colors.background : "#f3f4f6";
   const avatarFrameBorder = isDark ? colors.border : "#eee";
-  const isJersey = avatarKind === "jersey" && jerseyFrontUrl && jerseyBackUrl;
+  const isJersey = hasCompleteJersey(jerseyFrontUrl, jerseyBackUrl);
+  const catalogUrl = resolveCatalogAvatarUrl({ avatarKind, avatarUrl });
+  const showLegacyAvatar = shouldShowLegacyAvatar({
+    avatarKind,
+    avatarUrl: catalogUrl,
+    jerseyFrontUrl,
+    jerseyBackUrl,
+  });
+  const showJerseyFront =
+    hasJerseyFrontOnly(jerseyFrontUrl, jerseyBackUrl) && !jerseyFrontFailed;
 
   return (
     <View
@@ -61,21 +80,40 @@ export default function ProfileHeaderCard({
               fadeDurationMs={1100}
               backgroundColor="transparent"
             />
-          ) : (
-            <Image
-              source={
-                avatarUrl
-                  ? { uri: avatarUrl }
-                  : require("@src/assets/avatar-placeholder.png")
-              }
+          ) : showJerseyFront ? (
+            <View
               style={{
                 width: AVATAR_SIZE,
                 height: AVATAR_SIZE,
-                borderRadius: AVATAR_SIZE / 2,
+                borderRadius: 18,
                 borderWidth: 3,
                 borderColor: avatarFrameBorder,
                 backgroundColor: avatarFrameBg,
+                alignItems: "center",
+                justifyContent: "center",
               }}
+            >
+              <JerseyImage
+                uri={jerseyFrontUrl}
+                size={AVATAR_SIZE - 6}
+                onError={() => setJerseyFrontFailed(true)}
+              />
+            </View>
+          ) : showLegacyAvatar ? (
+            <LegacyAvatar
+              uri={catalogUrl}
+              name={displayName}
+              size={AVATAR_SIZE}
+              colors={colors}
+              borderWidth={3}
+            />
+          ) : (
+            <JerseyPlaceholder
+              size={AVATAR_SIZE}
+              colors={colors}
+              name={displayName}
+              borderRadius={18}
+              emphasized
             />
           )}
 

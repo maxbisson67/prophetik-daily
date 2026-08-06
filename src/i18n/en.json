@@ -1039,6 +1039,13 @@
       "tsWinnerBonusShort": "+{{bonus}} bonus",
       "dailyBonusNote": "Best night bonus: +{{bonus}} pts for the highest cumulative SOLO + DUO + TRIO total (shown as superscript on the Total column).",
     },
+    "participantProfile": {
+      "title": "Today's points",
+      "totalToday": "Today's total",
+      "byChallenge": "Points by challenge today",
+      "successes": "Successes",
+      "totalSuccesses": "{{count}} successes total"
+    },
     "badge": {
       "rbi": "SOLO",
       "goal": "SOLO",

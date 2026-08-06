@@ -1,10 +1,33 @@
-{
-  "storage": {
-    "rules": "storage.rules"
-  },
-  "emulators": {
-    "storage": {
-      "port": 9199
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /jerseys/generated/{uid}/{version}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /jerseys/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /avatars-store/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /avatars-group/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /branding/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }

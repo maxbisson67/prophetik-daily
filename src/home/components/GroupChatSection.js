@@ -30,7 +30,7 @@ export default function GroupChatSection({ groupId, groupName, colors, onInputFo
     for (const [uid, p] of Object.entries(profiles || {})) {
       if (p?.displayName) names[uid] = p.displayName;
       info[uid] = {
-        photoURL: p?.avatarUrl || p?.jerseyFrontUrl || null,
+        avatarUrl: p?.avatarUrl || null,
         jerseyFrontUrl: p?.jerseyFrontUrl || null,
         jerseyBackUrl: p?.jerseyBackUrl || null,
         avatarKind: p?.avatarKind || null,

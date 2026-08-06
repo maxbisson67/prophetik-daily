@@ -34,7 +34,7 @@
   "submit": {
     "internal": {
       "android": {
-        "track": "internal",
+        "track": "alpha",
         "serviceAccountKeyPath": "./play-service-account.json",
         "releaseStatus": "draft"
       }

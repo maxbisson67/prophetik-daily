@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, Keyboard } from "react-native";
 import i18n from "@src/i18n/i18n";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import FavoriteTeamPickerModal from "@src/groups/components/FavoriteTeamPickerModal";
@@ -63,7 +63,10 @@ export default function FavoriteTeamSelector({
 
         {!disabled ? (
           <TouchableOpacity
-            onPress={() => setModalOpen(true)}
+            onPress={() => {
+              Keyboard.dismiss();
+              setModalOpen(true);
+            }}
             style={{
               paddingVertical: 8,
               paddingHorizontal: 12,

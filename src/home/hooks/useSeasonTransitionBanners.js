@@ -2,7 +2,12 @@ import { useMemo } from "react";
 import useActiveCompetition from "@src/hooks/useActiveCompetition";
 import { useLeaderboardCompetitionMeta } from "@src/hooks/useGroupCompetitionHistory";
 import useLeaderboardProfiles, { resolveLeaderboardMember } from "@src/leaderboard/useLeaderboardProfiles";
-import { buildCompetitionKey, normalizeSport } from "@src/season/seasonCompetitionCore";
+import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
+import {
+  buildCompetitionKey,
+  isWithinCompetitionWindow,
+  normalizeSport,
+} from "@src/season/seasonCompetitionCore";
 
 function formatWinnerNames(winnerUids = [], profiles = {}) {
   const names = winnerUids
@@ -17,13 +22,16 @@ function formatWinnerNames(winnerUids = [], profiles = {}) {
 
 export default function useSeasonTransitionBanners({ sport = "MLB", groupId, enabled = true } = {}) {
   const sportNorm = normalizeSport(sport);
+  const hookEnabled = enabled && !!groupId;
 
   const {
     phase,
     seasonId,
     label: activeLabel,
+    fromYmd,
+    toYmd,
     loading: loadingActive,
-  } = useActiveCompetition({ sport, enabled });
+  } = useActiveCompetition({ sport, enabled: hookEnabled });
 
   const regularCompetitionKey = useMemo(() => {
     if (!seasonId) return "";
@@ -33,7 +41,7 @@ export default function useSeasonTransitionBanners({ sport = "MLB", groupId, ena
   const { meta: regularMeta, loading: loadingRegularMeta } = useLeaderboardCompetitionMeta({
     groupId,
     competitionKey: regularCompetitionKey,
-    enabled: enabled && !!groupId && !!regularCompetitionKey,
+    enabled: hookEnabled && !!regularCompetitionKey,
   });
 
   const winnerUids = useMemo(
@@ -44,13 +52,25 @@ export default function useSeasonTransitionBanners({ sport = "MLB", groupId, ena
   const profiles = useLeaderboardProfiles(winnerUids);
 
   return useMemo(() => {
+    if (!hookEnabled) {
+      return {
+        loading: false,
+        championBanner: null,
+        playoffsBanner: null,
+      };
+    }
+
     const loading = loadingActive || loadingRegularMeta;
+    const todayYmd = getProphetikBusinessYmd();
+    const playoffsLive =
+      phase === "playoffs" &&
+      isWithinCompetitionWindow({ fromYmd, toYmd }, todayYmd);
 
     const regularFinalized =
       String(regularMeta?.status || "").toLowerCase() === "finalized" || !!regularMeta?.winnerDeclaredAt;
 
     const championBanner =
-      phase === "playoffs" && regularFinalized && winnerUids.length
+      playoffsLive && regularFinalized && winnerUids.length
         ? {
             winnerNames: formatWinnerNames(winnerUids, profiles),
             winnerUids,
@@ -60,14 +80,13 @@ export default function useSeasonTransitionBanners({ sport = "MLB", groupId, ena
           }
         : null;
 
-    const playoffsBanner =
-      phase === "playoffs"
-        ? {
-            label: activeLabel,
-            seasonId,
-            sport: sportNorm,
-          }
-        : null;
+    const playoffsBanner = playoffsLive
+      ? {
+          label: activeLabel,
+          seasonId,
+          sport: sportNorm,
+        }
+      : null;
 
     return {
       loading,
@@ -75,12 +94,15 @@ export default function useSeasonTransitionBanners({ sport = "MLB", groupId, ena
       playoffsBanner,
     };
   }, [
+    hookEnabled,
     loadingActive,
     loadingRegularMeta,
     regularMeta,
     winnerUids,
     profiles,
     phase,
+    fromYmd,
+    toYmd,
     seasonId,
     sportNorm,
     activeLabel,

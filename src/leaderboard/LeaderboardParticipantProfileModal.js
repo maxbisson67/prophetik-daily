@@ -12,6 +12,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
+import JerseyPlaceholder from "@src/ui/JerseyPlaceholder";
+import JerseyImage from "@src/ui/JerseyImage";
+import LegacyAvatar from "@src/ui/LegacyAvatar";
+import {
+  hasCompleteJersey,
+  hasJerseyFrontOnly,
+  shouldShowLegacyAvatar,
+  resolveCatalogAvatarUrl,
+} from "@src/ui/resolveJerseyAvatar";
 import LiveChallengeKindBadge, { LIVE_BADGE_ACCENTS } from "@src/live/LiveChallengeKindBadge";
 import { resolveLeaderboardMember } from "./useLeaderboardProfiles";
 import {
@@ -143,7 +152,19 @@ function withCacheBust(url, tsMillis) {
   return url.includes("?") ? `${url}&_cb=${v}` : `${url}?_cb=${v}`;
 }
 
-function ChallengeStatCard({ kind, title, accent, stats, colors, t, memberCount, tpExtra = null, showTpExacts = true }) {
+function ChallengeStatCard({
+  kind,
+  title,
+  accent,
+  stats,
+  colors,
+  t,
+  memberCount,
+  tpExtra = null,
+  showTpExacts = true,
+  showRank = true,
+  winsLabel,
+}) {
   const hasActivity =
     Number(stats?.points ?? 0) > 0 ||
     Number(stats?.wins ?? 0) > 0 ||
@@ -174,7 +195,7 @@ function ChallengeStatCard({ kind, title, accent, stats, colors, t, memberCount,
             </Text>
           </View>
         </View>
-        {stats?.rank ? (
+        {showRank && stats?.rank ? (
           <ParticipantRankDisc
             rank={stats.rank}
             total={memberCount}
@@ -196,7 +217,10 @@ function ChallengeStatCard({ kind, title, accent, stats, colors, t, memberCount,
           />
           <StatPill
             colors={colors}
-            label={t("leaderboard.participantProfile.wins", { defaultValue: "Victoires" })}
+            label={
+              winsLabel ||
+              t("leaderboard.participantProfile.wins", { defaultValue: "Victoires" })
+            }
             value={String(stats.wins ?? 0)}
           />
           {showTpExacts && tpExtra ? (
@@ -292,16 +316,24 @@ export default function LeaderboardParticipantProfileModal({
     [mlb, t]
   );
 
+  const winsLabel = isDaily
+    ? t("live.participantProfile.successes", { defaultValue: "Réussites" })
+    : t("leaderboard.participantProfile.wins", { defaultValue: "Victoires" });
+
   if (!visible || !row || !colors) return null;
 
-  const version = identity?.updatedAt?.toMillis?.() ? identity.updatedAt.toMillis() : 0;
-  const avatarUri = identity?.avatarUrl ? withCacheBust(identity.avatarUrl, version) : null;
-  const isJersey =
-    identity?.avatarKind === "jersey" &&
-    identity?.jerseyFrontUrl &&
-    identity?.jerseyBackUrl;
-  const jerseyFrontOnly =
-    !isJersey && (identity?.jerseyFrontUrl || identity?.avatarKind === "jersey");
+  const isJersey = hasCompleteJersey(identity?.jerseyFrontUrl, identity?.jerseyBackUrl);
+  const jerseyFrontOnly = hasJerseyFrontOnly(identity?.jerseyFrontUrl, identity?.jerseyBackUrl);
+  const catalogUrl = resolveCatalogAvatarUrl({
+    avatarKind: identity?.avatarKind,
+    avatarUrl: identity?.avatarUrl,
+  });
+  const showLegacyAvatar = shouldShowLegacyAvatar({
+    avatarKind: identity?.avatarKind,
+    avatarUrl: catalogUrl,
+    jerseyFrontUrl: identity?.jerseyFrontUrl,
+    jerseyBackUrl: identity?.jerseyBackUrl,
+  });
 
   return (
     <Modal
@@ -360,26 +392,23 @@ export default function LeaderboardParticipantProfileModal({
                 fadeDurationMs={1100}
                 backgroundColor="transparent"
               />
-            ) : jerseyFrontOnly && identity?.jerseyFrontUrl ? (
-              <Image
-                source={{ uri: identity.jerseyFrontUrl }}
-                style={{
-                  width: JERSEY_SIZE,
-                  height: JERSEY_SIZE,
-                }}
-                resizeMode="contain"
+            ) : jerseyFrontOnly ? (
+              <JerseyImage uri={identity.jerseyFrontUrl} size={JERSEY_SIZE} />
+            ) : showLegacyAvatar ? (
+              <LegacyAvatar
+                uri={catalogUrl}
+                name={identity?.displayName}
+                size={JERSEY_SIZE}
+                colors={colors}
+                borderWidth={3}
               />
             ) : (
-              <Image
-                source={avatarUri ? { uri: avatarUri } : AVATAR_PLACEHOLDER}
-                style={{
-                  width: JERSEY_SIZE,
-                  height: JERSEY_SIZE,
-                  borderRadius: JERSEY_SIZE / 2,
-                  borderWidth: 3,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card2,
-                }}
+              <JerseyPlaceholder
+                size={JERSEY_SIZE}
+                colors={colors}
+                name={identity?.displayName}
+                borderRadius={18}
+                emphasized
               />
             )}
 
@@ -442,10 +471,15 @@ export default function LeaderboardParticipantProfileModal({
               </Text>
             </View>
             <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 12 }}>
-              {t("leaderboard.participantProfile.totalWins", {
-                count: stats?.overall?.wins ?? 0,
-                defaultValue: "{{count}} victoires au total",
-              })}
+              {isDaily
+                ? t("live.participantProfile.totalSuccesses", {
+                    count: stats?.overall?.wins ?? 0,
+                    defaultValue: "{{count}} réussites au total",
+                  })
+                : t("leaderboard.participantProfile.totalWins", {
+                    count: stats?.overall?.wins ?? 0,
+                    defaultValue: "{{count}} victoires au total",
+                  })}
             </Text>
           </View>
 
@@ -467,6 +501,8 @@ export default function LeaderboardParticipantProfileModal({
             memberCount={memberCount}
             colors={colors}
             t={t}
+            showRank={!isDaily}
+            winsLabel={winsLabel}
           />
 
           <ChallengeStatCard
@@ -479,6 +515,8 @@ export default function LeaderboardParticipantProfileModal({
             showTpExacts={!isDaily}
             colors={colors}
             t={t}
+            showRank={!isDaily}
+            winsLabel={winsLabel}
           />
 
           <ChallengeStatCard
@@ -489,6 +527,8 @@ export default function LeaderboardParticipantProfileModal({
             memberCount={memberCount}
             colors={colors}
             t={t}
+            showRank={!isDaily}
+            winsLabel={winsLabel}
           />
         </ScrollView>
       </View>

@@ -442,7 +442,7 @@ export default function AccueilScreen() {
 
   const streakGroupSummary = useMemo(
     () => ({
-      show: !!(currentGroupId && competitionKey && user?.uid),
+      show: !!(userGroups.length && currentGroupId && competitionKey && user?.uid),
       loading: groupLeaderboardSummary.loading || loadingCompetition,
       myPoints: groupLeaderboardSummary.myPoints,
       myRank: groupLeaderboardSummary.myRank,
@@ -451,6 +451,7 @@ export default function AccueilScreen() {
       competitionLabel,
     }),
     [
+      userGroups.length,
       currentGroupId,
       competitionKey,
       user?.uid,
@@ -846,13 +847,8 @@ const isCurrentGroupOwner =
 
 const avatarUrl =
   meDoc?.avatarKind === "jersey"
-    ? meDoc?.jerseyFrontUrl || meDoc?.avatarUrl || null
-    : meDoc?.avatarUrl ??
-      meDoc?.photoURL ??
-      meDoc?.photoUrl ??
-      meDoc?.avatar?.url ??
-      user?.photoURL ??
-      null;
+    ? null
+    : meDoc?.avatarUrl ?? null;
 
 
 

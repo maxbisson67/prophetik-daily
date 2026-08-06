@@ -4,7 +4,7 @@
     "name": "Prophetik",
     "slug": "prophetik-daily",
     "scheme": "prophetik-daily",
-    "version": "4.0.1",
+    "version": "4.0.2",
     "orientation": "portrait",
     "icon": "./assets/prophetik_icon_1024.png",
     "backgroundColor": "#ffffff",

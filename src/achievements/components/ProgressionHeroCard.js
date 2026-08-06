@@ -1,7 +1,16 @@
 import React from "react";
-import { View, Text, Image } from "react-native";
+import { View, Text } from "react-native";
 import i18n from "@src/i18n/i18n";
 import JerseyFlipAvatar from "@src/ui/JerseyFlipAvatar";
+import JerseyPlaceholder from "@src/ui/JerseyPlaceholder";
+import JerseyImage from "@src/ui/JerseyImage";
+import LegacyAvatar from "@src/ui/LegacyAvatar";
+import {
+  hasCompleteJersey,
+  hasJerseyFrontOnly,
+  shouldShowLegacyAvatar,
+  resolveCatalogAvatarUrl,
+} from "@src/ui/resolveJerseyAvatar";
 import { useTheme } from "@src/theme/ThemeProvider";
 import { MVP_ACHIEVEMENT_COUNT } from "../mvpAchievements.js";
 import { countUnlockedAchievements } from "../progressionUtils.js";
@@ -45,7 +54,15 @@ export default function ProgressionHeroCard({
 
   const frameBg = isDark ? colors.background : "#f3f4f6";
   const frameBorder = isDark ? colors.border : "#eee";
-  const isJersey = avatarKind === "jersey" && jerseyFrontUrl && jerseyBackUrl;
+  const isJersey = hasCompleteJersey(jerseyFrontUrl, jerseyBackUrl);
+  const showJerseyFront = hasJerseyFrontOnly(jerseyFrontUrl, jerseyBackUrl);
+  const catalogUrl = resolveCatalogAvatarUrl({ avatarKind, avatarUrl });
+  const showLegacyAvatar = shouldShowLegacyAvatar({
+    avatarKind,
+    avatarUrl: catalogUrl,
+    jerseyFrontUrl,
+    jerseyBackUrl,
+  });
   const name = String(displayName || "—").trim().toUpperCase();
 
   return (
@@ -70,19 +87,16 @@ export default function ProgressionHeroCard({
                 frontUrl={jerseyFrontUrl}
                 backUrl={jerseyBackUrl}
                 size={96}
-                pauseMs={2800}
-                flipDurationMs={1100}
+                holdMs={2800}
+                fadeDurationMs={1100}
                 backgroundColor={frameBg}
               />
+            ) : showJerseyFront ? (
+              <JerseyImage uri={jerseyFrontUrl} size={88} />
+            ) : showLegacyAvatar ? (
+              <LegacyAvatar uri={catalogUrl} name={name} size={88} colors={colors} borderWidth={0} />
             ) : (
-              <Image
-                source={
-                  avatarUrl
-                    ? { uri: avatarUrl }
-                    : require("@src/assets/avatar-placeholder.png")
-                }
-                style={{ width: 88, height: 88, borderRadius: 44 }}
-              />
+              <JerseyPlaceholder size={88} colors={colors} name={name} borderRadius={18} emphasized />
             )}
           </View>
 

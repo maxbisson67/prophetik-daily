@@ -4,12 +4,16 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import sharp from "sharp";
+import {
+  JERSEY_STORAGE_BUCKET,
+  uploadBufferWithDownloadUrl,
+} from "./jerseyStorageUrls.js";
 
 if (!getApps().length) initializeApp();
 
 const db = getFirestore();
 const storage = getStorage();
-const bucket = storage.bucket();
+const bucket = storage.bucket(JERSEY_STORAGE_BUCKET);
 
 const SUPPORTED_JERSEY_SPORTS = new Set(["hockey", "baseball"]);
 
@@ -65,29 +69,13 @@ async function readStorageFileAsBuffer(path) {
   return buf;
 }
 
-async function uploadBuffer({
-  path,
-  buffer,
-  contentType = "image/png",
-  metadata = {},
-}) {
-  const file = bucket.file(path);
-
-  await file.save(buffer, {
-    contentType,
-    resumable: false,
-    metadata: {
-      cacheControl: "public,max-age=3600",
-      metadata,
-    },
+async function uploadBuffer({ path, buffer, metadata = {} }) {
+  return uploadBufferWithDownloadUrl({
+    bucket,
+    path,
+    buffer,
+    metadata,
   });
-
-  const [url] = await file.getSignedUrl({
-    action: "read",
-    expires: "2100-01-01",
-  });
-
-  return url;
 }
 
 function svgTextOverlay({
