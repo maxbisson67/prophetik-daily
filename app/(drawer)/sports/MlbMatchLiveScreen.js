@@ -21,7 +21,10 @@ import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import MlbLiveSituation, { mlbLiveSituation } from "@src/sports/MlbLiveSituation";
-import { APP_TZ, addDaysToYmd, toYmdInTz } from "@src/lib/prophetikBusinessDate";
+import MlbLiveLineupPanel, { MlbCurrentBatterHint } from "@src/sports/MlbLiveLineupPanel";
+import MlbLinescoreTable from "@src/sports/MlbLinescoreTable";
+import { addDaysToYmd } from "@src/lib/prophetikBusinessDate";
+import { useProphetikBusinessYmd } from "@src/hooks/useProphetikBusinessDate";
 import { useTeamsBySport } from "@src/groups/hooks/useTeamsBySport";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import {
@@ -46,13 +49,7 @@ import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
 import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
 import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
 import TsMyResultsModal from "@src/defis/results/TsMyResultsModal";
-import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import { useRouter } from "expo-router";
-
-/** Aligné sur `todayAppYmd()` côté Functions (Toronto, sans bascule 4h/9h). */
-function computeMlbLiveQueryYmd(now = new Date()) {
-  return toYmdInTz(now, APP_TZ);
-}
 
 function fmtTime(d) {
   if (!d) return "—";
@@ -292,6 +289,7 @@ function GameRow({
   const gameId = String(game?.gamePk || game?.id || "").trim();
 
   const showLiveSituation = (isLive || delayed) && !!mlbLiveSituation(game);
+  const showCurrentBatter = isLive && !!game?.currentBatterName;
   const liveStatusLabel = delayed
     ? i18n.t("live.mlb.delayed", "Retardé")
     : i18n.t("live.status.live", "LIVE");
@@ -396,6 +394,14 @@ function GameRow({
                   {homeLabel}
                 </Text>
               </View>
+              {showCurrentBatter ? (
+                <MlbCurrentBatterHint
+                  game={game}
+                  colors={colors}
+                  variant="summary"
+                  teamForAbbr={teamForAbbr}
+                />
+              ) : null}
             </View>
 
             <View
@@ -730,6 +736,15 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
           </LinearGradient>
 
             <View style={{ paddingHorizontal: 16 }}>
+            <MlbLinescoreTable game={g} colors={colors} />
+
+            <MlbLiveLineupPanel
+              game={g}
+              colors={colors}
+              teamForAbbr={teamForAbbr}
+              enabled={visible}
+            />
+
             <View
               style={{
                 flexDirection: "row",
@@ -901,20 +916,15 @@ export default function MlbMatchLiveScreen() {
   const { selectedGroupId: currentGroupId } = useSelectedGroup();
   const teamForAbbr = useMlbTeamForAbbr();
   const [refreshing, setRefreshing] = useState(false);
-  const [todayKey, setTodayKey] = useState(() => computeMlbLiveQueryYmd());
+  const todayKey = useProphetikBusinessYmd();
   const yesterdayKey = useMemo(() => addDaysToYmd(todayKey, -1), [todayKey]);
-  const businessYmd = useMemo(() => getProphetikBusinessYmd(), [todayKey]);
   const [selectedGame, setSelectedGame] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [fgcModalItem, setFgcModalItem] = useState(null);
   const [tpModalItem, setTpModalItem] = useState(null);
   const [tsModalOpen, setTsModalOpen] = useState(false);
 
-  const challengeExtraYmds = useMemo(() => {
-    const extras = [yesterdayKey];
-    if (todayKey && todayKey !== businessYmd) extras.push(todayKey);
-    return extras;
-  }, [yesterdayKey, todayKey, businessYmd]);
+  const challengeExtraYmds = useMemo(() => [yesterdayKey], [yesterdayKey]);
 
   const {
     fgcByGameId,
@@ -1014,14 +1024,6 @@ export default function MlbMatchLiveScreen() {
     list.sort((a, b) => gStartMillis(a) - gStartMillis(b));
     return list;
   }, [todayBoardGames, yesterdayBoardGames]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const next = computeMlbLiveQueryYmd();
-      setTodayKey((prev) => (prev === next ? prev : next));
-    }, 60_000);
-    return () => clearInterval(id);
-  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

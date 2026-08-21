@@ -719,6 +719,8 @@
           "alertGenericErrorTitle": "Erreur",
           "alertLimitTitle": "Limite atteinte",
           "alertLimitMessage": "Ton abonnement {{tier}} permet max {{max}} groupe(s) au total (propriétaire ou membre). Tu en as déjà {{current}}. Passe à PRO/VIP pour augmenter la limite.",
+          "alertGroupMemberLimitTitle": "Groupe complet",
+          "alertGroupMemberLimitMessage": "Ce groupe a atteint la limite de {{max}} participants. Demande au propriétaire de libérer de la place ou de créer un autre groupe.",
           "joinedInactiveTitle": "Groupe rejoint en mode inactif",
           "joinedInactiveMessage": "Tu es membre de ce groupe, mais tu joues encore dans un autre groupe actif. Active ce groupe quand tu seras prêt à y jouer.",
           "joinedInactiveLater": "Plus tard",
@@ -1299,8 +1301,40 @@
     "howItWorks": {
       "title": "Comment ça marche",
       "headerTitle": "Comment ça marche",
-      "subtitle": "Tout ce qu’il faut savoir pour créer un défi, participer, comprendre les formats, la cagnotte et le bris d’égalité.",
+      "subtitle": "Le concept Prophetik, puis les guides pour créer un défi, participer et comprendre les règles.",
       "headerHint": "Guides rapides & règles des défis",
+
+      "concept": {
+        "title": "Le concept Prophetik",
+        "intro": "Prophetik, c’est un défi sportif quotidien entre amis — pas une ligue publique à milliers de participants.",
+        "b1": "Tu joues dans un groupe privé avec tes amis (NHL ou MLB).",
+        "b2": "Chaque jour : des défis à relever, des picks à faire, des résultats en direct.",
+        "b4": "Tes points s’accumulent sur la saison — le classement du groupe te suit toute l’année.",
+        "cta": "Crée un groupe ou rejoins tes amis avec un code d’invitation."
+      },
+
+      "challenges": {
+        "title": "Les défis et les points",
+        "intro": "Chaque jour, trois défis s’ajoutent à ton total de points pour le classement du groupe.",
+        "soloTitle": "SOLO",
+        "soloBody": "Premier but (NHL) ou premier point produit (MLB) : choisis le joueur qui marquera en premier.",
+        "soloPoints": "+10 pts si tu as le bon joueur",
+        "duoTitle": "DUO",
+        "duoBody": "Prédire le gagnant de 2 matchs (tu peux aussi viser le score exact).",
+        "duoPointsWinner": "+5 pts par bon gagnant",
+        "duoPointsExact": "+5 pts de bonus si le score est exact (10 pts max par match)",
+        "trioTitle": "TRIO",
+        "trioBody": "Cumule les points de 3 joueurs qui évoluent aujourd’hui — selon leurs stats réelles du match.",
+        "trioMlbTitle": "MLB",
+        "trioMlbLine1": "Point produit, point compté ou coup sûr = 1 pt",
+        "trioMlbLine2": "Double, triple ou circuit = 1 pt supplémentaire",
+        "trioNhlTitle": "NHL",
+        "trioNhlLine1": "But = 1 pt",
+        "trioNhlLine2": "Passe = 1 pt",
+        "bonusTitle": "Bonus du jour (+5 pts)",
+        "bonusBody": "+5 pts pour celui qui cumule le plus de points SOLO + DUO + TRIO dans la journée.",
+        "bonusTie": "En cas d’égalité au sommet, chaque ex æquo reçoit les +5 pts (pas de bris d’égalité)."
+      },
 
       "formats": {
         "title": "Formats & coût de participation",
@@ -1313,23 +1347,48 @@
 
       "create": {
         "title": "Créer un défi",
-        "step1": "Accède à l’onglet Défis.",
-        "step2": "Choisis un groupe.",
-        "step3": "Sélectionne un format (1x1, 2x2, …, 6x7).",
-        "step4": "Choisis la date NHL.",
-        "step5": "Clique sur « Créer le défi ».",
-        "deadlinePill": "Inscription/modification : jusqu’à 1h avant le 1er match",
-        "deadlineNote": "Le bouton « Créer » peut se désactiver si la date limite est passée (1h avant le premier match)."
+        "intro": "Les défis du jour existent par groupe : chaque groupe d’amis a ses propres défis SOLO, DUO et TRIO.",
+        "todayTabTitle": "Onglet Aujourd’hui",
+        "todayTabBody": "C’est l’endroit où tu consultes les défis du jour et où tu fais tes picks. Choisis ton groupe en haut de l’écran pour voir les défis de ce groupe.",
+        "autopilotTitle": "Mode Autopilote",
+        "autopilotIntro": "Le propriétaire du groupe peut activer ou désactiver l’Autopilote dans les paramètres du groupe.",
+        "autopilotOn": "Autopilote activé : SOLO, DUO et TRIO sont créés automatiquement chaque matin (vers 6 h 30). Les membres sont notifiés.",
+        "autopilotOff": "Autopilote désactivé : aucun défi n’est créé automatiquement — le propriétaire doit les lancer.",
+        "manualTitle": "Création manuelle",
+        "manualIntro": "Si l’Autopilote est désactivé, seul le propriétaire du groupe peut créer les défis depuis l’onglet Aujourd’hui.",
+        "manualSolo": "SOLO — bouton Créer dans la section Premier but / Premier point produit",
+        "manualDuo": "DUO — bouton Créer dans la section Prédire le match",
+        "manualTrio": "TRIO — bouton Créer dans la section Trio du jour"
       },
 
       "join": {
         "title": "Participer à un défi",
-        "step1": "Accède à l’onglet Défis.",
-        "step2": "Repère le défi (format + date).",
-        "step3": "Clique sur « Participer ».",
-        "step4": "Sélectionne le nombre de joueurs requis par le format.",
-        "step5": "Sauvegarde tes choix.",
-        "editPill": "Tu peux modifier tes choix jusqu’à 1h avant le 1er match"
+        "intro": "Tout se passe dans l’onglet Aujourd’hui : choisis ton groupe en haut, puis participe aux trois défis du jour (SOLO, DUO, TRIO).",
+        "soloTitle": "SOLO",
+        "soloBody": "Section Premier but (NHL) ou Premier point produit (MLB). Appuie sur Participer, choisis un joueur parmi les deux équipes, puis enregistre.",
+        "soloDeadline": "Heure limite : 5 minutes avant le début du match. Tu peux modifier ton choix jusqu’à ce verrouillage.",
+        "soloPostponed": "Match reporté : tu peux encore participer ou modifier ton choix tant que le résultat n’est pas confirmé.",
+        "duoTitle": "DUO",
+        "duoBody": "Section Prédire l’issue des matchs. Pour chaque confrontation, choisis le gagnant et le pointage (score exact = bonus).",
+        "duoDeadline": "Chaque match se verrouille 5 minutes avant son début. Tu peux compléter tes prédictions progressivement, match par match.",
+        "trioTitle": "TRIO",
+        "trioBody": "Section Trio du jour. Appuie sur Participer, puis sélectionne 3 joueurs qui évoluent aujourd’hui. Tes points s’accumulent en direct selon leurs stats.",
+        "trioDeadline": "Heure limite : 15 minutes avant le premier match de la journée. Tu peux modifier tes 3 joueurs jusqu’à cette limite.",
+        "deadlinesTitle": "Heures limites — récapitulatif",
+        "deadlineAutopilot": "Création des défis : vers 6 h 30 (heure de Toronto) si l’Autopilote est activé — tu reçois une notification.",
+        "deadlineSolo": "SOLO : verrouillage 5 min avant le début du match.",
+        "deadlineDuo": "DUO : verrouillage 5 min avant chaque match.",
+        "deadlineTrio": "TRIO : inscription et modifications jusqu’à 15 min avant le premier match.",
+        "novaTitle": "Nova Coach",
+        "novaIntro": "Nova est l’assistante intégrée qui t’aide à faire tes picks. Elle apparaît lors du choix d’un joueur ou d’un match.",
+        "novaLearn": "Apprendre : réponses instantanées sur les bases (premier but, RBI, OPS, ERA, platoon, BvP, barème DUO…).",
+        "novaStrategy": "Stratégies : analyse personnalisée par IA — avis sur un joueur, un match ou une comparaison (consomme ton quota mensuel).",
+        "novaAdvice": "Bouton « Avis de Nova » : analyse complète pour le joueur ou le match que tu consultes.",
+        "novaQuota": "Quota mensuel : Gratuit 30 · Pro 100 · VIP 250 conseils. Consulte Mon forfait pour suivre ton usage.",
+        "tipsTitle": "Conseils",
+        "tipInfoBubble": "Chaque section affiche une bulle d’info (?) avec le fonctionnement détaillé du défi.",
+        "tipLive": "Pendant les matchs, suis tes points en direct dans l’onglet En direct.",
+        "tipBonus": "Participe aux trois défis pour viser le bonus du jour (+5 pts au meilleur total SOLO + DUO + TRIO)."
       },
 
       "pot": {
@@ -1352,10 +1411,27 @@
       },
 
       "groups": {
-        "title": "Groupes : créer et joindre",
-        "create": "Créer un groupe : choisis un nom, puis invite des amis.",
-        "join": "Joindre un groupe : accepte une invitation ou utilise un code/lien (si disponible).",
-        "role": "Le propriétaire du groupe peut gérer les paramètres et les membres."
+        "title": "Les groupes",
+        "intro": "Un groupe, c’est ton cercle privé d’amis : chaque groupe a ses propres défis, son classement et son chat. Prophetik n’est pas une ligue publique — tu joues toujours dans un groupe.",
+        "createTitle": "Créer un groupe",
+        "createIntro": "Depuis l’onglet Groupes, appuie sur Créer et configure ton groupe :",
+        "createName": "Nom — obligatoire (ex. Les Snipers du Nord).",
+        "createDescription": "Description — optionnelle, visible par les membres.",
+        "createSport": "Sport — NHL ou MLB. Détermine les matchs et les défis du groupe.",
+        "createAutopilot": "Autopilote — si activé, SOLO, DUO et TRIO sont créés automatiquement chaque matin (vers 6 h 30). Le nombre de groupes en Autopilote dépend de ton forfait.",
+        "createFavorite": "Équipe favorite — utilisée pour prioriser les matchs du groupe (SOLO et DUO). Modifiable à tout moment dans les paramètres.",
+        "createInvite": "Une fois créé, partage le code d’invitation ou le QR Code depuis la fiche du groupe pour inviter tes amis.",
+        "joinTitle": "Joindre un groupe",
+        "joinIntro": "Depuis l’onglet Groupes, appuie sur Joindre :",
+        "joinCode": "Saisis le code d’invitation à 8 caractères fourni par le propriétaire du groupe.",
+        "joinQr": "Ou scanne le QR Code affiché sur la fiche du groupe (bouton Scanner un QR).",
+        "activeTitle": "Groupe actif et limites d’abonnement",
+        "activeIntro": "Tu peux être membre de plusieurs groupes, mais tu ne peux participer aux défis que dans tes groupes actifs — ceux où la participation est activée.",
+        "activeSwitch": "Dans l’onglet Groupes, active ou désactive la participation pour chaque groupe (Activer la participation / Jouer dans ce groupe).",
+        "activeLimits": "Limites de groupes actifs (jeu) : Gratuit 1 · Pro 5 · VIP 20. Consulte Mon forfait pour voir ton usage.",
+        "activeJoined": "Rejoindre des groupes est illimité : si ta limite est atteinte, tu peux quand même rejoindre en mode inactif et activer plus tard.",
+        "activeOwned": "Groupes possédés et Autopilote : mêmes plafonds par forfait (1 / 5 / 20). Passe à un forfait supérieur si tu veux en gérer davantage.",
+        "ownerPill": "Le propriétaire gère les membres, les paramètres et peut créer les défis manuellement si l’Autopilote est désactivé."
       },
 
       "footer": "Prophetik évolue : certaines options peuvent varier selon le groupe ou les événements spéciaux."
@@ -1515,7 +1591,8 @@
 
       "section": {
         "navigation": "Navigation",
-        "personal": "Personnel"
+        "personal": "Personnel",
+        "help": "Aide"
       },
 
       "home": "Aujourd'hui",
@@ -2009,7 +2086,17 @@
       "ballsShort": "B",
       "strikesShort": "S",
       "outsShort": "R",
-      "runnersOnBase": "{{count}} coureur(s)"
+      "runnersOnBase": "{{count}} coureur(s)",
+      "battingOrder": "Ordre de frappe",
+      "currentBatter": "Frappeur au bâton",
+      "currentPitcher": "vs {{pitcher}}",
+      "atBat": "Au bâton",
+      "loadingLineups": "Chargement des alignements…",
+      "noLineups": "Alignements non disponibles pour le moment.",
+      "linescoreTitle": "Tableau indicateur",
+      "linescoreRuns": "P",
+      "linescoreHits": "CS",
+      "linescoreErrors": "E"
     }
   },
   "leaderboardMember": {

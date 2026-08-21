@@ -584,8 +584,7 @@ const [myParticipationsByDefiId, setMyParticipationsByDefiId] = useState({});
 
     const qActiveLive = firestore()
       .collection("defis")
-      .where("groupId", "==", String(currentGroupId))
-      .limit(50);
+      .where("groupId", "==", String(currentGroupId));
 
     const un = listenRNFB(
       qActiveLive,

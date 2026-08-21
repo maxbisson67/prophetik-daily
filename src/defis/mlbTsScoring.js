@@ -38,7 +38,14 @@ export function parseMlbRateSort(raw) {
 }
 
 export function formatMlbOps(raw) {
-  return formatMlbRate(raw);
+  if (raw == null || raw === "") return ".000";
+  const s = String(raw).trim();
+  if (s.startsWith(".")) return s;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return s;
+  if (n > 1) return n.toFixed(2);
+  if (n > 0 && n <= 1) return n.toFixed(3).replace(/^0(?=\.)/, "");
+  return s;
 }
 
 export function resolveMlbOps(player, statsDoc = null) {

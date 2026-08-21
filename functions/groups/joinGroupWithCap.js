@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, FieldValue } from "../utils.js";
 import { readUserPlanTier } from "../subscriptions/planLimits.js";
 import { assertCanSetParticipationActive } from "./participationEnforcement.js";
+import { assertGroupHasMemberCapacity } from "./groupMemberLimit.js";
 import { PARTICIPATION, resolveParticipation } from "./participationUtils.js";
 
 async function resolveJoinParticipation(db, uid, tier) {
@@ -67,6 +68,8 @@ export const joinGroupWithCap = onCall(async (req) => {
         };
       }
     }
+
+    await assertGroupHasMemberCapacity(db, groupId);
 
     const tier = await readUserPlanTier(db, uid);
     const { participation: joinParticipation, joinedAsInactive } = await resolveJoinParticipation(

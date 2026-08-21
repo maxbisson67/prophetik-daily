@@ -6,18 +6,16 @@ import {
   FlatList,
   RefreshControl,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import { Stack } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import i18n from "@src/i18n/i18n";
 import useAppConfig from "@src/hooks/useAppConfig";
 import { SvgUri } from "react-native-svg";
-import { mlbHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
 import { enrichMlbLeaderRowsWithTeams } from "@src/mlb/enrichMlbLeaderRowsWithTeams";
 import { lookupMlbTeamById, lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import { formatMlbOps } from "@src/defis/mlbTsScoring";
 import {
   formatSeasonLabel,
   getMlbPreviousSeason,
@@ -31,16 +29,15 @@ const PAGE_SIZE = 50;
 const MAX_FETCH_BATCHES = 10;
 
 const COLS = {
-  rank: 26,
-  avatar: 30,
-  gap1: 6,
+  rank: 24,
   logo: 28,
-  gap2: 6,
-  rbi: 28,
-  hits: 24,
-  hr: 24,
-  avg: 32,
-  ops: 36,
+  gap: 4,
+  name: 88,
+  rbi: 30,
+  hits: 26,
+  hr: 26,
+  avg: 34,
+  ops: 38,
 };
 
 const STAT_COLUMNS = [
@@ -83,7 +80,7 @@ function formatStatValue(item, key) {
     case "battingAverage":
       return pickStr(item?.battingAverage, ".000");
     case "ops":
-      return pickStr(item?.ops, ".000");
+      return formatMlbOps(item?.ops);
     default:
       return "—";
   }
@@ -183,6 +180,7 @@ function TableHeader({ colors, sortField }) {
         borderBottomColor: colors.border,
         marginTop: 4,
         marginBottom: 4,
+        gap: 2,
       }}
     >
       <Text
@@ -196,14 +194,15 @@ function TableHeader({ colors, sortField }) {
         {i18n.t("mlb.batters.rank", { defaultValue: "Pos" })}
       </Text>
 
-      <View style={{ width: COLS.avatar }} />
-      <View style={{ width: COLS.gap1 }} />
       <View style={{ width: COLS.logo }} />
-      <View style={{ width: COLS.gap2 }} />
+      <View style={{ width: COLS.gap }} />
 
       <Text
+        numberOfLines={1}
         style={{
-          flex: 1,
+          width: COLS.name,
+          flexShrink: 1,
+          minWidth: 0,
           color: colors.subtext,
           fontSize: 10,
           fontWeight: "900",
@@ -223,9 +222,6 @@ function TableHeader({ colors, sortField }) {
 
 function PlayerRow({ item, index, colors, sortField }) {
   const lastName = pickStr(item?.lastName, pickStr(item?.fullName, "—"));
-
-  const playerId = pickStr(item?.playerId, "");
-  const headshot = mlbHeadshotUrl(playerId);
   const team = resolveMlbTeamForRow(item);
 
   const isActive = (field) => sortField === field;
@@ -248,6 +244,7 @@ function PlayerRow({ item, index, colors, sortField }) {
         paddingVertical: 8,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
+        gap: 2,
       }}
     >
       <Text
@@ -263,32 +260,6 @@ function PlayerRow({ item, index, colors, sortField }) {
 
       <View
         style={{
-          width: COLS.avatar,
-          height: COLS.avatar,
-          borderRadius: COLS.avatar / 2,
-          backgroundColor: colors.background,
-          borderWidth: 1,
-          borderColor: colors.border,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-        }}
-      >
-        {headshot ? (
-          <Image
-            source={{ uri: headshot }}
-            style={{ width: "100%", height: "100%" }}
-            resizeMode="cover"
-          />
-        ) : (
-          <Ionicons name="person-outline" size={14} color={colors.subtext} />
-        )}
-      </View>
-
-      <View style={{ width: COLS.gap1 }} />
-
-      <View
-        style={{
           width: COLS.logo,
           alignItems: "center",
           justifyContent: "center",
@@ -297,12 +268,14 @@ function PlayerRow({ item, index, colors, sortField }) {
         <MlbTeamLogo team={team} colors={colors} size={18} />
       </View>
 
-      <View style={{ width: COLS.gap2 }} />
+      <View style={{ width: COLS.gap }} />
 
       <Text
         numberOfLines={1}
         style={{
-          flex: 1,
+          width: COLS.name,
+          flexShrink: 1,
+          minWidth: 0,
           color: colors.text,
           fontSize: 12,
           fontWeight: "800",

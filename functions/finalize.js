@@ -242,8 +242,7 @@ export const finalizeDefiWinners = onSchedule(
     }
 
     if (!candidates.length) {
-      logger.info("finalizeDefiWinners: none", { reason });
-      return;
+      logger.info("finalizeDefiWinners: no TS defi candidates", { reason });
     }
 
     let processed = 0;
@@ -263,6 +262,7 @@ export const finalizeDefiWinners = onSchedule(
 
     for (const docSnap of candidates) {
       const defiId = docSnap.id;
+      try {
       const d = docSnap.data() || {};
       const bonusPerWinner = computeBonusPerWinner(defiId, d);
 
@@ -375,38 +375,8 @@ export const finalizeDefiWinners = onSchedule(
           const originalPot = Number(cur.pot ?? 0);
           const aiPart = partsAll.find((x) => String(x.uid).toLowerCase() === "ai");
 
-          tx.set(
-            dRef,
-            {
-              status: "cancelled",
-              cancelReason: "NO_HUMANS",
-              winners: [],
-              winnerShares: {},
-              cancelledAt: FieldValue.serverTimestamp(),
-              cancelledPotOriginal: originalPot,
-              pot: 0,
-              payoutAppliedAt: FieldValue.serverTimestamp(),
-              payoutAppliedTo: null,
-              payoutAppliedVersion: PAYOUT_APPLIED_VERSION,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-
-          if (aiPart) {
-            tx.set(
-              dRef.collection("participations").doc(String(aiPart.uid)),
-              {
-                finalPoints: Number(aiPart.livePoints ?? 0),
-                payout: 0,
-                cancelled: true,
-                cancelReason: "NO_HUMANS",
-                finalizedAt: FieldValue.serverTimestamp(),
-              },
-              { merge: true }
-            );
-          }
-
+          // ✅ READS avant toute WRITE (Firestore transaction)
+          let aiLeaderboardWrite = null;
           if (aiPart && competitionKey) {
             const cumulPoints = Number(aiPart.livePoints ?? 0) || 0;
             const uid = String(aiPart.uid);
@@ -446,9 +416,9 @@ export const finalizeDefiWinners = onSchedule(
               const nextTsPoints =
                 readNumberSafe(prev.tsPoints ?? prevTsFamily.points, 0) + cumulPoints;
 
-              tx.set(
+              aiLeaderboardWrite = {
                 memberRef,
-                {
+                payload: {
                   uid,
                   participations: nextPlays,
                   pointsTotal: nextPointsTotal,
@@ -464,10 +434,47 @@ export const finalizeDefiWinners = onSchedule(
                   updatedAt: FieldValue.serverTimestamp(),
                   createdAt: prev.createdAt || FieldValue.serverTimestamp(),
                 },
-                { merge: true }
-              );
+              };
             }
+          }
 
+          tx.set(
+            dRef,
+            {
+              status: "cancelled",
+              cancelReason: "NO_HUMANS",
+              winners: [],
+              winnerShares: {},
+              cancelledAt: FieldValue.serverTimestamp(),
+              cancelledPotOriginal: originalPot,
+              pot: 0,
+              payoutAppliedAt: FieldValue.serverTimestamp(),
+              payoutAppliedTo: null,
+              payoutAppliedVersion: PAYOUT_APPLIED_VERSION,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          if (aiPart) {
+            tx.set(
+              dRef.collection("participations").doc(String(aiPart.uid)),
+              {
+                finalPoints: Number(aiPart.livePoints ?? 0),
+                payout: 0,
+                cancelled: true,
+                cancelReason: "NO_HUMANS",
+                finalizedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+
+          if (aiLeaderboardWrite) {
+            tx.set(aiLeaderboardWrite.memberRef, aiLeaderboardWrite.payload, { merge: true });
+          }
+
+          if (aiPart && competitionKey) {
             tx.set(
               db.collection("groups").doc(groupId),
               {
@@ -878,6 +885,12 @@ export const finalizeDefiWinners = onSchedule(
       if (txResult?.finalized) finalizedNow++;
       if (txResult?.cancelled === "NO_PARTICIPANTS") cancelledNoParticipants++;
       if (txResult?.cancelled === "NO_HUMANS") cancelledNoHumans++;
+      } catch (e) {
+        logger.error("finalizeDefiWinners: defi processing failed", {
+          defiId,
+          error: String(e?.message || e),
+        });
+      }
     }
 
     const dailyPushTargets = new Map(groupDayPairs);

@@ -724,6 +724,8 @@
             "alertGenericErrorTitle": "Error",
             "alertLimitTitle": "Limit reached",
             "alertLimitMessage": "Your {{tier}} plan allows up to {{max}} group(s) total (owner or member). You currently have {{current}}. Upgrade to PRO/VIP to increase the limit.",
+            "alertGroupMemberLimitTitle": "Group full",
+            "alertGroupMemberLimitMessage": "This group has reached the limit of {{max}} members. Ask the owner to free up space or create another group.",
             "joinedInactiveTitle": "Joined as inactive member",
             "joinedInactiveMessage": "You are in this group, but you are still actively playing in another group. Enable this group when you are ready to play there.",
             "joinedInactiveLater": "Not now",
@@ -1148,7 +1150,17 @@
       "ballsShort": "B",
       "strikesShort": "S",
       "outsShort": "O",
-      "runnersOnBase": "{{count}} runner(s)"
+      "runnersOnBase": "{{count}} runner(s)",
+      "battingOrder": "Batting order",
+      "currentBatter": "Batter at the plate",
+      "currentPitcher": "vs {{pitcher}}",
+      "atBat": "At bat",
+      "loadingLineups": "Loading lineups…",
+      "noLineups": "Lineups are not available yet.",
+      "linescoreTitle": "Linescore",
+      "linescoreRuns": "P",
+      "linescoreHits": "H",
+      "linescoreErrors": "E"
     }
   },
   "settings": {
@@ -1439,8 +1451,40 @@
   "howItWorks": {
     "title": "How it works",
     "headerTitle": "How it works",
-    "subtitle": "Everything you need to know to create a challenge, join it, understand formats, the prize pool, and tie-breakers.",
+    "subtitle": "The Prophetik concept, then guides to create challenges, join them, and understand the rules.",
     "headerHint": "Quick guides & challenge rules",
+
+    "concept": {
+      "title": "The Prophetik concept",
+      "intro": "Prophetik is a daily sports challenge among friends — not a public league with thousands of players.",
+      "b1": "You play in a private group with your friends (NHL or MLB).",
+      "b2": "Each day: challenges to take on, picks to make, live results.",
+      "b4": "Your points add up over the season — your group leaderboard tracks you all year.",
+      "cta": "Create a group or join friends with an invite code."
+    },
+
+    "challenges": {
+      "title": "Challenges & points",
+      "intro": "Each day, three challenges add to your point total for the group leaderboard.",
+      "soloTitle": "SOLO",
+      "soloBody": "First goal (NHL) or first run batted in (MLB): pick the player who scores first.",
+      "soloPoints": "+10 pts if you pick the right player",
+      "duoTitle": "DUO",
+      "duoBody": "Predict the winner of 2 games (you can also aim for the exact score).",
+      "duoPointsWinner": "+5 pts per correct winner",
+      "duoPointsExact": "+5 pt bonus for an exact score (10 pts max per game)",
+      "trioTitle": "TRIO",
+      "trioBody": "Add up the points from 3 players playing today — based on their real game stats.",
+      "trioMlbTitle": "MLB",
+      "trioMlbLine1": "RBI, run scored, or hit = 1 pt",
+      "trioMlbLine2": "Double, triple, or home run = 1 additional pt",
+      "trioNhlTitle": "NHL",
+      "trioNhlLine1": "Goal = 1 pt",
+      "trioNhlLine2": "Assist = 1 pt",
+      "bonusTitle": "Daily bonus (+5 pts)",
+      "bonusBody": "+5 pts for whoever has the highest SOLO + DUO + TRIO total for the day.",
+      "bonusTie": "If several players tie for the top total, each tied player gets the +5 pts (no tie-breaker)."
+    },
 
     "formats": {
       "title": "Formats & entry cost",
@@ -1453,23 +1497,48 @@
 
     "create": {
       "title": "Create a challenge",
-      "step1": "Go to the Challenges tab.",
-      "step2": "Choose a group.",
-      "step3": "Select a format (1x1, 2x2, …, 6x7).",
-      "step4": "Pick the NHL date.",
-      "step5": "Tap “Create challenge”.",
-      "deadlinePill": "Sign up / edit: until 1 hour before the first game",
-      "deadlineNote": "The “Create” button can be disabled if the deadline has passed (1 hour before the first game)."
+      "intro": "Daily challenges are per group — each friend group has its own SOLO, DUO, and TRIO challenges.",
+      "todayTabTitle": "Today tab",
+      "todayTabBody": "This is where you see the day’s challenges and make your picks. Select your group at the top of the screen to view that group’s challenges.",
+      "autopilotTitle": "Autopilot mode",
+      "autopilotIntro": "The group owner can turn Autopilot on or off in the group settings.",
+      "autopilotOn": "Autopilot on: SOLO, DUO, and TRIO are created automatically each morning (around 6:30 AM). Members are notified.",
+      "autopilotOff": "Autopilot off: no challenge is created automatically — the owner must launch them.",
+      "manualTitle": "Manual creation",
+      "manualIntro": "When Autopilot is off, only the group owner can create challenges from the Today tab.",
+      "manualSolo": "SOLO — Create button in the First goal / First RBI section",
+      "manualDuo": "DUO — Create button in the Predict the game section",
+      "manualTrio": "TRIO — Create button in the Trio of the day section"
     },
 
     "join": {
       "title": "Join a challenge",
-      "step1": "Go to the Challenges tab.",
-      "step2": "Find the challenge (format + date).",
-      "step3": "Tap “Join”.",
-      "step4": "Select the number of players required by the format.",
-      "step5": "Save your picks.",
-      "editPill": "You can change your picks until 1 hour before the first game"
+      "intro": "Everything happens on the Today tab: select your group at the top, then join the day’s three challenges (SOLO, DUO, TRIO).",
+      "soloTitle": "SOLO",
+      "soloBody": "First goal (NHL) or First RBI (MLB) section. Tap Join, pick one player from either team, then save.",
+      "soloDeadline": "Deadline: 5 minutes before puck/ball drop. You can change your pick until lock.",
+      "soloPostponed": "Postponed game: you can still join or edit your pick until the result is confirmed.",
+      "duoTitle": "DUO",
+      "duoBody": "Predict the game section. For each matchup, pick the winner and score (exact score = bonus).",
+      "duoDeadline": "Each game locks 5 minutes before start. You can complete your predictions one match at a time.",
+      "trioTitle": "TRIO",
+      "trioBody": "Trio of the day section. Tap Join, then select 3 players playing today. Your points accumulate live from their stats.",
+      "trioDeadline": "Deadline: 15 minutes before the first game of the day. You can change your 3 players until then.",
+      "deadlinesTitle": "Deadlines — summary",
+      "deadlineAutopilot": "Challenge creation: around 6:30 AM (Toronto time) when Autopilot is on — you get a notification.",
+      "deadlineSolo": "SOLO: locks 5 min before game start.",
+      "deadlineDuo": "DUO: each game locks 5 min before start.",
+      "deadlineTrio": "TRIO: join and edits until 15 min before the first game.",
+      "novaTitle": "Nova Coach",
+      "novaIntro": "Nova is the built-in assistant that helps with your picks. She appears when choosing a player or a game.",
+      "novaLearn": "Learn: instant answers on basics (first goal, RBI, OPS, ERA, platoon, BvP, DUO scoring…).",
+      "novaStrategy": "Strategy: personalized AI analysis — advice on a player, game, or comparison (uses your monthly quota).",
+      "novaAdvice": "“Nova’s take” button: full analysis for the player or game you’re viewing.",
+      "novaQuota": "Monthly quota: Free 30 · Pro 100 · VIP 250 tips. Check My plan to track usage.",
+      "tipsTitle": "Tips",
+      "tipInfoBubble": "Each section has an info bubble (?) with detailed challenge rules.",
+      "tipLive": "During games, follow your points live on the Live tab.",
+      "tipBonus": "Play all three challenges to chase the daily bonus (+5 pts for the best SOLO + DUO + TRIO total)."
     },
 
     "pot": {
@@ -1492,10 +1561,27 @@
     },
 
     "groups": {
-      "title": "Groups: create & join",
-      "create": "Create a group: choose a name, then invite friends.",
-      "join": "Join a group: accept an invite or use a code/link (if available).",
-      "role": "The group owner can manage settings and members."
+      "title": "Groups",
+      "intro": "A group is your private circle of friends: each group has its own challenges, leaderboard, and chat. Prophetik is not a public league — you always play within a group.",
+      "createTitle": "Create a group",
+      "createIntro": "From the Groups tab, tap Create and set up your group:",
+      "createName": "Name — required (e.g. North Snipers).",
+      "createDescription": "Description — optional, visible to members.",
+      "createSport": "Sport — NHL or MLB. Determines the group’s games and challenges.",
+      "createAutopilot": "Autopilot — when on, SOLO, DUO, and TRIO are created automatically each morning (around 6:30 AM). How many Autopilot groups you can run depends on your plan.",
+      "createFavorite": "Favorite team — used to prioritize the group’s games (SOLO and DUO). You can change it anytime in settings.",
+      "createInvite": "Once created, share the invite code or QR code from the group page to invite friends.",
+      "joinTitle": "Join a group",
+      "joinIntro": "From the Groups tab, tap Join:",
+      "joinCode": "Enter the 8-character invite code from the group owner.",
+      "joinQr": "Or scan the QR code shown on the group page (Scan QR button).",
+      "activeTitle": "Active group & subscription limits",
+      "activeIntro": "You can belong to many groups, but you can only play daily challenges in your active groups — where participation is turned on.",
+      "activeSwitch": "On the Groups tab, turn participation on or off for each group (Activate participation / Play in this group).",
+      "activeLimits": "Active group limits (play): Free 1 · Pro 5 · VIP 20. Check My plan to track usage.",
+      "activeJoined": "Joining groups is unlimited: if you’re at your limit, you can still join as inactive and activate later.",
+      "activeOwned": "Owned groups and Autopilot: same caps per plan (1 / 5 / 20). Upgrade if you want to manage more.",
+      "ownerPill": "The owner manages members and settings, and can create challenges manually when Autopilot is off."
     },
 
     "footer": "Prophetik evolves: some options may vary depending on the group or special events."
@@ -1655,7 +1741,8 @@
 
     "section": {
       "navigation": "Navigation",
-      "personal": "Personal"
+      "personal": "Personal",
+      "help": "Help"
     },
 
     "home": "Today",

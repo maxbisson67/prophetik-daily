@@ -220,6 +220,25 @@ export default function JoinGroupScreen() {
 
       console.log("JOIN ERROR", { code: errCode, message: msg, details });
 
+      if (
+        errCode.includes("failed-precondition") &&
+        msg.includes("GROUP_MEMBER_LIMIT_REACHED")
+      ) {
+        const max = details?.max ?? 100;
+
+        Alert.alert(
+          i18n.t("groups.join.alertGroupMemberLimitTitle", {
+            defaultValue: "Groupe complet",
+          }),
+          i18n.t("groups.join.alertGroupMemberLimitMessage", {
+            max,
+            defaultValue:
+              "Ce groupe a atteint la limite de {{max}} participants. Demande au propriétaire de libérer de la place ou de créer un autre groupe.",
+          })
+        );
+        return;
+      }
+
       // ✅ Cap participation active
       if (
         errCode.includes("failed-precondition") &&

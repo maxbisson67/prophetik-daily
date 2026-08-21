@@ -124,10 +124,9 @@ export function resolveParticipantIdentity(entry, profile) {
   const avatarUrl =
     avatarKind === "jersey"
       ? null
-      : participant.avatarUrl ||
-        pub.avatarUrl ||
-        participant.photoURL ||
-        pub.photoURL ||
+      : profile?.avatarUrl ||
+        profile?.photoURL ||
+        profile?.photoUrl ||
         null;
 
   const useJersey =

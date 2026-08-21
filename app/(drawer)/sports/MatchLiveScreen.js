@@ -24,7 +24,7 @@ import LiveGameChallengeTags, {
 } from "@src/live/LiveGameChallengeTags";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import { lookupByGameId, liveBoardGameId } from "@src/live/liveChallengeModels";
-import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
+import { useProphetikBusinessYmd } from "@src/hooks/useProphetikBusinessDate";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
@@ -88,41 +88,6 @@ function formatShortDateLocalized(ymd, locale) {
     day: "numeric",
     month: "long",
   }).format(dt);
-}
-
-function todayYMD() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function addDaysToYMD(baseYmd, delta) {
-  if (!baseYmd || typeof baseYmd !== "string" || baseYmd.length < 10) return baseYmd;
-  const [y, m, d] = baseYmd.split("-").map((x) => parseInt(x, 10));
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + delta);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-/**
- * Règle NHL:
- * - Après 9h locale → date du jour
- * - Avant 9h locale → date de la veille
- */
-function computeNhlYmd() {
-  const now = new Date();
-  const base = todayYMD();
-  const hour = now.getHours();
-
-  if (hour < 9) {
-    return addDaysToYMD(base, -1);
-  }
-  return base;
 }
 
 function fmtTime(d) {
@@ -863,7 +828,7 @@ export default function MatchLiveScreen() {
   const requestedGameId = String(params?.gameId || "");
   const openedFromFgc = String(params?.from || "") === "fgc";
 
-  const [todayKey, setTodayKey] = useState(() => computeNhlYmd());
+  const todayKey = useProphetikBusinessYmd();
 
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -884,12 +849,6 @@ export default function MatchLiveScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   const { selectedGroupId: currentGroupId } = useSelectedGroup();
-  const businessYmd = useMemo(() => getProphetikBusinessYmd(), [todayKey]);
-  const challengeExtraYmds = useMemo(() => {
-    const extras = [];
-    if (todayKey && todayKey !== businessYmd) extras.push(todayKey);
-    return extras;
-  }, [todayKey, businessYmd]);
 
   const {
     fgcByGameId,
@@ -907,7 +866,6 @@ export default function MatchLiveScreen() {
   } = useTodayLiveChallenges({
     groupId: currentGroupId,
     league: "NHL",
-    extraYmds: challengeExtraYmds,
     userId: user?.uid,
     enabled: !!currentGroupId,
   });
@@ -935,16 +893,6 @@ export default function MatchLiveScreen() {
     });
   }, [requestedGameId, openedFromFgc, user?.uid]);
 
-
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const next = computeNhlYmd();
-      setTodayKey((prev) => (prev === next ? prev : next));
-    }, 60_000);
-
-    return () => clearInterval(id);
-  }, []);
 
   const handlePressFgc = useCallback(
     (item) => {

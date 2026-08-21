@@ -2,7 +2,7 @@
 import functions from "@react-native-firebase/functions";
 
 /**
- * Rejoindre un groupe via code (cap member géré côté serveur)
+ * Rejoindre un groupe via code (caps participation + taille groupe côté serveur)
  * CF: joinGroupWithCap
  * @returns {Promise<{ok: boolean, groupId: string, groupName?: string}>}
  */

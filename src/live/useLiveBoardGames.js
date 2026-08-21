@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { mapMlbScheduleGameToLiveGame } from "@src/mlb/mapMlbScheduleToLiveGame";
-import { fetchMlbScheduleGamesForYmd } from "@src/mlb/fetchMlbScheduleFromApi";
 import { isMlbGameDelayed } from "@src/mlb/mlbGameStatusUtils";
 
 function normalizeBoardGame(row = {}, league = "nhl") {
@@ -44,6 +43,14 @@ function pickMlbFeedRow(rows = []) {
   );
 }
 
+function firstDefinedField(rows = [], key) {
+  for (const row of rows) {
+    const value = row?.[key];
+    if (value != null && value !== "") return value;
+  }
+  return null;
+}
+
 function mergeMlbGameRows(schedule, legacy, board) {
   const rows = [schedule, legacy, board].filter(Boolean);
   if (!rows.length) return null;
@@ -52,7 +59,8 @@ function mergeMlbGameRows(schedule, legacy, board) {
   if (!key) return null;
 
   const meta = schedule || legacy || board;
-  const feed = pickMlbFeedRow([board, legacy, schedule].filter(Boolean)) || meta;
+  const feedCandidates = [board, legacy, schedule].filter(Boolean);
+  const feed = pickMlbFeedRow(feedCandidates) || meta;
   const live = rows.some(isMlbRowLive);
   const fin = !live && rows.some(isMlbRowFinal);
 
@@ -83,29 +91,34 @@ function mergeMlbGameRows(schedule, legacy, board) {
     onSecond: feed?.onSecond ?? meta?.onSecond ?? false,
     onThird: feed?.onThird ?? meta?.onThird ?? false,
     runnersOnBase: feed?.runnersOnBase ?? meta?.runnersOnBase ?? null,
+    currentBatterId: firstDefinedField(rows, "currentBatterId"),
+    currentBatterName: firstDefinedField(rows, "currentBatterName"),
+    currentPitcherId: firstDefinedField(rows, "currentPitcherId"),
+    currentPitcherName: firstDefinedField(rows, "currentPitcherName"),
+    battingTeamAbbr: firstDefinedField(rows, "battingTeamAbbr"),
+    awayBattingOrder:
+      (Array.isArray(feed?.awayBattingOrder) && feed.awayBattingOrder.length
+        ? feed.awayBattingOrder
+        : null) ??
+      (Array.isArray(legacy?.awayBattingOrder) && legacy.awayBattingOrder.length
+        ? legacy.awayBattingOrder
+        : null) ??
+      (Array.isArray(schedule?.awayBattingOrder) && schedule.awayBattingOrder.length
+        ? schedule.awayBattingOrder
+        : []) ??
+      [],
+    homeBattingOrder:
+      (Array.isArray(feed?.homeBattingOrder) && feed.homeBattingOrder.length
+        ? feed.homeBattingOrder
+        : null) ??
+      (Array.isArray(legacy?.homeBattingOrder) && legacy.homeBattingOrder.length
+        ? legacy.homeBattingOrder
+        : null) ??
+      (Array.isArray(schedule?.homeBattingOrder) && schedule.homeBattingOrder.length
+        ? schedule.homeBattingOrder
+        : []) ??
+      [],
   };
-}
-
-function mergeScheduleAndApi(firestoreRows = [], apiRows = []) {
-  const byKey = new Map();
-
-  for (const row of apiRows) {
-    const key = gameMergeKey(row);
-    if (key) byKey.set(key, row);
-  }
-
-  for (const row of firestoreRows) {
-    const key = gameMergeKey(row);
-    if (!key) continue;
-    const api = byKey.get(key);
-    if (!api) {
-      byKey.set(key, row);
-      continue;
-    }
-    byKey.set(key, mergeMlbGameRows(row, api, null) || row);
-  }
-
-  return [...byKey.values()];
 }
 
 /** Unionne calendrier + legacy + board (priorité live au statut, feed pour la situation). */
@@ -134,11 +147,9 @@ function mergeMlbLiveGameSources(boardRows = [], legacyRows = [], scheduleRows =
   return merged;
 }
 
-const MLB_API_POLL_MS = 30_000;
-
 /**
  * L2 — Liste Match Live via live_board_{nhl|mlb}/{ymd}, fallback query legacy.
- * MLB: fallback API statsapi + docs mlb_live_games/{gamePk} individuels.
+ * MLB: mlb_schedule_daily + mlb_live_games (+ docs individuels pour matchs live).
  */
 export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true }) {
   const [games, setGames] = useState([]);
@@ -168,9 +179,7 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
     let boardRows = [];
     let legacyRows = [];
     let scheduleRows = null;
-    let apiRows = [];
     let perGameRows = [];
-    let apiAttempted = false;
 
     const stopLegacy = () => {
       try {
@@ -226,11 +235,10 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
     const apply = () => {
       if (lg === "mlb") {
         const fsSchedule = Array.isArray(scheduleRows) ? scheduleRows : [];
-        const effectiveSchedule = mergeScheduleAndApi(fsSchedule, apiRows);
         const allLegacy = [...legacyRows, ...perGameRows];
-        const merged = mergeMlbLiveGameSources(boardRows, allLegacy, effectiveSchedule);
+        const merged = mergeMlbLiveGameSources(boardRows, allLegacy, fsSchedule);
 
-        const livePks = [...new Set(effectiveSchedule.filter(isMlbRowLive).map((g) => gameMergeKey(g)).filter(Boolean))];
+        const livePks = [...new Set(merged.filter(isMlbRowLive).map((g) => gameMergeKey(g)).filter(Boolean))];
         const livePksKey = livePks.join(",");
         if (livePksKey !== subscribedLivePksRef.current) {
           subscribedLivePksRef.current = livePksKey;
@@ -239,7 +247,7 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
 
         setGames(merged.map((r) => normalizeBoardGame(r, lg)));
         setUsingBoard(boardRows.length > 0);
-        setLoading(lg === "mlb" && !apiAttempted && merged.length === 0);
+        setLoading(false);
         return;
       }
 
@@ -303,25 +311,6 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
         );
     };
 
-    let apiPollCancelled = false;
-
-    const pollMlbApi = async () => {
-      if (lg !== "mlb") return;
-      try {
-        const rows = await fetchMlbScheduleGamesForYmd(ymd);
-        if (!apiPollCancelled) {
-          apiRows = rows;
-        }
-      } catch (err) {
-        console.log("[useLiveBoardGames] MLB API fallback error", err?.message || err);
-      } finally {
-        if (!apiPollCancelled) {
-          apiAttempted = true;
-          apply();
-        }
-      }
-    };
-
     const unsubBoard = firestore()
       .collection(boardCol)
       .doc(String(ymd))
@@ -340,16 +329,10 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
     startLegacy();
     if (lg === "mlb") {
       startSchedule();
-      pollMlbApi();
     }
 
-    const apiInterval =
-      lg === "mlb" ? setInterval(pollMlbApi, MLB_API_POLL_MS) : null;
-
     return () => {
-      apiPollCancelled = true;
       subscribedLivePksRef.current = "";
-      if (apiInterval) clearInterval(apiInterval);
       try {
         unsubBoard?.();
       } catch {}

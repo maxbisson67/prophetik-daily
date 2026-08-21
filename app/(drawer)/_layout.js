@@ -332,6 +332,21 @@ function CustomDrawerContent(props) {
       <Separator />
 
       <SectionLabel>
+        {i18n.t("drawer.section.help", { defaultValue: "Aide" })}
+      </SectionLabel>
+
+      <DrawerItem
+        {...itemCommonProps}
+        label={i18n.t("drawer.howItWorks", { defaultValue: "Comment ça marche" })}
+        onPress={() => closeAndPush("/(drawer)/howitworks")}
+        icon={({ size }) => (
+          <Ionicons name="help-circle-outline" size={size} color={colors.text} />
+        )}
+      />
+
+      <Separator />
+
+      <SectionLabel>
         {i18n.t("drawer.section.liveSports", { defaultValue: "Sports live" })}
       </SectionLabel>
 

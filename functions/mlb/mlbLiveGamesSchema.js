@@ -11,6 +11,10 @@
  * - startTimeUTC, venue, updatedAt
  * - finalizedAt (timestamp ms quand isFinal détecté)
  * - balls, strikes, outs, onFirst, onSecond, onThird, runnersOnBase (situation live)
+ * - currentBatterId, currentBatterName, currentPitcherId, currentPitcherName, battingTeamAbbr
+ * - awayBattingOrder, homeBattingOrder ([{ slot, playerId, name }])
+ * - awayLineupSig, homeLineupSig (signatures comparaison ingest)
+ * - inningLinescore ([{ n, away, home }]), inningLinescoreTotals ({ away, home }), inningLinescoreSig
  *
  * Sous-collection `scoring_plays/{playId}`:
  * - playId, gamePk, inning, halfInning, battingTeamAbbr, eventType, description
@@ -40,6 +44,14 @@ export const MLB_LIVE_DOC_COMPARE_KEYS = [
   "onSecond",
   "onThird",
   "runnersOnBase",
+  "currentBatterId",
+  "currentBatterName",
+  "currentPitcherId",
+  "currentPitcherName",
+  "battingTeamAbbr",
+  "awayLineupSig",
+  "homeLineupSig",
+  "inningLinescoreSig",
 ];
 
 function safeUpper(v) {
@@ -103,6 +115,9 @@ export function mergeMlbLiveFeedIntoDoc(baseDoc = {}, liveFeed = {}) {
 
   const isLive = abstractLower === "live" && !postponed;
   const situation = isLive ? extractLiveSituationFromFeed(liveFeed) : emptyLiveSituation();
+  const lineups = extractBattingOrdersFromFeed(liveFeed);
+  const matchup = isLive ? extractCurrentMatchupFromFeed(liveFeed) : emptyCurrentMatchup();
+  const linescoreTable = extractInningLinescoreFromFeed(liveFeed);
 
   return {
     ...baseDoc,
@@ -121,6 +136,60 @@ export function mergeMlbLiveFeedIntoDoc(baseDoc = {}, liveFeed = {}) {
     abstractGameState: abstract,
     detailedState: String(status?.detailedState || ""),
     ...situation,
+    ...lineups,
+    ...matchup,
+    ...linescoreTable,
+  };
+}
+
+function safeCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Tableau des manches (points par manche + totaux R/H/E) depuis le feed live. */
+export function extractInningLinescoreFromFeed(liveFeed = {}) {
+  const linescore = liveFeed?.liveData?.linescore || {};
+  const innings = Array.isArray(linescore.innings) ? linescore.innings : [];
+
+  const inningLinescore = innings
+    .map((inn) => {
+      const n = Number(inn?.num);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return {
+        n,
+        away: safeCount(inn?.away?.runs),
+        home: safeCount(inn?.home?.runs),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.n - b.n);
+
+  const awayTeam = linescore?.teams?.away || {};
+  const homeTeam = linescore?.teams?.home || {};
+
+  const inningLinescoreTotals = {
+    away: {
+      runs: safeCount(awayTeam.runs),
+      hits: safeCount(awayTeam.hits),
+      errors: safeCount(awayTeam.errors),
+    },
+    home: {
+      runs: safeCount(homeTeam.runs),
+      hits: safeCount(homeTeam.hits),
+      errors: safeCount(homeTeam.errors),
+    },
+  };
+
+  const inningLinescoreSig =
+    inningLinescore.map((row) => `${row.n}:${row.away ?? "x"}-${row.home ?? "x"}`).join("|") +
+    `#A${inningLinescoreTotals.away.runs ?? "x"}-${inningLinescoreTotals.away.hits ?? "x"}-${inningLinescoreTotals.away.errors ?? "x"}` +
+    `#H${inningLinescoreTotals.home.runs ?? "x"}-${inningLinescoreTotals.home.hits ?? "x"}-${inningLinescoreTotals.home.errors ?? "x"}`;
+
+  return {
+    inningLinescore,
+    inningLinescoreTotals,
+    inningLinescoreSig,
   };
 }
 
@@ -194,6 +263,79 @@ function clampCount(value, max) {
   return Math.max(0, Math.min(max, Math.floor(n)));
 }
 
+function playerNameFromTeamPlayers(players = {}, playerId) {
+  const id = String(playerId || "").trim();
+  if (!id) return null;
+
+  const direct = players?.[`ID${id}`] || players?.[id];
+  if (direct?.person?.fullName) return String(direct.person.fullName).trim() || null;
+
+  for (const node of Object.values(players || {})) {
+    if (String(node?.person?.id || "") === id && node?.person?.fullName) {
+      return String(node.person.fullName).trim() || null;
+    }
+  }
+
+  return null;
+}
+
+function extractBattingOrderFromTeam(teamNode = {}) {
+  const order = Array.isArray(teamNode?.battingOrder) ? teamNode.battingOrder : [];
+  return order
+    .map((rawId, index) => {
+      const playerId = String(rawId || "").trim();
+      if (!playerId) return null;
+      return {
+        slot: index + 1,
+        playerId,
+        name: playerNameFromTeamPlayers(teamNode?.players, playerId),
+      };
+    })
+    .filter(Boolean);
+}
+
+function lineupSignature(entries = []) {
+  return entries.map((entry) => `${entry.slot}:${entry.playerId}`).join("|");
+}
+
+/** Ordre de frappe (1–9) avec noms depuis le boxscore live. */
+export function extractBattingOrdersFromFeed(liveFeed = {}) {
+  const teams = liveFeed?.liveData?.boxscore?.teams || {};
+  const awayBattingOrder = extractBattingOrderFromTeam(teams?.away);
+  const homeBattingOrder = extractBattingOrderFromTeam(teams?.home);
+
+  return {
+    awayBattingOrder,
+    homeBattingOrder,
+    awayLineupSig: lineupSignature(awayBattingOrder),
+    homeLineupSig: lineupSignature(homeBattingOrder),
+  };
+}
+
+/** Frappeur / lanceur au bâton depuis le feed live. */
+export function extractCurrentMatchupFromFeed(liveFeed = {}) {
+  const linescore = liveFeed?.liveData?.linescore || {};
+  const currentPlay = liveFeed?.liveData?.plays?.currentPlay || {};
+  const matchup = currentPlay?.matchup || {};
+  const batter = matchup?.batter || linescore?.offense?.batter || {};
+  const pitcher = matchup?.pitcher || linescore?.defense?.pitcher || {};
+
+  const half = String(linescore?.inningHalf || "").toLowerCase();
+  const awayAbbr = teamAbbrFromNode(liveFeed?.gameData?.teams?.away);
+  const homeAbbr = teamAbbrFromNode(liveFeed?.gameData?.teams?.home);
+  let battingTeamAbbr = null;
+  if (half === "top") battingTeamAbbr = awayAbbr || null;
+  else if (half === "bottom") battingTeamAbbr = homeAbbr || null;
+
+  return {
+    currentBatterId: batter?.id != null ? String(batter.id) : null,
+    currentBatterName: String(batter?.fullName || "").trim() || null,
+    currentPitcherId: pitcher?.id != null ? String(pitcher.id) : null,
+    currentPitcherName: String(pitcher?.fullName || "").trim() || null,
+    battingTeamAbbr,
+  };
+}
+
 /** Situation au bâton depuis le feed live (compte + buts occupés). */
 export function extractLiveSituationFromFeed(liveFeed = {}) {
   const linescore = liveFeed?.liveData?.linescore || {};
@@ -241,6 +383,16 @@ function emptyLiveSituation() {
     onSecond: false,
     onThird: false,
     runnersOnBase: 0,
+  };
+}
+
+function emptyCurrentMatchup() {
+  return {
+    currentBatterId: null,
+    currentBatterName: null,
+    currentPitcherId: null,
+    currentPitcherName: null,
+    battingTeamAbbr: null,
   };
 }
 
