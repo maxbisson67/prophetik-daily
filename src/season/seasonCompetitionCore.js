@@ -40,7 +40,24 @@ export function addDaysToYmd(baseYmd, delta) {
 export function formatNhlSeasonLabel(seasonId) {
   const s = String(seasonId || "");
   if (!/^\d{8}$/.test(s)) return s;
-  return `${s.slice(0, 4)}-${s.slice(6, 8)}`;
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}`;
+}
+
+/** Libellé affiché : priorité aux dates (ex. clé legacy 20252026 + fenêtre 2026-10 → 2026-2027). */
+export function resolveNhlDisplaySeasonId(seasonId, fromYmd) {
+  const from = String(fromYmd || "").slice(0, 10);
+  const inferred = from ? inferNhlSeasonIdFromYmd(from) : "";
+  if (inferred && /^\d{8}$/.test(inferred)) return inferred;
+  const sid = String(seasonId || "").trim();
+  return sid || inferred || "20252026";
+}
+
+export function buildNhlCompetitionLabel(phase, seasonId, fromYmd) {
+  const displaySeasonId = resolveNhlDisplaySeasonId(seasonId, fromYmd);
+  const human = formatNhlSeasonLabel(displaySeasonId);
+  const p = String(phase || "regular").toLowerCase();
+  if (p === "playoffs") return `Saison NHL ${human} — Séries`;
+  return `Saison NHL ${human} — Saison régulière`;
 }
 
 export function defaultMlbSeasonBounds(seasonId) {
@@ -51,13 +68,28 @@ export function defaultMlbSeasonBounds(seasonId) {
   };
 }
 
+export function inferNhlSeasonIdFromYmd(ymd) {
+  const s = String(ymd || "").slice(0, 10);
+  const y = Number(s.slice(0, 4));
+  const m = Number(s.slice(5, 7));
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return "20252026";
+  const startYear = m >= 10 ? y : y - 1;
+  const endYear = startYear + 1;
+  return `${startYear}${endYear}`;
+}
+
 export function deriveNhlCompetitionEntries(config = {}) {
-  const seasonId = String(config.seasonId || "20252026");
-  const rsStart = String(
-    config.regularSeasonStartYmd || config.fromYmd || "2025-10-07"
+  const anchorYmd = String(
+    config.gameYmd || config.regularSeasonStartYmd || config.fromYmd || "2025-10-07"
   ).slice(0, 10);
-  const rsEnd = String(config.regularSeasonEndYmd || "2026-04-17").slice(0, 10);
-  const poEnd = String(config.playoffEndYmd || config.toYmd || "2026-06-15").slice(0, 10);
+  const rsStart = String(
+    config.regularSeasonStartYmd || config.fromYmd || anchorYmd
+  ).slice(0, 10);
+  const seasonId = inferNhlSeasonIdFromYmd(rsStart || anchorYmd);
+  const startYear = Number(seasonId.slice(0, 4)) || Number(rsStart.slice(0, 4));
+  const endYear = Number(seasonId.slice(4, 8)) || startYear + 1;
+  const rsEnd = String(config.regularSeasonEndYmd || `${endYear}-04-17`).slice(0, 10);
+  const poEnd = String(config.playoffEndYmd || config.toYmd || `${endYear}-06-15`).slice(0, 10);
   const poStart = addDaysToYmd(rsEnd, 1);
 
   return [
@@ -66,7 +98,7 @@ export function deriveNhlCompetitionEntries(config = {}) {
       sport: "nhl",
       seasonId,
       phase: "regular",
-      label: `Saison NHL ${formatNhlSeasonLabel(seasonId)} — Saison régulière`,
+      label: buildNhlCompetitionLabel("regular", seasonId, rsStart),
       fromYmd: rsStart,
       toYmd: rsEnd,
       status: "active",
@@ -76,7 +108,7 @@ export function deriveNhlCompetitionEntries(config = {}) {
       sport: "nhl",
       seasonId,
       phase: "playoffs",
-      label: `Saison NHL ${formatNhlSeasonLabel(seasonId)} — Séries`,
+      label: buildNhlCompetitionLabel("playoffs", seasonId, rsStart),
       fromYmd: poStart,
       toYmd: poEnd,
       status: "active",
@@ -213,13 +245,19 @@ export function normalizeCompetitionEntry(raw, id) {
   const competitionKey =
     String(raw.competitionKey || id || buildCompetitionKey(sport, seasonId, phase)).trim();
 
+  const fromYmd = String(raw.fromYmd || "").slice(0, 10);
+  let label = String(raw.label || competitionKey);
+  if (sport === "nhl" && fromYmd) {
+    label = buildNhlCompetitionLabel(phase, seasonId, fromYmd);
+  }
+
   return {
     competitionKey,
     sport,
     seasonId,
     phase,
-    label: String(raw.label || competitionKey),
-    fromYmd: String(raw.fromYmd || "").slice(0, 10),
+    label,
+    fromYmd,
     toYmd: String(raw.toYmd || "").slice(0, 10),
     status: String(raw.status || "active"),
   };

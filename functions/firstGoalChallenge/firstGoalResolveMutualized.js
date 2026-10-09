@@ -1,5 +1,5 @@
 // functions/firstGoalChallenge/firstGoalResolveMutualized.js
-import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentDeleted, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, FieldValue, logger } from "../utils.js";
@@ -101,6 +101,145 @@ async function computeFirstValidGoalFromGoals(gameId) {
   };
 }
 
+async function applyNoWinnerIfGameFinal(fgRef, gameId) {
+  const liveSnap = await db.collection("nhl_live_games").doc(gameId).get();
+  const live = liveSnap.exists ? liveSnap.data() : null;
+  if (!live || !looksFinal(live)) return false;
+
+  await fgRef.set(
+    {
+      status: "no_winner",
+      confirmedAt: FieldValue.serverTimestamp(),
+      result: {
+        playerId: null,
+        playerName: null,
+        teamAbbr: null,
+        timeInPeriod: null,
+        period: null,
+        goalId: null,
+      },
+      message:
+        "Aucun but en temps réglementaire / prolongation. Aucun gagnant (shootout exclu).",
+      candidate: FieldValue.delete(),
+      revealAt: FieldValue.delete(),
+      finalReviewAt: FieldValue.delete(),
+      provisionalAt: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return true;
+}
+
+async function clearStaleProvisionalCandidate(fgRef, message) {
+  await fgRef.set(
+    {
+      status: "pending",
+      candidate: FieldValue.delete(),
+      revealAt: FieldValue.delete(),
+      finalReviewAt: FieldValue.delete(),
+      provisionalAt: FieldValue.delete(),
+      result: FieldValue.delete(),
+      message,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function resetCandidateToCurrentFirst(fgRef, currentFirst, now, message) {
+  const revealAt2 = new Date(now.getTime() - 5 * 1000);
+  const finalReviewAt2 = new Date(now.getTime() - 5 * 1000);
+
+  await fgRef.set(
+    {
+      status: "pending",
+      revealAt: Timestamp.fromDate(revealAt2),
+      finalReviewAt: Timestamp.fromDate(finalReviewAt2),
+      candidate: {
+        goalId: String(currentFirst.goalId),
+        scoringPlayerId: currentFirst.scoringPlayerId || null,
+        scoringPlayerName: currentFirst.scoringPlayerName || null,
+        teamAbbr: currentFirst.teamAbbr || null,
+        period: currentFirst.period ?? null,
+        timeInPeriod: currentFirst.timeInPeriod || null,
+        periodType: currentFirst.periodType || null,
+        observedAt: FieldValue.serverTimestamp(),
+        revealAfterSeconds: REVEAL_DELAY_SECONDS,
+      },
+      provisionalAt: FieldValue.delete(),
+      confirmedAt: FieldValue.delete(),
+      result: FieldValue.delete(),
+      message,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/** Recalcule l'état mutualisé quand le premier but change (ex. but refusé / retiré du PBP). */
+async function reconcileMutualizedFirstGoalAfterGoalListChange(gameId, { reason = "goal-change" } = {}) {
+  const gid = String(gameId || "").trim();
+  if (!gid) return;
+
+  const fgRef = db.collection(FIRST_GOAL_GAMES_COL).doc(gid);
+  const fgSnap = await fgRef.get();
+  if (!fgSnap.exists) return;
+
+  const fg = fgSnap.data() || {};
+  const st = String(fg.status || "");
+  if (st === "confirmed" || st === "no_winner") return;
+
+  const candidate = fg.candidate || null;
+  const candidateGoalId = candidate?.goalId ? String(candidate.goalId) : "";
+
+  let currentFirst = null;
+  try {
+    currentFirst = await computeFirstValidGoalFromGoals(gid);
+  } catch (e) {
+    logger.warn("[FG-M] reconcile computeFirstValidGoal failed", {
+      gameId: gid,
+      reason,
+      err: String(e?.message || e),
+    });
+    return;
+  }
+
+  const now = new Date();
+
+  if (!currentFirst) {
+    if (await applyNoWinnerIfGameFinal(fgRef, gid)) {
+      logger.info("[FG-M] reconcile -> no_winner (final)", { gameId: gid, reason });
+      return;
+    }
+
+    if (candidateGoalId) {
+      await clearStaleProvisionalCandidate(
+        fgRef,
+        "But retiré par la ligue. En attente du premier but officiel…"
+      );
+      logger.info("[FG-M] reconcile -> cleared stale candidate", { gameId: gid, reason });
+    }
+    return;
+  }
+
+  if (!candidateGoalId || String(currentFirst.goalId) !== candidateGoalId) {
+    await resetCandidateToCurrentFirst(
+      fgRef,
+      currentFirst,
+      now,
+      candidateGoalId
+        ? "Premier but ajusté par la ligue. Nouveau candidat détecté."
+        : "Premier but détecté après révision."
+    );
+    logger.info("[FG-M] reconcile -> new candidate", {
+      gameId: gid,
+      reason,
+      goalId: currentFirst.goalId,
+    });
+  }
+}
+
 async function computeWinners(challengeRef, winnerPlayerId) {
   const q = await challengeRef
     .collection("entries")
@@ -193,6 +332,22 @@ export const onFirstGoalCandidateFromGoalCreated_mutualized = onDocumentCreated(
       scoringPlayerId: first.scoringPlayerId,
       revealAt: revealAt.toISOString(),
       finalReviewAt: finalReviewAt.toISOString(),
+    });
+  }
+);
+
+export const onFirstGoalCandidateFromGoalDeleted_mutualized = onDocumentDeleted(
+  {
+    document: "nhl_live_games/{gameId}/goals/{goalId}",
+    region: REGION,
+  },
+  async (event) => {
+    const gameId = String(event.params.gameId || "");
+    const deletedGoalId = String(event.params.goalId || "");
+    if (!gameId || !deletedGoalId) return;
+
+    await reconcileMutualizedFirstGoalAfterGoalListChange(gameId, {
+      reason: `goal-deleted:${deletedGoalId}`,
     });
   }
 );
@@ -384,35 +539,11 @@ if (!gameId) {
           const live = liveSnap.exists ? liveSnap.data() : null;
 
           if (live && looksFinal(live)) {
-            await fgRef.set(
-              {
-                status: "no_winner",
-                confirmedAt: FieldValue.serverTimestamp(),
-                result: {
-                  playerId: null,
-                  playerName: null,
-                  teamAbbr: null,
-                  timeInPeriod: null,
-                  period: null,
-                  goalId: null,
-                },
-                message:
-                  "Aucun but en temps réglementaire / prolongation. Aucun gagnant (shootout exclu).",
-                candidate: FieldValue.delete(),
-                revealAt: FieldValue.delete(),
-                finalReviewAt: FieldValue.delete(),
-                updatedAt: FieldValue.serverTimestamp(),
-              },
-              { merge: true }
-            );
+            await applyNoWinnerIfGameFinal(fgRef, gameId);
           } else {
-            await fgRef.set(
-              {
-                status: "pending",
-                message: "Le match continue. Re-check plus tard.",
-                updatedAt: FieldValue.serverTimestamp(),
-              },
-              { merge: true }
+            await clearStaleProvisionalCandidate(
+              fgRef,
+              "But retiré ou en révision. En attente du premier but officiel…"
             );
           }
         } catch {
@@ -425,35 +556,12 @@ if (!gameId) {
       const sameGoal = String(currentFirst.goalId) === String(candidate.goalId);
     
       if (!sameGoal) {
-        // ✅ on relance vite avec le nouveau vrai premier but
-        const revealAt2 = new Date(now.getTime() - 5 * 1000);
-        const finalReviewAt2 = new Date(now.getTime() - 5 * 1000);
-
-        await fgRef.set(
-          {
-            status: "pending",
-            revealAt: Timestamp.fromDate(revealAt2),
-            finalReviewAt: Timestamp.fromDate(finalReviewAt2),
-            candidate: {
-              goalId: String(currentFirst.goalId),
-              scoringPlayerId: currentFirst.scoringPlayerId || null,
-              scoringPlayerName: currentFirst.scoringPlayerName || null,
-              teamAbbr: currentFirst.teamAbbr || null,
-              period: currentFirst.period ?? null,
-              timeInPeriod: currentFirst.timeInPeriod || null,
-              periodType: currentFirst.periodType || null,
-              observedAt: FieldValue.serverTimestamp(),
-              revealAfterSeconds: REVEAL_DELAY_SECONDS,
-            },
-            provisionalAt: FieldValue.delete(),
-            confirmedAt: FieldValue.delete(),
-            result: FieldValue.delete(),
-            message: "Premier but ajusté par la ligue. Nouveau candidat détecté.",
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
+        await resetCandidateToCurrentFirst(
+          fgRef,
+          currentFirst,
+          now,
+          "Premier but ajusté par la ligue. Nouveau candidat détecté."
         );
-
         continue;
       }
 

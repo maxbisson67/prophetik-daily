@@ -378,64 +378,62 @@ export const finalizeDefiWinners = onSchedule(
           // ✅ READS avant toute WRITE (Firestore transaction)
           let aiLeaderboardWrite = null;
           if (aiPart && competitionKey) {
-            const cumulPoints = Number(aiPart.livePoints ?? 0) || 0;
             const uid = String(aiPart.uid);
             const typeKeyVal = ensureTypeKey(cur.type);
+            const aiProphetikPoints = 0;
 
-            if (cumulPoints > 0) {
-              const memberRef = db
-                .collection("groups")
-                .doc(groupId)
-                .collection("leaderboards")
-                .doc(String(competitionKey))
-                .collection("members")
-                .doc(uid);
+            const memberRef = db
+              .collection("groups")
+              .doc(groupId)
+              .collection("leaderboards")
+              .doc(String(competitionKey))
+              .collection("members")
+              .doc(uid);
 
-              const memberSnap = await tx.get(memberRef);
-              const prev = memberSnap.exists ? memberSnap.data() || {} : {};
+            const memberSnap = await tx.get(memberRef);
+            const prev = memberSnap.exists ? memberSnap.data() || {} : {};
 
-              const prevPlays = readNumberSafe(prev.participations ?? prev.plays, 0);
-              const prevWins = readNumberSafe(prev.wins, 0);
-              const prevPointsTotal = readNumberSafe(prev.pointsTotal, 0);
-              const nextPlays = prevPlays + 1;
-              const nextPointsTotal = prevPointsTotal + cumulPoints;
-              const nextWinRate = nextPlays > 0 ? prevWins / nextPlays : 0;
+            const prevPlays = readNumberSafe(prev.participations ?? prev.plays, 0);
+            const prevWins = readNumberSafe(prev.wins, 0);
+            const prevPointsTotal = readNumberSafe(prev.pointsTotal, 0);
+            const nextPlays = prevPlays + 1;
+            const nextPointsTotal = prevPointsTotal + aiProphetikPoints;
+            const nextWinRate = nextPlays > 0 ? prevWins / nextPlays : 0;
 
-              const winsByType = readWinsByTypeSafe(prev.winsByType);
-              const prevType = readWinsByTypeSafe(winsByType[typeKeyVal]);
-              winsByType[typeKeyVal] = {
-                plays: readNumberSafe(prevType.plays, 0) + 1,
-                wins: readNumberSafe(prevType.wins, 0),
-                pointsTotal: readNumberSafe(prevType.pointsTotal, 0) + cumulPoints,
-              };
+            const winsByType = readWinsByTypeSafe(prev.winsByType);
+            const prevType = readWinsByTypeSafe(winsByType[typeKeyVal]);
+            winsByType[typeKeyVal] = {
+              plays: readNumberSafe(prevType.plays, 0) + 1,
+              wins: readNumberSafe(prevType.wins, 0),
+              pointsTotal: readNumberSafe(prevType.pointsTotal, 0) + aiProphetikPoints,
+            };
 
-              const prevTsFamily =
-                prev.families && typeof prev.families.ts === "object" ? prev.families.ts : {};
-              const nextTsPlays = readNumberSafe(prev.tsPlays ?? prevTsFamily.plays, 0) + 1;
-              const nextTsWins = readNumberSafe(prev.tsWins ?? prevTsFamily.wins, 0);
-              const nextTsPoints =
-                readNumberSafe(prev.tsPoints ?? prevTsFamily.points, 0) + cumulPoints;
+            const prevTsFamily =
+              prev.families && typeof prev.families.ts === "object" ? prev.families.ts : {};
+            const nextTsPlays = readNumberSafe(prev.tsPlays ?? prevTsFamily.plays, 0) + 1;
+            const nextTsWins = readNumberSafe(prev.tsWins ?? prevTsFamily.wins, 0);
+            const nextTsPoints =
+              readNumberSafe(prev.tsPoints ?? prevTsFamily.points, 0) + aiProphetikPoints;
 
-              aiLeaderboardWrite = {
-                memberRef,
-                payload: {
-                  uid,
-                  participations: nextPlays,
-                  pointsTotal: nextPointsTotal,
-                  wins: prevWins,
-                  winRate: nextWinRate,
-                  winsByType,
-                  tsPoints: nextTsPoints,
-                  tsWins: nextTsWins,
-                  tsPlays: nextTsPlays,
-                  "families.ts.plays": nextTsPlays,
-                  "families.ts.wins": nextTsWins,
-                  "families.ts.points": nextTsPoints,
-                  updatedAt: FieldValue.serverTimestamp(),
-                  createdAt: prev.createdAt || FieldValue.serverTimestamp(),
-                },
-              };
-            }
+            aiLeaderboardWrite = {
+              memberRef,
+              payload: {
+                uid,
+                participations: nextPlays,
+                pointsTotal: nextPointsTotal,
+                wins: prevWins,
+                winRate: nextWinRate,
+                winsByType,
+                tsPoints: nextTsPoints,
+                tsWins: nextTsWins,
+                tsPlays: nextTsPlays,
+                "families.ts.plays": nextTsPlays,
+                "families.ts.wins": nextTsWins,
+                "families.ts.points": nextTsPoints,
+                updatedAt: FieldValue.serverTimestamp(),
+                createdAt: prev.createdAt || FieldValue.serverTimestamp(),
+              },
+            };
           }
 
           tx.set(
@@ -644,9 +642,7 @@ export const finalizeDefiWinners = onSchedule(
           const uid = String(p.uid);
           const isWinner = winners.includes(uid);
 
-          const cumulPoints = Number(p.livePoints ?? 0) || 0;
-          const bonusAmount = isWinner ? Number(bonusPerWinner || 0) : 0;
-          const addPoints = cumulPoints + bonusAmount;
+          const statPoints = Number(p.livePoints ?? 0) || 0;
 
           const memberRef = db
             .collection("groups")
@@ -664,7 +660,7 @@ export const finalizeDefiWinners = onSchedule(
 
           const nextPlays = prevPlays + 1;
           const nextWins = prevWins + (isWinner ? 1 : 0);
-          const nextPointsTotal = prevPointsTotal + (addPoints > 0 ? addPoints : 0);
+          const nextPointsTotal = prevPointsTotal + statPoints;
           const nextWinRate = nextPlays > 0 ? nextWins / nextPlays : 0;
 
           const winsByType = readWinsByTypeSafe(prev.winsByType);
@@ -673,11 +669,13 @@ export const finalizeDefiWinners = onSchedule(
           const prevTypePlays = readNumberSafe(prevType.plays, 0);
           const prevTypeWins = readNumberSafe(prevType.wins, 0);
           const prevTypePoints = readNumberSafe(prevType.pointsTotal, 0);
+          const prevTypeNhl = readNumberSafe(prevType.nhlPointsTotal, 0);
 
           winsByType[typeKey] = {
             plays: prevTypePlays + 1,
             wins: prevTypeWins + (isWinner ? 1 : 0),
-            pointsTotal: prevTypePoints + (addPoints > 0 ? addPoints : 0),
+            pointsTotal: prevTypePoints + statPoints,
+            nhlPointsTotal: prevTypeNhl + statPoints,
           };
 
           const prevTsFamily =
@@ -688,7 +686,7 @@ export const finalizeDefiWinners = onSchedule(
 
           const nextTsPlays = prevTsPlays + 1;
           const nextTsWins = prevTsWins + (isWinner ? 1 : 0);
-          const nextTsPoints = prevTsPoints + (addPoints > 0 ? addPoints : 0);
+          const nextTsPoints = prevTsPoints + statPoints;
 
           tx.set(
             memberRef,

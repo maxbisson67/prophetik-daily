@@ -378,7 +378,7 @@
         "infoTitleMlbOrdinal": "ier",
         "infoTitleMlbSuffix": " point produit",
         "infoTitleNhl": "Fonctionnement du défi premier but",
-        "infoBody":"• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 10 points seront alloués à celui qui a prédit le bon joueur."
+        "infoBody":"• Choisis le joueur qui marquera le premier but ou le premier point produit du match.\n• 5 points seront alloués à celui qui a prédit le bon joueur."
       },
       "create":{
         "firstGoalTitle":"Créer un défi Premier but",
@@ -412,6 +412,13 @@
         "chooseOne": "Choisis le joueur qui marquera le premier but",
         "chooseOneMlb": "Choisis le joueur qui produira le premier point",
         "sortedByStats": "Triés par stats saison en cours",
+        "sortedByPreviousSeasonStats": "Triés par stats {{season}} (saison précédente)",
+        "seasonCurrentShort": "Saison {{season}}",
+        "seasonPreviousShort": "Saison {{season}}",
+        "goalsThisYear": "Cette saison :",
+        "goalsLastYear": "L'an passé :",
+        "goalsPerGameUnit": "B/MJ",
+        "goalsGpTotals": "{{goals}} {{goalsUnit}} · {{gp}} {{gpUnit}}",
         "sortedByLineup": "Triés par ordre de frappe",
         "lineupOrder": "{{slot}}e frappeur",
         "lineupOrderPrevious": "{{slot}}e frappeur (dernier match)",
@@ -872,18 +879,24 @@
               "title": "Sélectionner un joueur",
               "close": "Fermer",
               "searchPlaceholder": "Rechercher un joueur…",
+              "searchNoResults": "Aucun joueur ne correspond à ta recherche.",
               "emptyChoice": "Choisir un joueur…",
               "choiceHint": "Choix {{index}} : {{hint}}",
               "hintTop10": "Sélectionne un joueur parmi les 10 choix suivants.",
               "hintOpen": "Sélectionne un joueur parmi les choix suivants.",
+              "hintAll": "Sélectionne un joueur parmi tous les choix disponibles.",
+              "hintExcludeTop10": "Sélectionne un joueur hors du top 10.",
+              "hintExcludeTop20": "Sélectionne un joueur hors du top 20.",
               "sortSlg": "SLG",
               "sortPoints": "Points",
+              "sortPpg": "Moy. / match",
               "sortHits": "Hits",
               "sortRbi": "RBI",
               "sortRuns": "Points marqués",
               "sortHr": "Circuits",
               "statSlg": "SLG",
               "statPoints": "PTS",
+              "statPpgShort": "Moy.",
               "statHits": "H",
               "statRbi": "RBI",
               "statHr": "HR",
@@ -935,7 +948,9 @@
               "title": "Règles de tiers",
               "wrongPickCount": "Tu dois sélectionner exactement {{expected}} joueurs.",
               "tierMissingCount": "Il te manque {{missing}} {{tierLabel}}.",
-              "tierTooMany": "Tu as dépassé la limite {{tierLabel}} (max {{max}})."
+              "tierTooMany": "Tu as dépassé la limite {{tierLabel}} (max {{max}}).",
+              "slotExcludeTop10": "Choix {{slot}} : ce joueur fait partie du top 10.",
+              "slotExcludeTop20": "Choix {{slot}} : ce joueur fait partie du top 20."
           },
           "errors":  {
               "notFoundMessage": "Aucun défi trouvé.",
@@ -1004,7 +1019,7 @@
               },
               "participants": {
               "empty": "Aucune participation.",
-              "hiddenUntil": "Les choix des autres participants sont cachés jusqu’au début du premier match{{time}}.",
+              "hiddenUntil": "Les choix des autres participants sont cachés jusqu’au début du premier match à {{time}}.",
               "legend": "Format : buts – passes = total",
               "hiddenSelections": "Sélections cachées jusqu’au début du premier match.",
               "noPlayers": "Aucun joueur sélectionné."
@@ -1026,6 +1041,8 @@
               "loginRequired": "Connecte-toi pour gérer tes notifications.",
               "morningChallenges": "Nouveaux défis du matin",
               "morningChallengesHint": "Rappel quand l'autopilote crée les défis du jour dans tes groupes.",
+              "tsSignupReminder": "Rappel inscription TRIO",
+              "tsSignupReminderHint": "1 h avant la deadline si tu n'es pas encore inscrit au Trio du jour.",
               "tpExactScore": "Prédire l'issue des matchs",
               "tpExactScoreHint": "Quand tu prédis le pointage exact d'un match.",
               "tsWin": "Plus de points hier",
@@ -1318,7 +1335,7 @@
         "intro": "Chaque jour, trois défis s’ajoutent à ton total de points pour le classement du groupe.",
         "soloTitle": "SOLO",
         "soloBody": "Premier but (NHL) ou premier point produit (MLB) : choisis le joueur qui marquera en premier.",
-        "soloPoints": "+10 pts si tu as le bon joueur",
+        "soloPoints": "+5 pts si tu as le bon joueur",
         "duoTitle": "DUO",
         "duoBody": "Prédire le gagnant de 2 matchs (tu peux aussi viser le score exact).",
         "duoPointsWinner": "+5 pts par bon gagnant",
@@ -1334,6 +1351,36 @@
         "bonusTitle": "Bonus du jour (+5 pts)",
         "bonusBody": "+5 pts pour celui qui cumule le plus de points SOLO + DUO + TRIO dans la journée.",
         "bonusTie": "En cas d’égalité au sommet, chaque ex æquo reçoit les +5 pts (pas de bris d’égalité)."
+      },
+
+      "seasonWinner": {
+        "title": "Gagnant de la saison",
+        "intro": "Le classement du groupe cumule tes points jour après jour. À la fin de la période visée, le participant avec le plus de points remporte la compétition.",
+        "oneGroupRule": "Un groupe = une compétition",
+        "oneGroupBody": "Chaque groupe vise un seul palmarès à la fois : saison régulière, séries ou période sur mesure. Pour enchaîner plusieurs compétitions (ex. régulière puis séries), crée un groupe distinct pour chacune.",
+        "regularGroupTitle": "Groupe « Saison régulière »",
+        "regularGroupIntro": "Exemple : « Beaudry NHL 2025-26 ». Les points des matchs de saison régulière alimentent le classement Saison régulière.",
+        "regularGroupWinner": "Gagnant : celui ou celle qui cumule le plus de points — couronné·e champion·ne de la saison régulière (notification automatique en fin de régulière).",
+        "regularGroupLeaderboard": "Consulte l’onglet Classement et sélectionne Saison régulière.",
+        "playoffsGroupTitle": "Groupe « Séries éliminatoires »",
+        "playoffsGroupIntro": "Les séries ont leur propre classement. Crée un second groupe, par ex. « Beaudry NHL 2025-26 — Séries », et invite les participants (souvent les mêmes amis).",
+        "playoffsGroupWinner": "Gagnant séries : plus haut total dans le classement Séries éliminatoires — compteur à zéro, indépendant de la régulière.",
+        "playoffsGroupWhen": "Crée ce groupe avant le début des séries ; annonce le code d’invitation dans le groupe de la régulière.",
+        "customGroupTitle": "Groupe « Période sur mesure »",
+        "customGroupIntro": "Pour un mois ou une période précise (ex. « Bisson — Novembre 2026 »), crée un groupe dédié avec les participants concernés.",
+        "customGroupPlay": "Jouez uniquement dans ce groupe pendant la période convenue — Autopilote ON pour le mois, ou défis créés manuellement par le propriétaire.",
+        "customGroupEnd": "À la date de fin : consulte le classement et annonce le gagnant dans le chat du groupe.",
+        "manualPill": "Période custom — gestion manuelle",
+        "manualBody": "Prophetik ne calcule pas automatiquement un gagnant « mois de novembre » ou « mi-saison ». Le propriétaire gère le début et la fin des défis ; les participants conviennent de la date de clôture et désignent le gagnant d’après le classement final.",
+        "namingTitle": "Nommer tes groupes",
+        "namingBody": "Utilise un nom explicite pour éviter la confusion quand plusieurs groupes coexistent :",
+        "namingRegular": "Régulière — « Beaudry — NHL 2025-26 »",
+        "namingPlayoffs": "Séries — « Beaudry — NHL 2025-26 — Séries »",
+        "namingCustom": "Custom — « Bisson — Novembre 2026 »",
+        "limitsTitle": "Limites de groupes actifs",
+        "limitsBody": "Tu peux rejoindre autant de groupes que tu veux, mais tu ne joues aux défis que dans tes groupes actifs (Gratuit 1 · Pro 5 · VIP 20).",
+        "limitsSwitch": "Forfait Gratuit : désactive la participation sur le groupe terminé (ex. régulière) avant d’activer le groupe séries.",
+        "limitsJoin": "Rejoindre un groupe reste illimité — tu peux être inscrit sans y jouer si ta limite est atteinte."
       },
 
       "formats": {
@@ -1863,7 +1910,8 @@
         "byChallenge": "Classement par défi",
         "wins": "Victoires",
         "totalWins": "{{count}} victoires au total",
-        "noChallengeActivity": "Aucune activité pour ce défi."
+        "noChallengeActivity": "Aucune activité pour ce défi.",
+        "dailyBonusHint": "+{{bonus}} pts par soirée gagnée (meilleur total SOLO + DUO + TRIO du jour)."
       },
 
       "challenge": {
@@ -2062,12 +2110,24 @@
     "mlb": {
       "noGames": "Aucun match pour cette journée.",
       "scoringPlays": "Actions marquantes",
+      "scoringSummary": "Résumé du pointage",
+      "scoringRunsLine": "Points : {{names}}",
+      "scoringRbiLine": "RBI : {{name}} ({{count}})",
+      "scoringHomeRunNth": "{{count}}e circuit",
+      "scoringDoubleNth": "{{count}}e double",
+      "scoringTripleNth": "{{count}}e triple",
+      "scoringSingleNth": "{{count}}e simple",
       "loadingPlays": "Chargement des actions…",
       "noScoringPlays": "Aucune action marquante pour le moment.",
       "postponed": "Reporté",
       "delayed": "Retardé",
-      "inningTop": "Début de {{inning}}",
-      "inningBottom": "Fin de {{inning}}",
+      "inningTop": "Début de {{inning}} manche",
+      "inningBottom": "Fin de {{inning}} manche",
+      "inningMiddle": "Entre les manches",
+      "inningMiddleMid": "Mi-{{inning}} manche",
+      "inningMiddleWithInning": "Fin de {{inning}} manche",
+      "inningEndWithInning": "Fin de {{inning}} manche",
+      "inningEnd": "Fin de match",
       "inningHeader": "{{label}}",
       "rbi": "{{count}} RBI",
       "homeRun": "HR",
@@ -2089,7 +2149,9 @@
       "runnersOnBase": "{{count}} coureur(s)",
       "battingOrder": "Ordre de frappe",
       "currentBatter": "Frappeur au bâton",
+      "batterGameStats": "Dans le match : {{line}}",
       "currentPitcher": "vs {{pitcher}}",
+      "pitcherPitchCount": "P:{{count}}",
       "atBat": "Au bâton",
       "loadingLineups": "Chargement des alignements…",
       "noLineups": "Alignements non disponibles pour le moment.",
@@ -2156,6 +2218,17 @@
       "final": "Final",
       "finalOt": "Final • Prol.",
       "finalSo": "Final • TDB"
+    },
+    "skaters": {
+      "seasonCurrent": "Saison {{season}}",
+      "seasonPrevious": "Saison {{season}}",
+      "currentSeasonEmpty": "Peu ou pas de stats en saison courante — consulte la saison précédente."
+    },
+    "standings": {
+      "seasonCurrent": "Saison {{season}}",
+      "seasonPrevious": "Saison {{season}}",
+      "finalAsOf": "Classement final au {{date}}",
+      "previousEmpty": "Snapshot N-1 indisponible — tire pour rafraîchir le classement."
     }
   },
   "challenges": {
@@ -2316,7 +2389,9 @@
       "progressSaved": "{{saved}}/{{total}} matchs enregistrés"
     },
     "live": {
-      "title": "Prédire l'issue des matchs"
+      "title": "Prédire l'issue des matchs",
+      "participantsPredictionsTitle": "Prédictions des {{count}} participants",
+      "participantsPredictionsTitlePending": "Prédictions des participants"
     },
     "results": {
       "officialScore": "Résultat",

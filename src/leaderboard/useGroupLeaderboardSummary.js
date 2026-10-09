@@ -5,22 +5,15 @@ import {
   competitionKeyMatchesSport,
   resolveLeaderboardReadKeys,
 } from "@src/season/seasonCompetitionCore";
+import {
+  mergeLeaderboardRows,
+  computeProphetikMemberPoints,
+} from "./leaderboardMemberMerge";
 
 const LEADERBOARD_LIMIT = 100;
 
 function normalizePoints(row) {
-  const r = row || {};
-  const fgc = Number(r.fgcPoints ?? r?.families?.fgc?.points ?? 0) || 0;
-  const tp = Number(r.tpPoints ?? r?.families?.tp?.points ?? 0) || 0;
-  const ts =
-    Number(
-      r.tsPoints ??
-        r.standardPoints ??
-        r?.families?.ts?.points ??
-        r?.families?.standard?.points ??
-        0
-    ) || 0;
-  return Number(r.pointsTotal ?? fgc + tp + ts) || 0;
+  return computeProphetikMemberPoints(row);
 }
 
 function isActiveMembership(data = {}) {
@@ -43,22 +36,6 @@ function computeRank(memberUids, pointsByUid, uid) {
 
   const index = sorted.indexOf(pk);
   return index >= 0 ? index + 1 : null;
-}
-
-function mergeLeaderboardRows(rowsByKey, readKeys) {
-  const merged = new Map();
-  for (const key of readKeys) {
-    for (const row of rowsByKey[key] || []) {
-      const id = String(row.uid || row.id || "").trim();
-      if (!id) continue;
-      const pts = normalizePoints(row);
-      const prev = merged.get(id);
-      if (!prev || pts >= normalizePoints(prev)) {
-        merged.set(id, { ...row, uid: id, id });
-      }
-    }
-  }
-  return Array.from(merged.values());
 }
 
 /**

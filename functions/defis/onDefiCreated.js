@@ -3,6 +3,7 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
 import { buildMlbDefiPlayerPool } from "./mlbDefiPlayerPool.js";
+import { resolveNhlPoolRankSeasonForGame } from "./nhlPoolRankSeason.js";
 
 // ✅ pool figé du défi — T3 inclut tous les joueurs éligibles (cap sécurité)
 const MAX_POOL_SIZE = 500;
@@ -58,6 +59,52 @@ function tierFromIndex0(idx0) {
   if (idx0 <= 9) return "T1";
   if (idx0 <= 19) return "T2";
   return "T3";
+}
+
+function parseNhlStatRow(d = {}) {
+  const goals = num(d.goals, 0);
+  const assists = num(d.assists, 0);
+  const points = Number.isFinite(d.points) ? num(d.points, goals + assists) : goals + assists;
+  const gamesPlayed = num(d.gamesPlayed, 0);
+  const ppg = Number.isFinite(d.pointsPerGame)
+    ? num(d.pointsPerGame, 0)
+    : gamesPlayed > 0
+    ? points / gamesPlayed
+    : 0;
+  const meta = d.coeff_meta || {};
+
+  return {
+    goals,
+    assists,
+    points,
+    gamesPlayed,
+    pointsPerGame: ppg,
+    coeff: Number.isFinite(d.coeff) ? num(d.coeff, 1) : 1,
+    reliability: Number.isFinite(meta.reliability) ? num(meta.reliability, 0) : 0,
+    ppgN: Number.isFinite(meta.ppgN) ? num(meta.ppgN, 0) : null,
+    shN: Number.isFinite(meta.shN) ? num(meta.shN, 0) : null,
+    talent: Number.isFinite(meta.talent) ? num(meta.talent, 0) : null,
+    defense: typeof meta.defense === "boolean" ? meta.defense : null,
+    coeff_v: d.coeff_v || null,
+    positionCode: d.positionCode || null,
+    teamAbbrevs: d.teamAbbrevs || d.teamAbbr || null,
+    timeOnIcePerGame: d.timeOnIcePerGame ?? null,
+  };
+}
+
+function pickNhlDisplaySlice(st = {}) {
+  const goals = num(st.goals, 0);
+  const assists = num(st.assists, 0);
+  let points = num(st.points, NaN);
+  if (!Number.isFinite(points) || (points <= 0 && goals + assists > 0)) {
+    points = goals + assists;
+  }
+  const gamesPlayed = num(st.gamesPlayed, 0);
+  let pointsPerGame = num(st.pointsPerGame, NaN);
+  if (!Number.isFinite(pointsPerGame) || pointsPerGame <= 0) {
+    pointsPerGame = gamesPlayed > 0 ? points / gamesPlayed : 0;
+  }
+  return { goals, assists, points, gamesPlayed, pointsPerGame };
 }
 
 /**
@@ -314,12 +361,26 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
     }
   }
 
-  const seasonId = seasonIdFromGameDateYmd(gameDateYmd);
+  let seasonConfig = {};
+  try {
+    const cfgSnap = await db.doc("app_config/currentSeason").get();
+    if (cfgSnap.exists) seasonConfig = cfgSnap.data() || {};
+  } catch (e) {
+    logger.warn("[onDefiCreated] currentSeason read failed", { defiId, err: e?.message });
+  }
+
+  const rankMeta = resolveNhlPoolRankSeasonForGame({ gameDateYmd, seasonConfig });
+  const seasonId = rankMeta.calendarSeasonId;
+  const rankSeasonId = rankMeta.rankSeasonId;
+  const previousSeasonId = rankMeta.previousSeasonId;
 
   await defiRef.set(
     {
       poolStatus: "building",
       poolSeasonId: seasonId,
+      poolRankSeasonId: rankSeasonId,
+      poolRankUsesPreviousUntilYmd: rankMeta.poolRankUsesPreviousUntilYmd,
+      poolUsedPreviousForRank: rankMeta.usedPreviousForRank,
       poolGameDate: gameDateYmd,
       updatedAt: FieldValue.serverTimestamp(),
     },
@@ -363,62 +424,49 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
     }
     if (!players.length) throw new Error("no_players_for_teams");
 
-    // 3) stats : lire UNIQUEMENT les docs nécessaires via docId `${seasonId}_${playerId}`
-    const statsMap = new Map();
-    const refs = players.map((p) => db.doc(`nhl_player_stats_current/${seasonId}_${p.playerId}`));
+    const seasonIdsToLoad = [seasonId, previousSeasonId].filter(Boolean);
+    const uniqueSeasonIds = [...new Set(seasonIdsToLoad.map(String))];
 
-    for (const refChunk of chunk(refs, GETALL_CHUNK)) {
+    const statsByPlayerSeason = new Map();
+    const refs = [];
+    const refMeta = [];
+
+    for (const p of players) {
+      for (const sid of uniqueSeasonIds) {
+        refs.push(db.doc(`nhl_player_stats_current/${sid}_${p.playerId}`));
+        refMeta.push({ playerId: p.playerId, seasonId: sid });
+      }
+    }
+
+    for (let offset = 0; offset < refs.length; offset += GETALL_CHUNK) {
+      const refChunk = refs.slice(offset, offset + GETALL_CHUNK);
+      const chunkMeta = refMeta.slice(offset, offset + GETALL_CHUNK);
       const snaps = await db.getAll(...refChunk);
-      for (const s of snaps) {
+
+      for (let i = 0; i < snaps.length; i++) {
+        const s = snaps[i];
         if (!s.exists) continue;
         const d = s.data() || {};
-        const pid = String(d.playerId ?? "");
-        if (!pid) continue;
+        const pid = String(d.playerId ?? chunkMeta[i]?.playerId ?? "");
+        const sid = String(chunkMeta[i]?.seasonId ?? d.seasonId ?? "");
+        if (!pid || !sid) continue;
 
-        const goals = num(d.goals, 0);
-        const assists = num(d.assists, 0);
-        const points = Number.isFinite(d.points)
-          ? num(d.points, goals + assists)
-          : goals + assists;
-
-        const gamesPlayed = num(d.gamesPlayed, 0);
-
-        const ppg = Number.isFinite(d.pointsPerGame)
-          ? num(d.pointsPerGame, 0)
-          : gamesPlayed > 0
-          ? points / gamesPlayed
-          : 0;
-
-        // ✅ coeff_meta (v2_df) est imbriqué
-        const meta = d.coeff_meta || {};
-
-        statsMap.set(pid, {
-          goals,
-          assists,
-          points,
-          gamesPlayed,
-          pointsPerGame: ppg,
-
-          coeff: Number.isFinite(d.coeff) ? num(d.coeff, 1) : 1,
-
-          // ✅ ces champs viennent de coeff_meta (sinon 0/null)
-          reliability: Number.isFinite(meta.reliability) ? num(meta.reliability, 0) : 0,
-          ppgN: Number.isFinite(meta.ppgN) ? num(meta.ppgN, 0) : null,
-          shN: Number.isFinite(meta.shN) ? num(meta.shN, 0) : null,
-          talent: Number.isFinite(meta.talent) ? num(meta.talent, 0) : null,
-          defense: typeof meta.defense === "boolean" ? meta.defense : null,
-
-          coeff_v: d.coeff_v || null,
-          positionCode: d.positionCode || null,
-          teamAbbrevs: d.teamAbbrevs || d.teamAbbr || null,
-          timeOnIcePerGame: d.timeOnIcePerGame ?? null,
-        });
+        if (!statsByPlayerSeason.has(pid)) statsByPlayerSeason.set(pid, new Map());
+        statsByPlayerSeason.get(pid).set(sid, parseNhlStatRow(d));
       }
     }
 
     // 4) merge + calc Nova score + matchup context (rank/GD + finalCoeff)
     const merged = players.map((p) => {
-      const st = statsMap.get(p.playerId) || {};
+      const bySeason = statsByPlayerSeason.get(p.playerId) || new Map();
+      const stRank = bySeason.get(String(rankSeasonId)) || {};
+      const stCurrent = bySeason.get(String(seasonId)) || stRank;
+      const st = stRank;
+
+      const statsBySeason = {};
+      for (const sid of uniqueSeasonIds) {
+        statsBySeason[String(sid)] = pickNhlDisplaySlice(bySeason.get(String(sid)) || {});
+      }
 
       const goals = num(st.goals, 0);
       const assists = num(st.assists, 0);
@@ -427,10 +475,15 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
 
       const pointsPerGame = num(st.pointsPerGame, gamesPlayed > 0 ? points / gamesPlayed : 0);
 
-      const coeff = num(st.coeff, 1);
-      const reliability = num(st.reliability, 0);
+      const coeff = num(stCurrent.coeff, num(st.coeff, 1));
+      const reliability = num(stCurrent.reliability, num(st.reliability, 0));
+      const ppgForNova = num(stCurrent.pointsPerGame, pointsPerGame);
 
-      const scoreNovaBase = computeNovaBaseScore({ pointsPerGame, coeff, reliability });
+      const scoreNovaBase = computeNovaBaseScore({
+        pointsPerGame: ppgForNova,
+        coeff,
+        reliability,
+      });
 
       const teamAbbr = (
         p.teamAbbr ||
@@ -519,6 +572,9 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
 
         // Nova helper
         scoreNovaBase,
+
+        statsBySeason,
+        rankSeasonId,
       };
     });
 
@@ -576,8 +632,11 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
         // Nova helper (sert à novaPickAtLock)
         scoreNovaBase: num(p.scoreNovaBase, 0),
 
+        statsBySeason: p.statsBySeason || {},
+
         // pool meta
         seasonId,
+        rankSeasonId,
         gameDateYmd,
         rank: idx + 1,
         tier: tierFromIndex0(idx),
@@ -593,6 +652,10 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
         poolFrozenAt: nowTs,
         poolCount: top.length,
         poolSeasonId: seasonId,
+        poolRankSeasonId: rankSeasonId,
+        poolRankUsesPreviousUntilYmd: rankMeta.poolRankUsesPreviousUntilYmd,
+        poolUsedPreviousForRank: rankMeta.usedPreviousForRank,
+        poolPreviousSeasonId: previousSeasonId || null,
         poolGameDate: gameDateYmd,
         updatedAt: nowTs,
       },
@@ -603,6 +666,7 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
     logger.info("[onDefiCreated] pool frozen", {
       defiId,
       seasonId,
+      rankSeasonId,
       count: top.length,
       gameDateYmd,
     });

@@ -15,6 +15,11 @@ import firestore from "@react-native-firebase/firestore";
 import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
 import Analytics from "@src/services/analytics";
+import {
+  formatSeasonLabel,
+  getNhlCurrentSeasonId,
+  getNhlPreviousSeasonId,
+} from "@src/players/seasonStatsHelpers";
 
 /* ========================
    Logos (reprend ton mapping NHL)
@@ -142,6 +147,20 @@ export default function NhlStandingsScreen() {
 
   // global | conference | division | wildcard
   const [mode, setMode] = useState("global");
+  const [seasonView, setSeasonView] = useState("current");
+  const [asOfYmd, setAsOfYmd] = useState(null);
+
+  const calendarSeasonId = useMemo(() => getNhlCurrentSeasonId(), []);
+  const previousSeasonId = useMemo(
+    () => getNhlPreviousSeasonId(calendarSeasonId),
+    [calendarSeasonId]
+  );
+  const currentSeasonLabel = formatSeasonLabel("NHL", calendarSeasonId);
+  const previousSeasonLabel = previousSeasonId
+    ? formatSeasonLabel("NHL", previousSeasonId)
+    : null;
+
+  const standingsDocId = seasonView === "previous" ? "previous" : "current";
 
   const headerTitle = i18n.t("nhl.standings.title", { defaultValue: "Classement NHL" });
 
@@ -160,16 +179,20 @@ export default function NhlStandingsScreen() {
   }, [busy, mode, rows]);
 
   useEffect(() => {
-    const ref = firestore().doc("nhl_standings/current");
+    setBusy(true);
+    const ref = firestore().doc(`nhl_standings/${standingsDocId}`);
     const unsub = ref.onSnapshot(
       (snap) => {
-        const data = snapshotData(snap) || {};
+        const data = snapshotExists(snap) ? snapshotData(snap) || {} : {};
         setRows(Array.isArray(data.standings) ? data.standings : []);
         setUpdatedAt(data.updatedAt?.toDate ? data.updatedAt.toDate() : null);
+        setAsOfYmd(data.asOfYmd ? String(data.asOfYmd) : null);
         setBusy(false);
       },
       (err) => {
         console.log("[NhlStandings] read error", err?.message || err);
+        setRows([]);
+        setAsOfYmd(null);
         setBusy(false);
       }
     );
@@ -178,7 +201,7 @@ export default function NhlStandingsScreen() {
         unsub();
       } catch {}
     };
-  }, []);
+  }, [standingsDocId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -493,17 +516,52 @@ const renderItem = ({ item }) => {
             }
             ListHeaderComponent={() => (
               <View style={{ marginBottom: 12, gap: 10 }}>
-                {/* UpdatedAt */}
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  <Pill
+                    colors={colors}
+                    active={seasonView === "current"}
+                    label={i18n.t("nhl.standings.seasonCurrent", {
+                      season: currentSeasonLabel,
+                      defaultValue: "Saison {{season}}",
+                    })}
+                    onPress={() => setSeasonView("current")}
+                  />
+                  {previousSeasonLabel ? (
+                    <Pill
+                      colors={colors}
+                      active={seasonView === "previous"}
+                      label={i18n.t("nhl.standings.seasonPrevious", {
+                        season: previousSeasonLabel,
+                        defaultValue: "Saison {{season}}",
+                      })}
+                      onPress={() => setSeasonView("previous")}
+                    />
+                  ) : null}
+                </View>
+
                 <Text style={{ color: colors.subtext, fontSize: 12 }}>
-                  {updatedAt
-                    ? i18n.t("nhl.standings.updatedAt", {
-                        defaultValue: "Mis à jour: {{t}}",
-                        t: updatedAt.toLocaleString(),
+                  {seasonView === "previous" && asOfYmd
+                    ? i18n.t("nhl.standings.finalAsOf", {
+                        date: asOfYmd,
+                        defaultValue: "Classement final au {{date}}",
                       })
-                    : ""}
+                    : updatedAt
+                      ? i18n.t("nhl.standings.updatedAt", {
+                          defaultValue: "Mis à jour: {{t}}",
+                          t: updatedAt.toLocaleString(),
+                        })
+                      : ""}
                 </Text>
 
-                {/* Toggles */}
+                {seasonView === "previous" && !rows.length ? (
+                  <Text style={{ color: colors.subtext, fontSize: 11, lineHeight: 16 }}>
+                    {i18n.t("nhl.standings.previousEmpty", {
+                      defaultValue:
+                        "Snapshot N-1 indisponible — tire pour rafraîchir le classement.",
+                    })}
+                  </Text>
+                ) : null}
+
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                   <Pill
                     colors={colors}

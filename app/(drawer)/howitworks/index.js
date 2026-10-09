@@ -318,7 +318,7 @@ export default function CommentCaMarcheScreen() {
         </Text>
         <Pill
           text={i18n.t("howItWorks.challenges.soloPoints", {
-            defaultValue: "+10 pts si tu as le bon joueur",
+            defaultValue: "+5 pts si tu as le bon joueur",
           })}
           colors={colors}
           tone="success"
@@ -400,6 +400,175 @@ export default function CommentCaMarcheScreen() {
             })}
           </Bullet>
         </View>
+      </Section>
+
+      <Section
+        title={i18n.t("howItWorks.seasonWinner.title", { defaultValue: "Gagnant de la saison" })}
+        icon="ribbon-outline"
+        colors={colors}
+        defaultOpen={false}
+      >
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.intro", {
+            defaultValue:
+              "Le classement du groupe cumule tes points jour après jour. À la fin de la période visée, le participant avec le plus de points remporte la compétition.",
+          })}
+        </Text>
+
+        <View style={{ marginTop: 4, marginBottom: 4 }}>
+          <Pill
+            text={i18n.t("howItWorks.seasonWinner.oneGroupRule", {
+              defaultValue: "Un groupe = une compétition",
+            })}
+            colors={colors}
+            tone="success"
+          />
+        </View>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.oneGroupBody", {
+            defaultValue:
+              "Chaque groupe vise un seul palmarès à la fois : saison régulière, séries ou période sur mesure. Pour enchaîner plusieurs compétitions (ex. régulière puis séries), crée un groupe distinct pour chacune.",
+          })}
+        </Text>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.regularGroupTitle", {
+            defaultValue: "Groupe « Saison régulière »",
+          })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.regularGroupIntro", {
+            defaultValue:
+              "Exemple : « Beaudry NHL 2025-26 ». Les points des matchs de saison régulière alimentent le classement Saison régulière.",
+          })}
+        </Text>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.regularGroupWinner", {
+            defaultValue:
+              "Gagnant : celui ou celle qui cumule le plus de points — couronné·e champion·ne de la saison régulière (notification automatique en fin de régulière).",
+          })}
+        </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.regularGroupLeaderboard", {
+            defaultValue:
+              "Consulte l’onglet Classement et sélectionne Saison régulière.",
+          })}
+        </Bullet>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.playoffsGroupTitle", {
+            defaultValue: "Groupe « Séries éliminatoires »",
+          })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.playoffsGroupIntro", {
+            defaultValue:
+              "Les séries ont leur propre classement. Crée un second groupe, par ex. « Beaudry NHL 2025-26 — Séries », et invite les participants (souvent les mêmes amis).",
+          })}
+        </Text>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.playoffsGroupWinner", {
+            defaultValue:
+              "Gagnant séries : plus haut total dans le classement Séries éliminatoires — compteur à zéro, indépendant de la régulière.",
+          })}
+        </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.playoffsGroupWhen", {
+            defaultValue:
+              "Crée ce groupe avant le début des séries ; annonce le code d’invitation dans le groupe de la régulière.",
+          })}
+        </Bullet>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.customGroupTitle", {
+            defaultValue: "Groupe « Période sur mesure »",
+          })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.customGroupIntro", {
+            defaultValue:
+              "Pour un mois ou une période précise (ex. « Bisson — Novembre 2026 »), crée un groupe dédié avec les participants concernés.",
+          })}
+        </Text>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.customGroupPlay", {
+            defaultValue:
+              "Jouez uniquement dans ce groupe pendant la période convenue — Autopilote ON pour le mois, ou défis créés manuellement par le propriétaire.",
+          })}
+        </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.customGroupEnd", {
+            defaultValue:
+              "À la date de fin : consulte le classement et annonce le gagnant dans le chat du groupe.",
+          })}
+        </Bullet>
+
+        <View style={{ marginTop: 8, gap: 8 }}>
+          <Pill
+            text={i18n.t("howItWorks.seasonWinner.manualPill", {
+              defaultValue: "Période custom — gestion manuelle",
+            })}
+            colors={colors}
+            tone="warn"
+          />
+          <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+            {i18n.t("howItWorks.seasonWinner.manualBody", {
+              defaultValue:
+                "Prophetik ne calcule pas automatiquement un gagnant « mois de novembre » ou « mi-saison ». Le propriétaire gère le début et la fin des défis ; les participants conviennent de la date de clôture et désignent le gagnant d’après le classement final.",
+            })}
+          </Text>
+        </View>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.namingTitle", {
+            defaultValue: "Nommer tes groupes",
+          })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.namingBody", {
+            defaultValue:
+              "Utilise un nom explicite pour éviter la confusion quand plusieurs groupes coexistent :",
+          })}
+        </Text>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.namingRegular", {
+            defaultValue: "Régulière — « Beaudry — NHL 2025-26 »",
+          })}
+        </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.namingPlayoffs", {
+            defaultValue: "Séries — « Beaudry — NHL 2025-26 — Séries »",
+          })}
+        </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.namingCustom", {
+            defaultValue: "Custom — « Bisson — Novembre 2026 »",
+          })}
+        </Bullet>
+
+        <SubTitle colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.limitsTitle", {
+            defaultValue: "Limites de groupes actifs",
+          })}
+        </SubTitle>
+        <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+          {i18n.t("howItWorks.seasonWinner.limitsBody", {
+            defaultValue:
+              "Tu peux rejoindre autant de groupes que tu veux, mais tu ne joues aux défis que dans tes groupes actifs (Gratuit 1 · Pro 5 · VIP 20).",
+          })}
+        </Text>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.limitsSwitch", {
+            defaultValue:
+              "Forfait Gratuit : désactive la participation sur le groupe terminé (ex. régulière) avant d’activer le groupe séries.",
+          })}
+        </Bullet>
+        <Bullet colors={colors}>
+          {i18n.t("howItWorks.seasonWinner.limitsJoin", {
+            defaultValue:
+              "Rejoindre un groupe reste illimité — tu peux être inscrit sans y jouer si ta limite est atteinte.",
+          })}
+        </Bullet>
       </Section>
 
       {/* Créer */}

@@ -31,7 +31,11 @@ export function deriveTpExactCount(row = {}) {
   return derived > 0 ? derived : 0;
 }
 
+/** Points SOLO affichés = même source que le total (Firestore), pas victoires × barème actuel. */
 export function fgcDisplayPoints(row = {}) {
+  const stored = Number(row.fgcPoints ?? row?.families?.fgc?.points ?? NaN);
+  if (Number.isFinite(stored) && stored >= 0) return stored;
+
   const wins = Number(row.fgcWins ?? row?.families?.fgc?.wins ?? 0) || 0;
   return wins * FGC_LEADERBOARD_POINTS_PER_WIN;
 }

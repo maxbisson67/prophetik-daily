@@ -64,8 +64,19 @@ function resultFromMutualizedDoc(mutualizedGameDoc = {}) {
   };
 }
 
+export function getFgcProvisionalCandidateGoalId(mutualizedGameDoc = null) {
+  const gameStatus = String(mutualizedGameDoc?.status || "").toLowerCase();
+  if (!["pending", "provisional"].includes(gameStatus)) return null;
+  const goalId = mutualizedGameDoc?.candidate?.goalId;
+  return goalId != null ? String(goalId) : null;
+}
+
 /** Résultat affichable = confirmé sur le défi, ou candidat provisoire du doc mutualisé. */
-export function resolveFgcEffectiveResult(challenge = {}, mutualizedGameDoc = null) {
+export function resolveFgcEffectiveResult(
+  challenge = {},
+  mutualizedGameDoc = null,
+  { provisionalGoalStillStored = true } = {}
+) {
   const fromChallenge = getFgcResult(challenge) || {};
   const chStatus = String(challenge?.status || "").toLowerCase();
   const decided = chStatus === "decided" || chStatus === "closed";
@@ -118,6 +129,7 @@ export function resolveFgcEffectiveResult(challenge = {}, mutualizedGameDoc = nu
   }
 
   if (["pending", "provisional"].includes(gameStatus)) {
+    if (provisionalGoalStillStored === false) return null;
     const provisional = candidateFromMutualizedDoc(mutualizedGameDoc, challenge);
     if (!provisional) return null;
     return {

@@ -695,34 +695,44 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
   }, [authReady, user?.uid, bundleId]);
 
   useEffect(() => {
-    if (!games.length) return;
+    setDraftByGameId({});
+    setEntry(null);
+    setBundle(null);
+    setLoading(true);
+    setSaveStatus("idle");
+    setSaveError(null);
+  }, [bundleId]);
+
+  useEffect(() => {
+    if (!games.length) {
+      setDraftByGameId({});
+      return;
+    }
 
     const saved = entry?.picks || {};
 
     setDraftByGameId((prev) => {
-      const next = { ...prev };
+      const next = {};
 
       for (const slot of games) {
         const gameId = String(slot.gameId);
         if (saved[gameId]) {
           const fromSaved = draftFromSavedPick(saved[gameId], isMlb);
-          const current = next[gameId];
+          const current = prev[gameId];
           const userIsEditing =
             current &&
             canSaveDraft(current, isMlb) &&
             !draftMatchesSaved(current, saved[gameId], isMlb);
 
-          if (!userIsEditing) {
-            next[gameId] = fromSaved;
-          }
-        } else if (!next[gameId]) {
-          next[gameId] = emptyDraftPick();
+          next[gameId] = userIsEditing ? current : fromSaved;
+        } else {
+          next[gameId] = prev[gameId] || emptyDraftPick();
         }
       }
 
       return next;
     });
-  }, [games, entry?.picks, isMlb]);
+  }, [bundleId, games, entry?.picks, isMlb]);
 
   const showResults = useMemo(() => isBundleDecided(bundle), [bundle]);
 

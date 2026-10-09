@@ -1,3 +1,5 @@
+import { extractCurrentBatterStatsFromFeed, extractCurrentPitcherPitchCountFromFeed } from "@src/mlb/mlbCurrentBatterStats";
+
 const MLB_BOXSCORE_URL = (gamePk) =>
   `https://statsapi.mlb.com/api/v1/game/${encodeURIComponent(String(gamePk))}/boxscore`;
 
@@ -60,7 +62,9 @@ export function lineupDisplayFromGameDoc(game = {}) {
     currentBatterName: game?.currentBatterName ?? null,
     currentPitcherId: game?.currentPitcherId ?? null,
     currentPitcherName: game?.currentPitcherName ?? null,
+    currentPitcherPitchCount: game?.currentPitcherPitchCount ?? null,
     battingTeamAbbr: game?.battingTeamAbbr ?? null,
+    currentBatterStats: game?.currentBatterStats ?? null,
   };
 }
 
@@ -93,16 +97,26 @@ export async function fetchMlbLineupDisplayFromApi(gamePk) {
       const half = str(linescore?.inningHalf).toLowerCase();
       const awayAbbr = str(live?.gameData?.teams?.away?.abbreviation).toUpperCase();
       const homeAbbr = str(live?.gameData?.teams?.home?.abbreviation).toUpperCase();
+      const currentBatterId = batter?.id != null ? String(batter.id) : null;
+      const currentPitcherId = pitcher?.id != null ? String(pitcher.id) : null;
+      const currentBatterStats = currentBatterId
+        ? extractCurrentBatterStatsFromFeed(live, currentBatterId)
+        : null;
+      const currentPitcherPitchCount = currentPitcherId
+        ? extractCurrentPitcherPitchCountFromFeed(live, currentPitcherId)
+        : null;
 
       if (hasMlbLineupEntries(awayBattingOrder) || hasMlbLineupEntries(homeBattingOrder)) {
         return {
           awayBattingOrder,
           homeBattingOrder,
-          currentBatterId: batter?.id != null ? String(batter.id) : null,
+          currentBatterId,
           currentBatterName: str(batter?.fullName) || null,
-          currentPitcherId: pitcher?.id != null ? String(pitcher.id) : null,
+          currentPitcherId,
           currentPitcherName: str(pitcher?.fullName) || null,
+          currentPitcherPitchCount,
           battingTeamAbbr: half === "top" ? awayAbbr || null : half === "bottom" ? homeAbbr || null : null,
+          currentBatterStats,
         };
       }
     }

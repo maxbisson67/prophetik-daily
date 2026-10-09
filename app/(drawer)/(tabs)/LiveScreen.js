@@ -7,6 +7,7 @@ import {
   useLiveTabTitle,
   useSelectedGroup,
 } from "@src/groups/SelectedGroupProvider";
+import { useApplyRouteGroupIdParam } from "@src/groups/useApplyRouteGroupIdParam";
 import { useTheme } from "@src/theme/ThemeProvider";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
 import LivePointsOverviewPanel from "@src/live/LivePointsOverviewPanel";
@@ -23,12 +24,7 @@ export default function LiveScreen() {
 
   const paramGroupId = String(params?.groupId || "").trim();
 
-  useEffect(() => {
-    if (!paramGroupId || !readableGroupIds.includes(paramGroupId)) return;
-    if (String(selectedGroupId) !== paramGroupId) {
-      setSelectedGroupId(paramGroupId);
-    }
-  }, [paramGroupId, readableGroupIds.join("|"), selectedGroupId, setSelectedGroupId]);
+  useApplyRouteGroupIdParam(paramGroupId, readableGroupIds, setSelectedGroupId);
 
   const sport = selectedSport === "MLB" ? "MLB" : "NHL";
   const [viewMode, setViewMode] = useState("points");

@@ -7,7 +7,7 @@ function toNumber(v, def = 0) {
 
 /**
  * Points FGC comptabilisés pour un entry (classement, bonus du soir, live).
- * Si gagnant : au moins FGC_WIN_POINTS (évite les vieux payout/points à 5).
+ * Si gagnant : max(payout, points, FGC_WIN_POINTS) — conserve les anciens crédits à 10 pts.
  */
 export function resolveFgcEntryPoints(
   entry = {},

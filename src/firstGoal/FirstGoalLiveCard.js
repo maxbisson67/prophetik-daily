@@ -20,8 +20,14 @@ import {
   getFgcLiveConfirmedText,
   getFgcConfirmedNoWinnerLabel,
 } from "@src/firstGoal/fgcChallengeUtils";
-import { resolveFgcEffectiveResult } from "@src/firstGoal/fgcMutualizedGameUtils";
+import {
+  getFgcProvisionalCandidateGoalId,
+  resolveFgcEffectiveResult,
+} from "@src/firstGoal/fgcMutualizedGameUtils";
 import useFgcMutualizedGamesMap from "@src/firstGoal/useFgcMutualizedGamesMap";
+import useFgcProvisionalGoalsStoredMap, {
+  isFgcProvisionalGoalStillStored,
+} from "@src/firstGoal/useFgcProvisionalGoalsStoredMap";
 import useParticipantProfilesFor, {
   resolveParticipantIdentity,
 } from "@src/firstGoal/useParticipantProfilesFor";
@@ -112,12 +118,20 @@ function StatusChip({ status, colors }) {
   );
 }
 
-function ResultBanner({ status, challenge, mutualizedGame, colors }) {
+function ResultBanner({
+  status,
+  challenge,
+  mutualizedGame,
+  colors,
+  provisionalGoalStillStored = true,
+}) {
   const st = String(status || "").toLowerCase();
   const decided = st === "decided" || st === "closed";
   const locked = st === "locked" || st === "live";
 
-  const effective = resolveFgcEffectiveResult(challenge, mutualizedGame);
+  const effective = resolveFgcEffectiveResult(challenge, mutualizedGame, {
+    provisionalGoalStillStored,
+  });
   const firstGoalName = effective?.playerName || null;
   const firstGoalTeam = effective?.teamAbbr || null;
   const awaitingFinal = !!effective?.awaitingFinalConfirmation;
@@ -636,6 +650,10 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
   const mutualizedGamesByGameId = useFgcMutualizedGamesMap(firstGoalChallenges, {
     enabled: firstGoalChallenges.length > 0,
   });
+  const provisionalGoalsStoredByKey = useFgcProvisionalGoalsStoredMap(
+    firstGoalChallenges,
+    mutualizedGamesByGameId
+  );
 
   if (loadingFirstGoal) {
     return (
@@ -717,6 +735,12 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
 
         const gameDocId = String(ch?.gamePk || ch?.gameId || "").trim();
         const mutualizedGame = gameDocId ? mutualizedGamesByGameId[gameDocId] : null;
+        const provisionalGoalId = getFgcProvisionalCandidateGoalId(mutualizedGame);
+        const provisionalGoalStillStored = isFgcProvisionalGoalStillStored(
+          provisionalGoalsStoredByKey,
+          gameDocId,
+          provisionalGoalId
+        );
 
         return (
           <View
@@ -751,6 +775,7 @@ export default function FirstGoalLiveCard({ visible, gameId, challengeId, colors
               challenge={ch}
               mutualizedGame={mutualizedGame}
               colors={colors}
+              provisionalGoalStillStored={provisionalGoalStillStored}
             />
 
             {decided ? (

@@ -3,6 +3,7 @@ import {
   buildFgcCurrentPickFromPlayer,
   resolveFgcPlayerFocus,
 } from "../resolveFgcPlayerFocus.js";
+import { resolveFgcNhlStatsSeasonForChallenge } from "../resolveFgcNhlStatsSeason.js";
 
 function str(v) {
   return String(v ?? "").trim();
@@ -12,20 +13,33 @@ function safeAbbr(v) {
   return str(v).toUpperCase();
 }
 
-function getNhlSeasonId(date = new Date()) {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + 1;
-  const startYear = month >= 7 ? year : year - 1;
-  return `${startYear}${startYear + 1}`;
+function resolveGameDateYmd(challenge = {}) {
+  const ymd = str(challenge.gameYmd);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+
+  const start = challenge.gameStartTimeUTC?.toDate?.();
+  if (!start) return "";
+
+  const y = start.getUTCFullYear();
+  const m = String(start.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(start.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function pickNhlStats(stats = {}) {
+  const goals = Number(stats.goals) || 0;
+  const assists = Number(stats.assists) || 0;
+  const points = Number(stats.points) || goals + assists;
+  const gamesPlayed = Number(stats.gamesPlayed) || 0;
+  const pointsPerGame =
+    Number(stats.pointsPerGame) || (gamesPlayed > 0 ? points / gamesPlayed : 0);
+
   return {
-    goals: Number(stats.goals) || 0,
-    assists: Number(stats.assists) || 0,
-    points: Number(stats.points) || 0,
-    gamesPlayed: Number(stats.gamesPlayed) || 0,
-    pointsPerGame: Number(stats.pointsPerGame) || 0,
+    goals,
+    assists,
+    points,
+    gamesPlayed,
+    pointsPerGame,
   };
 }
 
@@ -67,17 +81,28 @@ export class FgcNhlContextBuilder {
     const entrySnap = uid ? await db.doc(`first_goal_challenges/${cid}/entries/${uid}`).get() : null;
     const entry = entrySnap?.exists ? entrySnap.data() || {} : null;
 
-    const seasonId = getNhlSeasonId(
-      ch.gameStartTimeUTC?.toDate?.() ? ch.gameStartTimeUTC.toDate() : new Date()
-    );
+    const homeAbbr = safeAbbr(ch.homeAbbr);
+    const awayAbbr = safeAbbr(ch.awayAbbr);
+    const gameDateYmd = resolveGameDateYmd(ch);
+
+    const seasonCfgSnap = await db.doc("app_config/currentSeason").get();
+    const seasonConfig = seasonCfgSnap.exists ? seasonCfgSnap.data() || {} : null;
+
+    const statsMeta = await resolveFgcNhlStatsSeasonForChallenge({
+      gameDateYmd,
+      homeAbbr,
+      awayAbbr,
+      seasonConfig,
+    });
+    const statsSeasonId = statsMeta.statsSeasonId;
 
     const { ids, focusPlayerId } = resolveFgcPlayerFocus(playerIds, entry?.playerId);
 
     const players = [];
     for (const pid of ids) {
-      const row = await this.loadPlayerContext(pid, seasonId, {
-        homeAbbr: safeAbbr(ch.homeAbbr),
-        awayAbbr: safeAbbr(ch.awayAbbr),
+      const row = await this.loadPlayerContext(pid, statsSeasonId, {
+        homeAbbr,
+        awayAbbr,
       });
       if (row) players.push(row);
     }
@@ -94,8 +119,8 @@ export class FgcNhlContextBuilder {
         groupId: str(ch.groupId) || null,
         gameId: str(ch.gameId) || null,
         gameYmd: str(ch.gameYmd) || null,
-        homeAbbr: safeAbbr(ch.homeAbbr),
-        awayAbbr: safeAbbr(ch.awayAbbr),
+        homeAbbr,
+        awayAbbr,
         gameStartTimeUTC: ch.gameStartTimeUTC?.toDate?.()?.toISOString?.() || null,
       },
       participant: {
@@ -110,7 +135,13 @@ export class FgcNhlContextBuilder {
         currentPick: buildFgcCurrentPickFromPlayer(focusPlayer),
       },
       players,
-      seasonId,
+      seasonId: statsMeta.calendarSeasonId,
+      statsSeasonId,
+      statsUsesPreviousSeason: statsMeta.statsUsesPreviousSeason,
+      previousSeasonId: statsMeta.previousSeasonId || null,
+      statsSeasonNote: statsMeta.statsUsesPreviousSeason
+        ? "season_stats_from_previous_until_representative_current_sample"
+        : "season_stats_from_current",
     };
   }
 
@@ -128,6 +159,9 @@ export class FgcNhlContextBuilder {
     const teamAbbr = safeAbbr(statsRow.teamAbbr || player.teamAbbr || player.team);
     const injury = normalizeInjury(player.injury || statsRow.injury);
 
+    const opposingTeamAbbr =
+      teamAbbr && teamAbbr === homeAbbr ? awayAbbr : teamAbbr && teamAbbr === awayAbbr ? homeAbbr : null;
+
     return {
       playerId: pid,
       fullName: str(player.fullName || player.name || statsRow.fullName) || pid,
@@ -135,7 +169,9 @@ export class FgcNhlContextBuilder {
       position: str(player.positionCode || player.position) || null,
       isHomeTeam: teamAbbr && teamAbbr === homeAbbr,
       isAwayTeam: teamAbbr && teamAbbr === awayAbbr,
+      opposingTeamAbbr,
       seasonStats: pickNhlStats(statsRow),
+      statsSeasonId: str(seasonId),
       injury,
     };
   }

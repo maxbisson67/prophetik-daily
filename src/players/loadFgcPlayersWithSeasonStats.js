@@ -1,5 +1,5 @@
 import firestore from "@react-native-firebase/firestore";
-import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
+import { snapshotExists, snapshotData } from "@src/lib/safeSnapshot";
 import {
   getSeasonPairForLeague,
   getSeasonStats,
@@ -7,7 +7,10 @@ import {
 } from "./seasonStatsHelpers";
 import { filterFgcSelectablePlayers } from "./fgcPlayerFilters";
 
-const STATS_CHUNK = 30;
+/** Lots getAll — aligné sur enrichNhlPoolPlayers. */
+const STATS_CHUNK = 100;
+/** En secours si getAll échoue (Android): évite 30+ GET parallèles → unavailable. */
+const STATS_GET_CONCURRENCY = 4;
 
 function pickMlbDisplayFields(row = {}) {
   return {
@@ -47,6 +50,8 @@ function mergeStatsMaps(...maps) {
 
 function seasonStatsLookComplete(stats, league) {
   if (!stats || typeof stats !== "object") return false;
+  // Snapshot dénormalisé depuis nhl_players / mlb_players — pas besoin de relire stats_current.
+  if (stats.syncedAt != null) return true;
   const gp = Number(stats.gamesPlayed ?? 0);
   if (gp > 0) return true;
   if (String(league).toUpperCase() === "MLB") {
@@ -61,8 +66,44 @@ function playerNeedsSeasonFetch(player, seasonId, league) {
   return !seasonStatsLookComplete(embedded, league);
 }
 
-async function loadStatsByPlayerIds(collectionName, playerIds, seasonIds, pickFields) {
+async function readDocRefsWithFallback(refs) {
+  if (!refs.length) return [];
+
+  try {
+    if (typeof firestore().getAll === "function") {
+      return await firestore().getAll(...refs);
+    }
+  } catch (err) {
+    if (__DEV__) {
+      console.warn("[loadFgcPlayers] getAll failed", err?.code, err?.message);
+    }
+  }
+
+  const snaps = [];
+  for (let i = 0; i < refs.length; i += STATS_GET_CONCURRENCY) {
+    const slice = refs.slice(i, i + STATS_GET_CONCURRENCY);
+    const batch = await Promise.all(slice.map((ref) => ref.get()));
+    snaps.push(...batch);
+  }
+  return snaps;
+}
+
+async function readStatsChunk(chunkRefs, chunkMeta, pickFields) {
   const byPlayer = {};
+  const snaps = await readDocRefsWithFallback(chunkRefs);
+
+  snaps.forEach((snap, idx) => {
+    if (!snapshotExists(snap)) return;
+    const row = snapshotData(snap) || {};
+    const { playerId, seasonId } = chunkMeta[idx];
+    if (!byPlayer[playerId]) byPlayer[playerId] = {};
+    byPlayer[playerId][seasonId] = pickFields(row);
+  });
+
+  return byPlayer;
+}
+
+async function loadStatsByPlayerIds(collectionName, playerIds, seasonIds, pickFields) {
   const refs = [];
   const meta = [];
 
@@ -73,34 +114,106 @@ async function loadStatsByPlayerIds(collectionName, playerIds, seasonIds, pickFi
     }
   }
 
-  if (!refs.length) return byPlayer;
+  if (!refs.length) return {};
 
-  const readChunk = async (chunkRefs, chunkMeta) => {
-    let snaps = [];
-    try {
-      if (typeof firestore().getAll === "function") {
-        snaps = await firestore().getAll(...chunkRefs);
-      } else {
-        snaps = await Promise.all(chunkRefs.map((ref) => ref.get()));
-      }
-    } catch {
-      snaps = await Promise.all(chunkRefs.map((ref) => ref.get()));
-    }
+  const chunkCount = Math.ceil(refs.length / STATS_CHUNK);
+  const partials = await Promise.all(
+    Array.from({ length: chunkCount }, (_, chunkIdx) => {
+      const start = chunkIdx * STATS_CHUNK;
+      return readStatsChunk(
+        refs.slice(start, start + STATS_CHUNK),
+        meta.slice(start, start + STATS_CHUNK),
+        pickFields
+      );
+    })
+  );
 
-    snaps.forEach((snap, idx) => {
-      if (!snapshotExists(snap)) return;
-      const row = snapshotData(snap) || {};
-      const { playerId, seasonId } = chunkMeta[idx];
+  const byPlayer = {};
+  for (const partial of partials) {
+    for (const [playerId, seasons] of Object.entries(partial)) {
       if (!byPlayer[playerId]) byPlayer[playerId] = {};
-      byPlayer[playerId][seasonId] = pickFields(row);
-    });
-  };
-
-  for (let i = 0; i < refs.length; i += STATS_CHUNK) {
-    await readChunk(refs.slice(i, i + STATS_CHUNK), meta.slice(i, i + STATS_CHUNK));
+      Object.assign(byPlayer[playerId], seasons);
+    }
   }
 
   return byPlayer;
+}
+
+function leagueMeta(L) {
+  const playersCollection = L === "MLB" ? "mlb_players" : "nhl_players";
+  const statsCollection = L === "MLB" ? "mlb_player_stats_current" : "nhl_player_stats_current";
+  const pickFields = L === "MLB" ? pickMlbDisplayFields : pickNhlDisplayFields;
+  return { playersCollection, statsCollection, pickFields };
+}
+
+async function fetchFgcActiveRoster(home, away, L) {
+  const { playersCollection } = leagueMeta(L);
+  const playersSnap = await firestore()
+    .collection(playersCollection)
+    .where("teamAbbr", "in", [home, away])
+    .where("active", "==", true)
+    .get();
+
+  return (playersSnap?.docs ?? []).map((d) => {
+    const data = d.data() || {};
+    return {
+      id: d.id,
+      ...data,
+      statsBySeason: normalizeStatsBySeason(data.statsBySeason),
+    };
+  });
+}
+
+function mergeRosterWithFetchedStats(rosterRows, statsByPlayer, L) {
+  return filterFgcSelectablePlayers(
+    rosterRows.map((p) => {
+      const playerId = String(p.playerId || p.id || "").trim();
+      const fetchedStats = statsByPlayer[playerId] || {};
+
+      return {
+        ...p,
+        statsBySeason: mergeStatsMaps(p.statsBySeason, fetchedStats),
+      };
+    }),
+    L
+  );
+}
+
+function playerIdsNeedingSeasons(rosterRows, seasonIds, L) {
+  const playerIds = [
+    ...new Set(
+      rosterRows
+        .map((p) => String(p.playerId || p.id || "").trim())
+        .filter(Boolean)
+    ),
+  ];
+
+  return playerIds.filter((playerId) => {
+    const row = rosterRows.find((p) => String(p.playerId || p.id || "").trim() === playerId);
+    return seasonIds.some((seasonId) => playerNeedsSeasonFetch(row, seasonId, L));
+  });
+}
+
+async function fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds) {
+  const ids = seasonIds.filter(Boolean);
+  if (!ids.length) return;
+
+  const needing = playerIdsNeedingSeasons(rosterRows, ids, L);
+  if (!needing.length) return;
+
+  const { statsCollection, pickFields } = leagueMeta(L);
+  const statsByPlayer = await loadStatsByPlayerIds(statsCollection, needing, ids, pickFields);
+
+  for (const row of rosterRows) {
+    const playerId = String(row.playerId || row.id || "").trim();
+    const fetchedStats = statsByPlayer[playerId];
+    if (!fetchedStats) continue;
+    row.statsBySeason = mergeStatsMaps(row.statsBySeason, fetchedStats);
+  }
+}
+
+function playersFromRosterRows(rosterRows, L) {
+  return mergeRosterWithFetchedStats(rosterRows, {}, L);
 }
 
 export async function loadFgcPlayersWithSeasonStats({
@@ -118,83 +231,61 @@ export async function loadFgcPlayersWithSeasonStats({
   }
 
   const seasonPair = getSeasonPairForLeague(L);
-  const playersCollection = L === "MLB" ? "mlb_players" : "nhl_players";
-  const statsCollection = L === "MLB" ? "mlb_player_stats_current" : "nhl_player_stats_current";
-  const pickFields = L === "MLB" ? pickMlbDisplayFields : pickNhlDisplayFields;
   const seasonIds = includePreviousSeason
     ? [seasonPair.current, seasonPair.previous].filter(Boolean)
     : [seasonPair.current].filter(Boolean);
 
-  const playersSnap = await firestore()
-    .collection(playersCollection)
-    .where("teamAbbr", "in", [home, away])
-    .where("active", "==", true)
-    .get();
-
-  const rosterRows = (playersSnap?.docs ?? []).map((d) => {
-    const data = d.data() || {};
-    return {
-      id: d.id,
-      ...data,
-      statsBySeason: normalizeStatsBySeason(data.statsBySeason),
-    };
-  });
-
-  const playerIds = [
-    ...new Set(
-      rosterRows
-        .map((p) => String(p.playerId || p.id || "").trim())
-        .filter(Boolean)
-    ),
-  ];
-
-  const idsNeedingFetch = playerIds.filter((playerId) => {
-    const row = rosterRows.find(
-      (p) => String(p.playerId || p.id || "").trim() === playerId
-    );
-    return seasonIds.some((seasonId) => playerNeedsSeasonFetch(row, seasonId, L));
-  });
-
-  const statsByPlayer =
-    idsNeedingFetch.length > 0
-      ? await loadStatsByPlayerIds(statsCollection, idsNeedingFetch, seasonIds, pickFields)
-      : {};
-
-  const players = filterFgcSelectablePlayers(
-    rosterRows.map((p) => {
-      const playerId = String(p.playerId || p.id || "").trim();
-      const fetchedStats = statsByPlayer[playerId] || {};
-
-      return {
-        ...p,
-        statsBySeason: mergeStatsMaps(p.statsBySeason, fetchedStats),
-      };
-    }),
-    L
-  );
+  const rosterRows = await fetchFgcActiveRoster(home, away, L);
+  await fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds);
+  const players = playersFromRosterRows(rosterRows, L);
 
   return { players, league: L, seasonPair };
 }
 
-/** Charge d'abord le roster (stats embarquées), puis enrichit avec la saison précédente. */
-export async function loadFgcPlayersProgressive({ league, homeAbbr, awayAbbr, onRosterReady }) {
-  const first = await loadFgcPlayersWithSeasonStats({
-    league,
-    homeAbbr,
-    awayAbbr,
-    includePreviousSeason: false,
-  });
+/**
+ * Une seule requête roster; affichage immédiat avec stats dénormalisées;
+ * puis complète courante / N-1 sans recharger le roster.
+ */
+function publishFgcPlayers(rosterRows, L, seasonPair, cb) {
+  if (typeof cb !== "function") return;
+  cb(playersFromRosterRows(rosterRows, L), seasonPair);
+}
 
-  if (typeof onRosterReady === "function") {
-    onRosterReady(first.players, first.seasonPair);
+export async function loadFgcPlayersProgressive({
+  league,
+  homeAbbr,
+  awayAbbr,
+  onRosterReady,
+  onStatsReady,
+}) {
+  const home = String(homeAbbr || "").trim().toUpperCase();
+  const away = String(awayAbbr || "").trim().toUpperCase();
+  const L = String(league || "NHL").toUpperCase();
+  const seasonPair = getSeasonPairForLeague(L);
+
+  if (!home || !away) {
+    publishFgcPlayers([], L, seasonPair, onRosterReady);
+    return { players: [], league: L, seasonPair };
   }
 
-  const full = await loadFgcPlayersWithSeasonStats({
-    league,
-    homeAbbr,
-    awayAbbr,
-    includePreviousSeason: true,
-  });
+  const rosterRows = await fetchFgcActiveRoster(home, away, L);
+  publishFgcPlayers(rosterRows, L, seasonPair, onRosterReady);
 
-  return full;
+  const currentId = seasonPair.current ? String(seasonPair.current) : "";
+  const previousId =
+    seasonPair.previous && String(seasonPair.previous) !== currentId
+      ? String(seasonPair.previous)
+      : "";
+  const seasonIds = [...new Set([currentId, previousId].filter(Boolean))];
+
+  if (seasonIds.length) {
+    const needing = playerIdsNeedingSeasons(rosterRows, seasonIds, L);
+    if (needing.length) {
+      await fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds);
+      publishFgcPlayers(rosterRows, L, seasonPair, onStatsReady);
+    }
+  }
+
+  const players = playersFromRosterRows(rosterRows, L);
+  return { players, league: L, seasonPair };
 }

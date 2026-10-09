@@ -1,7 +1,8 @@
 import firestore from "@react-native-firebase/firestore";
 import { resolvePlayerBattingAverage } from "./mlbBattingAverage";
 
-const STATS_CHUNK = 30;
+const STATS_CHUNK = 100;
+const STATS_GET_CONCURRENCY = 4;
 
 export function poolHasEmbeddedMlbStats(list) {
   if (!Array.isArray(list) || !list.length) return false;
@@ -9,14 +10,31 @@ export function poolHasEmbeddedMlbStats(list) {
   return withSlg >= Math.min(list.length, 3);
 }
 
+async function readDocRefsWithFallback(refs) {
+  if (!refs.length) return [];
+
+  try {
+    if (typeof firestore().getAll === "function") {
+      return await firestore().getAll(...refs);
+    }
+  } catch (err) {
+    if (__DEV__) {
+      console.warn("[enrichMlbPool] getAll failed", err?.code, err?.message);
+    }
+  }
+
+  const snaps = [];
+  for (let i = 0; i < refs.length; i += STATS_GET_CONCURRENCY) {
+    const slice = refs.slice(i, i + STATS_GET_CONCURRENCY);
+    const batch = await Promise.all(slice.map((ref) => ref.get()));
+    snaps.push(...batch);
+  }
+  return snaps;
+}
+
 async function fetchStatsChunk(chunkRefs, chunkPlayers) {
   const statsById = {};
-  let snaps = [];
-  if (typeof firestore().getAll === "function") {
-    snaps = await firestore().getAll(...chunkRefs);
-  } else {
-    snaps = await Promise.all(chunkRefs.map((r) => r.get()));
-  }
+  const snaps = await readDocRefsWithFallback(chunkRefs);
 
   snaps.forEach((s, idx) => {
     if (!s.exists) return;

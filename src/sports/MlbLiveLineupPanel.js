@@ -5,21 +5,15 @@ import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { formatMlbTeamDisplayName } from "@src/mlb/mlbTeamDisplayName";
 import { formatMlbPlayerBroadcastName } from "@src/mlb/mlbPlayerDisplayName";
 import {
+  currentBatterStatsFromGame,
+  currentPitcherPitchCountFromGame,
+  MlbCurrentBatterStatLines,
+} from "@src/mlb/mlbCurrentBatterStats";
+import {
   fetchMlbLineupDisplayFromApi,
   hasMlbLineupDisplay,
   lineupDisplayFromGameDoc,
 } from "@src/mlb/mlbLiveLineupDisplay";
-
-function resolveBattingTeamAbbr(game = {}) {
-  const explicit = String(game?.battingTeamAbbr || "").trim().toUpperCase();
-  if (explicit) return explicit;
-
-  const half = String(game?.inningHalf || "").toLowerCase();
-  if (half === "top") return String(game?.awayAbbr || "").trim().toUpperCase();
-  if (half === "bottom") return String(game?.homeAbbr || "").trim().toUpperCase();
-
-  return "";
-}
 
 function LineupColumn({ title, team, abbr, entries = [], colors, currentBatterId, isBatting }) {
   if (!entries?.length) return null;
@@ -140,6 +134,12 @@ export default function MlbLiveLineupPanel({ game, colors, teamForAbbr, enabled 
   const display = hasMlbLineupDisplay(fromDoc) ? fromDoc : fallback || fromDoc;
   const hasLineups = hasMlbLineupDisplay(display);
   const showCurrentBatter = !!game?.isLive && !!display?.currentBatterName;
+  const batterStats = currentBatterStatsFromGame(game) || display?.currentBatterStats || null;
+  const pitcherPitchCount =
+    currentPitcherPitchCountFromGame(game) ??
+    (Number.isFinite(Number(display?.currentPitcherPitchCount))
+      ? Number(display.currentPitcherPitchCount)
+      : null);
 
   if (!enabled || (!hasLineups && !showCurrentBatter && !loadingFallback)) {
     return null;
@@ -170,11 +170,19 @@ export default function MlbLiveLineupPanel({ game, colors, teamForAbbr, enabled 
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 17 }}>
             {formatMlbPlayerBroadcastName(display.currentBatterName)}
           </Text>
+          <MlbCurrentBatterStatLines stats={batterStats} colors={colors} fontSize={12} marginTop={6} />
           {display.currentPitcherName ? (
             <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4 }}>
               {i18n.t("live.mlb.currentPitcher", {
                 defaultValue: "vs {{pitcher}}",
-                pitcher: formatMlbPlayerBroadcastName(display.currentPitcherName),
+                pitcher: `${formatMlbPlayerBroadcastName(display.currentPitcherName)}${
+                  pitcherPitchCount != null
+                    ? ` (${i18n.t("live.mlb.pitcherPitchCount", {
+                        defaultValue: "P:{{count}}",
+                        count: pitcherPitchCount,
+                      })})`
+                    : ""
+                }`,
               })}
             </Text>
           ) : null}
@@ -226,73 +234,5 @@ export default function MlbLiveLineupPanel({ game, colors, teamForAbbr, enabled 
         </Text>
       )}
     </View>
-  );
-}
-
-export function MlbCurrentBatterHint({ game, colors, variant = "compact", teamForAbbr }) {
-  if (!game?.isLive || !game?.currentBatterName) return null;
-
-  if (variant === "summary") {
-    const battingAbbr = resolveBattingTeamAbbr(game);
-    const battingTeam = battingAbbr && teamForAbbr ? teamForAbbr(battingAbbr) : null;
-
-    return (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
-          marginTop: 8,
-          paddingTop: 8,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-        }}
-      >
-        {battingAbbr ? (
-          <TeamLogoBadge
-            team={battingTeam || { sport: "MLB", abbreviation: battingAbbr }}
-            size={22}
-            colors={colors}
-          />
-        ) : (
-          <View
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 6,
-              backgroundColor: "rgba(220,38,38,0.12)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 12 }}>⚾</Text>
-          </View>
-        )}
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 10, letterSpacing: 0.4 }}>
-            {i18n.t("live.mlb.currentBatter", { defaultValue: "Frappeur au bâton" }).toUpperCase()}
-          </Text>
-          <Text style={{ color: colors.text, fontWeight: "800", fontSize: 13, marginTop: 1 }} numberOfLines={1}>
-            {formatMlbPlayerBroadcastName(game.currentBatterName)}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <Text
-      style={{
-        color: colors.text,
-        fontWeight: "700",
-        fontSize: 11,
-        textAlign: "right",
-        marginTop: 4,
-        maxWidth: 140,
-      }}
-      numberOfLines={2}
-    >
-      {formatMlbPlayerBroadcastName(game.currentBatterName)}
-    </Text>
   );
 }

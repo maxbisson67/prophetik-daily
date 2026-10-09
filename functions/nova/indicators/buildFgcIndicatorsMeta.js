@@ -62,7 +62,9 @@ export function buildFgcIndicatorsMeta(verifiedContext) {
             position: focusPlayer.position || null,
             isAwayTeam: focusPlayer.isAwayTeam === true,
             isHomeTeam: focusPlayer.isHomeTeam === true,
+            opposingTeamAbbr: focusPlayer.opposingTeamAbbr || null,
             seasonStats: focusPlayer.seasonStats || null,
+            statsSeasonId: focusPlayer.statsSeasonId || verifiedContext?.statsSeasonId || null,
             injury: focusPlayer.injury || null,
           }
         : null,
@@ -70,6 +72,9 @@ export function buildFgcIndicatorsMeta(verifiedContext) {
         homeAbbr: verifiedContext?.challenge?.homeAbbr || null,
         awayAbbr: verifiedContext?.challenge?.awayAbbr || null,
       },
+      statsUsesPreviousSeason: verifiedContext?.statsUsesPreviousSeason === true,
+      statsSeasonId: verifiedContext?.statsSeasonId || null,
+      calendarSeasonId: verifiedContext?.seasonId || null,
     };
   }
 

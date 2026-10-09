@@ -39,7 +39,9 @@ import {
 import FgcPlayerPickCard from "@src/firstGoal/FgcPlayerPickCard";
 import { shouldShowMlbBvpLine } from "@src/mlb/MlbDefiPlayerMeta";
 import { isPlayerUnavailable } from "@src/players/injuryDisplayHelpers";
-import { getPlayerSortValue } from "@src/players/seasonStatsHelpers";
+import { formatSeasonLabel, getPlayerSortValue } from "@src/players/seasonStatsHelpers";
+import { resolveFgcPlayerSortMeta } from "@src/firstGoal/fgcPlayerSortSeason";
+import useAppConfig from "@src/hooks/useAppConfig";
 import NovaCoachPlayerModal from "@src/nova/NovaCoachPlayerModal";
 
 /* ---------------- helpers ---------------- */
@@ -189,6 +191,7 @@ export default function FirstGoalPickScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { config: seasonConfig } = useAppConfig();
 
   const [challenge, setChallenge] = useState(null);
   const [players, setPlayers] = useState([]);
@@ -286,17 +289,22 @@ export default function FirstGoalPickScreen() {
     setPlayers([]);
     setSeasonPair(null);
 
+    const applyPlayerRows = (rows, pair) => {
+      if (cancelled) return;
+      rows.sort(byFullName);
+      setSeasonPair(pair);
+      setPlayers(rows);
+    };
+
     loadFgcPlayersProgressive({
       league,
       homeAbbr: home,
       awayAbbr: away,
       onRosterReady: (rows, pair) => {
-        if (cancelled) return;
-        rows.sort(byFullName);
-        setSeasonPair(pair);
-        setPlayers(rows);
-        setLoadingPlayers(false);
+        applyPlayerRows(rows, pair);
+        if (!cancelled) setLoadingPlayers(false);
       },
+      onStatsReady: applyPlayerRows,
     })
       .then(({ players: rows, seasonPair: pair }) => {
         if (cancelled) return;
@@ -581,6 +589,7 @@ export default function FirstGoalPickScreen() {
   const loading = loadingChallenge && !challenge;
 
   const activeSeasonPair = seasonPair || { current: "", previous: "" };
+  const challengeGameYmd = useMemo(() => lineupBeforeYmd(challenge), [challenge]);
   const lineupsAvailable = derived.league === "MLB" && hasUsableMlbLineups(mlbLineups);
   const lineupsProvisional = derived.league === "MLB" && isProvisionalMlbLineup(mlbLineups);
 
@@ -593,6 +602,18 @@ export default function FirstGoalPickScreen() {
       safeAbbr(challenge?.awayAbbr)
     );
   }, [players, mlbLineups, lineupsAvailable, challenge?.homeAbbr, challenge?.awayAbbr]);
+
+  const fgcSortMeta = useMemo(
+    () =>
+      resolveFgcPlayerSortMeta({
+        league: derived.league,
+        gameDateYmd: challengeGameYmd,
+        seasonPair: activeSeasonPair,
+        seasonConfig,
+        players: displayPlayers,
+      }),
+    [derived.league, challengeGameYmd, activeSeasonPair, seasonConfig, displayPlayers]
+  );
 
   const filteredPlayers = useMemo(() => {
     const t = safeAbbr(selectedTeam);
@@ -615,9 +636,10 @@ export default function FirstGoalPickScreen() {
         if (aSlot !== bSlot) return aSlot - bSlot;
       }
 
+      const sortOpts = { sortSeasonId: fgcSortMeta.sortSeasonId };
       const statDiff =
-        getPlayerSortValue(b, league, activeSeasonPair) -
-        getPlayerSortValue(a, league, activeSeasonPair);
+        getPlayerSortValue(b, league, activeSeasonPair, sortOpts) -
+        getPlayerSortValue(a, league, activeSeasonPair, sortOpts);
       if (statDiff !== 0) return statDiff;
 
       const aUnavailable = isPlayerUnavailable(a?.injury) ? 1 : 0;
@@ -635,6 +657,7 @@ export default function FirstGoalPickScreen() {
     derived.league,
     activeSeasonPair,
     lineupsAvailable,
+    fgcSortMeta.sortSeasonId,
   ]);
 
   const selectedTeamBvpNotice = useMemo(() => {
@@ -776,6 +799,7 @@ export default function FirstGoalPickScreen() {
           pendingPlayerId={savingPlayerId}
           league={derived.league}
           seasonPair={activeSeasonPair}
+          sortSeasonId={fgcSortMeta.sortSeasonId}
           lineupsAvailable={lineupsAvailable}
           lineupSideAvailable={hasLineupDataForTeam(
             mlbLineups,
@@ -796,6 +820,7 @@ export default function FirstGoalPickScreen() {
       colors,
       entry?.playerId,
       activeSeasonPair,
+      fgcSortMeta.sortSeasonId,
       bvpByPlayerId,
       bvpPitcherByPlayerId,
       lineupsAvailable,
@@ -825,9 +850,17 @@ export default function FirstGoalPickScreen() {
               ? i18n.t("firstGoal.pick.sortedByLineup", {
                   defaultValue: "Triés par ordre de frappe",
                 })
-              : i18n.t("firstGoal.pick.sortedByStats", {
-                  defaultValue: "Triés par stats saison en cours",
-                })}
+              : fgcSortMeta.sortUsesPreviousSeason
+                ? i18n.t("firstGoal.pick.sortedByPreviousSeasonStats", {
+                    defaultValue: "Triés par stats {{season}} (saison précédente)",
+                    season: formatSeasonLabel(
+                      derived.league,
+                      fgcSortMeta.sortSeasonId || activeSeasonPair.previous
+                    ),
+                  })
+                : i18n.t("firstGoal.pick.sortedByStats", {
+                    defaultValue: "Triés par stats saison en cours",
+                  })}
           </Text>
         ) : null}
 
@@ -885,6 +918,9 @@ export default function FirstGoalPickScreen() {
     lineupsProvisional,
     selectedTeamBvpNotice,
     lang,
+    fgcSortMeta.sortSeasonId,
+    fgcSortMeta.sortUsesPreviousSeason,
+    activeSeasonPair.previous,
   ]);
 
   if (loading) {

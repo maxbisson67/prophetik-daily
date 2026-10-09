@@ -125,7 +125,7 @@ export function formatSeasonLabel(league, seasonId) {
   const s = String(seasonId || "");
   if (L === "MLB") return s;
   if (!/^\d{8}$/.test(s)) return s;
-  return `${s.slice(0, 4)}-${s.slice(6, 8)}`;
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}`;
 }
 
 /** Seuil dynamique de qualification pour % et OPS (règle MLB : 3,1 PA par match d'équipe). */
@@ -310,9 +310,13 @@ export function getPlayerSeasonStatLines(player, league, seasonPair) {
   return lines;
 }
 
-export function getFgcPlayerStatChips(player, league, seasonPair) {
+export function getFgcPlayerStatChips(player, league, seasonPairOrSeasonId) {
   const L = String(league || "NHL").toUpperCase();
-  const stats = getSeasonStats(player?.statsBySeason, seasonPair?.current);
+  const seasonId =
+    typeof seasonPairOrSeasonId === "string" || typeof seasonPairOrSeasonId === "number"
+      ? String(seasonPairOrSeasonId)
+      : seasonPairOrSeasonId?.current;
+  const stats = getSeasonStats(player?.statsBySeason, seasonId);
   if (!stats || typeof stats !== "object") return [];
 
   if (L === "MLB") {
@@ -321,7 +325,7 @@ export function getFgcPlayerStatChips(player, league, seasonPair) {
     const rbi = Number(stats.rbi);
     const hr = Number(stats.homeRuns);
     const gp = Number(stats.gamesPlayed);
-    if (Number.isFinite(rbi)) chips.push({ key: "rbi", value: String(rbi), label: "RBI" });
+    if (Number.isFinite(rbi)) chips.push({ key: "rbi", value: String(rbi), label: "RBI", emphasize: true });
     if (Number.isFinite(hr)) chips.push({ key: "hr", value: String(hr), label: "HR" });
     if (stats.battingAverage) chips.push({ key: "avg", value: String(stats.battingAverage), label: "AVG" });
     else if (stats.ops) chips.push({ key: "ops", value: String(stats.ops), label: "OPS" });
@@ -336,7 +340,7 @@ export function getFgcPlayerStatChips(player, league, seasonPair) {
   const pts = Number(stats.points) || g + a;
   const gp = Number(stats.gamesPlayed) || 0;
   const chips = [
-    { key: "g", value: String(g), label: "G" },
+    { key: "g", value: String(g), label: "G", emphasize: true },
     { key: "a", value: String(a), label: "A" },
     { key: "pts", value: String(pts), label: "PTS" },
   ];
@@ -359,13 +363,35 @@ export function getFgcPlayerPreviousSeasonLine(player, league, seasonPair) {
   };
 }
 
-export function getPlayerSortValue(player, league, seasonPair) {
+/** Buts par match (NHL) à partir d'une ligne stats saison. */
+export function getNhlGoalsPerGameFromStats(stats) {
+  if (!stats || typeof stats !== "object") return 0;
+  const goals = Number(stats.goals) || 0;
+  const gp = Number(stats.gamesPlayed) || 0;
+  if (gp <= 0) return 0;
+  return goals / gp;
+}
+
+export function getPlayerSortValue(player, league, seasonPair, options = {}) {
+  const sortSeasonId = options?.sortSeasonId;
+  if (sortSeasonId) {
+    const L = String(league || "NHL").toUpperCase();
+    const stats = getSeasonStats(player?.statsBySeason, sortSeasonId);
+    if (!stats) return 0;
+    if (L === "MLB") return Number(stats.rbi) || 0;
+    return getNhlGoalsPerGameFromStats(stats);
+  }
+
   const L = String(league || "NHL").toUpperCase();
   const statsBySeason = player?.statsBySeason || {};
-  const primaryKey = L === "MLB" ? "rbi" : "goals";
   const currentStats = getSeasonStats(statsBySeason, seasonPair?.current);
   const previousStats = getSeasonStats(statsBySeason, seasonPair?.previous);
-  const current = Number(currentStats?.[primaryKey] ?? 0);
-  const previous = Number(previousStats?.[primaryKey] ?? 0);
-  return current > 0 ? current : previous;
+  if (L === "MLB") {
+    const current = Number(currentStats?.rbi ?? 0);
+    const previous = Number(previousStats?.rbi ?? 0);
+    return current > 0 ? current : previous;
+  }
+  const currentGpg = getNhlGoalsPerGameFromStats(currentStats);
+  const previousGpg = getNhlGoalsPerGameFromStats(previousStats);
+  return currentGpg > 0 ? currentGpg : previousGpg;
 }

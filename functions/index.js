@@ -83,6 +83,7 @@ export { finalizeSeasonCompetitions } from "./leaderboard/finalizeSeasonCompetit
 export { ascensionsCreate } from "./ascensions/ascensionsCreate.js";
 export { ascensionsTick } from "./ascensions/ascensionsTick.js";
 export { ascensionsDailyNotification } from "./ascensions/ascensionsDailyNotification.js";
+export { tsSignupReminder60 } from "./notifications/tsSignupReminder60.js";
 export { ascensionsNotifyOnCreate } from "./ascensions/ascensionsNotifyOnCreate.js";
 export { finalizeAscensionCycleWinners } from "./ascensions/finalizeAscensionCycleWinners.js";
 export { applyAscensionDailyBonus } from "./ascensions/applyAscensionDailyBonus.js";

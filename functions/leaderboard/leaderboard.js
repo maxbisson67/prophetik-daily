@@ -27,9 +27,9 @@ export const typeKey = (defiType) => {
 };
 
 /**
- * Règle TS (Trio) :
- * - finalPoints = cumul des stats réelles des picks
- * - potInc (Prophetik) = finalPoints (bonus quotidien séparé)
+ * Règle TS (Trio) — classement saison :
+ * - potInc = cumul stats NHL (finalPoints / livePoints) pour SOLO/DUO/TRIO agrégés
+ * - payout / bonus = cagnotte (crédits), pas la colonne TRIO du classement
  *
  * Rétrocompat : won si isWinner, bonus > 0 ou payout > 0.
  */
@@ -70,6 +70,54 @@ function gameDateFromAnyYmd(v) {
     return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
   }
   return ymd10(v);
+}
+
+function defiGameYmd(defi = {}) {
+  return gameDateFromAnyYmd(defi?.gameDate ?? defi?.gameYmd ?? defi?.gameDay);
+}
+
+function ymdInRange(ymd, from, to) {
+  const d = String(ymd || "").slice(0, 10);
+  if (!d || !from || !to) return false;
+  return d >= from && d <= to;
+}
+
+async function loadActiveGroupMemberUids(groupId) {
+  const gid = String(groupId || "").trim();
+  if (!gid) return [];
+  const snap = await db.collection("group_memberships").where("groupId", "==", gid).get();
+  const uids = new Set();
+  for (const doc of snap.docs) {
+    const data = doc.data() || {};
+    const status = String(data.status || "").toLowerCase();
+    if (status === "inactive" || data.active === false) continue;
+    const uid = String(data.uid || data.userId || data.participantId || "").trim();
+    if (uid) uids.add(uid);
+  }
+  return [...uids];
+}
+
+/** Défis TRIO du groupe dans la fenêtre (gameDate ou gameYmd, sans rater les Timestamp). */
+async function loadDefisForLeaderboardWindow({ groupId, from, to }) {
+  const [completedSnap, cancelledSnap] = await Promise.all([
+    db.collection("defis").where("groupId", "==", groupId).where("status", "==", "completed").get(),
+    db.collection("defis").where("groupId", "==", groupId).where("status", "==", "cancelled").get(),
+  ]);
+
+  const byId = new Map();
+  for (const doc of completedSnap.docs) {
+    const defi = doc.data() || {};
+    if (!ymdInRange(defiGameYmd(defi), from, to)) continue;
+    byId.set(doc.id, doc);
+  }
+  for (const doc of cancelledSnap.docs) {
+    const defi = doc.data() || {};
+    if (!ymdInRange(defiGameYmd(defi), from, to)) continue;
+    if (!tsDefiCountsForStats(defi)) continue;
+    byId.set(doc.id, doc);
+  }
+
+  return [...byId.values()];
 }
 
 function bundleHasScoredSlots(bundle = {}) {
@@ -394,28 +442,7 @@ export async function rebuildLeaderboardSeasonForGroupLogic({
   const totals = new Map();
 
   /* -------------------- 1) DEFIS: Standard + Ascension -------------------- */
-  const [defisCompletedSnap, defisCancelledSnap] = await Promise.all([
-    db
-      .collection("defis")
-      .where("groupId", "==", groupId)
-      .where("status", "==", "completed")
-      .where("gameDate", ">=", from)
-      .where("gameDate", "<=", to)
-      .get(),
-    db
-      .collection("defis")
-      .where("groupId", "==", groupId)
-      .where("status", "==", "cancelled")
-      .where("gameDate", ">=", from)
-      .where("gameDate", "<=", to)
-      .get(),
-  ]);
-
-  const defisSnapDocs = [
-    ...defisCompletedSnap.docs,
-    ...defisCancelledSnap.docs.filter((doc) => tsDefiCountsForStats(doc.data() || {})),
-  ];
-
+  const defisSnapDocs = await loadDefisForLeaderboardWindow({ groupId, from, to });
   const defisSnap = { docs: defisSnapDocs, size: defisSnapDocs.length };
 
   // ✅ summary global pour comparaison future avec moyenne des autres
@@ -436,7 +463,7 @@ const summary = {
     const defi = d.data() || {};
     const tKey = typeKey(defi?.type);
     const family = challengeFamily(defi);
-    const gameDate = ymd10(defi?.gameDate);
+    const gameDate = defiGameYmd(defi);
 
     const weekKey = weekKeyFromGameDate({ seasonId, fromYmd: from, gameDate });
     const monthKey = monthKeyFromGameDate(gameDate);
@@ -714,6 +741,11 @@ const summary = {
     }
   } catch {
     // optional subcollection
+  }
+
+  const rosterUids = await loadActiveGroupMemberUids(groupId);
+  for (const uid of rosterUids) {
+    if (!totals.has(uid)) totals.set(uid, makeEmptyAgg(uid));
   }
 
   const allUids = [...totals.keys()];

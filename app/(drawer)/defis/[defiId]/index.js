@@ -29,7 +29,14 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 
 import useEntitlement from "../../subscriptions/useEntitlement";
-import { getDefiRules, validatePicks } from "@src/defis/tiersRules";
+import {
+  getDefiRules,
+  rankExcludeTopForSlot,
+  usesRankSlotExclusion,
+  validatePicks,
+  validatePicksPartialBySlot,
+} from "@src/defis/tiersRules";
+import { getNhlPreviousSeasonId } from "@src/players/seasonStatsHelpers";
 
 import PlayerSelectModal from "./components/PlayerSelectModal";
 import PlayerPickerRow from "./components/PlayerPickerRow";
@@ -47,6 +54,12 @@ import Analytics from "@src/services/analytics";
 import { resolveDefiHeadshotUrl } from "@src/mlb/mlbPlayerAssets";
 import { useTeamStandingsLookup } from "@src/sports/useTeamStandingsLookup";
 import { enrichMlbPoolPlayers, poolHasEmbeddedMlbStats } from "@src/mlb/enrichMlbPoolPlayers";
+import {
+  enrichNhlPoolPlayers,
+  normalizeNhlPoolPlayersEmbedded,
+  poolHasEmbeddedNhlStats,
+} from "@src/nhl/enrichNhlPoolPlayers";
+import { getNhlCalendarSeasonIdFromGameYmd } from "@src/defis/nhlPoolRankSeason";
 import NovaCoachPlayerModal from "@src/nova/NovaCoachPlayerModal";
 import { navigateToAccueilChallenge } from "@src/defis/results/navigateToMesResultats";
 
@@ -141,9 +154,13 @@ function tierKeyOfPlayer(p) {
 }
 
 // ✅ Ne bloque pas tant qu'il manque des picks.
-// Bloque seulement si on dépasse une limite de tier.
-function validatePicksPartial(chosen = [], rules, i18n) {
+// Bloque seulement si on dépasse une limite de tier (ou slot rang pour le trio 3x3).
+function validatePicksPartial(chosen = [], rules, i18n, defiType) {
   if (!rules) return null;
+
+  if (usesRankSlotExclusion(defiType)) {
+    return validatePicksPartialBySlot(chosen, defiType, i18n);
+  }
 
   const maxT1 = Number(rules?.T1 ?? 0);
   const maxT2 = Number(rules?.T2 ?? 0);
@@ -206,11 +223,13 @@ export default function DefiParticipationScreen() {
   // playerPool figé
   const [players, setPlayers] = useState([]);
   const [loadingPool, setLoadingPool] = useState(true);
+  const [poolStatsEpoch, setPoolStatsEpoch] = useState(0);
 
   const [selected, setSelected] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerIndex, setPickerIndex] = useState(0);
   const [pickerTier, setPickerTier] = useState(null); // ✅ "T1" | "T2" | "T3" | null
+  const [pickerRankExclude, setPickerRankExclude] = useState(null); // ✅ 0 | 10 | 20 | null
 
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -291,7 +310,7 @@ export default function DefiParticipationScreen() {
   const showNovaCoach = defiSport === "MLB" || defiSport === "NHL";
 
   const { formatLine: formatStandingsLine } = useTeamStandingsLookup(
-    defiSport === "MLB" ? "MLB" : null
+    defiSport === "MLB" || defiSport === "NHL" ? defiSport : null
   );
 
   const headshotUrl = useCallback(
@@ -347,46 +366,106 @@ export default function DefiParticipationScreen() {
 
     let cancelled = false;
     let enrichGen = 0;
+    let enrichDebounceTimer = null;
     setLoadingPool(true);
+
+    const runMlbPoolEnrich = async (list, seasonId, myGen) => {
+      try {
+        const enriched = await enrichMlbPoolPlayers(list, seasonId);
+        if (cancelled || myGen !== enrichGen) return;
+        setPlayers((prev) => (isEqual(prev, enriched) ? prev : enriched));
+      } catch (e) {
+        if (!cancelled && myGen === enrichGen) {
+          setError(e);
+        }
+      }
+    };
+
+    const runNhlPoolEnrich = async (list, calendarSeasonId, previousSeasonId, myGen) => {
+      if (poolHasEmbeddedNhlStats(list, calendarSeasonId, previousSeasonId)) {
+        const normalized = normalizeNhlPoolPlayersEmbedded(list, {
+          currentSeasonId: calendarSeasonId,
+          previousSeasonId,
+        });
+        if (cancelled || myGen !== enrichGen) return;
+        setPlayers(normalized);
+        setPoolStatsEpoch((n) => n + 1);
+        return;
+      }
+
+      try {
+        const enriched = await enrichNhlPoolPlayers(list, {
+          currentSeasonId: calendarSeasonId,
+          previousSeasonId,
+          onProgress: (partial) => {
+            if (cancelled || myGen !== enrichGen) return;
+            setPlayers(partial);
+            setPoolStatsEpoch((n) => n + 1);
+          },
+        });
+        if (cancelled || myGen !== enrichGen) return;
+        setPlayers(enriched);
+        setPoolStatsEpoch((n) => n + 1);
+      } catch (e) {
+        if (!cancelled && myGen === enrichGen) {
+          setError(e);
+        }
+      }
+    };
 
     const unsub = firestore()
       .collection(`defis/${defi.id}/playerPool`)
       .orderBy("rank")
       .onSnapshot(
-        async (snap) => {
+        (snap) => {
           const list = [];
           snap.forEach((d) => list.push(d.data()));
 
-          if (defiSport !== "MLB") {
-            if (!cancelled) {
-              setPlayers((prev) => (isEqual(prev, list) ? prev : list));
-              setLoadingPool(false);
-            }
-            return;
-          }
-
           const seasonId = defi?.poolSeasonId;
           const myGen = ++enrichGen;
-          const hasEmbeddedStats = poolHasEmbeddedMlbStats(list);
+
+          if (defiSport === "NHL") {
+            const gameDate = String(defi?.gameDate || defi?.poolGameDate || "").slice(0, 10);
+            const calendarSeasonId =
+              seasonId ||
+              (gameDate ? getNhlCalendarSeasonIdFromGameYmd(gameDate) : null);
+            if (!calendarSeasonId) {
+              if (!cancelled) setLoadingPool(false);
+              return;
+            }
+
+            const previousSeasonId =
+              defi?.poolPreviousSeasonId || getNhlPreviousSeasonId(calendarSeasonId);
+
+            if (!cancelled) {
+              setPlayers(list);
+              setLoadingPool(false);
+            }
+
+            if (enrichDebounceTimer) clearTimeout(enrichDebounceTimer);
+            enrichDebounceTimer = setTimeout(() => {
+              enrichDebounceTimer = null;
+              void runNhlPoolEnrich(list, calendarSeasonId, previousSeasonId, myGen);
+            }, 350);
+            return;
+          }
 
           if (!cancelled) {
             setPlayers((prev) => (isEqual(prev, list) ? prev : list));
             setLoadingPool(false);
           }
 
+          if (defiSport !== "MLB") {
+            return;
+          }
+
+          const hasEmbeddedStats = poolHasEmbeddedMlbStats(list);
+
           if (hasEmbeddedStats || !seasonId) {
             return;
           }
 
-          try {
-            const enriched = await enrichMlbPoolPlayers(list, seasonId);
-            if (cancelled || myGen !== enrichGen) return;
-            setPlayers((prev) => (isEqual(prev, enriched) ? prev : enriched));
-          } catch (e) {
-            if (!cancelled && myGen === enrichGen) {
-              setError(e);
-            }
-          }
+          void runMlbPoolEnrich(list, seasonId, myGen);
         },
         (e) => {
           setError(e);
@@ -396,9 +475,10 @@ export default function DefiParticipationScreen() {
 
     return () => {
       cancelled = true;
+      if (enrichDebounceTimer) clearTimeout(enrichDebounceTimer);
       unsub();
     };
-  }, [defi?.id, defi?.poolSeasonId, defiSport]);
+  }, [defi?.id, defi?.poolSeasonId, defi?.poolPreviousSeasonId, defiSport]);
 
   const playersSorted = useMemo(() => {
     const arr = Array.isArray(players) ? players.slice() : [];
@@ -450,14 +530,19 @@ export default function DefiParticipationScreen() {
   );
 
   const openPicker = useCallback(
-  (index) => {
-    const forcedTier = tierForSlotIndex(index, defi?.type);
-    setPickerIndex(index);
-    setPickerTier(forcedTier);
-    setPickerOpen(true);
-    Keyboard.dismiss();
-  },
-  [defi?.type]
+    (index) => {
+      setPickerIndex(index);
+      if (usesRankSlotExclusion(defi?.type)) {
+        setPickerTier(null);
+        setPickerRankExclude(rankExcludeTopForSlot(index, defi?.type));
+      } else {
+        setPickerRankExclude(null);
+        setPickerTier(tierForSlotIndex(index, defi?.type));
+      }
+      setPickerOpen(true);
+      Keyboard.dismiss();
+    },
+    [defi?.type]
   );
 
   const handlePick = useCallback(
@@ -479,7 +564,7 @@ export default function DefiParticipationScreen() {
         next[pickerIndex] = p;
 
         const chosenHydrated = next.filter(Boolean).map((pl) => playerById[String(pl.playerId)] || pl);
-        const err = validatePicksPartial(chosenHydrated, rulesNow, i18n);
+        const err = validatePicksPartial(chosenHydrated, rulesNow, i18n, defi?.type);
         if (err) {
           Alert.alert(i18n.t("defi.rules.title", { defaultValue: "Règles de tiers" }), err, [{ text: i18n.t("common.ok") }]);
           return prev;
@@ -488,6 +573,7 @@ export default function DefiParticipationScreen() {
         if (next.filter(Boolean).length === maxChoices) {
           setPickerOpen(false);
           setPickerTier(null);
+          setPickerRankExclude(null);
         }
 
         return next;
@@ -561,7 +647,7 @@ export default function DefiParticipationScreen() {
         const rulesNow = getDefiRules(defi?.type);
         const chosenHydrated = selectedHydrated.filter(Boolean);
 
-        const err = validatePicks(chosenHydrated, rulesNow, i18n);
+        const err = validatePicks(chosenHydrated, rulesNow, i18n, defi?.type);
         if (err) {
           Alert.alert(i18n.t("defi.rules.title", { defaultValue: "Règles de tiers" }), err, [
             { text: i18n.t("common.ok") },
@@ -734,7 +820,6 @@ export default function DefiParticipationScreen() {
           <DefiHeroCard
             title={i18n.t("defi.infoCard.trioTitle", { defaultValue: "Trio du jour" })}
             gameDayStr={gameDayStr || "—"}
-            pot={defi.pot ?? 0}
           />
 
           <SectionCard title={null}>
@@ -750,7 +835,9 @@ export default function DefiParticipationScreen() {
                   headshotUrl={headshotUrl}
                   teamLogo={teamLogo}
                   sport={defiSport}
-                  formatStandingsLine={defiSport === "MLB" ? formatStandingsLine : null}
+                  formatStandingsLine={
+                    defiSport === "MLB" || defiSport === "NHL" ? formatStandingsLine : null
+                  }
                   showNovaButton={showNovaCoach}
                   onNovaPress={setNovaPlayer}
                 />
@@ -828,6 +915,7 @@ export default function DefiParticipationScreen() {
         onClose={() => {
           setPickerOpen(false);
           setPickerTier(null);
+          setPickerRankExclude(null);
         }}
         options={playersSorted}
         onPick={handlePick}
@@ -836,10 +924,33 @@ export default function DefiParticipationScreen() {
         teamLogo={teamLogo}
         headshotUrl={headshotUrl}
         forcedTier={pickerTier}
+        rankExcludeTop={pickerRankExclude}
         pickerSlotIndex={pickerIndex}
         sport={defiSport}
-        formatStandingsLine={defiSport === "MLB" ? formatStandingsLine : null}
+        formatStandingsLine={
+          defiSport === "MLB" || defiSport === "NHL" ? formatStandingsLine : null
+        }
         loading={loadingPool}
+        poolStatsEpoch={poolStatsEpoch}
+        nhlDisplaySeasonIds={
+          defiSport === "NHL"
+            ? (() => {
+                const gameDate = String(defi?.gameDate || defi?.poolGameDate || "").slice(
+                  0,
+                  10
+                );
+                const current =
+                  defi?.poolSeasonId ||
+                  (gameDate ? getNhlCalendarSeasonIdFromGameYmd(gameDate) : "");
+                if (!current) return null;
+                return {
+                  current,
+                  previous:
+                    defi?.poolPreviousSeasonId || getNhlPreviousSeasonId(current),
+                };
+              })()
+            : null
+        }
       />
 
       <LoadingOverlay visible={saving} text={i18n.t("defi.actions.primarySaving")} />

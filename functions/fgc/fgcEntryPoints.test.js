@@ -3,19 +3,22 @@ import assert from "node:assert/strict";
 import { resolveFgcEntryPoints, isFgcEntryWinner } from "./fgcEntryPoints.js";
 import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
 
-test("resolveFgcEntryPoints — gagnant avec vieux payout 5 → 10", () => {
-  const pts = resolveFgcEntryPoints(
-    { uid: "ai", won: true, payout: 5, points: 5 },
-    { winnersPreviewUids: [] }
-  );
-  assert.equal(pts, FGC_WIN_POINTS);
-  assert.equal(FGC_WIN_POINTS, 10);
+test("resolveFgcEntryPoints — plancher SOLO = FGC_WIN_POINTS", () => {
+  assert.equal(FGC_WIN_POINTS, 5);
 });
 
 test("resolveFgcEntryPoints — gagnant sans payout utilise le plancher", () => {
   const pts = resolveFgcEntryPoints(
     { uid: "u1", won: true },
     { winnersPreviewUids: ["u1"] }
+  );
+  assert.equal(pts, 5);
+});
+
+test("resolveFgcEntryPoints — conserve un vieux crédit à 10 pts", () => {
+  const pts = resolveFgcEntryPoints(
+    { uid: "ai", won: true, payout: 10, points: 10 },
+    { winnersPreviewUids: [] }
   );
   assert.equal(pts, 10);
 });

@@ -18,8 +18,7 @@ import {
   resolveFgcHideOthersPicks,
   resolveFgcRevealTimeLabel,
 } from "@src/firstGoal/fgcChallengeUtils";
-import { resolveFgcEffectiveResult } from "@src/firstGoal/fgcMutualizedGameUtils";
-import useFgcMutualizedGame from "@src/firstGoal/useFgcMutualizedGame";
+import useFgcEffectiveResult from "@src/firstGoal/useFgcEffectiveResult";
 import FgcParticipantsList from "@src/defis/results/FgcParticipantsList";
 
 export default function FgcParticipantsModal({
@@ -32,8 +31,7 @@ export default function FgcParticipantsModal({
   matchTask = null,
   colors,
 }) {
-  const { data: mutualizedGame } = useFgcMutualizedGame(challenge, { enabled: visible });
-  const effectiveResult = resolveFgcEffectiveResult(challenge, mutualizedGame);
+  const { effectiveResult } = useFgcEffectiveResult(challenge, { enabled: visible });
   const winnerPlayerId = getFgcResultPlayerId(challenge);
   const winnerName = effectiveResult?.playerName || null;
   const winnerTeam = effectiveResult?.teamAbbr || null;

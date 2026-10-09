@@ -75,6 +75,19 @@ export default function NotificationPrefsSection({ colors }) {
       <PrefRow
         colors={colors}
         disabled={disabled}
+        label={i18n.t("settings.notifications.tsSignupReminder", {
+          defaultValue: "Rappel inscription TRIO",
+        })}
+        hint={i18n.t("settings.notifications.tsSignupReminderHint", {
+          defaultValue: "1 h avant la deadline si tu n'es pas encore inscrit au Trio du jour.",
+        })}
+        value={prefs[NOTIFICATION_PREF_KEYS.TS_SIGNUP_REMINDER] !== false}
+        onValueChange={(v) => setPref(NOTIFICATION_PREF_KEYS.TS_SIGNUP_REMINDER, v)}
+      />
+
+      <PrefRow
+        colors={colors}
+        disabled={disabled}
         label={i18n.t("settings.notifications.tpExactScore", {
           defaultValue: "Prédire l'issue des matchs",
         })}

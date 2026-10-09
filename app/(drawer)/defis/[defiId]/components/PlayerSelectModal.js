@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
@@ -26,6 +27,12 @@ import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 
 import TeamMetaBadge from "./TeamMetaBadge"; // ✅ Rank: 2ième, +/-: 28
+import { formatSeasonLabel } from "@src/players/seasonStatsHelpers";
+import {
+  NhlOpponentMatchupLine,
+  resolveNhlOpponentAbbr,
+} from "@src/nhl/NhlDefiPlayerMeta";
+import { normalizeNhlSeasonStatRow } from "@src/nhl/nhlSeasonStatDisplay";
 
 function PlayerTeamLogo({ teamAbbr, sport, teamLogo, colors, size = 18 }) {
   const abbr = String(teamAbbr || "").toUpperCase();
@@ -77,6 +84,38 @@ function shortPlayerName(fullName = "") {
   return `${first.slice(0, 1).toUpperCase()}. ${last}`;
 }
 
+function normalizePlayerSearchText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function playerMatchesSearchQuery(player, queryRaw) {
+  const query = normalizePlayerSearchText(queryRaw);
+  if (!query) return true;
+
+  const name = normalizePlayerSearchText(player?.fullName);
+  const team = normalizePlayerSearchText(player?.teamAbbr);
+  const pid = normalizePlayerSearchText(player?.playerId);
+
+  if (name.includes(query)) return true;
+  if (team.includes(query)) return true;
+  if (pid.includes(query)) return true;
+
+  const parts = String(player?.fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    const lastFirst = normalizePlayerSearchText(`${parts[parts.length - 1]} ${parts[0]}`);
+    if (lastFirst.includes(query)) return true;
+  }
+
+  return false;
+}
+
 function mlbSeasonPoints(p) {
   const stored = num(p?.points);
   if (stored > 0) return stored;
@@ -100,10 +139,13 @@ export default function PlayerSelectModal({
   teamLogo,
   headshotUrl,
   forcedTier = null,
+  rankExcludeTop = null,
   pickerSlotIndex = 0,
   sport = "NHL",
   formatStandingsLine = null,
   loading = false,
+  poolStatsEpoch = 0,
+  nhlDisplaySeasonIds = null,
 }) {
   const { colors } = useTheme();
 
@@ -116,11 +158,86 @@ export default function PlayerSelectModal({
 
   const [tierFilter, setTierFilter] = useState("T1");
   const [sortKey, setSortKey] = useState(defaultSortKey);
+  const [nhlShowPreviousSeason, setNhlShowPreviousSeason] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const usesRankExclusion = Number.isFinite(Number(rankExcludeTop)) && Number(rankExcludeTop) >= 0;
+
+  const nhlCurrentSeasonId = String(nhlDisplaySeasonIds?.current || "");
+  const nhlPreviousSeasonId = String(nhlDisplaySeasonIds?.previous || "");
+
+  const nhlStatsToggleVisible =
+    !isMlbSport && Boolean(nhlCurrentSeasonId && nhlPreviousSeasonId);
+
+  const nhlActiveDisplaySeasonId = useMemo(() => {
+    if (!nhlStatsToggleVisible) return null;
+    return nhlShowPreviousSeason ? nhlPreviousSeasonId : nhlCurrentSeasonId;
+  }, [
+    nhlStatsToggleVisible,
+    nhlShowPreviousSeason,
+    nhlCurrentSeasonId,
+    nhlPreviousSeasonId,
+  ]);
+
+  function readStatsBySeasonRow(player, seasonId) {
+    const map = player?.statsBySeason;
+    if (!map || !seasonId) return null;
+    const sid = String(seasonId);
+    if (map[sid] != null && typeof map[sid] === "object") return map[sid];
+    const alt = map[Number(sid)];
+    if (alt != null && typeof alt === "object") return alt;
+    return null;
+  }
+
+  const emptyNhlSeasonStats = {
+    points: 0,
+    goals: 0,
+    assists: 0,
+    gamesPlayed: 0,
+    pointsPerGame: 0,
+  };
+
+  function resolveNhlDisplayStats(player) {
+    if (!player) return null;
+    const sid = nhlActiveDisplaySeasonId;
+
+    if (sid) {
+      const row = readStatsBySeasonRow(player, sid);
+      if (row) return normalizeNhlSeasonStatRow(row);
+      if (nhlStatsToggleVisible && sid === nhlCurrentSeasonId) {
+        return emptyNhlSeasonStats;
+      }
+      if (nhlStatsToggleVisible && sid === nhlPreviousSeasonId) {
+        return readStatsBySeasonRow(player, nhlPreviousSeasonId) || {
+          points: num(player?.points),
+          pointsPerGame: num(player?.pointsPerGame),
+          goals: num(player?.goals),
+          assists: num(player?.assists),
+          gamesPlayed: num(player?.gamesPlayed),
+        };
+      }
+    }
+
+    return {
+      points: num(player?.points),
+      pointsPerGame: num(player?.pointsPerGame),
+      goals: num(player?.goals),
+      assists: num(player?.assists),
+      gamesPlayed: num(player?.gamesPlayed),
+    };
+  }
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setSearchQuery("");
+      return;
+    }
 
     setSortKey(defaultSortKey);
+    setNhlShowPreviousSeason(false);
+    setSearchQuery("");
+
+    if (usesRankExclusion) return;
 
     const ft = String(forcedTier || "").toUpperCase();
     if (ft === "T1" || ft === "T2" || ft === "T3") {
@@ -128,15 +245,11 @@ export default function PlayerSelectModal({
     } else {
       setTierFilter("T1");
     }
-  }, [visible, forcedTier, defaultSortKey]);
+  }, [visible, forcedTier, defaultSortKey, usesRankExclusion]);
 
   const chosenSet = useMemo(() => new Set((alreadyChosenIds || []).map((x) => String(x))), [
     JSON.stringify(alreadyChosenIds || []),
   ]);
-
-  useEffect(() => {
-    if (!isMlbSport && isFree && sortKey === "ppg") setSortKey("points");
-  }, [isMlbSport, isFree, sortKey]);
 
   function getStatLabel() {
     if (isMlbSport) {
@@ -154,7 +267,9 @@ export default function PlayerSelectModal({
       }
       return i18n.t("defi.playerSelect.statPoints", { defaultValue: "PTS" });
     }
-    if (sortKey === "ppg" && !isFree) return "PPG";
+    if (sortKey === "ppg") {
+      return i18n.t("defi.playerSelect.statPpgShort", { defaultValue: "Moy." });
+    }
     return "PTS";
   }
 
@@ -165,8 +280,18 @@ export default function PlayerSelectModal({
       if (sortKey === "runs") return String(Math.round(num(p?.runs)));
       return String(Math.round(mlbSeasonPoints(p)));
     }
-    if (sortKey === "ppg" && !isFree) return num(p?.pointsPerGame).toFixed(2);
-    return String(Math.round(num(p?.points)));
+    if (sortKey === "ppg") {
+      const st = resolveNhlDisplayStats(p);
+      let ppg = num(st?.pointsPerGame);
+      if (ppg <= 0) {
+        const gp = num(st?.gamesPlayed);
+        const pts = num(st?.points);
+        if (gp > 0) ppg = pts / gp;
+      }
+      return ppg > 0 ? ppg.toFixed(2) : "0.00";
+    }
+    const st = resolveNhlDisplayStats(p);
+    return String(Math.round(num(st?.points ?? p?.points)));
   }
 
   function sortComparator(a, b) {
@@ -177,8 +302,24 @@ export default function PlayerSelectModal({
       if (sortKey === "runs") return num(b.runs) - num(a.runs);
     }
 
-    if (sortKey === "points") return num(b.points) - num(a.points);
-    if (sortKey === "ppg" && !isFree) return num(b.pointsPerGame) - num(a.pointsPerGame);
+    if (sortKey === "points") {
+      const bp = num(resolveNhlDisplayStats(b)?.points ?? b.points);
+      const ap = num(resolveNhlDisplayStats(a)?.points ?? a.points);
+      return bp - ap;
+    }
+    if (sortKey === "ppg") {
+      const ppgOf = (pl) => {
+        const st = resolveNhlDisplayStats(pl);
+        let ppg = num(st?.pointsPerGame ?? pl?.pointsPerGame);
+        if (ppg <= 0) {
+          const gp = num(st?.gamesPlayed ?? pl?.gamesPlayed);
+          const pts = num(st?.points ?? pl?.points);
+          if (gp > 0) ppg = pts / gp;
+        }
+        return ppg;
+      };
+      return ppgOf(b) - ppgOf(a);
+    }
 
     const ra = num(a.rank ?? 999999);
     const rb = num(b.rank ?? 999999);
@@ -188,10 +329,42 @@ export default function PlayerSelectModal({
 
   const filtered = useMemo(() => {
     const base = Array.isArray(options) ? options.slice() : [];
-    let list = base.filter((p) => String(p.tier || "").toUpperCase() === tierFilter);
+    let list;
+
+    if (usesRankExclusion) {
+      const excludeTop = Number(rankExcludeTop);
+      if (excludeTop <= 0) {
+        list = base.slice();
+      } else {
+        list = base.filter((p) => {
+          const rank = num(p?.rank);
+          return rank <= 0 || rank > excludeTop;
+        });
+      }
+    } else {
+      list = base.filter((p) => String(p.tier || "").toUpperCase() === tierFilter);
+    }
+
     list.sort(sortComparator);
+
+    const q = String(searchQuery || "").trim();
+    if (q) {
+      list = list.filter((p) => playerMatchesSearchQuery(p, q));
+    }
+
     return list;
-  }, [options, tierFilter, sortKey, isFree, isMlbSport]);
+  }, [
+    options,
+    tierFilter,
+    sortKey,
+    isFree,
+    isMlbSport,
+    usesRankExclusion,
+    rankExcludeTop,
+    nhlActiveDisplaySeasonId,
+    poolStatsEpoch,
+    searchQuery,
+  ]);
 
   const mlbSortTabs = useMemo(
     () => [
@@ -223,7 +396,29 @@ export default function PlayerSelectModal({
     });
   }, [isMlbSport]);
 
-  const mlbSelectionHint = useMemo(() => {
+  const selectionHint = useMemo(() => {
+    if (usesRankExclusion) {
+      const excludeTop = Number(rankExcludeTop);
+      const hintBody =
+        excludeTop <= 0
+          ? i18n.t("defi.playerSelect.hintAll", {
+              defaultValue: "Sélectionne un joueur parmi tous les choix disponibles.",
+            })
+          : excludeTop === 10
+          ? i18n.t("defi.playerSelect.hintExcludeTop10", {
+              defaultValue: "Sélectionne un joueur hors du top 10.",
+            })
+          : i18n.t("defi.playerSelect.hintExcludeTop20", {
+              defaultValue: "Sélectionne un joueur hors du top 20.",
+            });
+
+      return i18n.t("defi.playerSelect.choiceHint", {
+        index: Number(pickerSlotIndex) + 1,
+        hint: hintBody,
+        defaultValue: `Choix ${Number(pickerSlotIndex) + 1} : ${hintBody}`,
+      });
+    }
+
     if (!isMlbSport) return null;
 
     const tier = String(forcedTier || tierFilter || "").toUpperCase();
@@ -241,7 +436,7 @@ export default function PlayerSelectModal({
       hint: hintBody,
       defaultValue: `Choix ${Number(pickerSlotIndex) + 1} : ${hintBody}`,
     });
-  }, [isMlbSport, forcedTier, tierFilter, pickerSlotIndex]);
+  }, [usesRankExclusion, rankExcludeTop, isMlbSport, forcedTier, tierFilter, pickerSlotIndex]);
 
   function Chip({ label, active, onPress, locked }) {
     const tierStyles = {
@@ -339,7 +534,22 @@ export default function PlayerSelectModal({
             </TouchableOpacity>
           </View>
 
-          {mlbSelectionHint ? (
+          {nhlStatsToggleVisible ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              <Chip
+                label={formatSeasonLabel("NHL", nhlCurrentSeasonId)}
+                active={!nhlShowPreviousSeason}
+                onPress={() => setNhlShowPreviousSeason(false)}
+              />
+              <Chip
+                label={formatSeasonLabel("NHL", nhlPreviousSeasonId)}
+                active={nhlShowPreviousSeason}
+                onPress={() => setNhlShowPreviousSeason(true)}
+              />
+            </View>
+          ) : null}
+
+          {selectionHint ? (
             <Text
               style={{
                 color: colors.subtext,
@@ -348,7 +558,7 @@ export default function PlayerSelectModal({
                 marginBottom: mlbStatLegend ? 6 : 10,
               }}
             >
-              {mlbSelectionHint}
+              {selectionHint}
             </Text>
           ) : null}
 
@@ -365,6 +575,50 @@ export default function PlayerSelectModal({
               {mlbStatLegend}
             </Text>
           ) : null}
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+              paddingHorizontal: 10,
+              paddingVertical: Platform.OS === "ios" ? 10 : 8,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card2,
+            }}
+          >
+            <Ionicons name="search" size={18} color={colors.subtext} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={i18n.t("defi.playerSelect.searchPlaceholder", {
+                defaultValue: "Rechercher un joueur…",
+              })}
+              placeholderTextColor={colors.subtext}
+              autoCorrect={false}
+              autoCapitalize="words"
+              returnKeyType="search"
+              clearButtonMode={Platform.OS === "ios" ? "while-editing" : "never"}
+              style={{
+                flex: 1,
+                color: colors.text,
+                fontSize: 15,
+                fontWeight: "600",
+                paddingVertical: 0,
+              }}
+            />
+            {searchQuery.trim() && Platform.OS !== "ios" ? (
+              <TouchableOpacity
+                onPress={() => setSearchQuery("")}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={20} color={colors.subtext} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
           {/* Filters */}
           <View style={{ gap: 10, marginBottom: 10 }}>
@@ -413,17 +667,58 @@ export default function PlayerSelectModal({
                   })}
                 </View>
               ) : (
-                <>
-                  <Chip label="Points" active={sortKey === "points"} onPress={() => setSortKey("points")} />
-                  {!isFree ? (
-                    <Chip
-                      label="Points par partie"
-                      active={sortKey === "ppg"}
-                      onPress={() => setSortKey("ppg")}
-                      locked={!isPro}
-                    />
-                  ) : null}
-                </>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flex: 1,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    backgroundColor: colors.card2,
+                  }}
+                >
+                  {[
+                    {
+                      value: "points",
+                      label: i18n.t("defi.playerSelect.sortPoints", { defaultValue: "Points" }),
+                    },
+                    {
+                      value: "ppg",
+                      label: i18n.t("defi.playerSelect.sortPpg", {
+                        defaultValue: "Moy. / match",
+                      }),
+                    },
+                  ].map((tab) => {
+                    const active = sortKey === tab.value;
+                    return (
+                      <TouchableOpacity
+                        key={tab.value}
+                        onPress={() => setSortKey(tab.value)}
+                        activeOpacity={0.85}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          paddingHorizontal: 4,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: active ? colors.primary : "transparent",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: active ? "#fff" : colors.subtext,
+                            fontWeight: "900",
+                            fontSize: 11,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {tab.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               )}
             </View>
           </View>
@@ -448,9 +743,21 @@ export default function PlayerSelectModal({
           ) : (
           <FlatList
             data={filtered}
+            extraData={`${sortKey}|${nhlActiveDisplaySeasonId}|${nhlShowPreviousSeason}|${poolStatsEpoch}|${searchQuery}`}
             keyExtractor={(item, idx) => String(item?.playerId ?? item?.id ?? `player-${idx}`)}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 24 }}
+            contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
+            ListEmptyComponent={
+              !loading && String(searchQuery || "").trim() ? (
+                <View style={{ paddingVertical: 28, paddingHorizontal: 12, alignItems: "center" }}>
+                  <Text style={{ color: colors.subtext, fontWeight: "700", textAlign: "center" }}>
+                    {i18n.t("defi.playerSelect.searchNoResults", {
+                      defaultValue: "Aucun joueur ne correspond à ta recherche.",
+                    })}
+                  </Text>
+                </View>
+              ) : null
+            }
             initialNumToRender={20}
             maxToRenderPerBatch={20}
             updateCellsBatchingPeriod={50}
@@ -461,9 +768,9 @@ export default function PlayerSelectModal({
               const isChosen = pid && chosenSet.has(pid);
 
               const team = String(item?.teamAbbr || "").toUpperCase();
-              const opp = String(item?.matchup?.opponentAbbr || "").toUpperCase();
               const isMlb = isMlbDefiPlayer(item, sport);
               const oppAbbr = resolveMlbOpponentAbbr(item);
+              const nhlOppAbbr = resolveNhlOpponentAbbr(item);
 
               const injuryStatus = String(item?.injury?.status || "").toLowerCase();
               const isOut = injuryStatus === "out";
@@ -559,17 +866,15 @@ export default function PlayerSelectModal({
                             </Text>
 
                             <InjuryIcon injury={item?.injury} size={16} />
-
-                            {!isFree && !!opp && teamLogo ? (
-                              <>
-                                <Text style={{ color: colors.subtext, fontWeight: "900" }}>@</Text>
-                                <Image source={teamLogo(opp)} style={{ width: 16, height: 16 }} />
-                              </>
-                            ) : null}
                           </View>
 
-                          {!isFree && item?.matchup ? (
-                            <View style={{ marginTop: 6 }}>
+                          {item?.matchup && nhlOppAbbr ? (
+                            <View style={{ marginTop: 6, gap: 4 }}>
+                              <NhlOpponentMatchupLine
+                                opponentAbbr={nhlOppAbbr}
+                                colors={colors}
+                                formatStandingsLine={formatStandingsLine}
+                              />
                               <TeamMetaBadge
                                 compact
                                 rankOverall={oppRankOverall}

@@ -18,10 +18,7 @@ import {
   resolveFgcHideOthersPicks,
   resolveFgcRevealTimeLabel,
 } from "@src/firstGoal/fgcChallengeUtils";
-import {
-  resolveFgcEffectiveResult,
-} from "@src/firstGoal/fgcMutualizedGameUtils";
-import useFgcMutualizedGame from "@src/firstGoal/useFgcMutualizedGame";
+import useFgcEffectiveResult from "@src/firstGoal/useFgcEffectiveResult";
 import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
 import { MATCH_TASK_STATES, resolveFgcMatchStatus } from "@src/defis/match/matchTaskStatus";
 import {
@@ -134,8 +131,7 @@ export default function FgcResultDetailBlock({
   const challenge = item?.raw || {};
   const challengeId = String(item?.id || challenge?.id || "");
   const challengeLeague = getFgcLeague(challenge);
-  const { data: mutualizedGame } = useFgcMutualizedGame(challenge);
-  const effectiveResult = resolveFgcEffectiveResult(challenge, mutualizedGame);
+  const { effectiveResult, mutualizedGame } = useFgcEffectiveResult(challenge);
   const winnerPlayerId = getFgcResultPlayerId(challenge);
   const winnerName = effectiveResult?.playerName || null;
   const winnerTeam = effectiveResult?.teamAbbr || null;

@@ -1,10 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, ScrollView } from "react-native";
 import i18n from "@src/i18n/i18n";
 
-const INNING_COL_W = 28;
-const TOTAL_COL_W = 30;
-const TEAM_COL_W = 40;
+const MIN_INNING_COL_W = 28;
+const TOTAL_COL_W = 32;
+const TEAM_COL_W = 44;
+const VISIBLE_INNING_COLS = 5;
+const HEADER_H = 18;
+const ROW_H = 32;
+const DIVIDER_V = 4;
 
 function formatCell(value) {
   if (value == null) return "—";
@@ -44,9 +48,21 @@ function cellTextStyle({ highlight, light, colors }) {
   };
 }
 
-function ScoreCell({ value, highlight, light, colors, width = INNING_COL_W }) {
+function LinescoreDivider({ borderColor }) {
   return (
-    <View style={{ width, alignItems: "center", justifyContent: "center" }}>
+    <View
+      style={{
+        height: 1,
+        backgroundColor: borderColor,
+        marginVertical: DIVIDER_V,
+      }}
+    />
+  );
+}
+
+function ScoreCell({ value, highlight, light, colors, width }) {
+  return (
+    <View style={{ width, height: ROW_H, alignItems: "center", justifyContent: "center" }}>
       <Text
         style={{
           fontSize: 13,
@@ -60,12 +76,49 @@ function ScoreCell({ value, highlight, light, colors, width = INNING_COL_W }) {
   );
 }
 
+function TeamLabel({ abbr, teamColor }) {
+  return (
+    <View style={{ height: ROW_H, justifyContent: "center" }}>
+      <Text style={{ color: teamColor, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
+        {abbr || "—"}
+      </Text>
+    </View>
+  );
+}
+
 export default function MlbLinescoreTable({ game, colors, light = false, style }) {
   const data = useMemo(() => resolveLinescore(game), [game]);
+  const rows = data?.rows || [];
+  const awayTotals = data?.awayTotals || {};
+  const homeTotals = data?.homeTotals || {};
 
-  if (!data?.rows?.length) return null;
+  const [inningViewportW, setInningViewportW] = useState(0);
 
-  const { rows, awayTotals, homeTotals } = data;
+  const currentInning = Number(game?.currentInning);
+  const half = String(game?.inningHalf || "").toLowerCase();
+  const isLive = !!game?.isLive;
+  const scrollRef = useRef(null);
+  const scrollKey = `${rows.length}:${game?.inningLinescoreSig || ""}:${currentInning}:${half}`;
+
+  const slotsInView = Math.min(rows.length, VISIBLE_INNING_COLS);
+  const inningColW =
+    inningViewportW > 0
+      ? Math.max(MIN_INNING_COL_W, Math.floor(inningViewportW / Math.max(slotsInView, 1)))
+      : MIN_INNING_COL_W;
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || rows.length <= VISIBLE_INNING_COLS) return undefined;
+
+    const frame = requestAnimationFrame(() => {
+      node.scrollToEnd({ animated: false });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [scrollKey, rows.length]);
+
+  if (!rows.length) return null;
+
   const headerColor = light ? "rgba(255,255,255,0.55)" : colors.subtext;
   const borderColor = light ? "rgba(255,255,255,0.12)" : colors.border;
   const bg = light ? "rgba(255,255,255,0.06)" : colors.card2 || colors.card;
@@ -76,10 +129,6 @@ export default function MlbLinescoreTable({ game, colors, light = false, style }
     i18n.t("live.mlb.linescoreHits", { defaultValue: "H" }),
     i18n.t("live.mlb.linescoreErrors", { defaultValue: "E" }),
   ];
-
-  const currentInning = Number(game?.currentInning);
-  const half = String(game?.inningHalf || "").toLowerCase();
-  const isLive = !!game?.isLive;
 
   const isHighlighted = (side, inningNum) =>
     isLive &&
@@ -114,76 +163,80 @@ export default function MlbLinescoreTable({ game, colors, light = false, style }
         {i18n.t("live.mlb.linescoreTitle", { defaultValue: "TABLEAU INDICATEUR" }).toUpperCase()}
       </Text>
 
-      <View style={{ flexDirection: "row" }}>
-        <View style={{ width: TEAM_COL_W, paddingTop: 0 }}>
-          <View style={{ height: 18 }} />
-          <View style={{ height: 32, justifyContent: "center" }}>
-            <Text style={{ color: teamColor, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
-              {game?.awayAbbr || "—"}
-            </Text>
-          </View>
-          <View style={{ height: 32, justifyContent: "center" }}>
-            <Text style={{ color: teamColor, fontWeight: "900", fontSize: 13 }} numberOfLines={1}>
-              {game?.homeAbbr || "—"}
-            </Text>
-          </View>
+      <View style={{ flexDirection: "row", alignItems: "stretch" }}>
+        <View style={{ width: TEAM_COL_W, marginRight: 4 }}>
+          <View style={{ height: HEADER_H }} />
+          <LinescoreDivider borderColor={borderColor} />
+          <TeamLabel abbr={game?.awayAbbr} teamColor={teamColor} />
+          <TeamLabel abbr={game?.homeAbbr} teamColor={teamColor} />
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          nestedScrollEnabled
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingRight: 4 }}
+        <View
+          style={{ flex: 1, minWidth: 0 }}
+          onLayout={(e) => {
+            const w = Math.floor(e.nativeEvent.layout.width);
+            if (w > 0 && w !== inningViewportW) setInningViewportW(w);
+          }}
         >
-          <View>
-            <View style={{ flexDirection: "row", height: 18, alignItems: "center" }}>
-              {rows.map((row) => (
-                <View key={`hdr-${row.n}`} style={{ width: INNING_COL_W, alignItems: "center" }}>
-                  <Text
-                    style={{
-                      color: headerColor,
-                      fontWeight: "800",
-                      fontSize: 11,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {row.n}
-                  </Text>
-                </View>
-              ))}
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={rows.length > VISIBLE_INNING_COLS}
+            nestedScrollEnabled
+            style={{ flexGrow: 0 }}
+            contentContainerStyle={{ paddingRight: 2 }}
+          >
+            <View>
+              <View style={{ flexDirection: "row", height: HEADER_H, alignItems: "center" }}>
+                {rows.map((row) => (
+                  <View key={`hdr-${row.n}`} style={{ width: inningColW, alignItems: "center" }}>
+                    <Text
+                      style={{
+                        color: headerColor,
+                        fontWeight: "800",
+                        fontSize: 11,
+                        fontVariant: ["tabular-nums"],
+                      }}
+                    >
+                      {row.n}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <LinescoreDivider borderColor={borderColor} />
+
+              <View style={{ flexDirection: "row" }}>
+                {rows.map((row) => (
+                  <ScoreCell
+                    key={`away-${row.n}`}
+                    value={row.away}
+                    highlight={isHighlighted("away", row.n)}
+                    light={light}
+                    colors={colors}
+                    width={inningColW}
+                  />
+                ))}
+              </View>
+
+              <View style={{ flexDirection: "row" }}>
+                {rows.map((row) => (
+                  <ScoreCell
+                    key={`home-${row.n}`}
+                    value={row.home}
+                    highlight={isHighlighted("home", row.n)}
+                    light={light}
+                    colors={colors}
+                    width={inningColW}
+                  />
+                ))}
+              </View>
             </View>
+          </ScrollView>
+        </View>
 
-            <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 4 }} />
-
-            <View style={{ flexDirection: "row", height: 32, alignItems: "center" }}>
-              {rows.map((row) => (
-                <ScoreCell
-                  key={`away-${row.n}`}
-                  value={row.away}
-                  highlight={isHighlighted("away", row.n)}
-                  light={light}
-                  colors={colors}
-                />
-              ))}
-            </View>
-
-            <View style={{ flexDirection: "row", height: 32, alignItems: "center" }}>
-              {rows.map((row) => (
-                <ScoreCell
-                  key={`home-${row.n}`}
-                  value={row.home}
-                  highlight={isHighlighted("home", row.n)}
-                  light={light}
-                  colors={colors}
-                />
-              ))}
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={{ paddingLeft: 4 }}>
-          <View style={{ flexDirection: "row", height: 18, alignItems: "center" }}>
+        <View style={{ paddingLeft: 6, flexShrink: 0 }}>
+          <View style={{ flexDirection: "row", height: HEADER_H, alignItems: "center" }}>
             {totalHeaders.map((label) => (
               <View key={label} style={{ width: TOTAL_COL_W, alignItems: "center" }}>
                 <Text style={{ color: headerColor, fontWeight: "800", fontSize: 11 }}>{label}</Text>
@@ -191,15 +244,15 @@ export default function MlbLinescoreTable({ game, colors, light = false, style }
             ))}
           </View>
 
-          <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 4 }} />
+          <LinescoreDivider borderColor={borderColor} />
 
-          <View style={{ flexDirection: "row", height: 32, alignItems: "center" }}>
+          <View style={{ flexDirection: "row" }}>
             <ScoreCell value={awayTotals.runs} light={light} colors={colors} width={TOTAL_COL_W} />
             <ScoreCell value={awayTotals.hits} light={light} colors={colors} width={TOTAL_COL_W} />
             <ScoreCell value={awayTotals.errors} light={light} colors={colors} width={TOTAL_COL_W} />
           </View>
 
-          <View style={{ flexDirection: "row", height: 32, alignItems: "center" }}>
+          <View style={{ flexDirection: "row" }}>
             <ScoreCell value={homeTotals.runs} light={light} colors={colors} width={TOTAL_COL_W} />
             <ScoreCell value={homeTotals.hits} light={light} colors={colors} width={TOTAL_COL_W} />
             <ScoreCell value={homeTotals.errors} light={light} colors={colors} width={TOTAL_COL_W} />

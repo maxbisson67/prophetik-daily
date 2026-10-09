@@ -3,6 +3,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
 import { getMlbCurrentSeason } from "../players/seasonHelpers.js";
+import { resolveFgcNhlStatsSeasonForChallenge } from "../nova/context/resolveFgcNhlStatsSeason.js";
 
 const NOVA_UID = "ai";
 const NOVA_DISPLAY_NAME = "Nova";
@@ -31,11 +32,15 @@ function chunk(arr, size) {
   return out;
 }
 
-function getNhlSeasonId(date = new Date()) {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + 1;
-  const startYear = month >= 7 ? year : year - 1;
-  return `${startYear}${startYear + 1}`;
+function resolveGameDateYmd(challenge = {}) {
+  const ymd = str(challenge.gameYmd);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const start = challenge.gameStartTimeUTC?.toDate?.();
+  if (!start) return "";
+  const y = start.getUTCFullYear();
+  const m = String(start.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(start.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function isInjuredOrUnavailable(injury) {
@@ -210,8 +215,16 @@ async function loadCandidatesForChallenge(challenge = {}) {
     return loadMlbCandidates(homeAbbr, awayAbbr, seasonId);
   }
 
-  const seasonId = getNhlSeasonId(start || new Date());
-  return loadNhlCandidates(homeAbbr, awayAbbr, seasonId);
+  const gameDateYmd = resolveGameDateYmd(challenge);
+  const cfgSnap = await db.doc("app_config/currentSeason").get();
+  const seasonConfig = cfgSnap.exists ? cfgSnap.data() || {} : null;
+  const statsMeta = await resolveFgcNhlStatsSeasonForChallenge({
+    gameDateYmd,
+    homeAbbr,
+    awayAbbr,
+    seasonConfig,
+  });
+  return loadNhlCandidates(homeAbbr, awayAbbr, statsMeta.statsSeasonId);
 }
 
 export const novaFgcPickAtLock = onSchedule(

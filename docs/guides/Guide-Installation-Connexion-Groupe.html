@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prophetik — Guide rapide</title>
+  <style>
+    @page { margin: 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: #111827;
+      line-height: 1.5;
+      font-size: 11pt;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { font-size: 22pt; color: #b91c1c; margin-bottom: 4px; }
+    h2 { font-size: 15pt; color: #b91c1c; margin-top: 26px; border-bottom: 2px solid #fecaca; padding-bottom: 6px; page-break-after: avoid; }
+    h3 { font-size: 12pt; margin-top: 18px; page-break-after: avoid; }
+    .subtitle { color: #6b7280; font-size: 11pt; margin-bottom: 20px; }
+    .cover-box {
+      border: 2px solid #b91c1c;
+      border-radius: 12px;
+      padding: 14px 18px;
+      background: #fef2f2;
+      margin: 16px 0 24px;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 10pt; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; font-weight: 700; }
+    .platform-badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 9pt;
+      margin-right: 6px;
+    }
+    .ios { background: #dbeafe; color: #1d4ed8; }
+    .android { background: #dcfce7; color: #166534; }
+    ol, ul { padding-left: 22px; }
+    li { margin-bottom: 5px; }
+    .note {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      padding: 10px 14px;
+      margin: 14px 0;
+      font-size: 10pt;
+    }
+    .steps-summary {
+      background: #f9fafb;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 16px 0;
+    }
+    .steps-summary ol { margin: 8px 0 0; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 10pt; }
+    a { color: #b91c1c; }
+    @media print {
+      body { padding: 0; }
+      a { color: #111827; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Prophetik</h1>
+<p class="subtitle">Guide rapide — installation, connexion et adhésion à un groupe · Version 4.1.0</p>
+
+<div class="cover-box">
+  <strong>Liens d’installation</strong><br /><br />
+  <span class="platform-badge android">Android</span>
+  <a href="https://play.google.com/store/apps/details?id=com.prophetik">play.google.com/store/apps/details?id=com.prophetik</a><br /><br />
+  <span class="platform-badge ios">iPhone / iPad</span>
+  TestFlight : <a href="https://testflight.apple.com/join/4DAKMFcD">testflight.apple.com/join/4DAKMFcD</a><br />
+  App Store : <code>[LIEN_IOS]</code> *(quand disponible)*<br /><br />
+  Contact : <code>[EMAIL_SUPPORT]</code>
+</div>
+
+<div class="steps-summary">
+  <strong>En bref</strong>
+  <ol>
+    <li>Installer Prophetik (lien ci-dessus)</li>
+    <li>Se connecter avec son numéro mobile (code SMS)</li>
+    <li>Rejoindre le groupe avec le code à 8 caractères ou le QR</li>
+  </ol>
+</div>
+
+<h2>1. Installer l’application</h2>
+
+<h3><span class="platform-badge android">Android</span></h3>
+<ol>
+  <li>Ouvrez le lien Play Store sur votre téléphone.</li>
+  <li>Touchez <strong>Installer</strong>.</li>
+  <li>Ouvrez <strong>Prophetik</strong>.</li>
+</ol>
+
+<h3><span class="platform-badge ios">iPhone / iPad</span></h3>
+<p><strong>App Store</strong> (si publié) : recherchez Prophetik ou ouvrez <code>[LIEN_IOS]</code>.</p>
+<p><strong>TestFlight</strong> (en attendant) :</p>
+<ol>
+  <li>Installez <strong>TestFlight</strong> depuis l’App Store.</li>
+  <li>Ouvrez <a href="https://testflight.apple.com/join/4DAKMFcD">le lien TestFlight Prophetik</a>.</li>
+  <li><strong>Accepter</strong> → <strong>Installer</strong>.</li>
+</ol>
+
+<h2>2. Se connecter (SMS)</h2>
+<ol>
+  <li>À l’ouverture, touchez <strong>Continuer avec SMS</strong>.</li>
+  <li><em>(Optionnel)</em> Entrez votre prénom.</li>
+  <li>Entrez votre numéro de mobile (ex. <code>5145551234</code>).</li>
+  <li>Touchez <strong>Envoyer le code</strong>.</li>
+  <li>Consultez vos SMS — le message peut provenir de <strong>capitaine.firebaseapp.com</strong> (normal).</li>
+  <li>Saisissez le code reçu et touchez <strong>Confirmer</strong>.</li>
+</ol>
+
+<div class="note">
+  🔒 Les SMS d’authentification proviennent du service officiel Firebase utilisé par Prophetik (<code>capitaine.firebaseapp.com</code>).
+</div>
+
+<h2>3. Rejoindre un groupe</h2>
+<p>L’administrateur vous donne un <strong>code à 8 caractères</strong> (ex. <code>K7MNP3R2</code>) ou un <strong>QR code</strong>.</p>
+
+<h3>Première connexion</h3>
+<ol>
+  <li>Sur l’écran <strong>Bienvenue</strong>, touchez <strong>Rejoindre un groupe</strong>.</li>
+  <li>Entrez le code <strong>ou</strong> touchez <strong>Scanner un QR</strong> (autorisez la caméra).</li>
+  <li>Touchez <strong>Rejoindre le groupe</strong>.</li>
+</ol>
+
+<h3>Déjà connecté</h3>
+<ol>
+  <li>Menu <strong>☰</strong> → <strong>Groupes</strong> → <strong>Rejoindre</strong>.</li>
+  <li>Code ou QR comme ci-dessus.</li>
+</ol>
+
+<p><strong>Format du code :</strong> 8 caractères — lettres A–Z (sans O) et chiffres 1–9 (sans 0).</p>
+
+<h2>Dépannage rapide</h2>
+<table>
+  <tr><th>Problème</th><th>Solution</th></tr>
+  <tr><td>Pas de SMS</td><td>Vérifier le numéro ; attendre 1–2 min ; renvoyer le code</td></tr>
+  <tr><td>Code SMS refusé</td><td>Pas d’espace ; renvoyer un code si expiré</td></tr>
+  <tr><td>Code groupe invalide</td><td>8 caractères ; pas de O ni 0 ; redemander à l’admin</td></tr>
+  <tr><td>QR ne fonctionne pas</td><td>Autoriser la caméra ; saisir le code à la main</td></tr>
+</table>
+
+<p style="margin-top: 28px; color: #6b7280; font-size: 10pt;">
+  Besoin d’aide ? <code>[EMAIL_SUPPORT]</code> — précisez iPhone/Android et une capture d’écran si possible.
+</p>
+
+</body>
+</html>

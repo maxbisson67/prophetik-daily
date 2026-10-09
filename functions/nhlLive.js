@@ -225,6 +225,20 @@ async function runUpdateNhlLiveGames(forYmd, options = {}) {
       source,
       games: games.length,
     });
+
+    if (games.length) {
+      const scheduleBoard = games.map((g) => buildNhlBoardEntryFromSchedule(g, ymd));
+      try {
+        await upsertLiveBoard(league, ymd, scheduleBoard);
+        stats.boardFromScheduleOnly = scheduleBoard.length;
+      } catch (err) {
+        logger.warn("[updateNhlLiveGames] schedule-only board upsert failed", {
+          ymd,
+          error: err?.message || String(err),
+        });
+      }
+    }
+
     return stats;
   }
 

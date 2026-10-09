@@ -77,9 +77,11 @@ export default function GroupsToggleRow({
             borderRadius: 12,
             overflow: "hidden",
             backgroundColor: colors.card,
+            zIndex: 20,
+            elevation: 8,
           }}
         >
-          {groups.map((g) => {
+          {groups.map((g, index) => {
             const active = String(g.id) === String(value);
 
             return (
@@ -96,7 +98,7 @@ export default function GroupsToggleRow({
                   gap: 10,
                   paddingVertical: 12,
                   paddingHorizontal: 12,
-                  borderTopWidth: 1,
+                  borderTopWidth: index === 0 ? 0 : 1,
                   borderTopColor: colors.border,
                   backgroundColor: active ? colors.card2 : colors.card,
                   minHeight: 44,

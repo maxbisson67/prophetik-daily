@@ -63,6 +63,7 @@ export function compactMlbBoardEntry(doc = {}, gamePk = "") {
     currentPitcherId: doc.currentPitcherId ?? null,
     currentPitcherName: doc.currentPitcherName ?? null,
     battingTeamAbbr: doc.battingTeamAbbr ?? null,
+    currentBatterStats: doc.currentBatterStats ?? null,
     startTimeUTC: doc.startTimeUTC || null,
     venue: doc.venue || null,
   };

@@ -614,6 +614,8 @@ export class PromptComposer {
     const isTpCoach = !isExplain && verifiedContext?.domain === "tp";
     const isFgcMlbCoach =
       !isExplain && verifiedContext?.domain === "fgc" && verifiedContext?.sport === "MLB";
+    const isFgcNhlCoach =
+      !isExplain && verifiedContext?.domain === "fgc" && verifiedContext?.sport === "NHL";
     const isTsMlbCoach =
       !isExplain && verifiedContext?.domain === "ts" && verifiedContext?.sport === "MLB";
 
@@ -686,6 +688,17 @@ N'infère PAS l'OBP ou la tendance à monter sur les buts des frappeurs qui pré
 Dynamique visiteur/domicile en 1re manche (haut vs bas de 1re).
 Ne garantis jamais un résultat.`
       : "";
+
+    const fgcNhlCoachHint =
+      isFgcNhlCoach && verifiedContext?.statsUsesPreviousSeason
+        ? lang === "en"
+          ? `Context: First Goal Challenge (NHL). Player seasonStats in the verified JSON are from the PREVIOUS season (statsSeasonId) because the current season sample is not yet representative. Say so briefly if you cite goals/points; do not invent current-season totals. There is NO verified goalie/defensive matchup block — use only provided stats, injury, home/away and opposingTeamAbbr. Never guarantee an outcome.`
+          : `Contexte : Défi premier but (LNH). Les seasonStats du joueur dans le JSON vérifié viennent de la saison PRÉCÉDENTE (statsSeasonId) car l'échantillon saison courante n'est pas encore représentatif. Mentionne-le brièvement si tu cites buts/points ; n'invente pas de totaux saison courante. Il n'y a PAS de bloc matchup défensif/gardien vérifié — utilise seulement les stats fournies, la blessure, domicile/visite et opposingTeamAbbr. Ne garantis jamais un résultat.`
+        : isFgcNhlCoach
+          ? lang === "en"
+            ? `Context: First Goal Challenge (NHL). Use verified seasonStats only. No verified opposing-team defensive matchup data is provided (only opposingTeamAbbr). Never guarantee an outcome.`
+            : `Contexte : Défi premier but (LNH). Utilise uniquement les seasonStats vérifiées. Aucune donnée matchup défensif adverse vérifiée (seulement opposingTeamAbbr). Ne garantis jamais un résultat.`
+          : "";
 
     const tsCoachHint = isTsMlbCoach
       ? lang === "en"
@@ -789,6 +802,7 @@ Ne garantis jamais un résultat.`
       `Language: ${lang === "en" ? "en" : "fr"}`,
       tpCoachHint,
       fgcCoachHint,
+      fgcNhlCoachHint,
       tsCoachHint,
       tpBriefBlock,
       fgcBriefBlock,

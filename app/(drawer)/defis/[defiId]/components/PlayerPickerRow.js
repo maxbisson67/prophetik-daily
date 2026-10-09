@@ -11,6 +11,12 @@ import {
   MlbBvpLine,
   resolveMlbOpponentAbbr,
 } from "@src/mlb/MlbDefiPlayerMeta";
+import {
+  NhlOpponentMatchupLine,
+  resolveNhlOpponentAbbr,
+} from "@src/nhl/NhlDefiPlayerMeta";
+import TeamMetaBadge from "./TeamMetaBadge";
+import { normalizeNhlSeasonStatRow } from "@src/nhl/nhlSeasonStatDisplay";
 
 function num(v) {
   const n = Number(v);
@@ -66,9 +72,10 @@ export default function PlayerPickerRow({
 
   const oppAbbr = useMemo(() => resolveMlbOpponentAbbr(value || {}), [value]);
 
-  const g = num(value?.goals);
-  const a = num(value?.assists);
-  const p = num(value?.points);
+  const nhlLine = !isMlb && picked ? normalizeNhlSeasonStatRow(value) : null;
+  const g = isMlb ? num(value?.goals) : num(nhlLine?.goals);
+  const a = isMlb ? num(value?.assists) : num(nhlLine?.assists);
+  const p = isMlb ? num(value?.points) : num(nhlLine?.points);
 
   const ppg = useMemo(() => {
     const v = value?.pointsPerGame;
@@ -81,9 +88,8 @@ export default function PlayerPickerRow({
   }, [value?.pointsPerGame, value?.gamesPlayed, p]);
 
   const matchup = value?.matchup || null;
-  const nhlAwayAbbr = String(matchup?.awayAbbr || "").toUpperCase();
-  const nhlHomeAbbr = String(matchup?.homeAbbr || "").toUpperCase();
-  const canShowNhlMatchup = !isFree && !isMlb && picked && !!teamLogo && !!nhlAwayAbbr && !!nhlHomeAbbr;
+  const nhlOppAbbr = resolveNhlOpponentAbbr(value || {});
+  const canShowNhlOpponent = !isMlb && picked && !!nhlOppAbbr;
 
   return (
     <View
@@ -169,14 +175,23 @@ export default function PlayerPickerRow({
               <>
                 <Text style={{ color: colors.subtext, fontWeight: "800" }}>
                   {g}-{a}-{p}
-                  {!isFree && ppg ? ` • PPG ${ppg}` : ""}
+                  {ppg ? ` • ${i18n.t("defi.playerSelect.statPpgShort", { defaultValue: "Moy." })} ${ppg}` : ""}
                 </Text>
 
-                {canShowNhlMatchup ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Image source={teamLogo(nhlAwayAbbr)} style={{ width: 16, height: 16 }} />
-                    <Text style={{ color: colors.subtext, fontWeight: "900" }}>@</Text>
-                    <Image source={teamLogo(nhlHomeAbbr)} style={{ width: 16, height: 16 }} />
+                {canShowNhlOpponent ? (
+                  <View style={{ gap: 4 }}>
+                    <NhlOpponentMatchupLine
+                      opponentAbbr={nhlOppAbbr}
+                      colors={colors}
+                      formatStandingsLine={formatStandingsLine}
+                    />
+                    {matchup ? (
+                      <TeamMetaBadge
+                        compact
+                        rankOverall={matchup.oppRankOverall}
+                        goalDifferential={matchup.oppGoalDifferential}
+                      />
+                    ) : null}
                   </View>
                 ) : null}
               </>

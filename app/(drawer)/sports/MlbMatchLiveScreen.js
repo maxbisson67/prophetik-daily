@@ -21,14 +21,14 @@ import functions from "@react-native-firebase/functions";
 import i18n from "@src/i18n/i18n";
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import MlbLiveSituation, { mlbLiveSituation } from "@src/sports/MlbLiveSituation";
-import MlbLiveLineupPanel, { MlbCurrentBatterHint } from "@src/sports/MlbLiveLineupPanel";
+import MlbLiveLineupPanel from "@src/sports/MlbLiveLineupPanel";
 import MlbLinescoreTable from "@src/sports/MlbLinescoreTable";
+import MlbScoringSummary from "@src/sports/MlbScoringSummary";
 import { addDaysToYmd } from "@src/lib/prophetikBusinessDate";
 import { useProphetikBusinessYmd } from "@src/hooks/useProphetikBusinessDate";
 import { useTeamsBySport } from "@src/groups/hooks/useTeamsBySport";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import {
-  formatMlbHalfInningLabel,
   formatMlbLiveInningLabel,
 } from "@src/mlb/mlbInningLabel";
 import { isMlbGameDelayed } from "@src/mlb/mlbGameStatusUtils";
@@ -50,6 +50,9 @@ import FgcChallengeModal from "@src/defis/results/FgcChallengeModal";
 import TpMyPicksModal from "@src/defis/results/TpMyPicksModal";
 import TsMyResultsModal from "@src/defis/results/TsMyResultsModal";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
+import useMlbLinescorePoll from "@src/mlb/useMlbLinescorePoll";
+import { mergeMlbLinescoreOverlay, pickMlbLinescoreOverlayFields } from "@src/mlb/mlbLinescoreClient";
 
 function fmtTime(d) {
   if (!d) return "—";
@@ -127,116 +130,6 @@ function mlbDetailStatus(game) {
     : i18n.t("live.detail.startUnknown", "Heure de début inconnue");
 }
 
-function halfInningLabel(half, inning) {
-  const label = formatMlbHalfInningLabel(half, inning);
-  if (label) return label;
-  return String(half || "");
-}
-
-function scoringPlaysByInning(plays = []) {
-  const map = new Map();
-
-  for (const play of plays) {
-    const inning = play?.inning ?? "?";
-    const half = String(play?.halfInning || "");
-    const key = `${inning}-${half}`;
-
-    if (!map.has(key)) {
-      map.set(key, { inning, halfInning: half, plays: [] });
-    }
-    map.get(key).plays.push(play);
-  }
-
-  return [...map.values()].sort((a, b) => {
-    const ai = Number(a.inning) || 0;
-    const bi = Number(b.inning) || 0;
-    if (ai !== bi) return ai - bi;
-    const order = { top: 0, bottom: 1 };
-    return (order[String(a.halfInning).toLowerCase()] ?? 0) - (order[String(b.halfInning).toLowerCase()] ?? 0);
-  });
-}
-
-function battingTeamAbbrForPlay(play, game) {
-  const explicit = String(play?.battingTeamAbbr || "").trim();
-  if (explicit) return explicit;
-  const half = String(play?.halfInning || "").toLowerCase();
-  if (half === "top") return game?.awayAbbr;
-  if (half === "bottom") return game?.homeAbbr;
-  return null;
-}
-
-function eventTypeChip(eventType, colors) {
-  const key = String(eventType || "").toLowerCase();
-  let i18nKey = "live.mlb.eventFallback";
-  let defaultLabel = "Scoring play";
-  let bg = colors.card2 || colors.card;
-  let fg = colors.subtext;
-
-  if (key.includes("home_run")) {
-    i18nKey = "live.mlb.homeRun";
-    defaultLabel = "HR";
-    bg = "rgba(220,38,38,0.15)";
-    fg = "#dc2626";
-  } else if (key.includes("triple")) {
-    i18nKey = "live.mlb.triple";
-    defaultLabel = "3B";
-    bg = "rgba(37,99,235,0.12)";
-    fg = "#2563eb";
-  } else if (key.includes("double")) {
-    i18nKey = "live.mlb.double";
-    defaultLabel = "2B";
-    bg = "rgba(37,99,235,0.1)";
-    fg = "#1d4ed8";
-  } else if (key.includes("single")) {
-    i18nKey = "live.mlb.single";
-    defaultLabel = "1B";
-  } else if (key.includes("sac_fly")) {
-    i18nKey = "live.mlb.sacFly";
-    defaultLabel = "Sac fly";
-  } else if (key.includes("sac_bunt") || key.includes("sacrifice_bunt")) {
-    i18nKey = "live.mlb.sacBunt";
-    defaultLabel = "Sac bunt";
-  } else if (key.includes("field_error") || key.includes("error")) {
-    i18nKey = "live.mlb.fieldError";
-    defaultLabel = "Field error";
-  } else if (key.includes("wild_pitch")) {
-    i18nKey = "live.mlb.wildPitch";
-    defaultLabel = "Wild pitch";
-  } else if (key.includes("passed_ball")) {
-    i18nKey = "live.mlb.passedBall";
-    defaultLabel = "Passed ball";
-  } else if (key.includes("balk")) {
-    i18nKey = "live.mlb.balk";
-    defaultLabel = "Balk";
-  } else if (key.includes("hit_by_pitch")) {
-    i18nKey = "live.mlb.hitByPitch";
-    defaultLabel = "HBP";
-  } else if (key.includes("ground_rule")) {
-    i18nKey = "live.mlb.groundRuleDouble";
-    defaultLabel = "Ground-rule double";
-  }
-
-  const label = i18n.t(i18nKey, defaultLabel);
-  if (!label) return null;
-
-  return (
-    <View
-      style={{
-        alignSelf: "flex-start",
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 999,
-        backgroundColor: bg,
-        marginTop: 6,
-      }}
-    >
-      <Text style={{ color: fg, fontWeight: "800", fontSize: 11, textTransform: "uppercase" }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 function useMlbTeamForAbbr() {
   const { teams } = useTeamsBySport("MLB");
 
@@ -289,7 +182,6 @@ function GameRow({
   const gameId = String(game?.gamePk || game?.id || "").trim();
 
   const showLiveSituation = (isLive || delayed) && !!mlbLiveSituation(game);
-  const showCurrentBatter = isLive && !!game?.currentBatterName;
   const liveStatusLabel = delayed
     ? i18n.t("live.mlb.delayed", "Retardé")
     : i18n.t("live.status.live", "LIVE");
@@ -374,61 +266,43 @@ function GameRow({
             gap: 10,
           }}
         >
-          <View style={{ flex: 1, minWidth: 0, flexDirection: "row", gap: 8 }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-                <TeamLogoBadge team={awayTeam || { sport: "MLB", abbreviation: awayAbbr }} size={22} colors={colors} />
-                <Text
-                  style={{ color: colors.text, fontWeight: "600", flex: 1, marginLeft: 8 }}
-                  numberOfLines={1}
-                >
-                  {awayLabel}
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <TeamLogoBadge team={homeTeam || { sport: "MLB", abbreviation: homeAbbr }} size={22} colors={colors} />
-                <Text
-                  style={{ color: colors.text, fontWeight: "600", flex: 1, marginLeft: 8 }}
-                  numberOfLines={1}
-                >
-                  {homeLabel}
-                </Text>
-              </View>
-              {showCurrentBatter ? (
-                <MlbCurrentBatterHint
-                  game={game}
-                  colors={colors}
-                  variant="summary"
-                  teamForAbbr={teamForAbbr}
-                />
-              ) : null}
-            </View>
-
-            <View
-              style={{
-                width: 34,
-                flexShrink: 0,
-                alignItems: "flex-end",
-                justifyContent: "center",
-              }}
-            >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+              <TeamLogoBadge team={awayTeam || { sport: "MLB", abbreviation: awayAbbr }} size={22} colors={colors} />
               <Text
-                style={{
-                  color: colors.text,
-                  fontWeight: "700",
-                  fontSize: 16,
-                  lineHeight: 24,
-                  fontVariant: ["tabular-nums"],
-                }}
+                style={{ color: colors.text, fontWeight: "600", flex: 1, marginLeft: 8 }}
+                numberOfLines={1}
               >
-                {awayScore ?? "—"}
+                {awayLabel}
               </Text>
               <Text
                 style={{
                   color: colors.text,
                   fontWeight: "700",
                   fontSize: 16,
-                  lineHeight: 24,
+                  minWidth: 28,
+                  textAlign: "right",
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {awayScore ?? "—"}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TeamLogoBadge team={homeTeam || { sport: "MLB", abbreviation: homeAbbr }} size={22} colors={colors} />
+              <Text
+                style={{ color: colors.text, fontWeight: "600", flex: 1, marginLeft: 8 }}
+                numberOfLines={1}
+              >
+                {homeLabel}
+              </Text>
+              <Text
+                style={{
+                  color: colors.text,
+                  fontWeight: "700",
+                  fontSize: 16,
+                  minWidth: 28,
+                  textAlign: "right",
                   fontVariant: ["tabular-nums"],
                 }}
               >
@@ -477,14 +351,15 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!visible || !game?.id) {
+    const gamePk = String(game?.gamePk || game?.id || "").trim();
+    if (!visible || !gamePk) {
       setGameDoc(null);
       setScoringPlays([]);
       setLoading(false);
       return undefined;
     }
 
-    const ref = firestore().collection("mlb_live_games").doc(String(game.id));
+    const ref = firestore().collection("mlb_live_games").doc(gamePk);
     setLoading(true);
 
     const unsubGame = ref.onSnapshot(
@@ -511,10 +386,14 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
         unsubPlays();
       } catch {}
     };
-  }, [visible, game?.id]);
+  }, [visible, game?.gamePk, game?.id]);
 
-  const g = gameDoc || game;
-  const playGroups = useMemo(() => scoringPlaysByInning(scoringPlays), [scoringPlays]);
+  const g = useMemo(() => {
+    if (!game) return null;
+    const base = gameDoc ? { ...game, ...gameDoc } : game;
+    const overlay = pickMlbLinescoreOverlayFields(game);
+    return mergeMlbLinescoreOverlay(base, overlay);
+  }, [game, gameDoc]);
 
   if (!visible || !g) return null;
 
@@ -527,6 +406,15 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
   const statusText = mlbDetailStatus(g);
   const isLive = !!g.isLive;
   const isFinal = !!g.isFinal;
+
+  const teamNameStyle = {
+    color: "#f8fafc",
+    fontWeight: "900",
+    fontSize: 12,
+    marginTop: 8,
+    letterSpacing: 0.2,
+    textAlign: "center",
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -624,22 +512,16 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
                 justifyContent: "space-between",
               }}
             >
-              <View style={{ flex: 1, alignItems: "center" }}>
+              <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 4 }}>
                 <TeamLogoBadge
                   team={awayTeam || { sport: "MLB", abbreviation: g.awayAbbr }}
                   size={44}
                   colors={colors}
                 />
                 <Text
-                  style={{
-                    color: "#f8fafc",
-                    fontWeight: "900",
-                    fontSize: 15,
-                    marginTop: 8,
-                    letterSpacing: 0.3,
-                    textAlign: "center",
-                  }}
-                  numberOfLines={2}
+                  style={teamNameStyle}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {awayLabel}
                 </Text>
@@ -672,22 +554,16 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
                 </Text>
               </View>
 
-              <View style={{ flex: 1, alignItems: "center" }}>
+              <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 4 }}>
                 <TeamLogoBadge
                   team={homeTeam || { sport: "MLB", abbreviation: g.homeAbbr }}
                   size={44}
                   colors={colors}
                 />
                 <Text
-                  style={{
-                    color: "#f8fafc",
-                    fontWeight: "900",
-                    fontSize: 15,
-                    marginTop: 8,
-                    letterSpacing: 0.3,
-                    textAlign: "center",
-                  }}
-                  numberOfLines={2}
+                  style={teamNameStyle}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {homeLabel}
                 </Text>
@@ -745,162 +621,13 @@ function GameDetailModal({ visible, onClose, game, colors, isDark, teamForAbbr }
               enabled={visible}
             />
 
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 10,
-              }}
-            >
-              <MaterialCommunityIcons name="lightning-bolt" size={18} color={colors.primary || colors.text} />
-              <Text style={{ color: colors.text, fontWeight: "800", fontSize: 16 }}>
-                {i18n.t("live.mlb.scoringPlays", "Actions marquantes")}
-              </Text>
-              {!loading && scoringPlays.length > 0 ? (
-                <View
-                  style={{
-                    marginLeft: "auto",
-                    backgroundColor: colors.card2 || colors.card,
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 999,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 11 }}>
-                    {scoringPlays.length}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {loading ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 }}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={{ color: colors.subtext }}>
-                  {i18n.t("live.mlb.loadingPlays", "Chargement des actions…")}
-                </Text>
-              </View>
-            ) : scoringPlays.length === 0 ? (
-              <View
-                style={{
-                  padding: 16,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  alignItems: "center",
-                }}
-              >
-                <MaterialCommunityIcons name="baseball-bat" size={28} color={colors.subtext} />
-                <Text style={{ color: colors.subtext, textAlign: "center", marginTop: 8 }}>
-                  {i18n.t("live.mlb.noScoringPlays", "Aucune action marquante pour le moment.")}
-                </Text>
-              </View>
-            ) : (
-              playGroups.map((group) => {
-                const inningTitle =
-                  group.inning != null
-                    ? halfInningLabel(group.halfInning, group.inning)
-                    : halfInningLabel(group.halfInning, null);
-
-                return (
-                  <View key={`${group.inning}-${group.halfInning}`} style={{ marginBottom: 14 }}>
-                    <Text
-                      style={{
-                        color: colors.subtext,
-                        fontWeight: "800",
-                        fontSize: 12,
-                        letterSpacing: 0.6,
-                        textTransform: "uppercase",
-                        marginBottom: 8,
-                      }}
-                    >
-                      {inningTitle}
-                    </Text>
-
-                    {group.plays.map((play) => {
-                      const battingAbbr = battingTeamAbbrForPlay(play, g);
-                      const battingTeam = battingAbbr ? teamForAbbr(battingAbbr) : null;
-
-                      return (
-                      <View
-                        key={play.id}
-                        style={{
-                          flexDirection: "row",
-                          padding: 12,
-                          borderRadius: 14,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                          backgroundColor: colors.card,
-                          marginBottom: 8,
-                          gap: 10,
-                        }}
-                      >
-                        <View
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 10,
-                            backgroundColor: colors.card2 || colors.background,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            overflow: "hidden",
-                          }}
-                        >
-                          {battingAbbr ? (
-                            <TeamLogoBadge
-                              team={battingTeam || { sport: "MLB", abbreviation: battingAbbr }}
-                              size={28}
-                              colors={colors}
-                            />
-                          ) : (
-                            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>
-                              {play.inning ?? "—"}
-                            </Text>
-                          )}
-                        </View>
-
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: colors.text, fontWeight: "600", lineHeight: 20 }}>
-                            {play.description || play.eventType || "—"}
-                          </Text>
-                          {eventTypeChip(play.eventType, colors)}
-                        </View>
-
-                        <View style={{ alignItems: "flex-end", justifyContent: "center" }}>
-                          {(play.awayScore != null || play.homeScore != null) && (
-                            <Text
-                              style={{
-                                color: colors.text,
-                                fontWeight: "900",
-                                fontSize: 16,
-                                fontVariant: ["tabular-nums"],
-                              }}
-                            >
-                              {play.awayScore ?? "—"}–{play.homeScore ?? "—"}
-                            </Text>
-                          )}
-                          {Number(play.rbi) > 0 ? (
-                            <Text style={{ color: "#dc2626", fontWeight: "800", fontSize: 11, marginTop: 4 }}>
-                              {i18n.t("live.mlb.rbi", {
-                                defaultValue: "{{count}} RBI",
-                                count: play.rbi,
-                              })}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                      );
-                    })}
-                  </View>
-                );
-              })
-            )}
+            <MlbScoringSummary
+              game={g}
+              plays={scoringPlays}
+              loading={loading}
+              colors={colors}
+              teamForAbbr={teamForAbbr}
+            />
             </View>
           </ScrollView>
         </View>
@@ -1064,6 +791,37 @@ export default function MlbMatchLiveScreen() {
     return [...live, ...upcoming, ...final];
   }, [games]);
 
+  const isFocused = useIsFocused();
+  const livePollPks = useMemo(
+    () =>
+      sortedGames
+        .filter((g) => (g.isLive || String(g.abstractGameState || "").toLowerCase() === "live") && !g.isPostponed)
+        .map((g) => String(g.gamePk || g.id || "").trim())
+        .filter(Boolean),
+    [sortedGames]
+  );
+
+  const linescoreOverlays = useMlbLinescorePoll({
+    gamePks: livePollPks,
+    enabled: isFocused && livePollPks.length > 0,
+  });
+
+  const displayGames = useMemo(
+    () =>
+      sortedGames.map((game) => {
+        const pk = String(game.gamePk || game.id || "").trim();
+        return mergeMlbLinescoreOverlay(game, linescoreOverlays[pk]);
+      }),
+    [sortedGames, linescoreOverlays]
+  );
+
+  const selectedGameDisplay = useMemo(() => {
+    if (!selectedGame) return null;
+    const pk = String(selectedGame.gamePk || selectedGame.id || "").trim();
+    const fromList = displayGames.find((g) => String(g.gamePk || g.id || "").trim() === pk);
+    return fromList || mergeMlbLinescoreOverlay(selectedGame, linescoreOverlays[pk]);
+  }, [selectedGame, displayGames, linescoreOverlays]);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: 16 }}>
       <FgcChallengeModal
@@ -1095,7 +853,7 @@ export default function MlbMatchLiveScreen() {
         <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
       ) : (
         <FlatList
-          data={sortedGames}
+          data={displayGames}
           keyExtractor={(item) => String(item.gamePk || item.id)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
@@ -1134,7 +892,7 @@ export default function MlbMatchLiveScreen() {
       <GameDetailModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        game={selectedGame}
+        game={selectedGameDisplay}
         colors={colors}
         isDark={isDark}
         teamForAbbr={teamForAbbr}

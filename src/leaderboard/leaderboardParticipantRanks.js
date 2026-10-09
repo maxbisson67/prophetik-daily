@@ -37,6 +37,7 @@ export function buildLeaderboardRankMaps(rows = []) {
     fgc: buildRankMap(list, (r) => fgcDisplayPoints(r)),
     tp: buildRankMap(list, (r) => r?.tpPoints ?? 0),
     ts: buildRankMap(list, (r) => r?.tsPoints ?? 0),
+    dailyBonus: buildRankMap(list, (r) => Number(r?.dailyBonusWins ?? 0) || 0),
   };
 }
 
@@ -74,6 +75,11 @@ export function buildParticipantChallengeStats(row, rankMaps) {
       rank: getParticipantRank(rankMaps.ts, row),
       points: tsPoints,
       wins: Number(row?.tsWins ?? 0) || 0,
+    },
+    dailyBonus: {
+      rank: getParticipantRank(rankMaps.dailyBonus, row),
+      points: Number(row?.dailyBonusPoints ?? 0) || 0,
+      wins: Number(row?.dailyBonusWins ?? 0) || 0,
     },
   };
 }

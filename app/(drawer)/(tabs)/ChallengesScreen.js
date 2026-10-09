@@ -15,6 +15,7 @@ import i18n from "@src/i18n/i18n";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useTheme } from "@src/theme/ThemeProvider";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
+import { useApplyRouteGroupIdParam } from "@src/groups/useApplyRouteGroupIdParam";
 import ResultsDayPicker from "@src/defis/results/ResultsDayPicker";
 import {
   getTpBundleFirstDeadline,
@@ -429,12 +430,7 @@ export default function ChallengesScreen() {
     [dayOptions, selectedYmd]
   );
 
-  useEffect(() => {
-    if (!paramGroupId || !groupIds.includes(paramGroupId)) return;
-    if (String(currentGroupId) !== paramGroupId) {
-      setSelectedGroupId(paramGroupId);
-    }
-  }, [paramGroupId, groupIds.join("|"), currentGroupId, setSelectedGroupId]);
+  useApplyRouteGroupIdParam(paramGroupId, groupIds, setSelectedGroupId);
 
   useEffect(() => {
     if (!paramOpenChallengeId || loading) return;

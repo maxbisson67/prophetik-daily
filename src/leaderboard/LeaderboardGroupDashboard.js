@@ -1,8 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import i18n from "@src/i18n/i18n";
-import SportGlyph from "@src/sports/SportGlyph";
 import LiveChallengeKindBadge, { LIVE_BADGE_ACCENTS } from "@src/live/LiveChallengeKindBadge";
+import {
+  LeaderboardMoonLeading,
+  LeaderboardTrophyLeading,
+  LEADERBOARD_TOP_SCORERS_ACCENT,
+} from "./leaderboardSectionIcons";
 import LeaderboardRankBadge from "./LeaderboardRankBadge";
 import ParticipantAvatar from "@src/ui/ParticipantAvatar";
 import useLeaderboardProfiles, {
@@ -137,6 +141,7 @@ function SeeAllFooter({ visible, expanded, onPress, colors, t }) {
 function ChallengeCard({
   sport,
   challengeKind,
+  sectionLeading,
   title,
   accent,
   rows,
@@ -169,14 +174,15 @@ function ChallengeCard({
     <View style={[cardStyle(colors, accent), { marginBottom: 16 }]}>
       <SectionHeader
         leading={
-          challengeKind ? (
+          sectionLeading ??
+          (challengeKind ? (
             <LiveChallengeKindBadge
               kind={challengeKind}
               colors={colors}
               sport={sport}
               compact
             />
-          ) : null
+          ) : null)
         }
         title={title}
         colors={colors}
@@ -494,9 +500,9 @@ export default function LeaderboardGroupDashboard({
 
   return (
     <View style={{ gap: 0 }}>
-      <View style={[cardStyle(colors, "#FACC15"), { marginBottom: 16 }]}>
+      <View style={[cardStyle(colors, LEADERBOARD_TOP_SCORERS_ACCENT), { marginBottom: 16 }]}>
         <SectionHeader
-          leading={<SportGlyph sport={sport} colors={colors} size={20} />}
+          leading={<LeaderboardTrophyLeading size={28} />}
           title={t("leaderboard.sections.topScorers")}
           colors={colors}
         />
@@ -505,7 +511,7 @@ export default function LeaderboardGroupDashboard({
           rows={visibleTotals}
           colors={colors}
           columns={totalsColumns}
-          accent="#FACC15"
+          accent={LEADERBOARD_TOP_SCORERS_ACCENT}
           profiles={profiles}
           onParticipantPress={onParticipantPress}
           emptyText={emptyText}
@@ -572,7 +578,8 @@ export default function LeaderboardGroupDashboard({
         hasActivity={(row) => {
           const pts = Number(row?.tsPoints ?? 0) || 0;
           const wins = Number(row?.tsWins ?? 0) || 0;
-          return pts > 0 || wins > 0;
+          const plays = Number(row?.tsPlays ?? 0) || 0;
+          return pts > 0 || wins > 0 || plays > 0;
         }}
         colors={colors}
         profiles={profiles}
@@ -584,6 +591,7 @@ export default function LeaderboardGroupDashboard({
       <ChallengeCard
         sport={sport}
         challengeKind={null}
+        sectionLeading={<LeaderboardMoonLeading size={16} />}
         title={sectionTitles.dailyBonus}
         accent={colors.primary || "#ef4444"}
         rows={normalizedRows}

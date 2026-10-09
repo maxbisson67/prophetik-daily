@@ -158,6 +158,50 @@ export function formatTpPickLine(pick, league = "NHL") {
   return score;
 }
 
+/** Libellé court de période / issue pour affichage compact (ex. TR, PROL, TB). */
+export function formatTpPickPeriodShort(pick, league = "NHL") {
+  const lg = String(league || "NHL").toUpperCase();
+  if (lg === "MLB") return null;
+
+  const outcome = safeAbbr(pick?.predictedOutcome);
+  if (!outcome || outcome === "FINAL") return null;
+  if (outcome === "REG") return "TR";
+  if (outcome === "OT") return "PROL";
+  if (outcome === "TB") return "TB";
+  return outcome;
+}
+
+/** Lignes compactes pour la liste participants (données déjà dans entry.picks). */
+export function formatTpEntryPickLines(entry, bundle, league = "NHL") {
+  const games = Array.isArray(bundle?.games) ? bundle.games : [];
+  const picks = entry?.picks || {};
+  const lines = [];
+
+  for (const slot of games) {
+    const gameId = String(slot?.gameId || "");
+    if (!gameId) continue;
+
+    const pick = lookupPickByGameId(picks, gameId);
+    const awayScore = pick?.predictedAwayScore;
+    const homeScore = pick?.predictedHomeScore;
+    if (awayScore == null || homeScore == null) continue;
+
+    const awayAbbr = safeAbbr(slot?.awayAbbr);
+    const homeAbbr = safeAbbr(slot?.homeAbbr);
+
+    lines.push({
+      gameId,
+      awayAbbr,
+      homeAbbr,
+      awayScore,
+      homeScore,
+      periodShort: formatTpPickPeriodShort(pick, league),
+    });
+  }
+
+  return lines;
+}
+
 export function formatOfficialScoreLine(slot) {
   const official = slot?.officialResult || {};
   const away = official.awayScore;

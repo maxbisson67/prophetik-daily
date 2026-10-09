@@ -1,5 +1,5 @@
 /** Points attribués pour une victoire FGC (premier but / premier point produit). */
-export const FGC_WIN_POINTS = 10;
+export const FGC_WIN_POINTS = 5;
 
 /** @deprecated Le bonus Trio est remplacé par le bonus quotidien cumulatif. */
 export const TS_WIN_BONUS_POINTS = 0;

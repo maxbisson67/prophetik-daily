@@ -30,11 +30,17 @@ import {
   buildDailyParticipantChallengeStats,
   toDailyProfileRow,
 } from "./leaderboardParticipantRanks";
-import { isMlbSport } from "./leaderboardDashboardHelpers";
+import { fgcDisplayPoints, isMlbSport } from "./leaderboardDashboardHelpers";
+import { DAILY_TOP_BONUS_POINTS } from "@src/lib/challengeScoringConstants";
+import {
+  LeaderboardMoonLeading,
+  LeaderboardTrophyLeading,
+  LEADERBOARD_TOP_SCORERS_ACCENT,
+} from "./leaderboardSectionIcons";
 
 const AVATAR_PLACEHOLDER = require("@src/assets/avatar-placeholder.png");
 const JERSEY_SIZE = 132;
-const OVERALL_RANK_ACCENT = "#FACC15";
+const OVERALL_RANK_ACCENT = LEADERBOARD_TOP_SCORERS_ACCENT;
 
 function hexWithAlpha(hex, alphaHex = "22") {
   const clean = String(hex || "").replace("#", "");
@@ -242,6 +248,81 @@ function ChallengeStatCard({
   );
 }
 
+function DailyBonusStatCard({ title, accent, stats, memberCount, colors, t }) {
+  const wins = Number(stats?.wins ?? 0) || 0;
+  const points = Number(stats?.points ?? 0) || 0;
+  const hasActivity = wins > 0 || points > 0;
+
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 14,
+        backgroundColor: colors.card,
+        borderLeftWidth: 4,
+        borderLeftColor: accent,
+        padding: 12,
+        gap: 10,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <LeaderboardMoonLeading size={16} />
+            <Text
+              style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}
+              numberOfLines={2}
+            >
+              {title}
+            </Text>
+          </View>
+          <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 11, lineHeight: 15 }}>
+            {t("leaderboard.participantProfile.dailyBonusHint", {
+              bonus: DAILY_TOP_BONUS_POINTS,
+              defaultValue:
+                "+{{bonus}} pts par soirée gagnée (meilleur total SOLO + DUO + TRIO du jour).",
+            })}
+          </Text>
+        </View>
+        {stats?.rank ? (
+          <ParticipantRankDisc
+            rank={stats.rank}
+            total={memberCount}
+            accent={accent}
+            colors={colors}
+            t={t}
+            compact
+          />
+        ) : null}
+      </View>
+
+      {hasActivity ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <StatPill
+            colors={colors}
+            label={t("leaderboard.columns.dailyBonusWinsShort", { defaultValue: "Soirs" })}
+            value={String(wins)}
+            accent={accent}
+          />
+          <StatPill
+            colors={colors}
+            label={t("leaderboard.columns.pointsShort", { defaultValue: "Pts" })}
+            value={String(points)}
+            accent={accent}
+          />
+        </View>
+      ) : (
+        <Text style={{ color: colors.subtext, fontWeight: "700", fontSize: 12 }}>
+          {t("leaderboard.challenge.noStats.dailyBonus", {
+            defaultValue: "Aucun bonus meilleure soirée pour cette compétition.",
+          })}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 function StatPill({ colors, label, value, accent }) {
   return (
     <View
@@ -305,6 +386,8 @@ export default function LeaderboardParticipantProfileModal({
     return buildParticipantChallengeStats(row, rankMaps);
   }, [row, peerRows, isDaily]);
 
+  const dailyBonusAccent = colors.primary || "#ef4444";
+
   const sectionTitles = useMemo(
     () => ({
       fgc: mlb
@@ -312,6 +395,9 @@ export default function LeaderboardParticipantProfileModal({
         : t("leaderboard.sections.fgcNhl", { defaultValue: "Premier but" }),
       tp: t("leaderboard.sections.tp", { defaultValue: "Prédire l'issue du match" }),
       ts: t("leaderboard.sections.ts", { defaultValue: "Trio du jour" }),
+      dailyBonus: t("leaderboard.sections.dailyBonus", {
+        defaultValue: "Bonus meilleure soirée",
+      }),
     }),
     [mlb, t]
   );
@@ -319,6 +405,15 @@ export default function LeaderboardParticipantProfileModal({
   const winsLabel = isDaily
     ? t("live.participantProfile.successes", { defaultValue: "Réussites" })
     : t("leaderboard.participantProfile.wins", { defaultValue: "Victoires" });
+
+  /** Aucune bonne prédiction SOLO dans le groupe → pas de classement affiché. */
+  const fgcGroupHasRankableActivity = useMemo(() => {
+    return (peerRows || []).some((member) => {
+      const points = fgcDisplayPoints(member);
+      const wins = Number(member?.fgcWins ?? member?.families?.fgc?.wins ?? 0) || 0;
+      return points > 0 || wins > 0;
+    });
+  }, [peerRows]);
 
   if (!visible || !row || !colors) return null;
 
@@ -442,20 +537,7 @@ export default function LeaderboardParticipantProfileModal({
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <View
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  borderWidth: 2,
-                  borderColor: OVERALL_RANK_ACCENT,
-                  backgroundColor: hexWithAlpha(OVERALL_RANK_ACCENT, "1A"),
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>🏆</Text>
-              </View>
+              <LeaderboardTrophyLeading size={28} accent={OVERALL_RANK_ACCENT} />
               <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14, flex: 1 }}>
                 {isDaily
                   ? t("live.participantProfile.totalToday", { defaultValue: "Total du jour" })
@@ -501,7 +583,7 @@ export default function LeaderboardParticipantProfileModal({
             memberCount={memberCount}
             colors={colors}
             t={t}
-            showRank={!isDaily}
+            showRank={!isDaily && fgcGroupHasRankableActivity}
             winsLabel={winsLabel}
           />
 
@@ -530,6 +612,17 @@ export default function LeaderboardParticipantProfileModal({
             showRank={!isDaily}
             winsLabel={winsLabel}
           />
+
+          {!isDaily ? (
+            <DailyBonusStatCard
+              title={sectionTitles.dailyBonus}
+              accent={dailyBonusAccent}
+              stats={stats?.dailyBonus}
+              memberCount={memberCount}
+              colors={colors}
+              t={t}
+            />
+          ) : null}
         </ScrollView>
       </View>
     </Modal>

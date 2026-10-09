@@ -19,6 +19,9 @@ export default function TpParticipantsModal({
   loading = false,
   currentUid = "",
   colors,
+  league = "NHL",
+  hideOthersPicks = false,
+  revealTimeLabel = null,
 }) {
   const gameCount = Number(bundle?.gameCount || bundle?.games?.length || 0);
 
@@ -78,6 +81,9 @@ export default function TpParticipantsModal({
               loading={loading}
               currentUid={currentUid}
               colors={colors}
+              league={league}
+              hideOthersPicks={hideOthersPicks}
+              revealTimeLabel={revealTimeLabel}
             />
           </ScrollView>
         </View>

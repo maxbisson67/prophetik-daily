@@ -2,6 +2,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
+import { isPlayerEligibleForSlot, usesRankSlotExclusion } from "./tiersSlotRules.js";
 
 // Nova
 const NOVA_UID = "ai";
@@ -76,6 +77,25 @@ function pickNFrom(list, n, usedSet, { avoidInjured = true } = {}) {
   return out;
 }
 
+function pickNovaByRankSlots(pool, defiType, usedSet) {
+  const rules = getDefiRules(defiType);
+  const picks = [];
+
+  for (let slot = 0; slot < rules.picks; slot++) {
+    const eligible = (pool || []).filter(
+      (p) =>
+        isPlayerEligibleForSlot(p, slot, defiType) &&
+        !usedSet.has(String(p.playerId || "")) &&
+        !isInjuredOrUnavailable(p.injury)
+    );
+    const chosen = pickNFrom(eligible, 1, usedSet, { avoidInjured: true });
+    if (!chosen.length) return null;
+    picks.push(chosen[0]);
+  }
+
+  return picks.length === rules.picks ? picks : null;
+}
+
 /**
  * Détermine combien Nova "ajoute à la cagnotte".
  * - si tu as un champ dans le defi, tu peux le prioriser (ex: defi.entryCost / defi.novaPotBonus)
@@ -148,18 +168,23 @@ export const novaPickAtLock = onSchedule("every 5 minutes", async () => {
       continue;
     }
 
-    const t1 = pool.filter((p) => p.tier === "T1");
-    const t2 = pool.filter((p) => p.tier === "T2");
-    const t3 = pool.filter((p) => p.tier === "T3");
-
     const used = new Set();
 
-    // ✅ STRICT: on évite TOUS les statuts non-actifs.
-    const picks = [
-      ...pickNFrom(t1, rules.T1, used, { avoidInjured: true }),
-      ...pickNFrom(t2, rules.T2, used, { avoidInjured: true }),
-      ...pickNFrom(t3, rules.T3, used, { avoidInjured: true }),
-    ];
+    let picks;
+    if (usesRankSlotExclusion(defi.type)) {
+      picks = pickNovaByRankSlots(pool, defi.type, used);
+    } else {
+      const t1 = pool.filter((p) => p.tier === "T1");
+      const t2 = pool.filter((p) => p.tier === "T2");
+      const t3 = pool.filter((p) => p.tier === "T3");
+      picks = [
+        ...pickNFrom(t1, rules.T1, used, { avoidInjured: true }),
+        ...pickNFrom(t2, rules.T2, used, { avoidInjured: true }),
+        ...pickNFrom(t3, rules.T3, used, { avoidInjured: true }),
+      ];
+    }
+
+    if (!picks) picks = [];
 
     if (picks.length !== rules.picks) {
       await db.doc(`defis/${defiId}`).set(

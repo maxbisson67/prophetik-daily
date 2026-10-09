@@ -15,6 +15,7 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import GroupsToggleRow from "@src/home/components/GroupsToggleRow";
 import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
+import { useApplyRouteGroupIdParam } from "@src/groups/useApplyRouteGroupIdParam";
 
 import firestore from "@react-native-firebase/firestore";
 
@@ -207,12 +208,7 @@ export default function ClassementScreen() {
 
   const groupIds = useMemo(() => groups.map((g) => String(g.id)), [groups]);
 
-  useEffect(() => {
-    if (!paramGroupId || !groupIds.includes(paramGroupId)) return;
-    if (String(currentGroupId) !== paramGroupId) {
-      setSelectedGroupId(paramGroupId);
-    }
-  }, [paramGroupId, groupIds.join("|"), currentGroupId, setSelectedGroupId]);
+  useApplyRouteGroupIdParam(paramGroupId, groupIds, setSelectedGroupId);
 
   const canLoad =
     !!user &&
@@ -259,7 +255,10 @@ export default function ClassementScreen() {
       setRefreshing(true);
 
       const fromYmd = String(selectedCompetition?.fromYmd || "");
-      const toYmd = String(selectedCompetition?.toYmd || "");
+      let toYmd = String(selectedCompetition?.toYmd || "");
+      if (toYmd && todayYmd && toYmd < todayYmd) {
+        toYmd = todayYmd;
+      }
 
       await fetch(
         `${baseUrl}?groupId=${encodeURIComponent(currentGroupId)}&seasonId=${encodeURIComponent(
@@ -273,7 +272,13 @@ export default function ClassementScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [currentGroupId, selectedCompetitionKey, selectedCompetition?.fromYmd, selectedCompetition?.toYmd]);
+  }, [
+    currentGroupId,
+    selectedCompetitionKey,
+    selectedCompetition?.fromYmd,
+    selectedCompetition?.toYmd,
+    todayYmd,
+  ]);
 
   const hasLoggedLeaderboardViewRef = useRef(false);
 

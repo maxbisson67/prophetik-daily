@@ -1,25 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import firestore from "@react-native-firebase/firestore";
-import { resolveLeaderboardReadKeys, competitionKeyMatchesSport } from "@src/season/seasonCompetitionCore";
+import {
+  resolveLeaderboardReadKeys,
+  competitionKeyMatchesSport,
+} from "@src/season/seasonCompetitionCore";
+import {
+  mergeLeaderboardRows,
+  mergeMembersWithLeaderboardRows,
+  isActiveGroupMembership,
+} from "./leaderboardMemberMerge";
 
-function mergeLeaderboardRows(rowsByKey) {
-  const merged = new Map();
-  for (const rows of Object.values(rowsByKey)) {
-    for (const row of rows || []) {
-      const id = String(row.uid || row.id || "").trim();
-      if (!id) continue;
-      const pts = Number(row.pointsTotal ?? 0) || 0;
-      const prev = merged.get(id);
-      if (!prev || pts >= Number(prev.pointsTotal ?? 0)) {
-        merged.set(id, { ...row, id });
-      }
-    }
-  }
-
-  return Array.from(merged.values()).sort(
-    (a, b) => Number(b.pointsTotal ?? 0) - Number(a.pointsTotal ?? 0)
-  );
-}
+const MEMBER_DOC_LIMIT = 200;
 
 export default function useLeaderboardGroupMembers({
   groupId,
@@ -37,6 +28,7 @@ export default function useLeaderboardGroupMembers({
   );
 
   const [rowsByKey, setRowsByKey] = useState({});
+  const [memberUids, setMemberUids] = useState([]);
   const [loading, setLoading] = useState(!!effectiveEnabled);
 
   useEffect(() => {
@@ -44,6 +36,7 @@ export default function useLeaderboardGroupMembers({
 
     if (!effectiveEnabled || !leaderboardKey || !groupId) {
       setRowsByKey({});
+      setMemberUids([]);
       setLoading(false);
       return () => {
         alive = false;
@@ -51,6 +44,7 @@ export default function useLeaderboardGroupMembers({
     }
 
     setRowsByKey({});
+    setMemberUids([]);
     setLoading(true);
     const gid = String(groupId);
     const unsubs = [];
@@ -58,8 +52,7 @@ export default function useLeaderboardGroupMembers({
     for (const key of readKeys) {
       const q = firestore()
         .collection(`groups/${gid}/leaderboards/${key}/members`)
-        .orderBy("pointsTotal", "desc")
-        .limit(50);
+        .limit(MEMBER_DOC_LIMIT);
 
       unsubs.push(
         q.onSnapshot(
@@ -81,6 +74,32 @@ export default function useLeaderboardGroupMembers({
       );
     }
 
+    unsubs.push(
+      firestore()
+        .collection("group_memberships")
+        .where("groupId", "==", gid)
+        .onSnapshot(
+          (snap) => {
+            if (!alive) return;
+            const uids = (snap?.docs ?? [])
+              .map((d) => {
+                const data = d.data() || {};
+                if (!isActiveGroupMembership(data)) return null;
+                return (
+                  String(data.uid || data.userId || data.participantId || "").trim() ||
+                  null
+                );
+              })
+              .filter(Boolean);
+            setMemberUids(Array.from(new Set(uids)));
+          },
+          () => {
+            if (!alive) return;
+            setMemberUids([]);
+          }
+        )
+    );
+
     return () => {
       alive = false;
       unsubs.forEach((u) => {
@@ -96,8 +115,9 @@ export default function useLeaderboardGroupMembers({
     for (const key of readKeys) {
       scoped[key] = rowsByKey[key] || [];
     }
-    return mergeLeaderboardRows(scoped);
-  }, [rowsByKey, readKeys.join("|")]);
+    const leaderboardRows = mergeLeaderboardRows(scoped, readKeys);
+    return mergeMembersWithLeaderboardRows(memberUids, leaderboardRows);
+  }, [rowsByKey, readKeys.join("|"), memberUids.join("|")]);
 
   return { rows, loading };
 }

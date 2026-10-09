@@ -5,9 +5,11 @@ import i18n from "@src/i18n/i18n";
 import { MlbBvpLine, shouldShowMlbBvpLine } from "@src/mlb/MlbDefiPlayerMeta";
 import { getInjuryDisplay } from "@src/players/injuryDisplayHelpers";
 import {
-  getFgcPlayerPreviousSeasonLine,
   getFgcPlayerStatChips,
+  getNhlGoalsPerGameFromStats,
+  getSeasonStats,
 } from "@src/players/seasonStatsHelpers";
+import { getFgcPlayerSortTag } from "@src/firstGoal/fgcPlayerSortSeason";
 
 function initials(name) {
   const s = String(name || "").trim();
@@ -18,7 +20,8 @@ function initials(name) {
   return (a + b).toUpperCase();
 }
 
-function StatChip({ chip, colors }) {
+function StatChip({ chip, colors, muted = false }) {
+  const emphasized = chip.emphasize === true;
   return (
     <View
       style={{
@@ -27,18 +30,204 @@ function StatChip({ chip, colors }) {
         paddingVertical: 8,
         paddingHorizontal: 6,
         borderRadius: 10,
-        backgroundColor: colors.card2,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: muted ? colors.card : colors.card2,
+        borderWidth: emphasized ? 2 : 1,
+        borderColor: emphasized ? colors.primary : colors.border,
         alignItems: "center",
+        opacity: muted ? 0.92 : 1,
       }}
     >
-      <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16, lineHeight: 20 }}>
+      <Text
+        style={{
+          color: colors.text,
+          fontWeight: emphasized ? "900" : "800",
+          fontSize: emphasized ? 18 : 15,
+          lineHeight: emphasized ? 22 : 19,
+        }}
+      >
         {chip.value}
       </Text>
-      <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 10, marginTop: 2 }}>
+      <Text
+        style={{
+          color: emphasized ? colors.primary : colors.subtext,
+          fontWeight: "800",
+          fontSize: 10,
+          marginTop: 2,
+        }}
+      >
         {chip.label}
       </Text>
+    </View>
+  );
+}
+
+function SortPointsTag({ tag, colors, showLabel = true }) {
+  if (!tag) return null;
+
+  return (
+    <View
+      style={{
+        position: "absolute",
+        top: 10,
+        right: 10,
+        zIndex: 2,
+        paddingVertical: 5,
+        paddingHorizontal: 9,
+        borderRadius: 999,
+        backgroundColor: colors.primary,
+        borderWidth: 1,
+        borderColor: colors.primary,
+        alignItems: "center",
+        minWidth: 52,
+      }}
+    >
+      <Text style={{ color: "#fff", fontWeight: "900", fontSize: 15, lineHeight: 18 }}>
+        {tag.value}
+      </Text>
+      {showLabel && tag.label ? (
+        <Text style={{ color: "rgba(255,255,255,0.92)", fontWeight: "800", fontSize: 9, marginTop: 1 }}>
+          {tag.label}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function nhlGoalsAndGp(item, seasonId) {
+  const stats = getSeasonStats(item?.statsBySeason, seasonId);
+  if (!stats || typeof stats !== "object") {
+    return { goals: 0, gp: 0 };
+  }
+  return {
+    goals: Number(stats.goals) || 0,
+    gp: Number(stats.gamesPlayed) || 0,
+  };
+}
+
+const NHL_GOALS_LABEL_WIDTH = 100;
+
+/** B / G (buts) et MJ / GP (matchs) selon la langue. */
+function nhlGoalsUnitLabel() {
+  return i18n.language?.startsWith("fr") ? "B" : "G";
+}
+
+function nhlGamesPlayedUnitLabel() {
+  return i18n.language?.startsWith("fr") ? "MJ" : "GP";
+}
+
+function formatNhlGoalsPerGame(rate) {
+  if (rate == null || !Number.isFinite(rate)) return "—";
+  return rate.toFixed(2);
+}
+
+function NhlGoalsRateRow({ label, goals, gp, colors, emphasized = false }) {
+  const games = Number(gp) || 0;
+  const rate = games > 0 ? getNhlGoalsPerGameFromStats({ goals, gamesPlayed: gp }) : null;
+  const rateStr = formatNhlGoalsPerGame(rate);
+  const goalsUnit = nhlGoalsUnitLabel();
+  const gpUnit = nhlGamesPlayedUnitLabel();
+  const gpgUnit = i18n.t("firstGoal.pick.goalsPerGameUnit", {
+    defaultValue: i18n.language?.startsWith("fr") ? "B/MJ" : "G/GP",
+  });
+
+  const numStyle = {
+    fontVariant: ["tabular-nums"],
+    fontWeight: "900",
+    fontSize: emphasized ? 17 : 14,
+    lineHeight: emphasized ? 20 : 17,
+    color: emphasized ? colors.primary : colors.text,
+  };
+  const unitStyle = {
+    fontSize: 9,
+    fontWeight: "800",
+    color: emphasized ? colors.primary : colors.subtext,
+  };
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
+      <Text
+        style={{
+          minWidth: NHL_GOALS_LABEL_WIDTH,
+          flexShrink: 0,
+          color: colors.subtext,
+          fontSize: 10,
+          fontWeight: emphasized ? "800" : "700",
+          lineHeight: 14,
+          paddingTop: emphasized ? 4 : 2,
+        }}
+      >
+        {label}
+      </Text>
+      <View style={{ alignItems: "center", gap: 2, flexShrink: 1, maxWidth: "100%" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "baseline",
+            gap: 6,
+            paddingHorizontal: emphasized ? 8 : 5,
+            paddingVertical: emphasized ? 3 : 2,
+            borderRadius: 7,
+            backgroundColor: emphasized ? `${colors.primary}20` : colors.card2,
+            borderWidth: emphasized ? 1 : 0,
+            borderColor: emphasized ? `${colors.primary}40` : "transparent",
+          }}
+        >
+          <Text style={{ ...numStyle, paddingRight: 2 }} numberOfLines={1}>
+            {goals}
+          </Text>
+          <Text style={unitStyle}>{goalsUnit}</Text>
+          <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "700" }}>
+            ·
+          </Text>
+          <Text style={{ ...numStyle, paddingRight: 2 }} numberOfLines={1}>
+            {gp}
+          </Text>
+          <Text style={unitStyle}>{gpUnit}</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+          <Text
+            style={{
+              fontVariant: ["tabular-nums"],
+              fontWeight: "700",
+              fontSize: 9,
+              lineHeight: 12,
+              color: colors.subtext,
+            }}
+          >
+            {rateStr}
+          </Text>
+          <Text style={{ fontSize: 9, fontWeight: "700", color: colors.subtext }}>{gpgUnit}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function NhlGoalsUnderName({ item, seasonPair, colors }) {
+  const currentId = seasonPair?.current;
+  if (!currentId) return null;
+
+  const current = nhlGoalsAndGp(item, currentId);
+  const previousId = seasonPair?.previous;
+  const previous = previousId ? nhlGoalsAndGp(item, previousId) : null;
+
+  return (
+    <View style={{ gap: 4, marginTop: 2, alignSelf: "stretch" }}>
+      <NhlGoalsRateRow
+        label={i18n.t("firstGoal.pick.goalsThisYear", { defaultValue: "Cette saison :" })}
+        goals={current.goals}
+        gp={current.gp}
+        colors={colors}
+        emphasized
+      />
+      {previousId ? (
+        <NhlGoalsRateRow
+          label={i18n.t("firstGoal.pick.goalsLastYear", { defaultValue: "L'an passé :" })}
+          goals={previous?.goals ?? 0}
+          gp={previous?.gp ?? 0}
+          colors={colors}
+        />
+      ) : null}
     </View>
   );
 }
@@ -68,8 +257,7 @@ function resolveRoleLabel({ league, item, lineupSlot, lineupSideAvailable }) {
     });
   }
 
-  const pos = String(item?.positionCode || "").trim().toUpperCase();
-  return pos || null;
+  return null;
 }
 
 function LineupBadge({ slot, colors, provisional = false }) {
@@ -115,6 +303,7 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
   pendingPlayerId = null,
   league,
   seasonPair,
+  sortSeasonId = null,
   lineupsAvailable = false,
   lineupSideAvailable = false,
   lineupsProvisional = false,
@@ -133,8 +322,14 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
       String(pendingPlayerId) === String(item?.playerId))
   );
 
-  const statChips = getFgcPlayerStatChips(item, league, seasonPair);
-  const previousSeason = getFgcPlayerPreviousSeasonLine(item, league, seasonPair);
+  const isNhl = String(league || "").toUpperCase() === "NHL";
+  const currentChips = !isNhl ? getFgcPlayerStatChips(item, league, seasonPair?.current) : [];
+  const previousChips =
+    !isNhl && seasonPair?.previous
+      ? getFgcPlayerStatChips(item, league, seasonPair.previous)
+      : [];
+  const sortTagSeasonId = sortSeasonId || seasonPair?.current;
+  const sortTag = !isNhl ? getFgcPlayerSortTag(item, league, sortTagSeasonId) : null;
   const roleLabel = resolveRoleLabel({
     league,
     item,
@@ -153,11 +348,12 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
         overflow: "hidden",
       }}
     >
+      {sortTag ? <SortPointsTag tag={sortTag} colors={colors} /> : null}
       <TouchableOpacity
         onPress={() => onPick(item)}
         disabled={disabled}
         activeOpacity={0.85}
-        style={{ padding: 12, gap: 10 }}
+        style={{ padding: 12, paddingTop: sortTag ? 36 : 12, gap: 10 }}
       >
         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
           <View
@@ -217,8 +413,6 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
               <Text style={{ color: colors.warning || "#FB8C00", fontSize: 12, fontWeight: "800" }}>
                 {i18n.t("firstGoal.pick.saving", { defaultValue: "Enregistrement en cours…" })}
               </Text>
-            ) : roleLabel ? (
-              <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "800" }}>{roleLabel}</Text>
             ) : isPicked ? (
               <Text
                 style={{
@@ -229,6 +423,12 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
               >
                 {i18n.t("firstGoal.pick.mySelection", { defaultValue: "Ma sélection" })}
               </Text>
+            ) : roleLabel ? (
+              <Text style={{ color: colors.subtext, fontSize: 12, fontWeight: "800" }}>{roleLabel}</Text>
+            ) : null}
+
+            {isNhl && !isPending ? (
+              <NhlGoalsUnderName item={item} seasonPair={seasonPair} colors={colors} />
             ) : null}
 
             {injuryInfo ? (
@@ -254,18 +454,20 @@ const FgcPlayerPickCard = React.memo(function FgcPlayerPickCard({
           )}
         </View>
 
-        {statChips.length ? (
+        {!isNhl && currentChips.length ? (
           <View style={{ flexDirection: "row", gap: 8 }}>
-            {statChips.map((chip) => (
-              <StatChip key={chip.key} chip={chip} colors={colors} />
+            {currentChips.map((chip) => (
+              <StatChip key={`cur-${chip.key}`} chip={chip} colors={colors} />
             ))}
           </View>
         ) : null}
 
-        {previousSeason ? (
-          <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "600" }}>
-            {previousSeason.label} · {previousSeason.line}
-          </Text>
+        {!isNhl && previousChips.length ? (
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {previousChips.map((chip) => (
+              <StatChip key={`prev-${chip.key}`} chip={chip} colors={colors} muted />
+            ))}
+          </View>
         ) : null}
 
         {league === "MLB" && shouldShowMlbBvpLine(item?.bvpVsOpposingStarter) ? (

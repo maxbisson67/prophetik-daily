@@ -163,6 +163,47 @@ async function fetchNhlScheduleForYmd(gameYmd) {
   return out;
 }
 
+function ymdToCompact(ymd) {
+  return String(ymd || "").slice(0, 10).replaceAll("-", "");
+}
+
+/** Matchs régulier / séries — pas de pré-saison (Trio autopilot). */
+async function fetchNhlEligibleScheduleForYmd(gameYmd) {
+  const dayId = ymdToCompact(gameYmd);
+  const snap = await db
+    .collection(`nhl_matchups_daily/${dayId}/games`)
+    .where("eligibleForProphetik", "==", true)
+    .get();
+
+  const out = [];
+
+  snap.forEach((doc) => {
+    const g = doc.data() || {};
+    const homeAbbr = normalizeNhlAbbr(g, "home");
+    const awayAbbr = normalizeNhlAbbr(g, "away");
+    const homeTeamId = normalizeNhlTeamId(g, "home");
+    const awayTeamId = normalizeNhlTeamId(g, "away");
+    const start = toDateSafe(g?.startTimeUTC);
+
+    if (!start || !homeAbbr || !awayAbbr || homeAbbr.length < 2 || awayAbbr.length < 2) {
+      return;
+    }
+
+    out.push({
+      league: "NHL",
+      gameId: String(g.gameId || doc.id || "").trim(),
+      gameStartTimeUTC: start,
+      gameYmd,
+      homeAbbr,
+      awayAbbr,
+      homeTeamId,
+      awayTeamId,
+    });
+  });
+
+  return out;
+}
+
 /* ----------------------------- selection / idempotence ----------------------------- */
 
 function selectGameForGroup({ games, group, sport }) {
@@ -404,14 +445,15 @@ export const createDailyFgcAutopilot = onSchedule(
 
         const tsExists = await hasExistingTsForGroupDay({ groupId, gameYmd });
         if (!tsExists) {
-          if (scheduleCache[sport] == null) {
-            scheduleCache[sport] =
-              sport === "MLB"
-                ? await fetchMlbScheduleForYmd(gameYmd)
-                : await fetchNhlScheduleForYmd(gameYmd);
+          let tsGames = [];
+          if (sport === "NHL") {
+            tsGames = await fetchNhlEligibleScheduleForYmd(gameYmd);
+          } else {
+            if (scheduleCache[sport] == null) {
+              scheduleCache[sport] = await fetchMlbScheduleForYmd(gameYmd);
+            }
+            tsGames = scheduleCache[sport] || [];
           }
-
-          const tsGames = scheduleCache[sport] || [];
           const tsFirst =
             tsGames.length > 0
               ? tsGames.reduce((earliest, g) =>

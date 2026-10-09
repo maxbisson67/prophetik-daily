@@ -10,7 +10,12 @@ import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 import TpParticipantsModal from "@src/defis/results/TpParticipantsModal";
 import TpParticipantsList from "@src/defis/results/TpParticipantsList";
-import { tpEntryHasParticipation } from "@src/defis/results/challengeResultsModel";
+import {
+  getTpBundleFirstDeadline,
+  resolveChallengeDisplayStatus,
+  tpEntryHasParticipation,
+} from "@src/defis/results/challengeResultsModel";
+import { fmtTimeShort } from "@src/defis/tpDeadlineHelpers";
 import {
   formatParticipantTaskLabel,
   resolveParticipantTaskStatus,
@@ -33,7 +38,6 @@ import {
   scoreTpPickAgainstLive,
 } from "@src/defis/tpBundleDisplayHelpers";
 import { isMlbGamePostponed } from "@src/mlb/mlbGameStatusUtils";
-import { fmtTimeShort } from "@src/defis/tpDeadlineHelpers";
 import useLiveGameScores, {
   normalizeMlbScheduleGameForLive,
 } from "@src/defis/results/useLiveGameScores";
@@ -614,6 +618,18 @@ export default function TpResultDetailBlock({
     bundle?.gameYmd || item?.dateKey
   );
 
+  const displayStatus = useMemo(
+    () => resolveChallengeDisplayStatus(item, { scheduleByGameId }),
+    [item, scheduleByGameId]
+  );
+
+  const hideOthersPicks = displayStatus === "open";
+  const revealTimeLabel = useMemo(() => {
+    if (!hideOthersPicks) return null;
+    const deadline = getTpBundleFirstDeadline(bundle);
+    return deadline ? fmtTimeShort(deadline) : null;
+  }, [hideOthersPicks, bundle]);
+
   useEffect(() => {
     if (!bundleId) {
       setEntries([]);
@@ -703,6 +719,9 @@ export default function TpResultDetailBlock({
           loading={loading}
           currentUid={uid}
           colors={colors}
+          league={league}
+          hideOthersPicks={hideOthersPicks}
+          revealTimeLabel={revealTimeLabel}
         />
       ) : !loading && entries.length > 0 ? (
         <TouchableOpacity
@@ -737,6 +756,9 @@ export default function TpResultDetailBlock({
           onClose={() => setShowParticipantsModal(false)}
           bundle={bundle}
           entries={entries}
+          league={league}
+          hideOthersPicks={hideOthersPicks}
+          revealTimeLabel={revealTimeLabel}
           loading={loading}
           currentUid={uid}
           colors={colors}

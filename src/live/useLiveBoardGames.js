@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
 import { mapMlbScheduleGameToLiveGame } from "@src/mlb/mapMlbScheduleToLiveGame";
+import { mapNhlScheduleGameToLiveGame } from "@src/nhl/mapNhlScheduleToLiveGame";
 import { isMlbGameDelayed } from "@src/mlb/mlbGameStatusUtils";
 
 function normalizeBoardGame(row = {}, league = "nhl") {
@@ -51,6 +52,14 @@ function firstDefinedField(rows = [], key) {
   return null;
 }
 
+function firstDefinedObject(rows = [], key) {
+  for (const row of rows) {
+    const value = row?.[key];
+    if (value && typeof value === "object" && (value.season || value.game)) return value;
+  }
+  return null;
+}
+
 function mergeMlbGameRows(schedule, legacy, board) {
   const rows = [schedule, legacy, board].filter(Boolean);
   if (!rows.length) return null;
@@ -95,7 +104,9 @@ function mergeMlbGameRows(schedule, legacy, board) {
     currentBatterName: firstDefinedField(rows, "currentBatterName"),
     currentPitcherId: firstDefinedField(rows, "currentPitcherId"),
     currentPitcherName: firstDefinedField(rows, "currentPitcherName"),
+    currentPitcherPitchCount: firstDefinedField(rows, "currentPitcherPitchCount"),
     battingTeamAbbr: firstDefinedField(rows, "battingTeamAbbr"),
+    currentBatterStats: firstDefinedObject(rows, "currentBatterStats"),
     awayBattingOrder:
       (Array.isArray(feed?.awayBattingOrder) && feed.awayBattingOrder.length
         ? feed.awayBattingOrder
@@ -271,17 +282,23 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
     };
 
     const startSchedule = () => {
-      if (scheduleUnsubRef.current || lg !== "mlb" || !ymdCompact) return;
+      if (scheduleUnsubRef.current || !ymdCompact) return;
+      if (lg !== "mlb" && lg !== "nhl") return;
+
+      const collectionName = lg === "mlb" ? "mlb_schedule_daily" : "nhl_schedule_daily";
 
       scheduleUnsubRef.current = firestore()
-        .collection("mlb_schedule_daily")
+        .collection(collectionName)
         .doc(ymdCompact)
         .collection("games")
         .onSnapshot(
           (snap) => {
-            scheduleRows = (snap?.docs ?? []).map((d) =>
-              mapMlbScheduleGameToLiveGame({ ...d.data(), gamePk: d.id }, String(ymd))
-            );
+            scheduleRows = (snap?.docs ?? []).map((d) => {
+              const data = { ...d.data(), id: d.id };
+              return lg === "mlb"
+                ? mapMlbScheduleGameToLiveGame({ ...data, gamePk: d.id }, String(ymd))
+                : mapNhlScheduleGameToLiveGame(data, String(ymd));
+            });
             apply();
           },
           (err) => {
@@ -327,9 +344,7 @@ export default function useLiveBoardGames({ league = "nhl", ymd, enabled = true 
       );
 
     startLegacy();
-    if (lg === "mlb") {
-      startSchedule();
-    }
+    startSchedule();
 
     return () => {
       subscribedLivePksRef.current = "";

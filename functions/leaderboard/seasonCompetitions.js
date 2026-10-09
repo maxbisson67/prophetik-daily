@@ -56,12 +56,12 @@ async function fallbackEntriesForSport(db, sport, gameYmd) {
     try {
       const snap = await db.doc(CURRENT_SEASON_DOC).get();
       if (snap.exists) {
-        return deriveNhlCompetitionEntries(snap.data() || {});
+        return deriveNhlCompetitionEntries({ ...(snap.data() || {}), gameYmd });
       }
     } catch {
       // ignore
     }
-    return deriveNhlCompetitionEntries({});
+    return deriveNhlCompetitionEntries({ gameYmd });
   }
 
   const seasonId = getMlbCurrentSeason(new Date(`${String(gameYmd || "").slice(0, 10)}T12:00:00Z`));

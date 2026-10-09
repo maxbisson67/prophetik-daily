@@ -65,6 +65,7 @@ import { openLiveResultsTab } from "@src/defis/results/navigateToMesResultats";
 import { listenRNFB } from "@src/dev/fsListen";
 import { useMyGroups } from "@src/groups/MyGroupsProvider";
 import { useSelectedGroup } from "@src/groups/SelectedGroupProvider";
+import { useApplyRouteGroupIdParam } from "@src/groups/useApplyRouteGroupIdParam";
 import { isGroupAutopilotEnabled } from "@src/groups/groupAutopilotUtils";
 import { useAppVisibilitySafe } from "@src/providers/AppVisibilityProvider";
 import {
@@ -900,13 +901,7 @@ const avatarUrl =
     setSelectedGroupId(String(gid));
   }
 
-  useEffect(() => {
-    const raw = params?.groupId;
-    const gid = Array.isArray(raw) ? raw[0] : raw;
-    if (!gid) return;
-    if (!groupIds.includes(String(gid))) return;
-    setSelectedGroupId(String(gid));
-  }, [params?.groupId, groupIds.join("|"), setSelectedGroupId]);
+  useApplyRouteGroupIdParam(params?.groupId, groupIds, setSelectedGroupId);
 
   useEffect(() => {
     const openId = String(params?.openChallengeId || "").trim();

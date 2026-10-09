@@ -236,6 +236,10 @@ function isTodayTpBundleForHome(bundle, businessYmdCompact) {
   return String(bundle?.gameYmd || "").trim() === String(businessYmdCompact || "").trim();
 }
 
+function isTpBundleForGroup(bundle, groupId) {
+  return String(bundle?.groupId || "").trim() === String(groupId || "").trim();
+}
+
 function compareTpBundles(a, b) {
   const statusPriority = {
     open: 0,
@@ -412,6 +416,7 @@ export default function TeamPredictionHomeSection({
 
     setBundle(null);
     setBundleEntry(null);
+    setMyEntries({});
 
     let cancelled = false;
 
@@ -427,7 +432,11 @@ export default function TeamPredictionHomeSection({
         if (cancelled) return;
 
         const nextBundle = res?.data?.bundle || null;
-        if (nextBundle && isTodayTpBundleForHome(nextBundle, businessYmdCompact)) {
+        if (
+          nextBundle &&
+          isTodayTpBundleForHome(nextBundle, businessYmdCompact) &&
+          isTpBundleForGroup(nextBundle, gid)
+        ) {
           setBundle(nextBundle);
           setBundleEntry(res?.data?.entry ?? null);
         } else {
@@ -459,12 +468,18 @@ export default function TeamPredictionHomeSection({
         const candidates = [];
         if (exists) {
           const data = { id: bundleId, ...(snap?.data?.() || snap?.data || {}) };
-          if (isTodayTpBundleForHome(data, businessYmdCompact)) candidates.push(data);
+          if (
+            isTodayTpBundleForHome(data, businessYmdCompact) &&
+            isTpBundleForGroup(data, gid)
+          ) {
+            candidates.push(data);
+          }
         }
         if (
           prev?.id &&
           prev.id !== bundleId &&
-          isTodayTpBundleForHome(prev, businessYmdCompact)
+          isTodayTpBundleForHome(prev, businessYmdCompact) &&
+          isTpBundleForGroup(prev, gid)
         ) {
           candidates.push(prev);
         }
@@ -536,6 +551,14 @@ export default function TeamPredictionHomeSection({
 
   useEffect(() => {
     if (!user?.uid || !bundle?.id) {
+      setBundleEntry(null);
+      return;
+    }
+
+    const bundleGroupId = String(bundle?.groupId || "").trim();
+    const activeGroupId = String(currentGroupId || "").trim();
+    if (bundleGroupId && activeGroupId && bundleGroupId !== activeGroupId) {
+      setBundleEntry(null);
       return;
     }
 
@@ -546,7 +569,16 @@ export default function TeamPredictionHomeSection({
       .doc(String(user.uid));
 
     const unsub = ref.onSnapshot(
-      (snap) => setBundleEntry(snapshotExists(snap) ? snapshotData(snap) || null : null),
+      (snap) => {
+        if (
+          bundleGroupId &&
+          activeGroupId &&
+          bundleGroupId !== activeGroupId
+        ) {
+          return;
+        }
+        setBundleEntry(snapshotExists(snap) ? snapshotData(snap) || null : null);
+      },
       (err) => {
         const msg = String(err?.code || err?.message || "");
         if (!msg.includes("permission-denied")) {
@@ -560,7 +592,7 @@ export default function TeamPredictionHomeSection({
         unsub?.();
       } catch {}
     };
-  }, [bundle?.id, user?.uid]);
+  }, [bundle?.id, bundle?.groupId, currentGroupId, user?.uid]);
 
   /* ---------------- Legacy challenges ---------------- */
 
