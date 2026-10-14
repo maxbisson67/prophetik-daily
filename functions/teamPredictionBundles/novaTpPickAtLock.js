@@ -62,15 +62,14 @@ function isInNovaPickWindow(slot = {}, nowMs = Date.now()) {
   return nowMs >= novaStartMs && nowMs < cutoffMs;
 }
 
-function normalizeNhlPick(awayScore, homeScore, outcome, slot = {}) {
+function normalizeNhlPick(awayScore, homeScore, _outcome, slot = {}) {
   const predictedAwayScore = Number(awayScore);
   const predictedHomeScore = Number(homeScore);
-  const predictedOutcome = safeUpper(outcome);
 
   return {
     predictedAwayScore,
     predictedHomeScore,
-    predictedOutcome,
+    predictedOutcome: "FINAL",
     winnerAbbr: deriveWinnerAbbr({
       awayAbbr: slot.awayAbbr,
       homeAbbr: slot.homeAbbr,
@@ -104,14 +103,14 @@ function predictNhlPick(awayStrength, homeStrength, slot = {}) {
   const margin = Math.abs(homeAdj - awayStrength);
 
   if (homeFavored) {
-    if (margin < 0.04) return normalizeNhlPick(2, 3, "OT", slot);
-    if (margin < 0.12) return normalizeNhlPick(2, 3, "REG", slot);
-    return normalizeNhlPick(2, 4, "REG", slot);
+    if (margin < 0.04) return normalizeNhlPick(2, 3, null, slot);
+    if (margin < 0.12) return normalizeNhlPick(2, 3, null, slot);
+    return normalizeNhlPick(2, 4, null, slot);
   }
 
-  if (margin < 0.04) return normalizeNhlPick(3, 2, "OT", slot);
-  if (margin < 0.12) return normalizeNhlPick(3, 2, "REG", slot);
-  return normalizeNhlPick(4, 2, "REG", slot);
+  if (margin < 0.04) return normalizeNhlPick(3, 2, null, slot);
+  if (margin < 0.12) return normalizeNhlPick(3, 2, null, slot);
+  return normalizeNhlPick(4, 2, null, slot);
 }
 
 function predictMlbPick(awayStrength, homeStrength, slot = {}) {

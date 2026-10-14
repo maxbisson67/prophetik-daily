@@ -585,12 +585,6 @@ export default function CreateTeamPredictionModal({
         • {i18n.t("tp.create.ruleScore", { defaultValue: "Score exact" })}
       </Text>
 
-      {sportLeague === "NHL" ? (
-        <Text style={{ color: colors.text }}>
-          • {i18n.t("tp.create.ruleOutcome", { defaultValue: "Régulier / OT / TB" })}
-        </Text>
-      ) : null}
-
       <Text style={{ color: colors.subtext, marginTop: 10 }}>
         🎯{" "}
         {i18n.t("tp.create.scoringWinner", {

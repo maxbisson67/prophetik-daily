@@ -75,9 +75,65 @@ function buildReminderMessage(lang, { groupLabel }) {
   return { title, body };
 }
 
-async function fetchJoinedUids(defiId) {
-  const snap = await db.collection(`defis/${defiId}/participations`).get();
-  return new Set(snap.docs.map((d) => String(d.id)));
+export function groupTsDayKey(groupId, gameYmd) {
+  const gid = String(groupId || "").trim();
+  const ymd = String(gameYmd || "").slice(0, 10);
+  return gid && ymd ? `${gid}|${ymd}` : "";
+}
+
+function participationUid(partDoc) {
+  const data = partDoc.data?.() || partDoc.data || {};
+  const uid = String(data.uid || partDoc.id || "").trim();
+  if (!uid || uid.toLowerCase() === "ai") return "";
+  return uid;
+}
+
+/** Inscrits à n'importe quel TRIO du groupe pour cette date (évite les doublons de defis/jour). */
+export async function fetchHumanJoinedUidsForGroupTsDay(groupId, gameYmd) {
+  const gid = String(groupId || "").trim();
+  const ymd = String(gameYmd || "").slice(0, 10);
+  if (!gid || !ymd) return new Set();
+
+  const defisSnap = await db
+    .collection("defis")
+    .where("groupId", "==", gid)
+    .where("gameDate", "==", ymd)
+    .where("type", "==", TS_TYPE)
+    .get();
+
+  const joined = new Set();
+  await Promise.all(
+    defisSnap.docs.map(async (defiDoc) => {
+      const partsSnap = await defiDoc.ref.collection("participations").get();
+      for (const partDoc of partsSnap.docs) {
+        const uid = participationUid(partDoc);
+        if (uid) joined.add(uid);
+      }
+    })
+  );
+
+  return joined;
+}
+
+async function markTsReminderSentForGroupDay(groupId, gameYmd, extra = {}) {
+  const gid = String(groupId || "").trim();
+  const ymd = String(gameYmd || "").slice(0, 10);
+  if (!gid || !ymd) return;
+
+  const defisSnap = await db
+    .collection("defis")
+    .where("groupId", "==", gid)
+    .where("gameDate", "==", ymd)
+    .where("type", "==", TS_TYPE)
+    .get();
+
+  const patch = {
+    tsSignupReminder60SentAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+    ...extra,
+  };
+
+  await Promise.all(defisSnap.docs.map((d) => d.ref.set(patch, { merge: true })));
 }
 
 async function sendReminderPush({ uids, groupLabel, defiId, groupId, gameDate }) {
@@ -123,6 +179,10 @@ async function processOpenTsDefi(defiDoc, nowMs) {
   const status = String(defi.status || "").toLowerCase();
   if (status !== "open") return { skipped: true, reason: "not-open" };
 
+  const groupId = String(defi.groupId || "").trim();
+  const gameYmd = String(defi.gameDate || "").slice(0, 10);
+  const dayKey = groupTsDayKey(groupId, gameYmd);
+
   if (defi.tsSignupReminder60SentAt) {
     return { skipped: true, reason: "already-sent" };
   }
@@ -141,23 +201,29 @@ async function processOpenTsDefi(defiDoc, nowMs) {
     return { skipped: true, reason: "outside-window" };
   }
 
-  const groupId = String(defi.groupId || "").trim();
   if (!groupId) return { skipped: true, reason: "no-group" };
 
+  const siblingSnap = await db
+    .collection("defis")
+    .where("groupId", "==", groupId)
+    .where("gameDate", "==", gameYmd)
+    .where("type", "==", TS_TYPE)
+    .get();
+
+  const dayAlreadySent = siblingSnap.docs.some((d) => d.data()?.tsSignupReminder60SentAt);
+  if (dayAlreadySent) {
+    return { skipped: true, reason: "already-sent-group-day", defiId, dayKey };
+  }
+
   const memberUids = await fetchActiveHumanMemberUids(groupId);
-  const joined = await fetchJoinedUids(defiId);
+  const joined = await fetchHumanJoinedUidsForGroupTsDay(groupId, gameYmd);
   const targetUids = memberUids.filter((uid) => !joined.has(String(uid)));
 
   if (!targetUids.length) {
-    await defiDoc.ref.set(
-      {
-        tsSignupReminder60SentAt: FieldValue.serverTimestamp(),
-        tsSignupReminder60Skipped: "no-unjoined-members",
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    return { skipped: true, reason: "all-joined", defiId };
+    await markTsReminderSentForGroupDay(groupId, gameYmd, {
+      tsSignupReminder60Skipped: "no-unjoined-members",
+    });
+    return { skipped: true, reason: "all-joined", defiId, joinedCount: joined.size };
   }
 
   const groupName = await fetchGroupName(groupId);
@@ -172,18 +238,17 @@ async function processOpenTsDefi(defiDoc, nowMs) {
     gameDate: defi.gameDate,
   });
 
-  await defiDoc.ref.set(
-    {
-      tsSignupReminder60SentAt: FieldValue.serverTimestamp(),
-      tsSignupReminder60RecipientCount: targetUids.length,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await markTsReminderSentForGroupDay(groupId, gameYmd, {
+    tsSignupReminder60RecipientCount: targetUids.length,
+    tsSignupReminder60SourceDefiId: defiId,
+  });
 
   logger.info("[tsSignupReminder60] sent", {
     defiId,
     groupId,
+    dayKey,
+    joinedCount: joined.size,
+    tsDefiCount: siblingSnap.size,
     recipients: targetUids.length,
     ...push,
     deadline: deadline.toISOString(),

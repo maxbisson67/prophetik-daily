@@ -31,54 +31,6 @@ import TeamPredictionBundlePickScreen from "@src/defis/TeamPredictionBundlePickS
 
 const RED = "#b91c1c";
 
-function OutcomeChip({
-  label,
-  value,
-  selectedValue,
-  onPress,
-  colors,
-  disabled = false,
-}) {
-  const selected = value === selectedValue;
-
-  return (
-    <TouchableOpacity
-      onPress={() => {
-        if (!disabled) onPress(value);
-      }}
-      activeOpacity={disabled ? 1 : 0.9}
-      style={{
-        flex: 1,
-        minHeight: 42,
-        borderRadius: 12,
-        borderWidth: 1.5,
-        borderColor: disabled
-          ? colors.border
-          : selected
-          ? RED
-          : colors.border,
-        backgroundColor: disabled
-          ? colors.card2
-          : selected
-          ? "rgba(239,68,68,0.10)"
-          : colors.card,
-        alignItems: "center",
-        justifyContent: "center",
-        opacity: disabled ? 0.45 : 1,
-      }}
-    >
-      <Text
-        style={{
-          color: disabled ? colors.subtext : selected ? RED : colors.text,
-          fontWeight: "900",
-        }}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 function InfoRow({ label, value, colors }) {
   return (
     <View style={{ gap: 3 }}>
@@ -224,7 +176,6 @@ function TeamPredictionLegacyPickScreen({ challengeId }) {
 
   const [predictedAwayScore, setPredictedAwayScore] = useState("");
   const [predictedHomeScore, setPredictedHomeScore] = useState("");
-  const [predictedOutcome, setPredictedOutcome] = useState("REG");
   const [schedulePitchers, setSchedulePitchers] = useState(null);
 
   const [nowTick, setNowTick] = useState(Date.now());
@@ -283,11 +234,9 @@ const unsubEntry = entryRef.onSnapshot(
           : ""
       );
 
-      setPredictedOutcome(entryData.predictedOutcome || "REG");
     } else {
       setPredictedAwayScore("");
       setPredictedHomeScore("");
-      setPredictedOutcome("REG");
     }
   },
   (err) => {
@@ -385,22 +334,6 @@ const unsubEntry = entryRef.onSnapshot(
     });
   }, [awayAbbr, homeAbbr, predictedAwayScore, predictedHomeScore]);
 
-  const scoreDiff = useMemo(() => {
-    if (predictedAwayScore === "" || predictedHomeScore === "") return null;
-    const a = Number(predictedAwayScore);
-    const h = Number(predictedHomeScore);
-    if (!Number.isFinite(a) || !Number.isFinite(h)) return null;
-    return Math.abs(a - h);
-  }, [predictedAwayScore, predictedHomeScore]);
-
-  const otTbDisabled = scoreDiff !== null && scoreDiff > 1;
-
-  useEffect(() => {
-    if (otTbDisabled && (predictedOutcome === "OT" || predictedOutcome === "TB")) {
-      setPredictedOutcome("REG");
-    }
-  }, [otTbDisabled, predictedOutcome]);
-
   const isLocked = useMemo(() => {
     const status = String(challenge?.status || "").toLowerCase();
     if (["locked", "live", "closed", "completed", "decided"].includes(status)) {
@@ -418,16 +351,13 @@ const unsubEntry = entryRef.onSnapshot(
   const canSubmit = useMemo(() => {
     if (isLocked || saving) return false;
     if (predictedAwayScore === "" || predictedHomeScore === "") return false;
-    if (!isMlb && !predictedOutcome) return false;
     if (!derivedWinnerAbbr) return false;
     return true;
   }, [
     isLocked,
     saving,
-    isMlb,
     predictedAwayScore,
     predictedHomeScore,
-    predictedOutcome,
     derivedWinnerAbbr,
   ]);
 
@@ -444,7 +374,7 @@ const unsubEntry = entryRef.onSnapshot(
         challengeId: String(challengeId),
         predictedAwayScore: Number(predictedAwayScore),
         predictedHomeScore: Number(predictedHomeScore),
-        predictedOutcome,
+        predictedOutcome: "FINAL",
       });
 
       Alert.alert(
@@ -718,64 +648,6 @@ const unsubEntry = entryRef.onSnapshot(
                     </Text>
                   ) : null}
                 </View>
-
-                {/* Outcome — NHL seulement */}
-                {!isMlb ? (
-                <View
-                  style={[
-                    styles.card,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-                    {i18n.t("tp.pick.outcomeTitle", { defaultValue: "Type de victoire" })}
-                  </Text>
-
-                  <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                    <OutcomeChip
-                      label="REG"
-                      value="REG"
-                      selectedValue={predictedOutcome}
-                      onPress={setPredictedOutcome}
-                      colors={colors}
-                      disabled={isLocked}
-                    />
-                    <OutcomeChip
-                      label="OT"
-                      value="OT"
-                      selectedValue={predictedOutcome}
-                      onPress={setPredictedOutcome}
-                      colors={colors}
-                      disabled={isLocked || otTbDisabled}
-                    />
-                    <OutcomeChip
-                      label="TB"
-                      value="TB"
-                      selectedValue={predictedOutcome}
-                      onPress={setPredictedOutcome}
-                      colors={colors}
-                      disabled={isLocked || otTbDisabled}
-                    />
-                  </View>
-
-                  <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 10 }}>
-                    {i18n.t("tp.pick.outcomeHint", {
-                      defaultValue: "REG = temps régulier, OT = prolongation, TB = tirs de barrage.",
-                    })}
-                  </Text>
-
-                  {otTbDisabled ? (
-                    <Text style={{ color: RED, fontWeight: "800", fontSize: 12, marginTop: 8 }}>
-                      {i18n.t("tp.pick.otDisabledHint", {
-                        defaultValue: "OT et TB sont disponibles seulement si l’écart est de 1 but.",
-                      })}
-                    </Text>
-                  ) : null}
-                </View>
-                ) : null}
 
                 {/* Points */}
                 <View

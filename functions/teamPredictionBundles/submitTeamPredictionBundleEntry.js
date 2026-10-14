@@ -90,20 +90,10 @@ function normalizePickInput(raw = {}, slot = {}, league) {
     throw new HttpsError("invalid-argument", "Le score ne peut pas être égal.");
   }
 
-  if (normalizeLeague(league) === "MLB") {
+  if (normalizeLeague(league) === "MLB" || normalizeLeague(league) === "NHL") {
     predictedOutcome = "FINAL";
-  } else if (!["REG", "OT", "TB"].includes(predictedOutcome)) {
+  } else if (!["REG", "OT", "TB", "FINAL"].includes(predictedOutcome)) {
     throw new HttpsError("invalid-argument", "predictedOutcome invalide.");
-  }
-
-  if (normalizeLeague(league) === "NHL") {
-    const diff = Math.abs(predictedAwayScore - predictedHomeScore);
-    if (diff > 1 && (predictedOutcome === "OT" || predictedOutcome === "TB")) {
-      throw new HttpsError(
-        "invalid-argument",
-        "OT et TB sont permis seulement si l'écart est de 1 but."
-      );
-    }
   }
 
   const winnerAbbr = deriveWinnerAbbr({

@@ -1,25 +1,91 @@
 // app/(drawer)/(tabs)/_layout.js
 import React, { useMemo } from "react";
-import { View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { Tabs } from "expo-router";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "@src/i18n/i18n";
 
 import { useTheme } from "@src/theme/ThemeProvider";
 import { useAuth } from "@src/auth/SafeAuthProvider";
 import { useMyGroups } from "@src/groups/MyGroupsProvider";
-import {
-  useLiveTabTitle,
-  useSelectedGroup,
-} from "@src/groups/SelectedGroupProvider";
+import { useLiveTabTitle } from "@src/groups/SelectedGroupProvider";
 import { useGroupsUnreadTotal } from "@src/groupChat/useGroupUnreadCount";
+
+const TAB_ACTIVE_BAR = { width: 22, height: 3, marginTop: 4, borderRadius: 2 };
+
+function TabIconWithActiveBar({ focused, children }) {
+  const { colors } = useTheme();
+
+  return (
+    <View style={{ alignItems: "center" }}>
+      {children}
+      <View
+        style={{
+          ...TAB_ACTIVE_BAR,
+          backgroundColor: focused ? colors.primary : "transparent",
+        }}
+      />
+    </View>
+  );
+}
+
+function TabBarButton(props) {
+  const { isDark } = useTheme();
+  const selected = props.accessibilityState?.selected;
+
+  const activeBackground = isDark ? "rgba(239, 68, 68, 0.24)" : "rgba(239, 68, 68, 0.14)";
+  const ripple = isDark ? "rgba(239, 68, 68, 0.18)" : "rgba(239, 68, 68, 0.12)";
+
+  return (
+    <Pressable
+      {...props}
+      android_ripple={{ color: ripple, borderless: false }}
+      style={({ pressed }) => [
+        props.style,
+        {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 12,
+          marginHorizontal: 3,
+          marginVertical: 5,
+          backgroundColor: selected ? activeBackground : "transparent",
+          opacity: pressed ? 0.94 : 1,
+        },
+      ]}
+    />
+  );
+}
+
+function TabBarLabel({ focused, children }) {
+  const { colors } = useTheme();
+  const labelColor = focused ? colors.primary : colors.subtext;
+
+  return (
+    <Text
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.85}
+      style={{
+        color: labelColor,
+        fontSize: 10,
+        fontWeight: focused ? "800" : "600",
+        textAlign: "center",
+        marginTop: 0,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
 
 function TabsLayoutInner() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { groupIds } = useMyGroups();
-  const { selectedGroupId, selectedSport } = useSelectedGroup();
   const groupChatUnread = useGroupsUnreadTotal(groupIds, user?.uid);
 
   const liveTabTitle = useLiveTabTitle();
@@ -29,31 +95,51 @@ function TabsLayoutInner() {
     return groupChatUnread > 99 ? "99+" : groupChatUnread;
   }, [groupChatUnread]);
 
+  const tabBarBottomPad = Platform.OS === "ios" ? Math.max(insets.bottom, 10) : 8;
+
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: true,
+      lazy: true,
+      headerStyle: { backgroundColor: colors.card },
+      headerTintColor: colors.text,
+      headerTitleStyle: { color: colors.text },
+      tabBarStyle: {
+        backgroundColor: colors.card,
+        borderTopColor: colors.border,
+        borderTopWidth: 1,
+        paddingTop: 6,
+        paddingBottom: tabBarBottomPad,
+        paddingHorizontal: 2,
+        minHeight: 52 + tabBarBottomPad,
+      },
+      tabBarItemStyle: {
+        paddingVertical: 0,
+      },
+      tabBarActiveTintColor: colors.primary,
+      tabBarInactiveTintColor: colors.subtext,
+      tabBarButton: (props) => <TabBarButton {...props} />,
+      tabBarLabel: (props) => <TabBarLabel {...props} />,
+    }),
+    [colors.card, colors.border, colors.primary, colors.subtext, colors.text, tabBarBottomPad]
+  );
+
   return (
     <View style={{ flex: 1 }}>
-      <Tabs
-        initialRouteName="AccueilScreen"
-        screenOptions={{
-          headerShown: true,
-          lazy: true,
-          headerStyle: { backgroundColor: colors.card },
-          headerTintColor: colors.text,
-          headerTitleStyle: { color: colors.text },
-          tabBarStyle: {
-            backgroundColor: colors.card,
-            borderTopColor: colors.border,
-          },
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.subtext,
-        }}
-      >
+      <Tabs initialRouteName="AccueilScreen" screenOptions={screenOptions}>
         <Tabs.Screen
           name="AccueilScreen"
           options={{
             title: i18n.t("home.title", { defaultValue: "Aujourd’hui" }),
             headerLeft: (props) => <DrawerToggleButton {...props} />,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar-outline" color={color} size={size} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <TabIconWithActiveBar focused={focused}>
+                <Ionicons
+                  name={focused ? "calendar" : "calendar-outline"}
+                  color={color}
+                  size={size}
+                />
+              </TabIconWithActiveBar>
             ),
             tabBarBadge: todayTabBadge,
             tabBarBadgeStyle: {
@@ -74,8 +160,14 @@ function TabsLayoutInner() {
             title: liveTabTitle,
             tabBarLabel: liveTabTitle,
             headerLeft: (props) => <DrawerToggleButton {...props} />,
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="broadcast" color={color} size={size} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <TabIconWithActiveBar focused={focused}>
+                <MaterialCommunityIcons
+                  name="satellite-uplink"
+                  color={color}
+                  size={focused ? size + 2 : size}
+                />
+              </TabIconWithActiveBar>
             ),
           }}
         />
@@ -86,9 +178,10 @@ function TabsLayoutInner() {
             title: i18n.t("tabs.challenges", { defaultValue: "Historique" }),
             tabBarLabel: i18n.t("tabs.challenges", { defaultValue: "Historique" }),
             headerLeft: (props) => <DrawerToggleButton {...props} />,
-            tabBarActiveTintColor: "#16a34a",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="time-outline" color={color} size={size} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <TabIconWithActiveBar focused={focused}>
+                <Ionicons name={focused ? "time" : "time-outline"} color={color} size={size} />
+              </TabIconWithActiveBar>
             ),
           }}
         />
@@ -98,8 +191,14 @@ function TabsLayoutInner() {
           options={{
             title: i18n.t("tabs.leaderboard", { defaultValue: "Classement" }),
             headerLeft: (props) => <DrawerToggleButton {...props} />,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="podium" color={color} size={size} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <TabIconWithActiveBar focused={focused}>
+                <Ionicons
+                  name={focused ? "podium" : "podium-outline"}
+                  color={color}
+                  size={focused ? size + 1 : size}
+                />
+              </TabIconWithActiveBar>
             ),
           }}
         />

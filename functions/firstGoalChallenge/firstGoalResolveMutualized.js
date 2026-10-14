@@ -3,8 +3,22 @@ import { onDocumentCreated, onDocumentDeleted, onDocumentWritten } from "firebas
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, FieldValue, logger } from "../utils.js";
+import {
+  computeFirstValidGoalFromGoals as computeFirstValidGoalFromGoalsForGame,
+  isShootoutGoal,
+  looksFinal,
+  toInt,
+} from "./nhlFirstGoalGoalUtils.js";
+import {
+  repairNhlFirstGoalTerminalGame,
+  verifyTerminalNhlFirstGoalGames,
+} from "./repairNhlFirstGoalTerminal.js";
 
 const REGION = "us-central1";
+
+async function computeFirstValidGoalFromGoals(gameId) {
+  return computeFirstValidGoalFromGoalsForGame(db, gameId);
+}
 
 // 90s = révélation provisoire
 const REVEAL_DELAY_SECONDS = 90;
@@ -19,87 +33,6 @@ const PENDING_MAX_AGE_MINUTES = 60;
 const FIRST_GOAL_GAMES_COL = "nhl_first_goal_games";
 
 /* ----------------------------- Helpers ----------------------------- */
-
-function toInt(v, def = null) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : def;
-}
-
-// "10:34" -> 634
-function timeInPeriodToSeconds(s) {
-  if (!s || typeof s !== "string") return null;
-  const [mmS, ssS] = s.split(":").map((x) => x.trim());
-  const mm = toInt(mmS, null);
-  const ss = toInt(ssS, null);
-  if (mm == null || ss == null) return null;
-  return mm * 60 + ss;
-}
-
-function isShootoutGoal(goal) {
-  const pt = String(goal?.periodType || "").toUpperCase();
-  return pt === "SO";
-}
-
-function isValidGoal(goal) {
-  if (!goal) return false;
-  if (isShootoutGoal(goal)) return false;
-  if (!goal?.scoringPlayerId && !goal?.scoringPlayerName) return false;
-  return true;
-}
-
-function looksFinal(live) {
-  const a = String(live?.gameState || "").toUpperCase();
-  const b = String(live?.gameStatus || "").toUpperCase();
-  const c = String(live?.status || "").toUpperCase();
-  return (
-    a.includes("FINAL") ||
-    b.includes("FINAL") ||
-    c.includes("FINAL") ||
-    a === "OFF" ||
-    b === "OFF" ||
-    c === "OFF"
-  );
-}
-
-/**
- * Calcule le premier but "valide" à partir de la sous-collection goals.
- * Exclut shootout. Trie par période + timeInPeriod.
- */
-async function computeFirstValidGoalFromGoals(gameId) {
-  const goalsRef = db.collection("nhl_live_games").doc(String(gameId)).collection("goals");
-
-  const snap = await goalsRef.get();
-  if (snap.empty) return null;
-
-  const rows = snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .filter(isValidGoal);
-
-  if (!rows.length) return null;
-
-  rows.sort((a, b) => {
-    const pa = toInt(a.period, 99);
-    const pb = toInt(b.period, 99);
-    if (pa !== pb) return pa - pb;
-
-    const sa = timeInPeriodToSeconds(a.timeInPeriod) ?? 999999;
-    const sb = timeInPeriodToSeconds(b.timeInPeriod) ?? 999999;
-    if (sa !== sb) return sa - sb;
-
-    return String(a.id).localeCompare(String(b.id));
-  });
-
-  const first = rows[0];
-  return {
-    goalId: String(first.id),
-    scoringPlayerId: first.scoringPlayerId ? String(first.scoringPlayerId) : null,
-    scoringPlayerName: first.scoringPlayerName || null,
-    teamAbbr: first.teamAbbr || null,
-    period: toInt(first.period, null),
-    timeInPeriod: first.timeInPeriod || null,
-    periodType: first.periodType || null,
-  };
-}
 
 async function applyNoWinnerIfGameFinal(fgRef, gameId) {
   const liveSnap = await db.collection("nhl_live_games").doc(gameId).get();
@@ -188,7 +121,15 @@ async function reconcileMutualizedFirstGoalAfterGoalListChange(gameId, { reason 
 
   const fg = fgSnap.data() || {};
   const st = String(fg.status || "");
-  if (st === "confirmed" || st === "no_winner") return;
+  if (st === "no_winner") return;
+
+  if (st === "confirmed") {
+    await repairNhlFirstGoalTerminalGame(gid, {
+      revertChallenges: true,
+      reason: `reconcile-${reason}`,
+    });
+    return;
+  }
 
   const candidate = fg.candidate || null;
   const candidateGoalId = candidate?.goalId ? String(candidate.goalId) : "";
@@ -737,5 +678,26 @@ export const applyFirstGoalResultToChallenges_mutualized = onDocumentWritten(
       afterStatus,
       count: challengesSnap.size,
     });
+  }
+);
+
+/** Recalcule les matchs déjà confirmés si le PBP NHL a retiré le premier but. */
+export const verifyTerminalNhlFirstGoalGames_mutualized = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    timeZone: "America/Toronto",
+    region: REGION,
+  },
+  async () => {
+    try {
+      const res = await verifyTerminalNhlFirstGoalGames({ limit: 60 });
+      if (res.repaired > 0) {
+        logger.info("[FG-M] verifyTerminalNhlFirstGoalGames", res);
+      }
+    } catch (e) {
+      logger.error("[FG-M] verifyTerminalNhlFirstGoalGames failed", {
+        err: String(e?.message || e),
+      });
+    }
   }
 );

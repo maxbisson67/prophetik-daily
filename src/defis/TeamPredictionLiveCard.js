@@ -160,19 +160,14 @@ function isPerfectPick(entry = {}, official = {}, awayAbbr, homeAbbr) {
   const officialAwayScore = Number(official?.awayScore);
   const officialHomeScore = Number(official?.homeScore);
 
-  const predictedOutcome = safeAbbr(entry?.predictedOutcome);
-  const officialOutcome = safeAbbr(official?.outcome);
-
   if (!predictedWinner || !officialWinner) return false;
   if (!Number.isFinite(predictedAwayScore) || !Number.isFinite(predictedHomeScore)) return false;
   if (!Number.isFinite(officialAwayScore) || !Number.isFinite(officialHomeScore)) return false;
-  if (!predictedOutcome || !officialOutcome) return false;
 
   return (
     predictedWinner === officialWinner &&
     predictedAwayScore === officialAwayScore &&
-    predictedHomeScore === officialHomeScore &&
-    predictedOutcome === officialOutcome
+    predictedHomeScore === officialHomeScore
   );
 }
 

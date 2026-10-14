@@ -122,43 +122,6 @@ function ScoreInputBox({
   );
 }
 
-function OutcomeChip({ label, value, selectedValue, onPress, colors, disabled = false }) {
-  const selected = value === selectedValue;
-
-  return (
-    <TouchableOpacity
-      onPress={() => {
-        if (!disabled) onPress(value);
-      }}
-      activeOpacity={disabled ? 1 : 0.9}
-      style={{
-        flex: 1,
-        minHeight: 42,
-        borderRadius: 12,
-        borderWidth: 1.5,
-        borderColor: disabled ? colors.border : selected ? RED : colors.border,
-        backgroundColor: disabled
-          ? colors.card2
-          : selected
-          ? "rgba(239,68,68,0.10)"
-          : colors.card,
-        alignItems: "center",
-        justifyContent: "center",
-        opacity: disabled ? 0.45 : 1,
-      }}
-    >
-      <Text
-        style={{
-          color: disabled ? colors.subtext : selected ? RED : colors.text,
-          fontWeight: "900",
-        }}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 function PitcherBlock({ pitcher, colors }) {
   const nameLine = formatMlbPitcherNameAndRecord(pitcher);
   const eraLine = formatMlbPitcherEraLine(pitcher);
@@ -190,10 +153,10 @@ function normalizeScoreInput(v) {
 }
 
 function emptyDraftPick() {
-  return { away: "", home: "", outcome: "REG" };
+  return { away: "", home: "" };
 }
 
-function draftFromSavedPick(pick, isMlb) {
+function draftFromSavedPick(pick) {
   if (!pick) return emptyDraftPick();
   return {
     away:
@@ -204,46 +167,42 @@ function draftFromSavedPick(pick, isMlb) {
       pick.predictedHomeScore !== undefined && pick.predictedHomeScore !== null
         ? String(pick.predictedHomeScore)
         : "",
-    outcome: isMlb ? "FINAL" : pick.predictedOutcome || "REG",
   };
 }
 
-function canSaveDraft(draft, isMlb) {
+function canSaveDraft(draft) {
   if (!draft || typeof draft !== "object") return false;
   if (draft.away === "" || draft.home === "") return false;
   if (Number(draft.away) === Number(draft.home)) return false;
-  if (!isMlb && !draft.outcome) return false;
   return true;
 }
 
-function draftMatchesSaved(draft, savedPick, isMlb) {
-  if (!draft || !savedPick || !canSaveDraft(draft, isMlb)) return false;
+function draftMatchesSaved(draft, savedPick) {
+  if (!draft || !savedPick || !canSaveDraft(draft)) return false;
   if (Number(draft.away) !== Number(savedPick.predictedAwayScore)) return false;
   if (Number(draft.home) !== Number(savedPick.predictedHomeScore)) return false;
-  const outcome = isMlb ? "FINAL" : draft.outcome;
-  if (!isMlb && String(savedPick.predictedOutcome || "") !== String(outcome)) return false;
   return true;
 }
 
-function pickPayloadFromDraft(draft, isMlb) {
+function pickPayloadFromDraft(draft) {
   return {
     predictedAwayScore: Number(draft.away),
     predictedHomeScore: Number(draft.home),
-    predictedOutcome: isMlb ? "FINAL" : draft.outcome,
+    predictedOutcome: "FINAL",
   };
 }
 
 function getCardSaveState({ draft, savedPick, isMlb, locked, decided, saving, hasError }) {
   if (decided) return null;
   if (saving) return "saving";
-  if (hasError && canSaveDraft(draft, isMlb) && !draftMatchesSaved(draft, savedPick, isMlb)) {
+  if (hasError && canSaveDraft(draft) && !draftMatchesSaved(draft, savedPick)) {
     return "error";
   }
   if (locked) {
     return savedPick ? "saved" : "incomplete";
   }
-  if (!canSaveDraft(draft, isMlb)) return "incomplete";
-  if (draftMatchesSaved(draft, savedPick, isMlb)) return "saved";
+  if (!canSaveDraft(draft)) return "incomplete";
+  if (draftMatchesSaved(draft, savedPick)) return "saved";
   return "pending";
 }
 
@@ -359,10 +318,6 @@ function BundleMatchPickSection({
   const homeAbbr = String(slot?.homeAbbr || "");
   const awayTeam = lookupTeamByAbbr(league, awayAbbr);
   const homeTeam = lookupTeamByAbbr(league, homeAbbr);
-  const scoreDiff =
-    draft.away !== "" && draft.home !== "" ? Math.abs(Number(draft.away) - Number(draft.home)) : null;
-  const otTbDisabled = scoreDiff !== null && scoreDiff > 1;
-
   return (
     <View
       style={[
@@ -490,37 +445,6 @@ function BundleMatchPickSection({
           />
         </View>
       </View>
-
-      {!isMlb ? (
-        <View style={{ marginTop: 12 }}>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <OutcomeChip
-              label="REG"
-              value="REG"
-              selectedValue={draft.outcome}
-              onPress={(v) => onChangeDraft({ ...draft, outcome: v })}
-              colors={colors}
-              disabled={locked}
-            />
-            <OutcomeChip
-              label="OT"
-              value="OT"
-              selectedValue={draft.outcome}
-              onPress={(v) => onChangeDraft({ ...draft, outcome: v })}
-              colors={colors}
-              disabled={locked || otTbDisabled}
-            />
-            <OutcomeChip
-              label="TB"
-              value="TB"
-              selectedValue={draft.outcome}
-              onPress={(v) => onChangeDraft({ ...draft, outcome: v })}
-              colors={colors}
-              disabled={locked || otTbDisabled}
-            />
-          </View>
-        </View>
-      ) : null}
 
       {draft.away !== "" && draft.home !== "" && Number(draft.away) === Number(draft.home) ? (
         <Text style={{ color: RED, fontWeight: "800", marginTop: 8 }}>
@@ -717,12 +641,12 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
       for (const slot of games) {
         const gameId = String(slot.gameId);
         if (saved[gameId]) {
-          const fromSaved = draftFromSavedPick(saved[gameId], isMlb);
+          const fromSaved = draftFromSavedPick(saved[gameId]);
           const current = prev[gameId];
           const userIsEditing =
             current &&
-            canSaveDraft(current, isMlb) &&
-            !draftMatchesSaved(current, saved[gameId], isMlb);
+            canSaveDraft(current) &&
+            !draftMatchesSaved(current, saved[gameId]);
 
           next[gameId] = userIsEditing ? current : fromSaved;
         } else {
@@ -777,12 +701,12 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
       if (!isSlotEditable(slot)) continue;
 
       const draft = draftByGameId[gameId] || emptyDraftPick();
-      if (!canSaveDraft(draft, isMlb)) continue;
+      if (!canSaveDraft(draft)) continue;
 
       const savedPick = entry?.picks?.[gameId];
-      if (draftMatchesSaved(draft, savedPick, isMlb)) continue;
+      if (draftMatchesSaved(draft, savedPick)) continue;
 
-      payload[gameId] = pickPayloadFromDraft(draft, isMlb);
+      payload[gameId] = pickPayloadFromDraft(draft);
     }
 
     return payload;
@@ -858,7 +782,7 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     for (const slot of editableGames) {
       const gameId = String(slot.gameId);
       const draft = draftByGameId[gameId] || emptyDraftPick();
-      if (draftMatchesSaved(draft, entry?.picks?.[gameId], isMlb)) {
+      if (draftMatchesSaved(draft, entry?.picks?.[gameId])) {
         saved += 1;
       }
     }
