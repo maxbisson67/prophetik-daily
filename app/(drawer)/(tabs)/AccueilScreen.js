@@ -56,7 +56,6 @@ import HomeDefisToggle, {
   paleChallengeBackground,
 } from "@src/home/components/HomeDefisToggle";
 import DailyDefisProgress from "@src/home/components/DailyDefisProgress";
-import GroupChatSection from "@src/home/components/GroupChatSection";
 import SeasonTransitionBanners from "@src/home/components/SeasonTransitionBanners";
 import SportSeasonSwitchBanner from "@src/home/components/SportSeasonSwitchBanner";
 import useSeasonTransitionBanners from "@src/home/hooks/useSeasonTransitionBanners";
@@ -393,11 +392,6 @@ export default function AccueilScreen() {
   const skipDefiTabResetRef = useRef(false);
   const { isActive: appActive } = useAppVisibilitySafe();
   const listenersEnabled = isFocused && appActive;
-  const homeScrollRef = useRef(null);
-  const bindHomeScrollRef = useCallback((ref) => {
-    homeScrollRef.current = ref;
-  }, []);
-
   const {
     readableGroupIds: groupIds,
     groupsMeta,
@@ -1002,7 +996,6 @@ const avatarUrl =
         ) : (
           <KeyboardAwareScrollView
             style={{ flex: 1 }}
-            innerRef={bindHomeScrollRef}
             contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 80 }}
             keyboardShouldPersistTaps="handled"
             enableOnAndroid
@@ -1209,28 +1202,6 @@ const avatarUrl =
                 </View>
               </View>
             </View>
-
-            {currentGroupId ? (
-              <View style={[prophetikCardShadow()]}>
-                <View style={prophetikLeftAccentCardStyle(colors, PROPHETIK_RED)}>
-                  <GroupChatSection
-                    groupId={currentGroupId}
-                    groupName={currentGroupMeta?.name || currentGroupMeta?.title || null}
-                    colors={colors}
-                    onInputFocus={() => {
-                      requestAnimationFrame(() => {
-                        const scroll = homeScrollRef.current;
-                        if (typeof scroll?.scrollToEnd === "function") {
-                          scroll.scrollToEnd({ animated: true });
-                          return;
-                        }
-                        scroll?.getScrollResponder?.()?.scrollToEnd?.({ animated: true });
-                      });
-                    }}
-                  />
-                </View>
-              </View>
-            ) : null}
 
           </KeyboardAwareScrollView>
         )}

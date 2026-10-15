@@ -458,6 +458,7 @@ export default function ClassementScreen() {
                     colors={colors}
                     sport={currentGroup?.sport || currentGroup?.league}
                     profiles={leaderboardProfiles}
+                    currentUserId={user?.uid || null}
                     onParticipantPress={setProfileRow}
                     emptyText={t("leaderboard.group.noStats", {
                       defaultValue: "Aucun classement disponible.",

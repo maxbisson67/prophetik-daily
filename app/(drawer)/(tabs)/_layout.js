@@ -8,12 +8,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "@src/i18n/i18n";
 
 import { useTheme } from "@src/theme/ThemeProvider";
-import { useAuth } from "@src/auth/SafeAuthProvider";
-import { useMyGroups } from "@src/groups/MyGroupsProvider";
 import { useLiveTabTitle } from "@src/groups/SelectedGroupProvider";
-import { useGroupsUnreadTotal } from "@src/groupChat/useGroupUnreadCount";
 
-const TAB_ACTIVE_BAR = { width: 22, height: 3, marginTop: 4, borderRadius: 2 };
+const TAB_ACTIVE_BAR = { width: 22, height: 3, marginTop: 2, marginBottom: 5, borderRadius: 2 };
 
 function TabIconWithActiveBar({ focused, children }) {
   const { colors } = useTheme();
@@ -73,7 +70,7 @@ function TabBarLabel({ focused, children }) {
         fontSize: 10,
         fontWeight: focused ? "800" : "600",
         textAlign: "center",
-        marginTop: 0,
+        marginTop: 1,
       }}
     >
       {children}
@@ -84,16 +81,7 @@ function TabBarLabel({ focused, children }) {
 function TabsLayoutInner() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
-  const { groupIds } = useMyGroups();
-  const groupChatUnread = useGroupsUnreadTotal(groupIds, user?.uid);
-
   const liveTabTitle = useLiveTabTitle();
-
-  const todayTabBadge = useMemo(() => {
-    if (!groupChatUnread || groupChatUnread <= 0) return undefined;
-    return groupChatUnread > 99 ? "99+" : groupChatUnread;
-  }, [groupChatUnread]);
 
   const tabBarBottomPad = Platform.OS === "ios" ? Math.max(insets.bottom, 10) : 8;
 
@@ -141,16 +129,6 @@ function TabsLayoutInner() {
                 />
               </TabIconWithActiveBar>
             ),
-            tabBarBadge: todayTabBadge,
-            tabBarBadgeStyle: {
-              backgroundColor: "#ef4444",
-              color: "#fff",
-              fontSize: 10,
-              fontWeight: "800",
-              minWidth: 18,
-              height: 18,
-              lineHeight: 18,
-            },
           }}
         />
 

@@ -151,6 +151,7 @@ function ChallengeCard({
   colors,
   profiles,
   onParticipantPress,
+  currentUserId,
   emptyText,
   t,
 }) {
@@ -195,6 +196,7 @@ function ChallengeCard({
         accent={accent}
         profiles={profiles}
         onParticipantPress={onParticipantPress}
+        currentUserId={currentUserId}
         emptyText={emptyText}
         compact
       />
@@ -216,6 +218,7 @@ function RankedRows({
   accent,
   profiles,
   onParticipantPress,
+  currentUserId = null,
   emptyText,
   compact = false,
 }) {
@@ -250,6 +253,9 @@ function RankedRows({
     const openProfile = onParticipantPress
       ? () => onParticipantPress(row)
       : null;
+    const rowUid = String(row?.id || row?.uid || "");
+    const isSelf =
+      currentUserId && rowUid && rowUid === String(currentUserId);
 
     return (
       <View key={`${row.id}:${idx}`} style={rowStyle}>
@@ -286,8 +292,8 @@ function RankedRows({
           >
             <Text
               style={{
-                color: openProfile ? colors.primary : colors.text,
-                fontWeight: "800",
+                color: isSelf ? colors.primary : colors.text,
+                fontWeight: isSelf ? "900" : "800",
                 flex: 1,
                 minWidth: 0,
                 fontSize: compactStats ? 12 : 14,
@@ -420,6 +426,7 @@ export default function LeaderboardGroupDashboard({
   sport,
   profiles: profilesProp,
   onParticipantPress,
+  currentUserId = null,
   emptyText,
 }) {
   const t = i18n.t.bind(i18n);
@@ -514,6 +521,7 @@ export default function LeaderboardGroupDashboard({
           accent={LEADERBOARD_TOP_SCORERS_ACCENT}
           profiles={profiles}
           onParticipantPress={onParticipantPress}
+          currentUserId={currentUserId}
           emptyText={emptyText}
           compact
         />
@@ -542,6 +550,7 @@ export default function LeaderboardGroupDashboard({
         colors={colors}
         profiles={profiles}
         onParticipantPress={onParticipantPress}
+        currentUserId={currentUserId}
         emptyText={emptyTexts.fgc}
         t={t}
       />
@@ -563,6 +572,7 @@ export default function LeaderboardGroupDashboard({
         colors={colors}
         profiles={profiles}
         onParticipantPress={onParticipantPress}
+        currentUserId={currentUserId}
         emptyText={emptyTexts.tp}
         t={t}
       />
@@ -584,6 +594,7 @@ export default function LeaderboardGroupDashboard({
         colors={colors}
         profiles={profiles}
         onParticipantPress={onParticipantPress}
+        currentUserId={currentUserId}
         emptyText={emptyTexts.ts}
         t={t}
       />
@@ -609,6 +620,7 @@ export default function LeaderboardGroupDashboard({
         colors={colors}
         profiles={profiles}
         onParticipantPress={onParticipantPress}
+        currentUserId={currentUserId}
         emptyText={emptyTexts.dailyBonus}
         t={t}
       />
