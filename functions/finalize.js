@@ -19,6 +19,8 @@ import { computeMemberSeasonRank } from "./leaderboard/leaderboardRankUtils.js";
 import { notifyLeaderboardRankUpAfterPointsCredit } from "./notifications/notifyLeaderboardRankUp.js";
 import { resolveCompetitionForGroupCredit } from "./leaderboard/currentSeason.js";
 import { TS_WIN_BONUS_POINTS } from "./challengeScoringConstants.js";
+import { getFirestoreCostFlags } from "./shared/firestoreCostFlags.js";
+import { recordGroupHumanParticipationYmd } from "./groups/groupHumanPlayDenorm.js";
 
 /* ------------------------- Admin init ------------------------- */
 if (getApps().length === 0) initializeApp();
@@ -26,7 +28,6 @@ const db = getFirestore();
 
 /* --------------------------- Config -------------------------- */
 const PAYOUT_APPLIED_VERSION = "v7_ascension_cycles_members_2026-01-14";
-const CATCHUP_DAYS = 14;
 
 const CURRENT_SEASON_DOC = "app_config/currentSeason";
 const FALLBACK_SEASON_ID = "20252026";
@@ -182,6 +183,8 @@ export const finalizeDefiWinners = onSchedule(
   },
   async () => {
     const now = new Date();
+    const costFlags = getFirestoreCostFlags();
+    const catchupDays = costFlags.finalizeCatchupDays;
     const seasonId = await getSeasonIdSafe();
 
     // 0) Pré-sync livePoints (best effort)
@@ -197,10 +200,10 @@ export const finalizeDefiWinners = onSchedule(
 
     const todayYmd = appYmd(now);
     const yYMD = addDaysToYmd(todayYmd, -1);
-    const catchupFromYmd = addDaysToYmd(todayYmd, -CATCHUP_DAYS);
+    const catchupFromYmd = addDaysToYmd(todayYmd, -catchupDays);
 
     logger.info(
-      `finalizeDefiWinners@5AM: nowUTC=${formatDebug(now, "UTC")} todayApp=${todayYmd} target<=${yYMD} catchupFrom=${catchupFromYmd} seasonId=${seasonId}`
+      `finalizeDefiWinners@5AM: nowUTC=${formatDebug(now, "UTC")} todayApp=${todayYmd} target<=${yYMD} catchupFrom=${catchupFromYmd} catchupDays=${catchupDays} seasonId=${seasonId}`
     );
 
     // 1) Candidats
@@ -295,7 +298,16 @@ export const finalizeDefiWinners = onSchedule(
         : null;
 
       const rankBeforeByUid = {};
-      if (preGroupId && eligibleParts.length && competition) {
+      const humanWithPoints = humanParts.some((p) => p.livePoints > 0);
+      const needsRankSnapshot =
+        costFlags.finalizeRankSnapshot &&
+        preGroupId &&
+        competition &&
+        eligibleParts.length > 0 &&
+        !d.payoutAppliedAt &&
+        humanWithPoints;
+
+      if (needsRankSnapshot) {
         for (const p of eligibleParts) {
           try {
             rankBeforeByUid[p.uid] = await computeMemberSeasonRank({
@@ -312,6 +324,16 @@ export const finalizeDefiWinners = onSchedule(
             });
           }
         }
+      }
+
+      if (preGroupId && defiGameYmd && humanWithPoints) {
+        recordGroupHumanParticipationYmd(db, preGroupId, defiGameYmd).catch((e) => {
+          logger.warn("finalizeDefiWinners: recordGroupHumanParticipationYmd failed", {
+            groupId: preGroupId,
+            ymd: defiGameYmd,
+            error: String(e?.message || e),
+          });
+        });
       }
 
       const txResult = await db.runTransaction(async (tx) => {

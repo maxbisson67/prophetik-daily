@@ -21,6 +21,8 @@ import firestore from "@react-native-firebase/firestore";
 
 import { dedupeById } from "@src/leaderboard/utils";
 import LeaderboardGroupDashboard from "@src/leaderboard/LeaderboardGroupDashboard";
+import GroupParticipationSection from "@src/leaderboard/GroupParticipationSection";
+import { canViewGroupParticipationStats } from "@src/leaderboard/participationStatsAccess";
 import LeaderboardParticipantProfileModal from "@src/leaderboard/LeaderboardParticipantProfileModal";
 import normalizeMemberRow from "@src/leaderboard/normalizeMemberRow";
 import useLeaderboardGroupMembers from "@src/leaderboard/useLeaderboardGroupMembers";
@@ -205,6 +207,9 @@ export default function ClassementScreen() {
   }, [selectedCompetition, todayYmd]);
 
   const isSelectedCompetitionUpcoming = selectedCompetitionStatus === "upcoming";
+
+  const showParticipationStats =
+    !!currentGroupId && canViewGroupParticipationStats(user?.uid);
 
   const groupIds = useMemo(() => groups.map((g) => String(g.id)), [groups]);
 
@@ -436,12 +441,23 @@ export default function ClassementScreen() {
               />
 
               {isSelectedCompetitionUpcoming ? (
-                <View style={{ paddingVertical: 40, alignItems: "center" }}>
-                  <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 15 }}>
-                    {t("leaderboard.competitionNotStarted", {
-                      defaultValue: "Non débuté",
-                    })}
-                  </Text>
+                <View style={{ marginTop: 16, gap: 16 }}>
+                  {showParticipationStats ? (
+                    <GroupParticipationSection
+                      groupId={currentGroupId}
+                      colors={colors}
+                      currentUserId={user?.uid || null}
+                      competitionFromYmd={selectedCompetition?.fromYmd}
+                      competitionToYmd={selectedCompetition?.toYmd}
+                    />
+                  ) : null}
+                  <View style={{ paddingVertical: 40, alignItems: "center" }}>
+                    <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 15 }}>
+                      {t("leaderboard.competitionNotStarted", {
+                        defaultValue: "Non débuté",
+                      })}
+                    </Text>
+                  </View>
                 </View>
               ) : loadingBoard || !isCompetitionSelectionReady ? (
                 <View style={{ paddingVertical: 40, alignItems: "center" }}>
@@ -454,6 +470,9 @@ export default function ClassementScreen() {
                 <View style={{ marginTop: 16 }}>
                   <LeaderboardGroupDashboard
                     key={`${currentGroupId}:${selectedCompetitionKey}`}
+                    groupId={currentGroupId}
+                    competitionFromYmd={selectedCompetition?.fromYmd}
+                    competitionToYmd={selectedCompetition?.toYmd}
                     rows={rows}
                     colors={colors}
                     sport={currentGroup?.sport || currentGroup?.league}

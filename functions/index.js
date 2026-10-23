@@ -144,3 +144,5 @@ export {
   disableInactiveAutopilotCron,
   disableInactiveAutopilotNow,
 } from "./autopilot/disableInactiveAutopilot.js";
+
+export { dailyGroupParticipationReportCron } from "./reports/dailyGroupParticipationReportCron.js";

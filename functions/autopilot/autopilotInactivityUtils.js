@@ -5,6 +5,11 @@ import {
   pushTitleWithGroup,
   resolveGroupDisplayName,
 } from "../groups/groupDisplayUtils.js";
+import { getFirestoreCostFlags } from "../shared/firestoreCostFlags.js";
+import {
+  groupHadHumanPlayOnYmd,
+  recordGroupHumanParticipationYmd,
+} from "../groups/groupHumanPlayDenorm.js";
 
 const AI_UID = "ai";
 const INACTIVITY_STREAK_THRESHOLD = 3;
@@ -38,7 +43,7 @@ function resolveOwnerUid(group = {}) {
   return ownerId ? String(ownerId) : null;
 }
 
-async function loadDailyChallengesForGroup({ groupId, gameYmdDashed }) {
+export async function loadDailyChallengesForGroup({ groupId, gameYmdDashed }) {
   const gid = String(groupId);
   const gameYmdCompact = ymdCompactFromDashed(gameYmdDashed);
 
@@ -70,7 +75,7 @@ async function loadDailyChallengesForGroup({ groupId, gameYmdDashed }) {
   };
 }
 
-function challengeDocs(challenges) {
+export function challengeDocs(challenges) {
   return [...challenges.fgc, ...challenges.tp, ...challenges.ts];
 }
 
@@ -78,36 +83,35 @@ export function dayHadDailyChallenges(challenges) {
   return Number(challenges?.total || 0) > 0;
 }
 
-async function challengeHasHumanEntry(docRef, subcollection) {
-  const snap = await docRef.collection(subcollection).limit(25).get();
-  if (snap.empty) return false;
-
-  for (const entryDoc of snap.docs) {
-    const uid = String(entryDoc.id || entryDoc.data()?.uid || "").trim();
-    if (!uid || uid.toLowerCase() === AI_UID) continue;
-    return true;
-  }
-
-  return false;
+export async function dayHadHumanParticipation(challenges) {
+  const { count } = await countUniqueHumanParticipants(challenges);
+  return count > 0;
 }
 
-export async function dayHadHumanParticipation(challenges) {
+function entrySubcollectionForChallengeDoc(doc) {
+  return doc.ref.parent.id === "defis" ? "participations" : "entries";
+}
+
+function humanUidFromEntryDoc(entryDoc) {
+  const uid = String(entryDoc.id || entryDoc.data()?.uid || "").trim();
+  if (!uid || uid.toLowerCase() === AI_UID) return null;
+  return uid;
+}
+
+/** Unique human players across SOLO + DUO + TRIO for one group-day. */
+export async function countUniqueHumanParticipants(challenges) {
+  const uids = new Set();
+
   for (const doc of challengeDocs(challenges)) {
-    const data = doc.data() || {};
-    const participantsCount = Number(data.participantsCount || 0);
-    if (participantsCount <= 0) continue;
-
-    const subcollection =
-      doc.ref.parent.id === "defis"
-        ? "participations"
-        : "entries";
-
-    if (await challengeHasHumanEntry(doc.ref, subcollection)) {
-      return true;
+    const subcollection = entrySubcollectionForChallengeDoc(doc);
+    const snap = await doc.ref.collection(subcollection).get();
+    for (const entryDoc of snap.docs) {
+      const uid = humanUidFromEntryDoc(entryDoc);
+      if (uid) uids.add(uid);
     }
   }
 
-  return false;
+  return { count: uids.size, uids };
 }
 
 export function getEvaluatedGameYmd(now = new Date()) {
@@ -133,7 +137,22 @@ export async function evaluateGroupAutopilotInactivity({
     };
   }
 
-  const hadParticipation = await dayHadHumanParticipation(challenges);
+  let hadParticipation = false;
+  let participationSource = "legacy_scan";
+  const { autopilotInactivityUseDenorm } = getFirestoreCostFlags();
+  const denormHadPlay = groupHadHumanPlayOnYmd(group, evaluatedYmd);
+
+  if (autopilotInactivityUseDenorm && denormHadPlay !== null) {
+    hadParticipation = denormHadPlay;
+    participationSource = "denorm";
+  } else {
+    hadParticipation = await dayHadHumanParticipation(challenges);
+    participationSource = "legacy_scan";
+    if (hadParticipation) {
+      await recordGroupHumanParticipationYmd(db, groupId, evaluatedYmd);
+    }
+  }
+
   const previousStreak = Number(group?.autopilotInactivityDays || 0);
   const nextStreak = hadParticipation ? 0 : previousStreak + 1;
 
@@ -154,6 +173,7 @@ export async function evaluateGroupAutopilotInactivity({
       evaluatedYmd,
       streak: 0,
       challengeCount: challenges.total,
+      participationSource,
     };
   }
 
@@ -172,6 +192,7 @@ export async function evaluateGroupAutopilotInactivity({
       evaluatedYmd,
       streak: nextStreak,
       challengeCount: challenges.total,
+      participationSource,
     };
   }
 

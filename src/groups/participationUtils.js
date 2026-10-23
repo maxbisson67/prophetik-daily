@@ -6,6 +6,14 @@ export const PARTICIPATION = {
   ADMIN_ONLY: "admin_only",
 };
 
+/** Nova (uid `ai`, type `ai`) — pas un participant humain pour les stats / limites. */
+export function isNovaMember(m = {}, uidOverride = "") {
+  const u = String(uidOverride || m.uid || m.userId || m.participantId || "").toLowerCase();
+  if (u === "ai") return true;
+  if (String(m.type || "").toLowerCase() === "ai") return true;
+  return false;
+}
+
 export function resolveParticipation(m = {}) {
   const raw = String(m?.participation || "").toLowerCase();
   if (raw === PARTICIPATION.ACTIVE) return PARTICIPATION.ACTIVE;

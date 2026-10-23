@@ -10,6 +10,7 @@ import {
   isMlbGamePostponedFromLiveFeed,
   isMlbGamePreGame,
 } from "../mlb/mlbGameStatus.js";
+import { shouldSkipIdleCronTick } from "../shared/cronIdleGate.js";
 
 const SCHEDULER_REGION = FUNCTIONS_REGION;
 const REVEAL_DELAY_SECONDS = 90;
@@ -505,6 +506,8 @@ export const detectMlbFirstRbiCandidates_mutualized = onSchedule(
     region: SCHEDULER_REGION,
   },
   async () => {
+    if (await shouldSkipIdleCronTick(db, "FGC-MLB-detect")) return;
+
     logger.info("[FGC-MLB] detect tick");
 
     const snap = await db
@@ -562,6 +565,8 @@ export const confirmPendingMlbFirstRbiGames_mutualized = onSchedule(
     region: SCHEDULER_REGION,
   },
   async () => {
+    if (await shouldSkipIdleCronTick(db, "FGC-MLB-confirm")) return;
+
     const now = new Date();
 
     const snap = await db

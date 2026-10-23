@@ -2,6 +2,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { db, FieldValue } from "../utils.js";
+import { shouldSkipIdleCronTick } from "../shared/cronIdleGate.js";
 
 const REGION = "us-central1";
 const LOCK_BEFORE_MINUTES = 5;
@@ -13,6 +14,8 @@ export const lockFirstGoalChallenges = onSchedule(
     region: REGION,
   },
   async () => {
+    if (await shouldSkipIdleCronTick(db, "FirstGoalLock")) return;
+
     const now = new Date();
     const lockBeforeMs = LOCK_BEFORE_MINUTES * 60 * 1000;
 

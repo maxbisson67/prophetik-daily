@@ -12,6 +12,7 @@ import {
   hasExistingTsForGroupDay,
 } from "../defis/autopilotTsCreate.js";
 import { isMlbChallengeEligibleGameType } from "../mlb/mlbGameTypeUtils.js";
+import { shadowWriteLiveIndexEntry } from "../live/liveIndexShadow.js";
 
 const MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule";
 
@@ -401,6 +402,15 @@ export const createDailyFgcAutopilot = onSchedule(
                 homeAbbr: selected.homeAbbr,
               });
 
+              await shadowWriteLiveIndexEntry(db, {
+                ymd: gameYmd,
+                kind: "fgc",
+                docId: challengeId,
+                groupId,
+                status: "open",
+                sport,
+              });
+
               logger.info("[GROUP AUTOPILOT] fgc created", {
                 groupId,
                 sport,
@@ -428,6 +438,15 @@ export const createDailyFgcAutopilot = onSchedule(
             type: "tp",
             bundleId: tpResult.bundleId,
             gameCount: tpResult.gameCount,
+          });
+
+          await shadowWriteLiveIndexEntry(db, {
+            ymd: gameYmd,
+            kind: "tp",
+            docId: tpResult.bundleId,
+            groupId,
+            status: "open",
+            sport,
           });
 
           logger.info("[GROUP AUTOPILOT] tp created", {
@@ -474,6 +493,15 @@ export const createDailyFgcAutopilot = onSchedule(
                 type: "ts",
                 defiId,
                 label: "Top scoreurs 3×3",
+              });
+
+              await shadowWriteLiveIndexEntry(db, {
+                ymd: gameYmd,
+                kind: "ts",
+                docId: defiId,
+                groupId,
+                status: "open",
+                sport,
               });
 
               logger.info("[GROUP AUTOPILOT] ts created", {

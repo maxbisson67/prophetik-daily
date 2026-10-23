@@ -17,6 +17,8 @@ import {
   fgcDisplayPoints,
   isMlbSport,
 } from "./leaderboardDashboardHelpers";
+import GroupParticipationSection from "./GroupParticipationSection";
+import { canViewGroupParticipationStats } from "./participationStatsAccess";
 
 function formatPts(n) {
   const v = Number(n) || 0;
@@ -421,6 +423,9 @@ function buildChallengeColumns({ t, accent, variant }) {
 }
 
 export default function LeaderboardGroupDashboard({
+  groupId = null,
+  competitionFromYmd = null,
+  competitionToYmd = null,
   rows,
   colors,
   sport,
@@ -430,6 +435,8 @@ export default function LeaderboardGroupDashboard({
   emptyText,
 }) {
   const t = i18n.t.bind(i18n);
+  const showParticipationStats =
+    !!groupId && canViewGroupParticipationStats(currentUserId);
   const [showAllTotals, setShowAllTotals] = useState(false);
   const mlb = isMlbSport(sport);
 
@@ -499,14 +506,35 @@ export default function LeaderboardGroupDashboard({
 
   if (!normalizedRows.length) {
     return (
-      <View style={{ paddingVertical: 32, alignItems: "center" }}>
-        <Text style={{ color: colors.subtext, fontWeight: "700" }}>{emptyText}</Text>
+      <View style={{ gap: 0 }}>
+        {showParticipationStats ? (
+          <GroupParticipationSection
+            groupId={groupId}
+            colors={colors}
+            currentUserId={currentUserId}
+            competitionFromYmd={competitionFromYmd}
+            competitionToYmd={competitionToYmd}
+          />
+        ) : null}
+        <View style={{ paddingVertical: 32, alignItems: "center" }}>
+          <Text style={{ color: colors.subtext, fontWeight: "700" }}>{emptyText}</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={{ gap: 0 }}>
+      {showParticipationStats ? (
+        <GroupParticipationSection
+          groupId={groupId}
+          colors={colors}
+          currentUserId={currentUserId}
+          competitionFromYmd={competitionFromYmd}
+          competitionToYmd={competitionToYmd}
+        />
+      ) : null}
+
       <View style={[cardStyle(colors, LEADERBOARD_TOP_SCORERS_ACCENT), { marginBottom: 16 }]}>
         <SectionHeader
           leading={<LeaderboardTrophyLeading size={28} />}
