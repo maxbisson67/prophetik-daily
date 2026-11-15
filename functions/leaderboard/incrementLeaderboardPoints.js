@@ -4,8 +4,6 @@ import { FGC_WIN_POINTS } from "../challengeScoringConstants.js";
 import { resolveFgcEntryPoints, isFgcEntryWinner } from "../fgc/fgcEntryPoints.js";
 import { db, toNumber } from "./leaderboard.js";
 import { resolveCompetitionForGroupCredit } from "./seasonCompetitions.js";
-import { computeMemberSeasonRank } from "./leaderboardRankUtils.js";
-import { notifyLeaderboardRankUpAfterPointsCredit } from "../notifications/notifyLeaderboardRankUp.js";
 
 function dateFromYmdUTC(ymd) {
   const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -114,15 +112,6 @@ export async function incrementLeaderboardTpSlotPoints({
   const memberRef = db.doc(
     `groups/${gid}/leaderboards/${ctx.competitionKey}/members/${userId}`
   );
-
-  const previousRank =
-    pts > 0
-      ? await computeMemberSeasonRank({
-          groupId: gid,
-          seasonId: ctx.competitionKey,
-          uid: userId,
-        })
-      : null;
 
   const update = {
     uid: userId,

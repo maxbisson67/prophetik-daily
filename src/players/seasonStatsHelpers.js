@@ -310,6 +310,26 @@ export function getPlayerSeasonStatLines(player, league, seasonPair) {
   return lines;
 }
 
+/** Premiers buts de match (saison) — alimenté par syncNhlFirstGoalSeasonStatsDaily. */
+export function getNhlFirstGoalsSeasonCount(player, seasonId) {
+  const sid = String(seasonId || "").trim();
+  if (!sid) return null;
+
+  const fromMap = player?.firstGoalsBySeason?.[sid];
+  if (fromMap !== undefined && fromMap !== null) {
+    const n = Number(fromMap);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const fromStats = getSeasonStats(player?.statsBySeason, sid)?.firstGoals;
+  if (fromStats !== undefined && fromStats !== null) {
+    const n = Number(fromStats);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  return null;
+}
+
 export function getFgcPlayerStatChips(player, league, seasonPairOrSeasonId) {
   const L = String(league || "NHL").toUpperCase();
   const seasonId =

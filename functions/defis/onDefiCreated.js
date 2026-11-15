@@ -548,6 +548,11 @@ export const onDefiCreated = onDocumentCreated("defis/{defiId}", async (event) =
 
               oppRankOverall: num(oppTeam?.rankOverall, 0),
               oppGoalDifferential: num(oppTeam?.goalDifferential, 0),
+              oppGaPerGame:
+                oppTeam?.gaPerGame != null && oppTeam?.gaPerGame !== ""
+                  ? num(oppTeam.gaPerGame)
+                  : null,
+              oppGamesPlayed: num(oppTeam?.gamesPlayed, 0) || null,
 
               // bonus (si tu veux plus tard)
               myGoalsFor: num(myTeam?.goalsFor, 0),

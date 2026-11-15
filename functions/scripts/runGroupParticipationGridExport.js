@@ -9,6 +9,9 @@
  *     --pdf ./out/participation-grid.pdf
  *
  *   COHORT_START_YMD=2026-10-04  (défaut: 2026-10-04)
+ *
+ *   --include-current-day   dernier jour = aujourd'hui (Toronto), pas J-1
+ *   --throughYmd 2026-10-23  dernier jour explicite (≤ aujourd'hui Toronto)
  */
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";

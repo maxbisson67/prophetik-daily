@@ -57,6 +57,9 @@ export function buildNhlCompetitionLabel(phase, seasonId, fromYmd) {
   const human = formatNhlSeasonLabel(displaySeasonId);
   const p = String(phase || "regular").toLowerCase();
   if (p === "playoffs") return `Saison NHL ${human} — Séries`;
+  if (p === "opening") return `Saison NHL ${human} — Ouverture`;
+  if (p === "winter") return `Saison NHL ${human} — Hiver`;
+  if (p === "sprint") return `Saison NHL ${human} — Sprint`;
   return `Saison NHL ${human} — Saison régulière`;
 }
 
@@ -144,13 +147,21 @@ export function deriveMlbCompetitionEntries(seasonId, bounds = null) {
   ];
 }
 
+function isCatalogEntryEligible(entry) {
+  const st = String(entry?.status || "").toLowerCase();
+  return st !== "retired" && st !== "archived" && st !== "finalized";
+}
+
 export function pickCompetitionForDate(entries, gameYmd) {
   const ymd = String(gameYmd || "").slice(0, 10);
   if (!ymd || !Array.isArray(entries) || !entries.length) return null;
 
-  const sportEntries = entries.filter((e) => e?.fromYmd && e?.toYmd);
-  const exact = sportEntries.find((e) => e.fromYmd <= ymd && ymd <= e.toYmd);
-  if (exact) return exact;
+  const sportEntries = entries.filter((e) => e?.fromYmd && e?.toYmd && isCatalogEntryEligible(e));
+  const exactMatches = sportEntries.filter((e) => e.fromYmd <= ymd && ymd <= e.toYmd);
+  if (exactMatches.length) {
+    const sorted = sortCompetitionEntries(exactMatches);
+    return sorted[0];
+  }
 
   const future = sportEntries
     .filter((e) => e.fromYmd > ymd)
@@ -172,9 +183,98 @@ export function resolveLeaderboardReadKeys(competitionKey) {
 
 export function competitionPhaseSortIndex(phase) {
   const p = String(phase || "").toLowerCase();
-  if (p === "regular") return 0;
-  if (p === "playoffs") return 1;
-  return 2;
+  if (p === "opening") return 0;
+  if (p === "winter") return 1;
+  if (p === "sprint") return 2;
+  if (p === "playoffs") return 3;
+  if (p === "regular") return 10;
+  return 5;
+}
+
+/** Masque l’ancien bloc monolithique regular quand le catalogue 4 compétitions est présent. */
+export function filterLeaderboardCompetitionEntries(entries = []) {
+  const list = (Array.isArray(entries) ? entries : []).filter(Boolean);
+  const visible = list.filter((e) => {
+    const st = String(e.status || "").toLowerCase();
+    return st !== "retired" && st !== "archived";
+  });
+
+  const seasonsWithFourBlock = new Set();
+  for (const e of visible) {
+    if (e.sport !== "nhl") continue;
+    const p = String(e.phase || "").toLowerCase();
+    if (p === "opening" || p === "winter" || p === "sprint") {
+      seasonsWithFourBlock.add(String(e.seasonId || ""));
+    }
+  }
+
+  const primaryNhlFourBlockSeason = [...seasonsWithFourBlock].sort((a, b) => b.localeCompare(a))[0] || "";
+
+  return visible.filter((e) => {
+    if (e.sport !== "nhl") return true;
+    const sid = String(e.seasonId || "");
+    if (primaryNhlFourBlockSeason && sid !== primaryNhlFourBlockSeason) return false;
+    if (!seasonsWithFourBlock.has(sid)) return true;
+    const p = String(e.phase || "").toLowerCase();
+    const key = String(e.competitionKey || "");
+    if (p === "regular" || key.endsWith("_regular")) return false;
+    if (p === "playoffs" && seasonsWithFourBlock.has(sid)) {
+      const hasDedicatedPlayoffs = visible.some(
+        (x) =>
+          String(x.seasonId || "") === sid &&
+          String(x.phase || "").toLowerCase() === "playoffs" &&
+          String(x.competitionKey || "").includes(String(sid))
+      );
+      if (hasDedicatedPlayoffs && key.includes("_regular")) return false;
+    }
+    return true;
+  });
+}
+
+/** Filet client si le catalogue Firestore n’est pas encore en cache (OTA / réseau). */
+export function nhl20262027CompetitionsFallback() {
+  return [
+    {
+      competitionKey: "nhl_20262027_opening",
+      sport: "nhl",
+      seasonId: "20262027",
+      phase: "opening",
+      label: "Saison NHL 2026-27 — Ouverture",
+      fromYmd: "2026-10-07",
+      toYmd: "2026-11-25",
+      status: "active",
+    },
+    {
+      competitionKey: "nhl_20262027_winter",
+      sport: "nhl",
+      seasonId: "20262027",
+      phase: "winter",
+      label: "Saison NHL 2026-27 — Hiver",
+      fromYmd: "2026-11-27",
+      toYmd: "2027-02-03",
+      status: "active",
+    },
+    {
+      competitionKey: "nhl_20262027_sprint",
+      sport: "nhl",
+      seasonId: "20262027",
+      phase: "sprint",
+      label: "Saison NHL 2026-27 — Sprint",
+      fromYmd: "2027-02-08",
+      toYmd: "2027-04-10",
+      status: "active",
+    },
+    {
+      competitionKey: "nhl_20262027_playoffs",
+      sport: "nhl",
+      seasonId: "20262027",
+      phase: "playoffs",
+      label: "Saison NHL 2026-27 — Séries",
+      fromYmd: "2027-04-11",
+      toYmd: "2027-06-30",
+      status: "active",
+    },
+  ];
 }
 
 export function sortCompetitionEntries(entries = []) {
@@ -204,6 +304,9 @@ export function pickDefaultLeaderboardCompetition(
 
   const inWindow = entries.find((e) => competitionTimelineStatus(e, ymd) === "active");
   if (inWindow) return inWindow;
+
+  const upcoming = entries.find((e) => competitionTimelineStatus(e, ymd) === "upcoming");
+  if (upcoming) return upcoming;
 
   const regular = entries.find((e) => String(e.phase || "").toLowerCase() === "regular");
   if (regular) return regular;
@@ -246,8 +349,9 @@ export function normalizeCompetitionEntry(raw, id) {
     String(raw.competitionKey || id || buildCompetitionKey(sport, seasonId, phase)).trim();
 
   const fromYmd = String(raw.fromYmd || "").slice(0, 10);
-  let label = String(raw.label || competitionKey);
-  if (sport === "nhl" && fromYmd) {
+  const explicitLabel = String(raw.label || "").trim();
+  let label = explicitLabel || competitionKey;
+  if (!explicitLabel && sport === "nhl" && fromYmd) {
     label = buildNhlCompetitionLabel(phase, seasonId, fromYmd);
   }
 
@@ -273,13 +377,24 @@ export function isWithinCompetitionWindow(competition, gameYmd) {
 
 export function isCompetitionOpenForCredit(competition, gameYmd) {
   if (!competition) return false;
-  if (String(competition.status || "").toLowerCase() === "finalized") return false;
+  const st = String(competition.status || "").toLowerCase();
+  if (st === "finalized" || st === "retired" || st === "archived") return false;
   return isWithinCompetitionWindow(competition, gameYmd);
+}
+
+/** Clés saison NHL 2025-26 (4 blocs) remplacées par 2026-27 — ne pas afficher comme « champions ». */
+export function filterCompetitionHistoryRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const key = String(row?.competitionKey || "");
+    if (key.startsWith("nhl_20252026_")) return false;
+    return true;
+  });
 }
 
 export function isCompetitionReadyToFinalize(competition, todayYmd, graceDays = 2) {
   if (!competition) return false;
-  if (String(competition.status || "").toLowerCase() === "finalized") return false;
+  const st = String(competition.status || "").toLowerCase();
+  if (st === "finalized" || st === "retired" || st === "archived") return false;
   const to = String(competition.toYmd || "").slice(0, 10);
   const today = String(todayYmd || "").slice(0, 10);
   if (!to || !today) return false;

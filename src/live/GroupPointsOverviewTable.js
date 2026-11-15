@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import ParticipantAvatar from "@src/ui/ParticipantAvatar";
 import LiveChallengeKindBadge, { LIVE_BADGE_ACCENTS } from "@src/live/LiveChallengeKindBadge";
@@ -101,10 +102,15 @@ export default function GroupPointsOverviewTable({
   currentUid = "",
   resolveMember,
   embedded = false,
+  showPlayerColumnLabel = true,
   onParticipantPress = null,
   onChallengeKindPress = null,
 }) {
   const t = i18n.t.bind(i18n);
+  const showPicksColumnCue = !showPlayerColumnLabel && !!onChallengeKindPress;
+  const columnPicksHint = t("live.pointsOverview.columnPicksHint", {
+    defaultValue: "Clique pour voir les choix",
+  });
 
   const tableBody = (
     <>
@@ -120,10 +126,40 @@ export default function GroupPointsOverviewTable({
         }}
       >
         <View style={{ width: JERSEY_COL_WIDTH }} />
-        <View style={{ flex: 1.55, minWidth: 0, paddingRight: 4 }}>
-          <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "800" }}>
-            {t("leaderboard.columns.player", { defaultValue: "Joueur" })}
-          </Text>
+        <View style={{ flex: 1.55, minWidth: 0, paddingRight: 2 }}>
+          {showPlayerColumnLabel ? (
+            <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "800" }}>
+              {t("leaderboard.columns.player", { defaultValue: "Joueur" })}
+            </Text>
+          ) : showPicksColumnCue ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 2,
+                paddingRight: 0,
+              }}
+            >
+              <Text
+                style={{
+                  flex: 1,
+                  color: colors.subtext,
+                  fontSize: 9,
+                  lineHeight: 12,
+                  fontWeight: "700",
+                }}
+                numberOfLines={2}
+              >
+                {columnPicksHint}
+              </Text>
+              <MaterialCommunityIcons
+                name="arrow-right"
+                size={16}
+                color={colors.primary || "#ef4444"}
+                style={{ marginLeft: -2, flexShrink: 0 }}
+              />
+            </View>
+          ) : null}
         </View>
         <View style={{ width: STAT_COL_WIDTH, alignItems: "center" }}>
           <LiveChallengeKindBadge

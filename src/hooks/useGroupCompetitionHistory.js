@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import firestore from "@react-native-firebase/firestore";
-import { normalizeSport } from "@src/season/seasonCompetitionCore";
+import {
+  normalizeSport,
+  filterCompetitionHistoryRows,
+} from "@src/season/seasonCompetitionCore";
 
 function tsMillis(v) {
   try {

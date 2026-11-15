@@ -12,10 +12,9 @@ import {
   resolveMlbOpponentAbbr,
 } from "@src/mlb/MlbDefiPlayerMeta";
 import {
-  NhlOpponentMatchupLine,
+  NhlOpponentPickMeta,
   resolveNhlOpponentAbbr,
 } from "@src/nhl/NhlDefiPlayerMeta";
-import TeamMetaBadge from "./TeamMetaBadge";
 import { normalizeNhlSeasonStatRow } from "@src/nhl/nhlSeasonStatDisplay";
 
 function num(v) {
@@ -43,6 +42,7 @@ export default function PlayerPickerRow({
   teamLogo,
   sport = "NHL",
   formatStandingsLine = null,
+  getStandingsRecord = null,
   showNovaButton = false,
   onNovaPress = null,
 }) {
@@ -77,14 +77,21 @@ export default function PlayerPickerRow({
   const a = isMlb ? num(value?.assists) : num(nhlLine?.assists);
   const p = isMlb ? num(value?.points) : num(nhlLine?.points);
 
-  const ppg = useMemo(() => {
+  const ppgLabel = useMemo(() => {
     const v = value?.pointsPerGame;
-    if (Number.isFinite(Number(v))) return Number(v).toFixed(2);
+    let n = Number.isFinite(Number(v)) ? Number(v) : null;
+    if (n == null) {
+      const gp = Number(value?.gamesPlayed);
+      if (Number.isFinite(gp) && gp > 0) n = p / gp;
+    }
+    if (n == null || !Number.isFinite(n)) return null;
 
-    const gp = Number(value?.gamesPlayed);
-    if (Number.isFinite(gp) && gp > 0) return (p / gp).toFixed(2);
-
-    return null;
+    const isFr = String(i18n.locale || "").toLowerCase().startsWith("fr");
+    const formatted = isFr ? n.toFixed(2).replace(".", ",") : n.toFixed(2);
+    return i18n.t("defi.playerSelect.pointsPerGameLine", {
+      value: formatted,
+      defaultValue: `${formatted} points par match`,
+    });
   }, [value?.pointsPerGame, value?.gamesPlayed, p]);
 
   const matchup = value?.matchup || null;
@@ -173,26 +180,17 @@ export default function PlayerPickerRow({
               </>
             ) : (
               <>
-                <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                  {g}-{a}-{p}
-                  {ppg ? ` • ${i18n.t("defi.playerSelect.statPpgShort", { defaultValue: "Moy." })} ${ppg}` : ""}
-                </Text>
+                {ppgLabel ? (
+                  <Text style={{ color: colors.subtext, fontWeight: "800" }}>{ppgLabel}</Text>
+                ) : null}
 
                 {canShowNhlOpponent ? (
-                  <View style={{ gap: 4 }}>
-                    <NhlOpponentMatchupLine
-                      opponentAbbr={nhlOppAbbr}
-                      colors={colors}
-                      formatStandingsLine={formatStandingsLine}
-                    />
-                    {matchup ? (
-                      <TeamMetaBadge
-                        compact
-                        rankOverall={matchup.oppRankOverall}
-                        goalDifferential={matchup.oppGoalDifferential}
-                      />
-                    ) : null}
-                  </View>
+                  <NhlOpponentPickMeta
+                    opponentAbbr={nhlOppAbbr}
+                    colors={colors}
+                    teamOrMatchup={matchup}
+                    getStandingsRecord={getStandingsRecord}
+                  />
                 ) : null}
               </>
             )}

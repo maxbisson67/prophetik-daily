@@ -9,6 +9,8 @@ import {
   normalizeSport,
   pickCompetitionForDate,
   competitionTimelineStatus,
+  filterLeaderboardCompetitionEntries,
+  pickDefaultLeaderboardCompetition,
 } from "@src/season/seasonCompetitionCore";
 import {
   currentSeasonDocRef,
@@ -56,13 +58,31 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
 
     setLoading(true);
 
+    const failSafe = setTimeout(() => setLoading(false), 6000);
+
+    seasonCompetitionCollection()
+      .get()
+      .then((snap) => {
+        const rows = (snap?.docs ?? [])
+          .map((d) => normalizeCompetitionEntry(d.data(), d.id))
+          .filter(Boolean);
+        setCatalog(rows);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+
     const unCatalog = seasonCompetitionCollection().onSnapshot(
         (snap) => {
-          const rows = (snap?.docs ?? [])
-            .map((d) => normalizeCompetitionEntry(d.data(), d.id))
-            .filter(Boolean);
-          setCatalog(rows);
-          setLoading(false);
+          try {
+            const rows = (snap?.docs ?? [])
+              .map((d) => normalizeCompetitionEntry(d.data(), d.id))
+              .filter(Boolean);
+            setCatalog(rows);
+          } catch {
+            setCatalog([]);
+          } finally {
+            setLoading(false);
+          }
         },
         () => {
           setCatalog([]);
@@ -76,6 +96,7 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
       );
 
     return () => {
+      clearTimeout(failSafe);
       try {
         unCatalog?.();
       } catch {}
@@ -91,20 +112,25 @@ export default function useActiveCompetition({ sport = "NHL", gameYmd, enabled =
     }
 
     const sportNorm = normalizeSport(sport);
-    const sportCatalog = catalog.filter(
-      (e) => e.sport === sportNorm && String(e.status || "").toLowerCase() !== "finalized"
+    const sportCatalog = filterLeaderboardCompetitionEntries(
+      catalog.filter((e) => e.sport === sportNorm)
     );
     let active = pickCompetitionForDate(sportCatalog, todayYmd);
 
-    if (!active) {
-      const fallback = deriveFallbackEntries(sport, nhlConfig, todayYmd).filter(
-        (e) => String(e.status || "").toLowerCase() !== "finalized"
+    if (!active && !sportCatalog.length) {
+      const fallback = filterLeaderboardCompetitionEntries(
+        deriveFallbackEntries(sport, nhlConfig, todayYmd).filter((e) => e.sport === sportNorm)
       );
       active = pickCompetitionForDate(fallback, todayYmd);
     }
 
+    if (!active && sportCatalog.length) {
+      active =
+        pickDefaultLeaderboardCompetition(sportCatalog, todayYmd, "") || sportCatalog[0] || null;
+    }
+
     if (!active) {
-      return emptyActiveCompetition(loading);
+      return { ...emptyActiveCompetition(false), loading: loading && !catalog.length };
     }
 
     const daysRemaining = daysRemainingUntil(active.toYmd, todayYmd);

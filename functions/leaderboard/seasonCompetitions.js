@@ -8,6 +8,7 @@ import {
   normalizeCompetitionEntry,
   normalizeSport,
   pickCompetitionForDate,
+  filterLeaderboardCompetitionEntries,
 } from "./seasonCompetitionCore.js";
 
 const CATALOG_COLLECTION = "seasonCompetitions";
@@ -34,9 +35,10 @@ export async function loadCompetitionCatalog(db = getFirestore()) {
     // optional collection
   }
 
-  cachedCatalog = entries;
+  const filtered = filterLeaderboardCompetitionEntries(entries);
+  cachedCatalog = filtered;
   cachedCatalogAt = now;
-  return entries;
+  return filtered;
 }
 
 export function invalidateCompetitionCatalogCache() {

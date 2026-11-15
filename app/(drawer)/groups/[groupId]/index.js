@@ -33,6 +33,7 @@ import CreateDefiModal from '../../defis/CreateDefiModal';
 
 import InviteQrCard from "@src/groups/InviteQrCard";
 import GroupConfigSection from "@src/groups/components/GroupConfigSection";
+import GroupTeamSplitSection from "@src/groups/components/GroupTeamSplitSection";
 import GroupAvatar from "@src/groups/components/GroupAvatar";
 import {
   resolveParticipation,

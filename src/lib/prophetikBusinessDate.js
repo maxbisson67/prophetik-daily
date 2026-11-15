@@ -86,3 +86,18 @@ export function getProphetikBusinessDate(now = new Date()) {
 export function getPreviousProphetikBusinessYmdCompact(now = new Date()) {
   return addDaysToYmd(getProphetikBusinessYmd(now), -1).replace(/-/g, "");
 }
+
+/** Ms jusqu'au prochain roll du jour Prophetik (4h Toronto). */
+export function msUntilNextProphetikBusinessDayRoll(now = new Date()) {
+  const current = getProphetikBusinessYmd(now);
+  const start = now.getTime() + 30_000;
+  const end = start + 26 * 3_600_000;
+
+  for (let t = start; t <= end; t += 60_000) {
+    if (getProphetikBusinessYmd(new Date(t)) !== current) {
+      return Math.max(1_000, t - now.getTime());
+    }
+  }
+
+  return 30 * 60_000;
+}

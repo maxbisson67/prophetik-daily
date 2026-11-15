@@ -280,6 +280,8 @@
     "resultsTabHintLink": "Live",
     "resultsTabHintSuffix": " tab.",
     "selectGroupLabel": "Select a group to view its challenges",
+    "viewParticipantsPicks": "See participants' picks",
+    "viewParticipantsPicksShort": "See picks",
     "dailyDefisTitle": "Take on today's challenges",
     "dailyDefisProgressTitle": "My daily challenge progress",
     "groupChatTitle": "Group chat",
@@ -424,8 +426,25 @@
         "seasonCurrentShort": "Season {{season}}",
         "seasonPreviousShort": "Season {{season}}",
         "goalsThisYear": "This season:",
+        "firstGoalsSeason": "First goals of the game (season): {{count}}",
         "goalsLastYear": "Last season:",
         "goalsPerGameUnit": "G/GP",
+        "firstGoalsPersonal": "{{name}} has scored the game's first goal {{count}} times this season.",
+        "firstGoalsPersonalNone": "{{name}} hasn't scored the game's first goal yet this season.",
+        "playerFirstNameFallback": "This player",
+        "seasonStatsBlock": "{{season}} season",
+        "seasonStatsBlockPrevious": "Previous season · {{season}}",
+        "chooseShort": "Pick",
+        "choosePlayer": "Pick this player",
+        "toggleStats": "Show stats for {{name}}",
+        "nhlRowHint": "Tap the row for details · Pick to enter",
+        "detailSeasonHint": "Current season",
+        "detailGoals": "Goals",
+        "detailGoalsPerGame": "Goals / game",
+        "seasonGoalsTotalShort": "{{goals}} G",
+        "detailToi": "Avg. ice time",
+        "detailShotsPerGame": "Shots / game",
+        "detailPpGoals": "Power-play goals",
         "goalsGpTotals": "{{goals}} {{goalsUnit}} · {{gp}} {{gpUnit}}",
         "sortedByLineup": "Sorted by batting order",
         "lineupOrder": "#{{slot}} hitter",
@@ -623,6 +642,27 @@
 
         "transferRequiredTitle": "Transfer required",
         "transferRequiredMessage": "Other members still exist. You must transfer ownership before leaving."
+    },
+    "teamSplit": {
+        "sectionTitle": "Team duel (optional)",
+        "sectionHint": "Assign active members. Team standings appear for everyone once each team has at least one player.",
+        "teamA": "Team A",
+        "teamB": "Team B",
+        "teamAPlaceholder": "e.g. Parents",
+        "teamBPlaceholder": "e.g. Teens",
+        "ready": "Visible in Leaderboard for all members",
+        "notReady": "Assign at least one member per team",
+        "noParticipatingMembers": "No active members to assign.",
+        "save": "Save team duel",
+        "errors": {
+          "ownerOnly": "Only the owner can edit teams.",
+          "memberNotParticipating": "An assigned member is not actively participating.",
+          "invalidTeam": "Invalid team.",
+          "teamNameTooLong": "Team name is too long.",
+          "groupNotFound": "Group not found.",
+          "functionNotDeployed": "Server function missing. Deploy setGroupTeamSplit (firebase deploy --only functions:setGroupTeamSplit).",
+          "groupIdMissing": "Group id missing. Reopen the group screen."
+        }
     },
     "config": {
         "sectionTitle": "Configuration",
@@ -877,7 +917,8 @@
         },
         "matchup": {
           "rankShort": "Rank",
-          "diffShort": "+/-"
+          "diffShort": "+/-",
+          "goalsAgainstShort": "GA"
         },
         "playerSelect": {
             "title": "Select a player",
@@ -901,6 +942,7 @@
             "statSlg": "SLG",
             "statPoints": "PTS",
             "statPpgShort": "Avg",
+            "pointsPerGameLine": "{{value}} points per game",
             "statHits": "H",
             "statRbi": "RBI",
             "statHr": "HR",
@@ -1043,8 +1085,8 @@
       "ts": "Today's trio — rack up as many points as you can."
     },
     "viewMode": {
-      "games": "Games",
-      "points": "Points"
+      "games": "Live games",
+      "points": "Tonight's points"
     },
     "pointsOverview": {
       "title": "Today's points",
@@ -1053,15 +1095,24 @@
       "noChallenges": "No challenges today for this group.",
       "noParticipants": "No entries yet.",
       "hint": "Provisional points based on confirmed or in-progress results. Tap SOLO, DUO, or TRIO to see details.",
+      "hintProvisional": "Provisional points based on confirmed or in-progress results.",
+      "hintDiscoverability": "Tap SOLO, DUO, or TRIO to see participants' picks.",
+      "columnPicksHint": "Tap to see picks",
+      "a11yOpenFgcPicks": "See participants' SOLO picks",
+      "a11yOpenTpPicks": "See participants' DUO picks",
+      "a11yOpenTsPicks": "See participants' TRIO picks",
       "tsWinnerBonusShort": "+{{bonus}} bonus",
-      "dailyBonusNote": "Best night bonus: +{{bonus}} pts for the highest cumulative SOLO + DUO + TRIO total (shown as superscript on the Total column).",
+      "dailyBonusNote": "Best night bonus: +{{bonus}} pts for the highest cumulative SOLO + DUO + TRIO total (shown as superscript on the Total column)."
     },
     "participantProfile": {
       "title": "Today's points",
       "totalToday": "Today's total",
       "byChallenge": "Points by challenge today",
       "successes": "Successes",
-      "totalSuccesses": "{{count}} successes total"
+      "totalSuccesses": "{{count}} successes total",
+      "rankToday": "Today's rank",
+      "rankSeason": "Competition rank",
+      "rankNotStarted": "Before today's results"
     },
     "badge": {
       "rbi": "SOLO",
@@ -2024,7 +2075,10 @@
     "competitionDateLine": "{{from}} → {{to}}",
     "competitionPhase": {
       "regular": "Regular season",
-      "playoffs": "Playoffs"
+      "playoffs": "Playoffs",
+      "opening": "Opening",
+      "winter": "Winter",
+      "sprint": "Sprint"
     },
     "competitionStatus": {
       "active": "In progress",
@@ -2096,6 +2150,20 @@
     "actions": {
       "showAll": "See all ›",
       "showLess": "See less ›"
+    },
+
+    "viewMode": {
+      "individual": "Individual",
+      "teams": "Teams"
+    },
+
+    "teamSplit": {
+      "title": "Team standings",
+      "subtitle": "Average total points (selected phase).",
+      "memberCount": "{{count}} member(s)",
+      "avgLabel": "avg pts",
+      "gap": "Gap: {{gap}} pts (average)",
+      "gapLead": "🔥 {{team}} leads by {{gap}} points!"
     },
 
     "group": {
@@ -2386,6 +2454,20 @@
       "locked": "Locked",
       "yourPick": "You",
       "postponedHint": "Game postponed — prediction still open",
+      "teamFormRecord": "Record",
+      "teamFormHome": "Home",
+      "teamFormAway": "Away",
+      "teamFormGoalsFor": "GF / Game",
+      "teamFormGoalsAgainst": "GA / Game",
+      "teamFormRunsFor": "Runs scored / game",
+      "teamFormRunsAgainst": "Runs allowed / game",
+      "teamFormLastTen": "Last 10",
+      "teamRecord": "Record · {{record}}",
+      "goalsRatePerGame": "{{gf}} GF/GP · {{ga}} GA/GP",
+      "runsRatePerGame": "{{rf}} R/GP · {{ra}} RA/GP",
+      "teamLastTen": "Last 10 · {{record}}",
+      "sideSplitAway": "Away · {{record}}",
+      "sideSplitHome": "Home · {{record}}",
       "tieNotAllowed": "The score cannot be tied.",
       "saveMatch": "Save this game",
       "modifyPick": "Modify my pick",

@@ -2,8 +2,10 @@ import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
+import { SUBSCRIPTIONS_UI_VISIBLE } from "@src/subscriptions/subscriptionsNav";
 import ResultsTabHint from "@src/home/components/ResultsTabHint";
 import ParticipantTaskStatusChip from "@src/defis/participant/ParticipantTaskStatusChip";
+import HomeParticipantsCountRow from "@src/home/components/HomeParticipantsCountRow";
 import {
   formatParticipantCtaLabel,
   resolveParticipantTaskStatus,
@@ -327,6 +329,7 @@ export default function DefiListItem({
   onPressUpgrade,
   onPressResults,
   onPressParticipate,
+  onPressViewPicks = null,
 }) {
   const rawStatus = String(item?.status || "").toLowerCase();
   const uiStatus = computeUiStatus(item);
@@ -491,13 +494,11 @@ export default function DefiListItem({
           )}
         </Text>
 
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-          <MaterialCommunityIcons name="account-group" size={16} color={colors.subtext} />
-          <Text style={{ color: colors.subtext, marginLeft: 6, fontSize: 13 }}>
-            {getParticipantsCount(item)}{" "}
-            {i18n.t("common.participants", { defaultValue: "participant(s)" })}
-          </Text>
-        </View>
+        <HomeParticipantsCountRow
+          count={getParticipantsCount(item)}
+          colors={colors}
+          onPressViewPicks={onPressViewPicks}
+        />
 
         <TsSelectionBlock lines={tsSelectionLines} colors={colors} sport={itemSport} />
 
@@ -517,38 +518,40 @@ export default function DefiListItem({
                 })}
               </Text>
 
-              <TouchableOpacity
-                onPress={onPressUpgrade}
-                activeOpacity={0.85}
-                style={{
-                  marginTop: 4,
-                  paddingVertical: 10,
-                  borderRadius: 12,
-                  alignItems: "center",
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  width: "100%",
-                }}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <MaterialCommunityIcons
-                    name="lock-open-outline"
-                    size={16}
-                    color={PROPHETIK_RED}
-                  />
-                  <Text
-                    style={{
-                      color: PROPHETIK_RED,
-                      fontWeight: "900",
-                      fontSize: 13,
-                      marginLeft: 6,
-                    }}
-                  >
-                    {ctaLabel}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              {SUBSCRIPTIONS_UI_VISIBLE && onPressUpgrade ? (
+                <TouchableOpacity
+                  onPress={onPressUpgrade}
+                  activeOpacity={0.85}
+                  style={{
+                    marginTop: 4,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    alignItems: "center",
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    width: "100%",
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <MaterialCommunityIcons
+                      name="lock-open-outline"
+                      size={16}
+                      color={PROPHETIK_RED}
+                    />
+                    <Text
+                      style={{
+                        color: PROPHETIK_RED,
+                        fontWeight: "900",
+                        fontSize: 13,
+                        marginLeft: 6,
+                      }}
+                    >
+                      {ctaLabel}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
             </>
           ) : (
             <>
@@ -652,27 +655,28 @@ export default function DefiListItem({
                   defaultValue: "Passe à Pro/Vip pour participer à ce défi.",
                 })}
               </Text>
-
-              <TouchableOpacity
-                onPress={onPressUpgrade}
-                activeOpacity={0.85}
-                style={{
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  borderRadius: 10,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <Text style={{ color: PROPHETIK_RED, fontWeight: "900", fontSize: 13 }}>
-                  {i18n.t("home.upgradeCta", { defaultValue: "Voir les forfaits" })}
-                </Text>
-                <MaterialCommunityIcons name="chevron-right" size={16} color={PROPHETIK_RED} />
-              </TouchableOpacity>
+              {SUBSCRIPTIONS_UI_VISIBLE && onPressUpgrade ? (
+                <TouchableOpacity
+                  onPress={onPressUpgrade}
+                  activeOpacity={0.85}
+                  style={{
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Text style={{ color: PROPHETIK_RED, fontWeight: "900", fontSize: 13 }}>
+                    {i18n.t("home.upgradeCta", { defaultValue: "Voir les forfaits" })}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-right" size={16} color={PROPHETIK_RED} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : showResultsCta ? (
             <ResultsTabHint colors={colors} groupId={item?.groupId} />

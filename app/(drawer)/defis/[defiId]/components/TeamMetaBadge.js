@@ -1,9 +1,12 @@
 // app/defis/[defiId]/components/TeamMetaBadge.js
-import React, { useMemo } from "react";
+import React from "react";
 import { View, Text } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
+import {
+  formatTeamGoalsAgainstPerGame,
+  resolveTeamGoalsAgainstPerGame,
+} from "@src/nhl/nhlTeamGoalsAgainstDisplay";
 
 function isFrench() {
   return String(i18n.locale || "").toLowerCase().startsWith("fr");
@@ -12,7 +15,6 @@ function isFrench() {
 function ordinalFr(n) {
   const x = Number(n);
   if (!Number.isFinite(x) || x <= 0) return "—";
-  // 1er / 2e / 3e …
   return x === 1 ? "1er" : `${x}e`;
 }
 
@@ -36,45 +38,37 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+export { resolveTeamGoalsAgainstPerGame } from "@src/nhl/nhlTeamGoalsAgainstDisplay";
+
 export default function TeamMetaBadge({
   rankOverall,
-  goalDifferential,
+  goalsAgainstPerGame = null,
+  gaPerGame = null,
+  teamOrMatchup = null,
+  standingsTeamAbbr = null,
+  getStandingsRecord = null,
   compact = true, // conservé pour compat
 }) {
   const { colors } = useTheme();
 
   const rank = numOrNull(rankOverall);
-  const gd = numOrNull(goalDifferential);
+  const standingsRecord =
+    typeof getStandingsRecord === "function" && standingsTeamAbbr
+      ? getStandingsRecord(standingsTeamAbbr)
+      : null;
 
-  const trend = useMemo(() => {
-    if (gd == null) return "flat";
-    if (gd > 0) return "up";
-    if (gd < 0) return "down";
-    return "flat";
-  }, [gd]);
+  const gaPg =
+    resolveTeamGoalsAgainstPerGame({
+      goalsAgainstPerGame,
+      gaPerGame,
+      ...(teamOrMatchup || {}),
+    }) ?? resolveTeamGoalsAgainstPerGame(standingsRecord);
 
-  const icon =
-    trend === "up"
-      ? "trending-up"
-      : trend === "down"
-      ? "trending-down"
-      : "remove";
-
-  const fg =
-    trend === "up"
-      ? "#16a34a"
-      : trend === "down"
-      ? "#ef4444"
-      : colors.subtext;
-
-  // ✅ i18n labels (plus de "Rank" hardcodé)
   const labelRank = i18n.t("defi.matchup.rankShort", { defaultValue: "Rank" });
-  const labelGd = i18n.t("defi.matchup.diffShort", { defaultValue: "+/-" });
+  const labelBc = i18n.t("defi.matchup.goalsAgainstShort", { defaultValue: "GA" });
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <Ionicons name={icon} size={16} color={fg} />
-
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
       <Text
         style={{
           color: colors.subtext,
@@ -84,8 +78,8 @@ export default function TeamMetaBadge({
         }}
         numberOfLines={1}
       >
-        {labelRank}: {rank == null ? "—" : fmtRank(rank)}, {labelGd}:{" "}
-        {gd == null ? "—" : gd}
+        {labelRank}: {rank == null ? "—" : fmtRank(rank)}, {labelBc}:{" "}
+        {gaPg == null ? "—" : formatTeamGoalsAgainstPerGame(gaPg)}
       </Text>
     </View>
   );

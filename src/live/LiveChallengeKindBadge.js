@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 
 const LIVE_BADGE_ACCENTS = {
@@ -34,36 +35,42 @@ function BadgeFrame({
   children,
   compact = false,
   tableHeader = false,
+  tableHeaderInteractive = false,
   inverted = false,
 }) {
   const borderColor = inverted
     ? "rgba(255,255,255,0.85)"
     : accent || colors.primary || "#ef4444";
-  const minHeight = tableHeader ? 22 : compact ? 30 : 34;
+  const interactiveHeader = tableHeader && tableHeaderInteractive;
+  const minHeight = interactiveHeader ? 28 : tableHeader ? 22 : compact ? 30 : 34;
   const radius = tableHeader ? 7 : 10;
   const innerRadius = Math.max(radius - 2, 4);
-  const borderWidth = tableHeader ? 1.5 : 2;
+  const borderWidth = interactiveHeader ? 2 : tableHeader ? 1.5 : 2;
 
   return (
     <View
       style={{
-        minWidth: tableHeader ? 34 : compact ? 52 : 48,
+        minWidth: tableHeader ? 36 : compact ? 52 : 48,
         minHeight,
         borderRadius: radius,
         borderWidth,
         borderColor,
-        backgroundColor: inverted ? "rgba(255,255,255,0.14)" : hexWithAlpha(borderColor, "1A"),
+        backgroundColor: inverted
+          ? "rgba(255,255,255,0.14)"
+          : interactiveHeader
+          ? hexWithAlpha(borderColor, "28")
+          : hexWithAlpha(borderColor, "1A"),
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: tableHeader ? 3 : compact ? 6 : 8,
-        paddingVertical: tableHeader ? 2 : 4,
+        paddingVertical: tableHeader ? (interactiveHeader ? 3 : 2) : 4,
         flexShrink: 0,
         overflow: "hidden",
-        shadowColor: inverted || tableHeader ? "transparent" : borderColor,
-        shadowOffset: { width: 0, height: inverted || tableHeader ? 0 : 2 },
-        shadowOpacity: inverted || tableHeader ? 0 : 0.25,
-        shadowRadius: inverted || tableHeader ? 0 : 4,
-        elevation: inverted || tableHeader ? 0 : 3,
+        shadowColor: inverted || !interactiveHeader ? "transparent" : borderColor,
+        shadowOffset: { width: 0, height: interactiveHeader ? 1 : 0 },
+        shadowOpacity: interactiveHeader ? 0.22 : 0,
+        shadowRadius: interactiveHeader ? 2 : 0,
+        elevation: interactiveHeader ? 2 : tableHeader ? 0 : 3,
       }}
     >
       {!inverted ? (
@@ -88,7 +95,30 @@ function BadgeFrame({
   );
 }
 
-function FgcBadge({ colors, sport, compact, tableHeader, inverted = false }) {
+function TableHeaderBadgeContent({ accent, tableHeaderInteractive, children }) {
+  if (!tableHeaderInteractive) return children;
+
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
+      {children}
+      <MaterialCommunityIcons
+        name="unfold-more-horizontal"
+        size={11}
+        color={accent}
+        style={{ marginTop: -1, opacity: 0.92 }}
+      />
+    </View>
+  );
+}
+
+function FgcBadge({
+  colors,
+  sport,
+  compact,
+  tableHeader,
+  tableHeaderInteractive = false,
+  inverted = false,
+}) {
   const accent = LIVE_BADGE_ACCENTS.fgc;
   const league = String(sport || "MLB").toUpperCase();
   const label =
@@ -102,21 +132,30 @@ function FgcBadge({ colors, sport, compact, tableHeader, inverted = false }) {
       colors={colors}
       compact={compact}
       tableHeader={tableHeader}
+      tableHeaderInteractive={tableHeaderInteractive}
       inverted={inverted}
     >
-      <Text
-        style={badgeTextStyle({ accent, compact, tableHeader, letterSpacing: 0.8, inverted })}
-        numberOfLines={1}
-        adjustsFontSizeToFit={!tableHeader}
-        minimumFontScale={0.85}
-      >
-        {label}
-      </Text>
+      <TableHeaderBadgeContent accent={accent} tableHeaderInteractive={tableHeaderInteractive}>
+        <Text
+          style={badgeTextStyle({ accent, compact, tableHeader, letterSpacing: 0.8, inverted })}
+          numberOfLines={1}
+          adjustsFontSizeToFit={!tableHeader}
+          minimumFontScale={0.85}
+        >
+          {label}
+        </Text>
+      </TableHeaderBadgeContent>
     </BadgeFrame>
   );
 }
 
-function TpBadge({ colors, compact, tableHeader, inverted = false }) {
+function TpBadge({
+  colors,
+  compact,
+  tableHeader,
+  tableHeaderInteractive = false,
+  inverted = false,
+}) {
   const accent = LIVE_BADGE_ACCENTS.tp;
   const label = i18n.t("live.badge.score", { defaultValue: "DUO" });
 
@@ -126,21 +165,30 @@ function TpBadge({ colors, compact, tableHeader, inverted = false }) {
       colors={colors}
       compact={compact}
       tableHeader={tableHeader}
+      tableHeaderInteractive={tableHeaderInteractive}
       inverted={inverted}
     >
-      <Text
-        style={badgeTextStyle({ accent, compact, tableHeader, inverted })}
-        numberOfLines={1}
-        adjustsFontSizeToFit={!tableHeader}
-        minimumFontScale={0.85}
-      >
-        {label}
-      </Text>
+      <TableHeaderBadgeContent accent={accent} tableHeaderInteractive={tableHeaderInteractive}>
+        <Text
+          style={badgeTextStyle({ accent, compact, tableHeader, inverted })}
+          numberOfLines={1}
+          adjustsFontSizeToFit={!tableHeader}
+          minimumFontScale={0.85}
+        >
+          {label}
+        </Text>
+      </TableHeaderBadgeContent>
     </BadgeFrame>
   );
 }
 
-function TsBadge({ colors, compact, tableHeader, inverted = false }) {
+function TsBadge({
+  colors,
+  compact,
+  tableHeader,
+  tableHeaderInteractive = false,
+  inverted = false,
+}) {
   const accent = LIVE_BADGE_ACCENTS.ts;
   const label = i18n.t("live.badge.trio", { defaultValue: "TRIO" });
 
@@ -150,11 +198,14 @@ function TsBadge({ colors, compact, tableHeader, inverted = false }) {
       colors={colors}
       compact={compact}
       tableHeader={tableHeader}
+      tableHeaderInteractive={tableHeaderInteractive}
       inverted={inverted}
     >
-      <Text style={badgeTextStyle({ accent, compact, tableHeader, letterSpacing: 0.3, inverted })}>
-        {label}
-      </Text>
+      <TableHeaderBadgeContent accent={accent} tableHeaderInteractive={tableHeaderInteractive}>
+        <Text style={badgeTextStyle({ accent, compact, tableHeader, letterSpacing: 0.3, inverted })}>
+          {label}
+        </Text>
+      </TableHeaderBadgeContent>
     </BadgeFrame>
   );
 }
@@ -169,6 +220,7 @@ export default function LiveChallengeKindBadge({
   onPress = null,
 }) {
   const key = String(kind || "").toLowerCase();
+  const tableHeaderInteractive = !!(tableHeader && onPress);
 
   const badge =
     key === "fgc" ? (
@@ -177,20 +229,52 @@ export default function LiveChallengeKindBadge({
         sport={sport}
         compact={compact}
         tableHeader={tableHeader}
+        tableHeaderInteractive={tableHeaderInteractive}
         inverted={inverted}
       />
     ) : key === "tp" ? (
-      <TpBadge colors={colors} compact={compact} tableHeader={tableHeader} inverted={inverted} />
+      <TpBadge
+        colors={colors}
+        compact={compact}
+        tableHeader={tableHeader}
+        tableHeaderInteractive={tableHeaderInteractive}
+        inverted={inverted}
+      />
     ) : key === "ts" ? (
-      <TsBadge colors={colors} compact={compact} tableHeader={tableHeader} inverted={inverted} />
+      <TsBadge
+        colors={colors}
+        compact={compact}
+        tableHeader={tableHeader}
+        tableHeaderInteractive={tableHeaderInteractive}
+        inverted={inverted}
+      />
     ) : null;
 
   if (!badge) return null;
 
   if (!onPress) return badge;
 
+  const a11yLabel =
+    key === "fgc"
+      ? i18n.t("live.pointsOverview.a11yOpenFgcPicks", {
+          defaultValue: "Voir les choix SOLO des participants",
+        })
+      : key === "tp"
+      ? i18n.t("live.pointsOverview.a11yOpenTpPicks", {
+          defaultValue: "Voir les choix DUO des participants",
+        })
+      : i18n.t("live.pointsOverview.a11yOpenTsPicks", {
+          defaultValue: "Voir les choix TRIO des participants",
+        });
+
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.75}
+      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+    >
       {badge}
     </TouchableOpacity>
   );

@@ -18,11 +18,14 @@ export async function recordGroupHumanParticipationYmd(db, groupId, ymdDashed) {
   );
 }
 
-/** true/false si le champ est présent ; null = pas encore de denorm (fallback legacy). */
+/**
+ * true si lastHumanParticipationYmd = le jour évalué (participation certaine).
+ * null sinon → le cron inactivité doit scanner les entries (last ≠ veille ne prouve pas l'absence).
+ */
 export function groupHadHumanPlayOnYmd(group = {}, evaluatedYmd) {
   const last = String(group?.lastHumanParticipationYmd || "").slice(0, 10);
   const evalY = String(evaluatedYmd || "").slice(0, 10);
-  if (!evalY) return null;
-  if (!last) return null;
-  return last === evalY;
+  if (!evalY || !last) return null;
+  if (last === evalY) return true;
+  return null;
 }

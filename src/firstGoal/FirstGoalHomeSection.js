@@ -38,6 +38,8 @@ import {
   resolveChallengeEmptyMessage,
 } from "@src/home/components/AutopilotPendingChallengeHint";
 import ParticipantPredictionFrame from "@src/defis/participant/ParticipantPredictionFrame";
+import HomeParticipantsCountRow from "@src/home/components/HomeParticipantsCountRow";
+import LiveChallengePicksModal from "@src/live/LiveChallengePicksModal";
 
 function chunk(arr, size = 10) {
   const out = [];
@@ -142,6 +144,7 @@ export default function FirstGoalHomeSection({
   }, [groups, sportLeague]);
 
   const [allChallenges, setAllChallenges] = useState([]);
+  const [picksChallenge, setPicksChallenge] = useState(null);
   const [loading, setLoading] = useState(false);
   const [myPickByChallengeId, setMyPickByChallengeId] = useState({});
 
@@ -591,13 +594,13 @@ export default function FirstGoalHomeSection({
                     )}
                   </Text>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-                    <MaterialCommunityIcons name="account-group" size={16} color={colors.subtext} />
-                    <Text style={{ color: colors.subtext, marginLeft: 6, fontSize: 13 }}>
-                      {participants}{" "}
-                      {i18n.t("common.participants", { defaultValue: "participant(s)" })}
-                    </Text>
-                  </View>
+                  <HomeParticipantsCountRow
+                    count={participants}
+                    colors={colors}
+                    onPressViewPicks={
+                      challengeId ? () => setPicksChallenge({ ...ch, id: challengeId }) : null
+                    }
+                  />
 
                   <View style={{ marginTop: 8, gap: 8 }}>
                     {!participation.showPostponed ? (
@@ -622,6 +625,15 @@ export default function FirstGoalHomeSection({
           </View>
         )}
       </View>
+
+      <LiveChallengePicksModal
+        visible={!!picksChallenge}
+        kind="fgc"
+        sport={sportLeague}
+        colors={colors}
+        fgcChallenge={picksChallenge}
+        onClose={() => setPicksChallenge(null)}
+      />
     </>
   );
 }

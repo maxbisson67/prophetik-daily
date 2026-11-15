@@ -43,6 +43,9 @@ import {
   normalizeSport,
   pickDefaultLeaderboardCompetition,
 } from "@src/season/seasonCompetitionCore";
+import { isTeamSplitReady } from "@src/groups/teamSplitUtils";
+import useGroupTeamSplit from "@src/groups/useGroupTeamSplit";
+import TeamLeaderboardSection from "@src/leaderboard/TeamLeaderboardSection";
 
 function useOwnedGroups(uid) {
   const [owned, setOwned] = useState([]);
@@ -153,6 +156,8 @@ export default function ClassementScreen() {
   }, [currentGroupId, sportNorm]);
 
   useEffect(() => {
+    if (loadingCompetitions) return;
+
     const keys = competitions.map((c) => c.competitionKey);
 
     if (
@@ -171,7 +176,9 @@ export default function ClassementScreen() {
     if (selectedCompetitionKey && keys.includes(selectedCompetitionKey)) return;
 
     const preferredKey =
-      activeCompetitionKey && competitionKeyMatchesSport(activeCompetitionKey, currentSport)
+      activeCompetitionKey &&
+      keys.includes(activeCompetitionKey) &&
+      competitionKeyMatchesSport(activeCompetitionKey, currentSport)
         ? activeCompetitionKey
         : "";
 
@@ -189,6 +196,7 @@ export default function ClassementScreen() {
     currentSport,
     sportNorm,
     todayYmd,
+    loadingCompetitions,
   ]);
 
   const selectedCompetition = useMemo(
@@ -196,7 +204,10 @@ export default function ClassementScreen() {
     [competitions, selectedCompetitionKey]
   );
 
+  const competitionsReady = !loadingSeason && !loadingCompetitions;
+
   const isCompetitionSelectionReady =
+    competitionsReady &&
     !!selectedCompetitionKey &&
     competitionKeyMatchesSport(selectedCompetitionKey, currentSport) &&
     competitions.some((c) => c.competitionKey === selectedCompetitionKey);
@@ -207,9 +218,6 @@ export default function ClassementScreen() {
   }, [selectedCompetition, todayYmd]);
 
   const isSelectedCompetitionUpcoming = selectedCompetitionStatus === "upcoming";
-
-  const showParticipationStats =
-    !!currentGroupId && canViewGroupParticipationStats(user?.uid);
 
   const groupIds = useMemo(() => groups.map((g) => String(g.id)), [groups]);
 
@@ -249,6 +257,16 @@ export default function ClassementScreen() {
     });
 
   const [refreshing, setRefreshing] = useState(false);
+
+  const showParticipationStats =
+    !!currentGroupId && canViewGroupParticipationStats(user?.uid);
+
+  const { teamSplit } = useGroupTeamSplit(currentGroupId);
+
+  const showTeamSplitSection = useMemo(
+    () => isTeamSplitReady(teamSplit),
+    [teamSplit]
+  );
 
   const baseUrl =
     "https://us-central1-capitaine.cloudfunctions.net/rebuildLeaderboardSeasonForGroup";
@@ -351,27 +369,6 @@ export default function ClassementScreen() {
     );
   }
 
-  if (loadingMemberGroups || loadingOwned) {
-    return (
-      <>
-        <Stack.Screen options={{ title: t("leaderboard.title") }} />
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.background,
-          }}
-        >
-          <ActivityIndicator color={colors.primary} />
-          <Text style={{ marginTop: 8, color: colors.subtext }}>
-            {t("leaderboard.loading")}
-          </Text>
-        </View>
-      </>
-    );
-  }
-
   if (error) {
     return (
       <>
@@ -458,8 +455,32 @@ export default function ClassementScreen() {
                       })}
                     </Text>
                   </View>
+                  {showTeamSplitSection ? (
+                    <TeamLeaderboardSection
+                      teamSplit={teamSplit}
+                      memberRows={rows}
+                      colors={colors}
+                    />
+                  ) : null}
                 </View>
-              ) : loadingBoard || !isCompetitionSelectionReady ? (
+              ) : !isCompetitionSelectionReady ? (
+                <View style={{ paddingVertical: 40, alignItems: "center" }}>
+                  {competitionsReady && !competitions.length ? (
+                    <Text style={{ color: colors.subtext, fontWeight: "700", textAlign: "center" }}>
+                      {t("leaderboard.group.noStats", {
+                        defaultValue: "Aucun classement disponible.",
+                      })}
+                    </Text>
+                  ) : (
+                    <>
+                      <ActivityIndicator color={colors.primary} />
+                      <Text style={{ marginTop: 8, color: colors.subtext }}>
+                        {t("leaderboard.loading")}
+                      </Text>
+                    </>
+                  )}
+                </View>
+              ) : loadingBoard && canLoad ? (
                 <View style={{ paddingVertical: 40, alignItems: "center" }}>
                   <ActivityIndicator color={colors.primary} />
                   <Text style={{ marginTop: 8, color: colors.subtext }}>
@@ -483,6 +504,13 @@ export default function ClassementScreen() {
                       defaultValue: "Aucun classement disponible.",
                     })}
                   />
+                  {showTeamSplitSection ? (
+                    <TeamLeaderboardSection
+                      teamSplit={teamSplit}
+                      memberRows={rows}
+                      colors={colors}
+                    />
+                  ) : null}
                   <LeaderboardParticipantProfileModal
                     visible={!!profileRow}
                     row={profileRow}

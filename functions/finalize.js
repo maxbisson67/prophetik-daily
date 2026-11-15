@@ -15,8 +15,7 @@ import {
   collectGroupDayPairsForDates,
   notifyDailyTopScorer,
 } from "./notifications/dailyTopScorer.js";
-import { computeMemberSeasonRank } from "./leaderboard/leaderboardRankUtils.js";
-import { notifyLeaderboardRankUpAfterPointsCredit } from "./notifications/notifyLeaderboardRankUp.js";
+import { runMorningLeaderboardRankNotificationsForGroup } from "./notifications/notifyLeaderboardRankUp.js";
 import { resolveCompetitionForGroupCredit } from "./leaderboard/currentSeason.js";
 import { TS_WIN_BONUS_POINTS } from "./challengeScoringConstants.js";
 import { getFirestoreCostFlags } from "./shared/firestoreCostFlags.js";

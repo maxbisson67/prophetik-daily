@@ -34,6 +34,9 @@ function pickNhlDisplayFields(row = {}) {
     gamesPlayed: Number(row.gamesPlayed) || 0,
     pointsPerGame: Number(row.pointsPerGame) || 0,
     coeff: Number.isFinite(Number(row.coeff)) ? Number(row.coeff) : null,
+    shots: Number(row.shots) || 0,
+    ppGoals: Number(row.ppGoals ?? row.powerPlayGoals) || 0,
+    timeOnIcePerGame: row.timeOnIcePerGame ?? null,
   };
 }
 
@@ -194,6 +197,15 @@ function playerIdsNeedingSeasons(rosterRows, seasonIds, L) {
   });
 }
 
+async function mergeStatsOntoRosterRows(rosterRows, statsByPlayer) {
+  for (const row of rosterRows) {
+    const playerId = String(row.playerId || row.id || "").trim();
+    const fetchedStats = statsByPlayer[playerId];
+    if (!fetchedStats) continue;
+    row.statsBySeason = mergeStatsMaps(row.statsBySeason, fetchedStats);
+  }
+}
+
 async function fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds) {
   const ids = seasonIds.filter(Boolean);
   if (!ids.length) return;
@@ -203,13 +215,26 @@ async function fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds) {
 
   const { statsCollection, pickFields } = leagueMeta(L);
   const statsByPlayer = await loadStatsByPlayerIds(statsCollection, needing, ids, pickFields);
+  await mergeStatsOntoRosterRows(rosterRows, statsByPlayer);
+}
 
-  for (const row of rosterRows) {
-    const playerId = String(row.playerId || row.id || "").trim();
-    const fetchedStats = statsByPlayer[playerId];
-    if (!fetchedStats) continue;
-    row.statsBySeason = mergeStatsMaps(row.statsBySeason, fetchedStats);
-  }
+/** Stats étendues (tirs, TOI, PP) depuis stats_current — NHL SOLO. */
+async function fetchAndMergeNhlSeasonExtendedStats(rosterRows, seasonId) {
+  const sid = String(seasonId || "").trim();
+  if (!sid) return;
+
+  const playerIds = [
+    ...new Set(
+      rosterRows
+        .map((p) => String(p.playerId || p.id || "").trim())
+        .filter(Boolean)
+    ),
+  ];
+  if (!playerIds.length) return;
+
+  const { statsCollection, pickFields } = leagueMeta("NHL");
+  const statsByPlayer = await loadStatsByPlayerIds(statsCollection, playerIds, [sid], pickFields);
+  await mergeStatsOntoRosterRows(rosterRows, statsByPlayer);
 }
 
 function playersFromRosterRows(rosterRows, L) {
@@ -237,6 +262,12 @@ export async function loadFgcPlayersWithSeasonStats({
 
   const rosterRows = await fetchFgcActiveRoster(home, away, L);
   await fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds);
+  if (L === "NHL") {
+    if (seasonPair.current) await fetchAndMergeNhlSeasonExtendedStats(rosterRows, seasonPair.current);
+    if (seasonPair.previous && seasonPair.previous !== seasonPair.current) {
+      await fetchAndMergeNhlSeasonExtendedStats(rosterRows, seasonPair.previous);
+    }
+  }
   const players = playersFromRosterRows(rosterRows, L);
 
   return { players, league: L, seasonPair };
@@ -284,6 +315,12 @@ export async function loadFgcPlayersProgressive({
       await fetchAndMergeSeasonStatsOntoRoster(rosterRows, L, seasonIds);
       publishFgcPlayers(rosterRows, L, seasonPair, onStatsReady);
     }
+  }
+
+  if (L === "NHL") {
+    if (currentId) await fetchAndMergeNhlSeasonExtendedStats(rosterRows, currentId);
+    if (previousId) await fetchAndMergeNhlSeasonExtendedStats(rosterRows, previousId);
+    publishFgcPlayers(rosterRows, L, seasonPair, onStatsReady);
   }
 
   const players = playersFromRosterRows(rosterRows, L);

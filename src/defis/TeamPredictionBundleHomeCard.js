@@ -3,7 +3,6 @@
 import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import i18n from "@src/i18n/i18n";
 import TpHomeDeadlineBlock from "@src/defis/TpHomeDeadlineBlock";
 import { getEarliestOpenSlot, getSlotLockedAt, isSlotLocked, fmtTimeShort } from "@src/defis/tpDeadlineHelpers";
@@ -32,6 +31,7 @@ import {
   getChallengeAccent,
   paleChallengeBackground,
 } from "@src/home/components/HomeDefisToggle";
+import HomeParticipantsCountRow from "@src/home/components/HomeParticipantsCountRow";
 
 function safeAbbr(v) {
   return String(v || "").trim().toUpperCase();
@@ -318,13 +318,7 @@ export default function TeamPredictionBundleHomeCard({
         </Text>
       ) : null}
 
-      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-        <MaterialCommunityIcons name="account-group" size={16} color={colors.subtext} />
-        <Text style={{ color: colors.subtext, marginLeft: 6, fontSize: 13 }}>
-          {participants}{" "}
-          {i18n.t("common.participants", { defaultValue: "participant(s)" })}
-        </Text>
-      </View>
+      <HomeParticipantsCountRow count={participants} colors={colors} />
 
       <View style={{ marginTop: 12, gap: 10 }}>
         <ResultsTabHint colors={colors} groupId={groupId} />

@@ -45,6 +45,7 @@ import CreateDefiModal from "../defis/CreateDefiModal";
 import CreateAscensionModal from "@src/ascensions/CreateAscensionModal";
 
 import useEntitlement from "../subscriptions/useEntitlement";
+import { SUBSCRIPTIONS_UI_VISIBLE, navigateToSubscriptions } from "@src/subscriptions/subscriptionsNav";
 import useLeaderboardCompetitionKey from "@src/hooks/useLeaderboardCompetitionKey";
 import useGroupLeaderboardSummary from "@src/leaderboard/useGroupLeaderboardSummary";
 import DefiSectionIntroBand from "@src/home/components/DefiSectionIntroBand";

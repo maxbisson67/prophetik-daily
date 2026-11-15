@@ -7,6 +7,7 @@ import { useTheme } from "@src/theme/ThemeProvider";
 import i18n from "@src/i18n/i18n";
 import { useRouter } from "expo-router";
 import useEntitlement from "../../app/(drawer)/subscriptions/useEntitlement";
+import { SUBSCRIPTIONS_UI_VISIBLE, navigateToSubscriptions } from "@src/subscriptions/subscriptionsNav";
 import { Ionicons } from "@expo/vector-icons";
 import { createAscension } from "@src/ascensions/api";
 import NovaBubble from "@src/ui/NovaBubble";
@@ -259,24 +260,26 @@ export default function CreateAscensionModal({
             })}
           </Text>
 
-          <TouchableOpacity
-            onPress={onGoToSubscriptions}
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "#b91c1c",
-              backgroundColor: "#b91c1c",
-              minWidth: 240,
-              alignItems: "center",
-              alignSelf: "center",
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "900" }}>
-              {i18n.t("ascension.create.unlockOther", { defaultValue: "Débloquer Ascension 7" })}
-            </Text>
-          </TouchableOpacity>
+          {SUBSCRIPTIONS_UI_VISIBLE ? (
+            <TouchableOpacity
+              onPress={onGoToSubscriptions}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#b91c1c",
+                backgroundColor: "#b91c1c",
+                minWidth: 240,
+                alignItems: "center",
+                alignSelf: "center",
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "900" }}>
+                {i18n.t("ascension.create.unlockOther", { defaultValue: "Débloquer Ascension 7" })}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -429,22 +432,24 @@ export default function CreateAscensionModal({
             {i18n.t("ascension.create.planLocked", { defaultValue: "Ton abonnement ne permet pas l’Ascension 7." })}
           </Text>
 
-          <TouchableOpacity
-            onPress={onGoToSubscriptions}
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 10,
-              backgroundColor: "#b91c1c",
-              alignSelf: "center",
-              minWidth: 220,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "900" }}>
-              {i18n.t("ascension.create.unlockOther", { defaultValue: "Débloquer Ascension 7" })}
-            </Text>
-          </TouchableOpacity>
+          {SUBSCRIPTIONS_UI_VISIBLE ? (
+            <TouchableOpacity
+              onPress={onGoToSubscriptions}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                backgroundColor: "#b91c1c",
+                alignSelf: "center",
+                minWidth: 220,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "900" }}>
+                {i18n.t("ascension.create.unlockOther", { defaultValue: "Débloquer Ascension 7" })}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
     </View>

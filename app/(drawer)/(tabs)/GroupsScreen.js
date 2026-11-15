@@ -17,6 +17,7 @@ import { isGroupOwner } from '@src/groups/groupOwnership';
 import { PARTICIPATION } from '@src/groups/participationUtils';
 import { setMembershipParticipationService } from '@src/groups/setMembershipParticipationService';
 import usePlanUsage from '@src/subscriptions/usePlanUsage';
+import { SUBSCRIPTIONS_UI_VISIBLE, navigateToSubscriptions } from '@src/subscriptions/subscriptionsNav';
 
 /* ----------------------------------------------------
    Firestore helpers (RNFirebase natif / Web SDK)

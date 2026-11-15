@@ -1,5 +1,5 @@
 // app/(drawer)/(tabs)/ChallengesScreen.js
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { snapshotExists, snapshotData, snapshotId } from "@src/lib/safeSnapshot";
 import {
   View,
@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useFocusEffect } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";
 
 import i18n from "@src/i18n/i18n";
@@ -23,10 +23,10 @@ import {
   shouldShowPastDayResultItem,
 } from "@src/defis/results/challengeResultsModel";
 import {
-  getProphetikBusinessDate,
   getProphetikBusinessYmd,
   addDaysToYmd,
 } from "@src/lib/prophetikBusinessDate";
+import useProphetikBusinessDay from "@src/hooks/useProphetikBusinessDay";
 import HistoryDayDetailSections from "@src/defis/results/HistoryDayDetailSections";
 import { getFgcTitle } from "@src/firstGoal/fgcChallengeUtils";
 import useMlbScheduleGames from "@src/mlb/useMlbScheduleGames";
@@ -85,14 +85,18 @@ function addDays(date, days) {
   return d;
 }
 
-function buildResultsDayOptions() {
-  const base = getProphetikBusinessDate();
+function buildResultsDayOptions(businessYmd = getProphetikBusinessYmd()) {
+  const [y, m, d] = String(businessYmd || "")
+    .slice(0, 10)
+  .split("-")
+    .map(Number);
+  const base = new Date(y, m - 1, d);
   return Array.from({ length: 8 }, (_, i) => {
-    const d = addDays(base, -(i + 1));
-    const ymd = ymdLocal(d);
+    const day = addDays(base, -(i + 1));
+    const ymd = ymdLocal(day);
     return {
       ymd,
-      compact: compactYmd(d),
+      compact: compactYmd(day),
       label: prettyDateLabel(ymd),
     };
   });
@@ -121,7 +125,7 @@ function leftAccentCardStyle(colors, accent = RESULTS_ACCENT) {
 
 function prettyDateLabel(ymd) {
   const today = getProphetikBusinessYmd();
-  const yesterday = ymdLocal(addDays(getProphetikBusinessDate(), -1));
+  const yesterday = addDaysToYmd(today, -1);
 
   if (ymd === today) {
     return i18n.t("challenges.todayTitle", { defaultValue: "Aujourd’hui" });
@@ -274,6 +278,7 @@ export default function ChallengesScreen() {
   const isFocused = useIsFocused();
   const { isActive: appActive } = useAppVisibilitySafe();
   const listenersEnabled = isFocused && appActive;
+  const { businessYmd, syncBusinessDay } = useProphetikBusinessDay({ enabled: listenersEnabled });
   const { selectedGroupId: currentGroupId, setSelectedGroupId } = useSelectedGroup();
 
   const {
@@ -294,9 +299,7 @@ export default function ChallengesScreen() {
   const [fgcItems, setFgcItems] = useState([]);
   const [tpBundleItems, setTpBundleItems] = useState([]);
   const [tpLegacyItems, setTpLegacyItems] = useState([]);
-  const [selectedYmd, setSelectedYmd] = useState(() =>
-    addDaysToYmd(getProphetikBusinessYmd(), -1)
-  );
+  const [selectedYmd, setSelectedYmd] = useState(() => addDaysToYmd(businessYmd, -1));
 
   const tpItems = useMemo(
     () => mergeTpItemsByDate(tpBundleItems, tpLegacyItems),
@@ -310,16 +313,22 @@ export default function ChallengesScreen() {
     tpBundle: [],
   });
 
-  const dayKeys = useMemo(() => buildResultsDayOptions(), []);
+  const dayKeys = useMemo(() => buildResultsDayOptions(businessYmd), [businessYmd]);
   const dayYmdSet = useMemo(() => new Set(dayKeys.map((d) => d.ymd)), [dayKeys]);
   const dayOptions = useMemo(
     () => dayKeys.map((d) => ({ ymd: d.ymd, label: d.label })),
     [dayKeys]
   );
 
-  const todayKey = getProphetikBusinessYmd();
+  const todayKey = businessYmd;
   const yesterdayKey = useMemo(() => addDaysToYmd(todayKey, -1), [todayKey]);
   const isSelectedToday = selectedYmd === todayKey;
+
+  useFocusEffect(
+    useCallback(() => {
+      syncBusinessDay();
+    }, [syncBusinessDay])
+  );
 
   useEffect(() => {
     if (!isFocused || paramOpenChallengeId) return;

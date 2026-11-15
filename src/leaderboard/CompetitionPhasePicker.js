@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import i18n from "@src/i18n/i18n";
 import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import { competitionTimelineStatus } from "@src/season/seasonCompetitionCore";
@@ -15,6 +15,15 @@ function phaseLabel(phase) {
     return i18n.t("leaderboard.competitionPhase.playoffs", {
       defaultValue: "Séries éliminatoires",
     });
+  }
+  if (p === "opening") {
+    return i18n.t("leaderboard.competitionPhase.opening", { defaultValue: "Ouverture" });
+  }
+  if (p === "winter") {
+    return i18n.t("leaderboard.competitionPhase.winter", { defaultValue: "Hiver" });
+  }
+  if (p === "sprint") {
+    return i18n.t("leaderboard.competitionPhase.sprint", { defaultValue: "Sprint" });
   }
   return String(phase || "—");
 }
@@ -80,12 +89,10 @@ export default function CompetitionPhasePicker({
         })}
       </Text>
 
-      <View
-        style={{
-          flexDirection: "row",
-          gap: 8,
-          alignItems: "stretch",
-        }}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 8, paddingVertical: 2, paddingRight: 4 }}
       >
         {options.map((option) => {
           const active = value === option.competitionKey;
@@ -96,9 +103,9 @@ export default function CompetitionPhasePicker({
               onPress={() => onChange?.(option.competitionKey)}
               activeOpacity={0.85}
               style={{
-                flex: 1,
+                minWidth: 88,
                 paddingVertical: 10,
-                paddingHorizontal: 8,
+                paddingHorizontal: 12,
                 borderRadius: 6,
                 borderWidth: 1.5,
                 borderColor: active ? accent : colors.border,
@@ -115,7 +122,9 @@ export default function CompetitionPhasePicker({
                   fontSize: 12,
                   textAlign: "center",
                 }}
-                numberOfLines={2}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
               >
                 {option.shortLabel}
               </Text>
@@ -134,7 +143,7 @@ export default function CompetitionPhasePicker({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {selected ? (
         <Text

@@ -3,7 +3,13 @@ import * as logger from "firebase-functions/logger";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import sharp from "sharp";
+let sharpModulePromise = null;
+async function loadSharp() {
+  if (!sharpModulePromise) {
+    sharpModulePromise = import("sharp").then((m) => m.default);
+  }
+  return sharpModulePromise;
+}
 import {
   JERSEY_STORAGE_BUCKET,
   uploadBufferWithDownloadUrl,
@@ -124,6 +130,7 @@ function centeredImagePlacement({ x, y, width, height }) {
 }
 
 async function composeBack({ templateBuffer, name, number, textZones }) {
+  const sharp = await loadSharp();
   const base = sharp(templateBuffer);
   const meta = await base.metadata();
 
@@ -180,6 +187,7 @@ async function composeBack({ templateBuffer, name, number, textZones }) {
 }
 
 async function composeFront({ templateBuffer, frontZones }) {
+  const sharp = await loadSharp();
   const base = sharp(templateBuffer);
   const meta = await base.metadata();
 
@@ -234,6 +242,7 @@ async function composeFront({ templateBuffer, frontZones }) {
 }
 
 async function composeProfile({ templateBuffer }) {
+  const sharp = await loadSharp();
   return await sharp(templateBuffer).png().toBuffer();
 }
 

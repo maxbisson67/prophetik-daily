@@ -320,14 +320,7 @@ function CustomDrawerContent(props) {
         )}
       />
 
-      <DrawerItem
-        {...itemCommonProps}
-        label={i18n.t("drawer.subscriptions", { defaultValue: "Abonnement" })}
-        onPress={() => closeAndPush("/(drawer)/subscriptions")}
-        icon={({ size }) => (
-          <Ionicons name="card-outline" size={size} color={colors.text} />
-        )}
-      />
+      {/* Abonnement masqué — réactiver via SUBSCRIPTIONS_UI_VISIBLE (subscriptionsNav.js) */}
 
       <Separator />
 

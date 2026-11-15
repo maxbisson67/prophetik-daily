@@ -18,6 +18,7 @@ import i18n from "@src/i18n/i18n";
 import functions from "@react-native-firebase/functions";
 import Analytics from "@src/services/analytics";
 import { filterGroupsForManualChallengeCreation } from "@src/groups/groupAutopilotUtils";
+import { getProphetikBusinessYmdCompact } from "@src/lib/prophetikBusinessDate";
 
 /* ---------------- UI bits ---------------- */
 

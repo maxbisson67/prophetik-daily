@@ -30,12 +30,7 @@ import {
   formatMlbPitcherNameAndRecord,
 } from "@src/mlb/mlbPitcherDisplayHelpers";
 import { useTpBundleTeamRecords } from "@src/sports/useTeamStandingsLookup";
-import {
-  formatCountdown,
-  fmtTimeShort,
-  getSlotLockedAt,
-  isSlotLocked,
-} from "@src/defis/tpDeadlineHelpers";
+import { fmtTimeShort, getSlotLockedAt, isSlotLocked } from "@src/defis/tpDeadlineHelpers";
 import {
   isBundleDecided,
   isSlotDecided,
@@ -46,22 +41,262 @@ import NovaCoachMatchModal from "@src/nova/NovaCoachMatchModal";
 
 const RED = "#b91c1c";
 
-function TeamStandingsLine({ line, colors }) {
-  if (!line) return null;
+const TP_STATS_EMPTY = "—";
+const TP_PICK_COL_INSET = 10;
+const TP_PICK_COL_LABEL = { flex: 1.15, minWidth: 0 };
+const TP_PICK_COL_TEAM = { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center" };
 
+function tpStatsCell(value) {
+  return value != null && String(value).trim() !== "" ? String(value) : TP_STATS_EMPTY;
+}
+
+/** Grille 3 colonnes identique : libellé | visiteur | local. */
+function TpPickAlignedRow({ label = null, away, home, colors, style, alignItems = "center" }) {
+  const labelNode =
+    label == null || label === "" ? null : typeof label === "string" ? (
+      <Text
+        style={{
+          color: colors.subtext,
+          fontSize: 10,
+          fontWeight: "700",
+          lineHeight: 13,
+        }}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+    ) : (
+      label
+    );
+
+  return (
+    <View
+      style={[
+        {
+          flexDirection: "row",
+          alignItems,
+          alignSelf: "stretch",
+          gap: 4,
+          paddingHorizontal: TP_PICK_COL_INSET,
+        },
+        style,
+      ]}
+    >
+      <View style={{ ...TP_PICK_COL_LABEL, justifyContent: "center" }}>{labelNode}</View>
+      <View style={TP_PICK_COL_TEAM}>{away}</View>
+      <View style={TP_PICK_COL_TEAM}>{home}</View>
+    </View>
+  );
+}
+
+function TpPickStatValue({ children, colors }) {
   return (
     <Text
       style={{
+        alignSelf: "stretch",
+        width: "100%",
         color: colors.text,
         fontSize: 12,
-        fontWeight: "800",
+        fontWeight: "900",
+        fontVariant: ["tabular-nums"],
         textAlign: "center",
-        opacity: 0.82,
       }}
-      numberOfLines={2}
     >
-      {line}
+      {children}
     </Text>
+  );
+}
+
+function tpFormHasStats(form) {
+  if (!form) return false;
+  return !!(
+    form.recordWlt ||
+    form.splitWlt ||
+    form.lastTenWlt ||
+    form.goalsForPerGame ||
+    form.goalsAgainstPerGame
+  );
+}
+
+function TpMatchStatsGrid({ awayForm, homeForm, league, colors }) {
+  if (!tpFormHasStats(awayForm) && !tpFormHasStats(homeForm)) return null;
+
+  const isMlb = String(league || "").toUpperCase() === "MLB";
+
+  const rows = [
+    {
+      key: "record",
+      label: i18n.t("tp.pick.teamFormRecord", { defaultValue: "Fiche" }),
+      away: tpStatsCell(awayForm?.recordWlt),
+      home: tpStatsCell(homeForm?.recordWlt),
+    },
+    {
+      key: "awaySplit",
+      label: i18n.t("tp.pick.teamFormAway", { defaultValue: "Extérieur" }),
+      away: tpStatsCell(awayForm?.splitWlt),
+      home: TP_STATS_EMPTY,
+    },
+    {
+      key: "homeSplit",
+      label: i18n.t("tp.pick.teamFormHome", { defaultValue: "Domicile" }),
+      away: TP_STATS_EMPTY,
+      home: tpStatsCell(homeForm?.splitWlt),
+    },
+    {
+      key: "l10",
+      label: i18n.t("tp.pick.teamFormLastTen", { defaultValue: "10 derniers" }),
+      away: tpStatsCell(awayForm?.lastTenWlt),
+      home: tpStatsCell(homeForm?.lastTenWlt),
+    },
+    {
+      key: "gf",
+      label: isMlb
+        ? i18n.t("tp.pick.teamFormRunsFor", { defaultValue: "Marques / match" })
+        : i18n.t("tp.pick.teamFormGoalsFor", { defaultValue: "BP / Match" }),
+      away: tpStatsCell(awayForm?.goalsForPerGame),
+      home: tpStatsCell(homeForm?.goalsForPerGame),
+    },
+    {
+      key: "ga",
+      label: isMlb
+        ? i18n.t("tp.pick.teamFormRunsAgainst", { defaultValue: "Encaissées / match" })
+        : i18n.t("tp.pick.teamFormGoalsAgainst", { defaultValue: "BC / Match" }),
+      away: tpStatsCell(awayForm?.goalsAgainstPerGame),
+      home: tpStatsCell(homeForm?.goalsAgainstPerGame),
+    },
+  ];
+
+  return (
+    <View
+      style={{
+        alignSelf: "stretch",
+        width: "100%",
+        marginTop: 6,
+        marginBottom: 8,
+      }}
+    >
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          borderRadius: 12,
+          backgroundColor: colors.card2,
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}
+      />
+      <View style={{ paddingVertical: 10, gap: 6 }}>
+        <View
+          style={{
+            height: 1,
+            backgroundColor: colors.border,
+            marginHorizontal: TP_PICK_COL_INSET,
+            marginBottom: 2,
+          }}
+        />
+        {rows.map((row) => (
+          <TpPickAlignedRow
+            key={row.key}
+            label={row.label}
+            colors={colors}
+            away={<TpPickStatValue colors={colors}>{row.away}</TpPickStatValue>}
+            home={<TpPickStatValue colors={colors}>{row.home}</TpPickStatValue>}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Logos, stats et scores partagent exactement la même grille. */
+function TpMatchPickTeamGrid({
+  colors,
+  awayTeam,
+  homeTeam,
+  awayAbbr,
+  homeAbbr,
+  awayForm,
+  homeForm,
+  league,
+  isMlb,
+  awayPitcher,
+  homePitcher,
+  draft,
+  locked,
+  awayInputRef,
+  homeInputRef,
+  fieldKeyAway,
+  fieldKeyHome,
+  focusedFieldKey,
+  onChangeDraft,
+  onScoreFocus,
+  onAdvanceFromAway,
+  onAdvanceFromHome,
+}) {
+  return (
+    <View style={{ alignSelf: "stretch", width: "100%" }}>
+      <TpPickAlignedRow
+        colors={colors}
+        style={{ marginTop: 4, marginBottom: 2 }}
+        away={
+          <View style={{ alignItems: "center", gap: 4 }}>
+            <TeamLogoBadge team={awayTeam} size={40} colors={colors} />
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>{awayAbbr}</Text>
+          </View>
+        }
+        home={
+          <View style={{ alignItems: "center", gap: 4 }}>
+            <TeamLogoBadge team={homeTeam} size={40} colors={colors} />
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>{homeAbbr}</Text>
+          </View>
+        }
+      />
+
+      <TpMatchStatsGrid awayForm={awayForm} homeForm={homeForm} league={league} colors={colors} />
+
+      {isMlb ? (
+        <TpPickAlignedRow
+          colors={colors}
+          alignItems="flex-start"
+          style={{ marginBottom: 8 }}
+          away={<PitcherBlock pitcher={awayPitcher} colors={colors} />}
+          home={<PitcherBlock pitcher={homePitcher} colors={colors} />}
+        />
+      ) : null}
+
+      <TpPickAlignedRow
+        colors={colors}
+        style={{ marginTop: 2, marginBottom: 4 }}
+        away={
+          <ScoreInputBox
+            inputRef={awayInputRef}
+            value={draft.away}
+            onChangeText={(txt) => onChangeDraft({ ...draft, away: txt })}
+            editable={!locked}
+            colors={colors}
+            isFocused={focusedFieldKey === fieldKeyAway}
+            onFocus={() => onScoreFocus?.(awayInputRef?.current, fieldKeyAway)}
+            onAdvance={onAdvanceFromAway}
+          />
+        }
+        home={
+          <ScoreInputBox
+            inputRef={homeInputRef}
+            value={draft.home}
+            onChangeText={(txt) => onChangeDraft({ ...draft, home: txt })}
+            editable={!locked}
+            colors={colors}
+            isFocused={focusedFieldKey === fieldKeyHome}
+            onFocus={() => onScoreFocus?.(homeInputRef?.current, fieldKeyHome)}
+            onAdvance={onAdvanceFromHome}
+          />
+        }
+      />
+    </View>
   );
 }
 
@@ -267,23 +502,13 @@ function MatchLockInfo({ slot, locked, nowTick, colors }) {
 
   if (!lockedAt) return null;
 
-  const countdown = formatCountdown(lockedAt.getTime() - nowTick);
-
   return (
-    <View style={{ marginBottom: 8, gap: 2 }}>
-      <Text style={{ color: colors.subtext, fontSize: 12 }}>
-        {i18n.t("tp.pick.lockAt", {
-          defaultValue: "Verrouillage : {{time}}",
-          time: lockHM || "—",
-        })}
-      </Text>
-      <Text style={{ color: colors.text, fontSize: 12, fontWeight: "800" }}>
-        {i18n.t("tp.pick.lockCountdown", {
-          defaultValue: "Il te reste {{time}} pour enregistrer ce match",
-          time: countdown,
-        })}
-      </Text>
-    </View>
+    <Text style={{ color: colors.subtext, fontSize: 12, marginBottom: 8 }}>
+      {i18n.t("tp.pick.lockAt", {
+        defaultValue: "Verrouillage : {{time}}",
+        time: lockHM || "—",
+      })}
+    </Text>
   );
 }
 
@@ -295,6 +520,8 @@ function BundleMatchPickSection({
   saveState = null,
   colors,
   formatTeamLine,
+  formatTeamSplitLine,
+  getTeamForm,
   nowTick,
   scheduleInfo = null,
   onScoreFocus = null,
@@ -400,51 +627,30 @@ function BundleMatchPickSection({
           colors={colors}
         />
       )}
-
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
-        <View style={{ flex: 1, alignItems: "center", gap: 8 }}>
-          <TeamLogoBadge team={awayTeam} size={40} colors={colors} />
-          <Text style={{ color: colors.text, fontWeight: "900" }}>{awayAbbr}</Text>
-          <TeamStandingsLine line={formatTeamLine?.(gameId, "away", awayAbbr)} colors={colors} />
-          {isMlb ? <PitcherBlock pitcher={slot?.awayProbablePitcher} colors={colors} /> : null}
-          <ScoreInputBox
-            inputRef={awayInputRef}
-            value={draft.away}
-            onChangeText={(txt) => onChangeDraft({ ...draft, away: txt })}
-            editable={!locked}
-            colors={colors}
-            isFocused={focusedFieldKey === fieldKeyAway}
-            onFocus={() => onScoreFocus?.(awayInputRef?.current, fieldKeyAway)}
-            onAdvance={onAdvanceFromAway}
-          />
-        </View>
-
-        <Text style={{ color: colors.subtext, fontWeight: "900", fontSize: 20 }}>-</Text>
-
-        <View style={{ flex: 1, alignItems: "center", gap: 8 }}>
-          <TeamLogoBadge team={homeTeam} size={40} colors={colors} />
-          <Text style={{ color: colors.text, fontWeight: "900" }}>{homeAbbr}</Text>
-          <TeamStandingsLine line={formatTeamLine?.(gameId, "home", homeAbbr)} colors={colors} />
-          {isMlb ? <PitcherBlock pitcher={slot?.homeProbablePitcher} colors={colors} /> : null}
-          <ScoreInputBox
-            inputRef={homeInputRef}
-            value={draft.home}
-            onChangeText={(txt) => onChangeDraft({ ...draft, home: txt })}
-            editable={!locked}
-            colors={colors}
-            isFocused={focusedFieldKey === fieldKeyHome}
-            onFocus={() => onScoreFocus?.(homeInputRef?.current, fieldKeyHome)}
-            onAdvance={onAdvanceFromHome}
-          />
-        </View>
-      </View>
+      <TpMatchPickTeamGrid
+        colors={colors}
+        awayTeam={awayTeam}
+        homeTeam={homeTeam}
+        awayAbbr={awayAbbr}
+        homeAbbr={homeAbbr}
+        awayForm={getTeamForm?.(gameId, "away", awayAbbr)}
+        homeForm={getTeamForm?.(gameId, "home", homeAbbr)}
+        league={league}
+        isMlb={isMlb}
+        awayPitcher={slot?.awayProbablePitcher}
+        homePitcher={slot?.homeProbablePitcher}
+        draft={draft}
+        locked={locked}
+        awayInputRef={awayInputRef}
+        homeInputRef={homeInputRef}
+        fieldKeyAway={fieldKeyAway}
+        fieldKeyHome={fieldKeyHome}
+        focusedFieldKey={focusedFieldKey}
+        onChangeDraft={onChangeDraft}
+        onScoreFocus={onScoreFocus}
+        onAdvanceFromAway={onAdvanceFromAway}
+        onAdvanceFromHome={onAdvanceFromHome}
+      />
 
       {draft.away !== "" && draft.home !== "" && Number(draft.away) === Number(draft.home) ? (
         <Text style={{ color: RED, fontWeight: "800", marginTop: 8 }}>
@@ -560,7 +766,11 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
     () => (Array.isArray(bundle?.games) ? [...bundle.games].sort((a, b) => (a.slot || 0) - (b.slot || 0)) : []),
     [bundle?.games]
   );
-  const { formatLine: formatTeamLine } = useTpBundleTeamRecords({ bundle, games, league });
+  const {
+    formatLine: formatTeamLine,
+    formatSplitLine: formatTeamSplitLine,
+    getTeamForm,
+  } = useTpBundleTeamRecords({ bundle, games, league });
 
   const mlbScheduleTargets = useMemo(
     () =>
@@ -918,6 +1128,8 @@ export default function TeamPredictionBundlePickScreen({ bundleId }) {
                     league={league}
                     draft={draft}
                     formatTeamLine={formatTeamLine}
+                    formatTeamSplitLine={formatTeamSplitLine}
+                    getTeamForm={getTeamForm}
                     nowTick={nowTick}
                     onChangeDraft={(nextDraft) =>
                       setDraftByGameId((prev) => ({ ...prev, [gameId]: nextDraft }))

@@ -1,10 +1,11 @@
 // src/home/components/DefiListSection.js
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import i18n from "@src/i18n/i18n";
 import DefiListItem from "./DefiListItem";
 import ProphetikIcons from "@src/ui/ProphetikIcons";
 import { resolveChallengeEmptyMessage } from "@src/home/components/AutopilotPendingChallengeHint";
+import LiveChallengePicksModal from "@src/live/LiveChallengePicksModal";
 
 export default function DefiListSection(props) {
   const {

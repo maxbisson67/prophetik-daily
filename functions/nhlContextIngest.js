@@ -153,24 +153,33 @@ async function writeSeasonDatesIfPresent(schedulePayload) {
   );
 
   try {
-    const { deriveNhlCompetitionEntries } = await import("./leaderboard/seasonCompetitionCore.js");
-    const entries = deriveNhlCompetitionEntries({
-      seasonId,
-      regularSeasonStartYmd: rs,
-      regularSeasonEndYmd: re,
-      playoffEndYmd: pe,
-      fromYmd: rs || cur.fromYmd,
-      toYmd: pe || cur.toYmd,
-    });
+    const openingSnap = await db.doc("seasonCompetitions/nhl_20262027_opening").get();
+    const fourBlockActive =
+      openingSnap.exists &&
+      String(openingSnap.data()?.status || "").toLowerCase() !== "retired";
 
-    for (const entry of entries) {
-      await db.doc(`seasonCompetitions/${entry.competitionKey}`).set(
-        {
-          ...entry,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+    if (fourBlockActive) {
+      logger.info("writeSeasonDatesIfPresent: skip legacy 2-competition sync (four-block pilot)");
+    } else {
+      const { deriveNhlCompetitionEntries } = await import("./leaderboard/seasonCompetitionCore.js");
+      const entries = deriveNhlCompetitionEntries({
+        seasonId,
+        regularSeasonStartYmd: rs,
+        regularSeasonEndYmd: re,
+        playoffEndYmd: pe,
+        fromYmd: rs || cur.fromYmd,
+        toYmd: pe || cur.toYmd,
+      });
+
+      for (const entry of entries) {
+        await db.doc(`seasonCompetitions/${entry.competitionKey}`).set(
+          {
+            ...entry,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
     }
   } catch (e) {
     logger.warn("writeSeasonDatesIfPresent: seasonCompetitions sync failed", {

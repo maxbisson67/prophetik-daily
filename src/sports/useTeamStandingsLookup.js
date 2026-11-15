@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { subscribeFirestoreDoc } from "@src/lib/firestoreCompat";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
+import { buildTpTeamFormFacts } from "@src/leaderboard/tpTeamFormDisplay";
 
 const MLB_AL_ID = "103";
 const MLB_NL_ID = "104";
@@ -70,7 +71,18 @@ function parseMlbRecord(row) {
 
   const wins = Number(row?.wins);
   const losses = Number(row?.losses);
+  const gp = Number(row?.gamesPlayed);
+  const runsScored = Number(row?.runsScored);
+  const runsAllowed = Number(row?.runsAllowed);
   const pctRaw = String(row?.winningPercentage ?? row?.leagueRecord?.pct ?? "").trim();
+  const lt = row?.lastTen && typeof row.lastTen === "object" ? row.lastTen : null;
+
+  const homeWins = Number(row?.home?.wins);
+  const homeLosses = Number(row?.home?.losses);
+  const homePctRaw = String(row?.home?.pct ?? "").trim();
+  const awayWins = Number(row?.away?.wins);
+  const awayLosses = Number(row?.away?.losses);
+  const awayPctRaw = String(row?.away?.pct ?? "").trim();
 
   return {
     abbr,
@@ -78,6 +90,35 @@ function parseMlbRecord(row) {
     wins: Number.isFinite(wins) ? wins : null,
     losses: Number.isFinite(losses) ? losses : null,
     pctLabel: formatMlbPctLabel(pctRaw),
+    home:
+      Number.isFinite(homeWins) && Number.isFinite(homeLosses)
+        ? {
+            wins: homeWins,
+            losses: homeLosses,
+            pctLabel: formatMlbPctLabel(homePctRaw),
+          }
+        : null,
+    away:
+      Number.isFinite(awayWins) && Number.isFinite(awayLosses)
+        ? {
+            wins: awayWins,
+            losses: awayLosses,
+            pctLabel: formatMlbPctLabel(awayPctRaw),
+          }
+        : null,
+    gamesPlayed: Number.isFinite(gp) && gp > 0 ? gp : null,
+    runsForPerGame:
+      Number.isFinite(gp) && gp > 0 && Number.isFinite(runsScored) ? runsScored / gp : null,
+    runsAgainstPerGame:
+      Number.isFinite(gp) && gp > 0 && Number.isFinite(runsAllowed) ? runsAllowed / gp : null,
+    lastTen:
+      lt && Number.isFinite(Number(lt.wins)) && Number.isFinite(Number(lt.losses))
+        ? {
+            wins: Number(lt.wins),
+            losses: Number(lt.losses),
+            otLosses: 0,
+          }
+        : null,
   };
 }
 
@@ -113,12 +154,58 @@ function parseNhlRecord(row) {
     pctLabel = `${((pts / (gp * 2)) * 100).toFixed(1)}%`;
   }
 
+  const homeWins = Number(row?.homeWins);
+  const homeLosses = Number(row?.homeLosses);
+  const homeOtLosses = Number(row?.homeOtLosses);
+  const roadWins = Number(row?.roadWins);
+  const roadLosses = Number(row?.roadLosses);
+  const roadOtLosses = Number(row?.roadOtLosses);
+
+  const goalFor = Number(row?.goalFor ?? row?.goalsFor);
+  const goalAgainst = Number(row?.goalAgainst ?? row?.goalsAgainst);
+  const l10Wins = Number(row?.l10Wins);
+  const l10Losses = Number(row?.l10Losses);
+  const l10OtLosses = Number(row?.l10OtLosses);
+
+  let goalsForPerGame = null;
+  let goalsAgainstPerGame = null;
+  if (Number.isFinite(gp) && gp > 0) {
+    if (Number.isFinite(goalFor)) goalsForPerGame = goalFor / gp;
+    if (Number.isFinite(goalAgainst)) goalsAgainstPerGame = goalAgainst / gp;
+  }
+
   return {
     abbr,
     wins: Number.isFinite(wins) ? wins : null,
     losses: Number.isFinite(losses) ? losses : null,
     otLosses: Number.isFinite(otLosses) ? otLosses : 0,
     pctLabel,
+    goalsForPerGame,
+    goalsAgainstPerGame,
+    lastTen:
+      Number.isFinite(l10Wins) && Number.isFinite(l10Losses)
+        ? {
+            wins: l10Wins,
+            losses: l10Losses,
+            otLosses: Number.isFinite(l10OtLosses) ? l10OtLosses : 0,
+          }
+        : null,
+    home:
+      Number.isFinite(homeWins) && Number.isFinite(homeLosses)
+        ? {
+            wins: homeWins,
+            losses: homeLosses,
+            otLosses: Number.isFinite(homeOtLosses) ? homeOtLosses : 0,
+          }
+        : null,
+    road:
+      Number.isFinite(roadWins) && Number.isFinite(roadLosses)
+        ? {
+            wins: roadWins,
+            losses: roadLosses,
+            otLosses: Number.isFinite(roadOtLosses) ? roadOtLosses : 0,
+          }
+        : null,
   };
 }
 
@@ -136,6 +223,26 @@ export function formatTeamStandingsLine(record, league = "NHL") {
 
   const ot = otLosses ?? 0;
   return pctLabel ? `${wins}-${losses}-${ot} · ${pctLabel}` : `${wins}-${losses}-${ot}`;
+}
+
+/** Fiche domicile ou visite pour la colonne DUO (away → route, home → domicile). */
+export function formatTeamSideSplitLine(record, side, league = "NHL") {
+  if (!record || (side !== "home" && side !== "away")) return null;
+
+  const lg = String(league || "NHL").toUpperCase();
+
+  if (lg === "MLB") {
+    const split = side === "home" ? record.home : record.away;
+    if (!split || split.wins == null || split.losses == null) return null;
+    return split.pctLabel
+      ? `${split.wins}-${split.losses} · ${split.pctLabel}`
+      : `${split.wins}-${split.losses}`;
+  }
+
+  const split = side === "home" ? record.home : record.road;
+  if (!split || split.wins == null || split.losses == null) return null;
+  const ot = split.otLosses ?? 0;
+  return `${split.wins}-${split.losses}-${ot}`;
 }
 
 function formatNhlMatchupSide(team = {}) {
@@ -452,7 +559,7 @@ export function useTpMatchupTeamRecords({ gameYmd, games, league }) {
 
 export function useTpBundleTeamRecords({ bundle, games, league }) {
   const sport = normalizeSport(league);
-  const { formatLine: formatStandingsLine, byTeamId } = useTeamStandingsLookup(sport);
+  const { formatLine: formatStandingsLine, getRecord, byTeamId } = useTeamStandingsLookup(sport);
   const { getLine: getMatchupLine } = useTpMatchupTeamRecords({
     gameYmd: bundle?.gameYmd,
     games,
@@ -464,6 +571,18 @@ export function useTpBundleTeamRecords({ bundle, games, league }) {
     league: sport,
   });
 
+  const resolveRecord = useCallback(
+    (gameId, side, abbr) => {
+      if (sport === "MLB") {
+        const ids = mlbTeamIdsByGame[String(gameId || "")];
+        const teamId = side === "home" ? ids?.homeTeamId : ids?.awayTeamId;
+        if (teamId && byTeamId[teamId]) return byTeamId[teamId];
+      }
+      return getRecord(abbr);
+    },
+    [sport, mlbTeamIdsByGame, byTeamId, getRecord]
+  );
+
   const formatLine = useMemo(
     () => (gameId, side, abbr) => {
       if (sport === "NHL") {
@@ -471,19 +590,25 @@ export function useTpBundleTeamRecords({ bundle, games, league }) {
         if (matchupLine) return matchupLine;
       }
 
-      if (sport === "MLB") {
-        const ids = mlbTeamIdsByGame[String(gameId || "")];
-        const teamId =
-          side === "home" ? ids?.homeTeamId : ids?.awayTeamId;
-        if (teamId && byTeamId[teamId]) {
-          return formatTeamStandingsLine(byTeamId[teamId], "MLB");
-        }
-      }
+      const record = resolveRecord(gameId, side, abbr);
+      if (record) return formatTeamStandingsLine(record, sport);
 
       return formatStandingsLine(abbr);
     },
-    [sport, getMatchupLine, formatStandingsLine, mlbTeamIdsByGame, byTeamId]
+    [sport, getMatchupLine, formatStandingsLine, resolveRecord]
   );
 
-  return { formatLine };
+  const formatSplitLine = useMemo(
+    () => (gameId, side, abbr) =>
+      formatTeamSideSplitLine(resolveRecord(gameId, side, abbr), side, sport),
+    [resolveRecord, sport]
+  );
+
+  const getTeamForm = useMemo(
+    () => (gameId, side, abbr) =>
+      buildTpTeamFormFacts(resolveRecord(gameId, side, abbr), side, sport),
+    [resolveRecord, sport]
+  );
+
+  return { formatLine, formatSplitLine, getTeamForm };
 }

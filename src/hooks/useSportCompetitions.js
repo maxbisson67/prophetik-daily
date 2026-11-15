@@ -7,6 +7,8 @@ import {
   normalizeCompetitionEntry,
   normalizeSport,
   sortCompetitionEntries,
+  filterLeaderboardCompetitionEntries,
+  nhl20262027CompetitionsFallback,
 } from "@src/season/seasonCompetitionCore";
 import {
   currentSeasonDocRef,
@@ -39,13 +41,31 @@ export default function useSportCompetitions({
 
     setLoading(true);
 
-    const unCatalog = seasonCompetitionCollection().onSnapshot(
-      (snap) => {
+    const failSafe = setTimeout(() => setLoading(false), 6000);
+
+    seasonCompetitionCollection()
+      .get()
+      .then((snap) => {
         const rows = (snap?.docs ?? [])
           .map((d) => normalizeCompetitionEntry(d.data(), d.id))
           .filter(Boolean);
         setCatalog(rows);
-        setLoading(false);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+
+    const unCatalog = seasonCompetitionCollection().onSnapshot(
+      (snap) => {
+        try {
+          const rows = (snap?.docs ?? [])
+            .map((d) => normalizeCompetitionEntry(d.data(), d.id))
+            .filter(Boolean);
+          setCatalog(rows);
+        } catch {
+          setCatalog([]);
+        } finally {
+          setLoading(false);
+        }
       },
       () => {
         setCatalog([]);
@@ -59,6 +79,7 @@ export default function useSportCompetitions({
     );
 
     return () => {
+      clearTimeout(failSafe);
       try {
         unCatalog?.();
       } catch {}
@@ -74,9 +95,19 @@ export default function useSportCompetitions({
     const todayYmd = getProphetikBusinessYmd();
 
     let entries = catalog.filter((e) => e.sport === sportNorm);
+    entries = filterLeaderboardCompetitionEntries(entries);
+
+    if (!entries.length && sportNorm === "nhl") {
+      const cfgSid = String(nhlConfig?.seasonId || "").trim();
+      const cfgKey = String(nhlConfig?.competitionKey || "");
+      if (cfgSid === "20262027" || cfgKey.startsWith("nhl_20262027_")) {
+        entries = nhl20262027CompetitionsFallback();
+      }
+    }
+
     if (!entries.length) {
-      entries = deriveFallbackEntries(sport, nhlConfig, todayYmd).filter(
-        (e) => e.sport === sportNorm
+      entries = filterLeaderboardCompetitionEntries(
+        deriveFallbackEntries(sport, nhlConfig, todayYmd).filter((e) => e.sport === sportNorm)
       );
     }
 

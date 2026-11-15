@@ -42,8 +42,6 @@ import { isPlayerUnavailable } from "@src/players/injuryDisplayHelpers";
 import { formatSeasonLabel, getPlayerSortValue } from "@src/players/seasonStatsHelpers";
 import { resolveFgcPlayerSortMeta } from "@src/firstGoal/fgcPlayerSortSeason";
 import useAppConfig from "@src/hooks/useAppConfig";
-import NovaCoachPlayerModal from "@src/nova/NovaCoachPlayerModal";
-
 /* ---------------- helpers ---------------- */
 
 function toDateSafe(v) {
@@ -205,7 +203,7 @@ export default function FirstGoalPickScreen() {
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingPlayerId, setSavingPlayerId] = useState(null);
-  const [novaModalPlayer, setNovaModalPlayer] = useState(null);
+  const [expandedPlayerId, setExpandedPlayerId] = useState(null);
 
   const cid = String(challengeId || "");
   const [selectedTeam, setSelectedTeam] = useState("");
@@ -766,11 +764,15 @@ export default function FirstGoalPickScreen() {
     [cid, user?.uid, challenge?.league]
   );
 
+  const togglePlayerExpand = useCallback((player) => {
+    const pid = String(player?.playerId ?? player?.id ?? "");
+    if (!pid) return;
+    setExpandedPlayerId((prev) => (prev === pid ? null : pid));
+  }, []);
+
   const renderItem = useCallback(
     ({ item }) => {
       const pid = String(item?.playerId ?? item?.id ?? "");
-      const showNova =
-        (derived.league === "NHL" || derived.league === "MLB") && !derived.locked;
 
       const homeAbbr = safeAbbr(challenge?.homeAbbr);
       const awayAbbr = safeAbbr(challenge?.awayAbbr);
@@ -792,9 +794,9 @@ export default function FirstGoalPickScreen() {
           disabled={derived.locked || saving}
           locked={derived.locked}
           onPick={pickPlayer}
-          onNovaPress={setNovaModalPlayer}
-          showNovaButton={showNova}
           colors={colors}
+          expanded={derived.league === "NHL" && expandedPlayerId === pid}
+          onToggleExpand={derived.league === "NHL" ? togglePlayerExpand : undefined}
           selectedPlayerId={entry?.playerId}
           pendingPlayerId={savingPlayerId}
           league={derived.league}
@@ -828,6 +830,8 @@ export default function FirstGoalPickScreen() {
       mlbLineups,
       challenge?.homeAbbr,
       challenge?.awayAbbr,
+      expandedPlayerId,
+      togglePlayerExpand,
     ]
   );
 
@@ -865,31 +869,41 @@ export default function FirstGoalPickScreen() {
         ) : null}
 
         {lineupsProvisional ? (
-          <View
-            style={{
-              alignSelf: "flex-start",
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.card2,
-            }}
-          >
-            <Text
+          <>
+            {derived.league === "NHL" ? (
+              <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "600" }}>
+                {i18n.t("firstGoal.pick.nhlRowHint", {
+                  defaultValue: "Touche la ligne pour les stats détaillées · Choisir pour participer",
+                })}
+              </Text>
+            ) : null}
+
+            <View
               style={{
-                color: colors.subtext,
-                fontSize: 11,
-                fontWeight: "700",
-                lineHeight: 16,
+                alignSelf: "flex-start",
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.card2,
               }}
             >
-              {i18n.t("firstGoal.pick.lineupPreviousNotice", {
-                defaultValue:
-                  "Ordre basé sur le dernier match de chaque équipe — sera mis à jour dès publication par la MLB.",
-              })}
-            </Text>
-          </View>
+              <Text
+                style={{
+                  color: colors.subtext,
+                  fontSize: 11,
+                  fontWeight: "700",
+                  lineHeight: 16,
+                }}
+              >
+                {i18n.t("firstGoal.pick.lineupPreviousNotice", {
+                  defaultValue:
+                    "Ordre basé sur le dernier match de chaque équipe — sera mis à jour dès publication par la MLB.",
+                })}
+              </Text>
+            </View>
+          </>
         ) : null}
 
         {selectedTeamBvpNotice ? (
@@ -1021,43 +1035,6 @@ export default function FirstGoalPickScreen() {
               </View>
             )
           }
-        />
-
-        <NovaCoachPlayerModal
-          visible={!!novaModalPlayer}
-          onClose={() => setNovaModalPlayer(null)}
-          player={
-            novaModalPlayer
-              ? {
-                  ...novaModalPlayer,
-                  lineupSlot:
-                    lineupsAvailable && mlbLineups
-                      ? lineupSlotForPlayer(
-                          mlbLineups,
-                          novaModalPlayer,
-                          safeAbbr(challenge?.homeAbbr),
-                          safeAbbr(challenge?.awayAbbr)
-                        )
-                      : novaModalPlayer?.lineupSlot ?? null,
-                  bvpVsOpposingStarter:
-                    novaModalPlayer?.bvpVsOpposingStarter ||
-                    bvpByPlayerId[String(novaModalPlayer?.playerId ?? novaModalPlayer?.id ?? "")] ||
-                    null,
-                  opposingPitcherForBvp:
-                    novaModalPlayer?.opposingPitcherForBvp ||
-                    bvpPitcherByPlayerId[String(novaModalPlayer?.playerId ?? novaModalPlayer?.id ?? "")] ||
-                    null,
-                }
-              : null
-          }
-          challengeId={String(challenge.id)}
-          domain="fgc"
-          sport={derived.league}
-          gameId={challenge?.gamePk ?? challenge?.gameId ?? challenge?.mlbGameId ?? null}
-          probablePitchers={probablePitchers}
-          homeAbbr={challenge?.homeAbbr}
-          awayAbbr={challenge?.awayAbbr}
-          disabled={derived.locked || saving}
         />
       </SafeAreaView>
     </>

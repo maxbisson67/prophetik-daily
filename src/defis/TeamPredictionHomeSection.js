@@ -28,6 +28,8 @@ import TpMatchMetaColumn from "@src/defis/TpMatchMetaColumn";
 import { buildTpBundleTabProgress } from "@src/defis/tpTabProgress";
 import TpHomePredictionRow, { isCompleteTpPick } from "@src/defis/TpHomePredictionRow";
 import ParticipantPredictionFrame from "@src/defis/participant/ParticipantPredictionFrame";
+import HomeParticipantsCountRow from "@src/home/components/HomeParticipantsCountRow";
+import LiveChallengePicksModal from "@src/live/LiveChallengePicksModal";
 import MatchTaskStatusChip from "@src/defis/match/MatchTaskStatusChip";
 import {
   getChallengeAccent,
@@ -299,6 +301,7 @@ export default function TeamPredictionHomeSection({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [myEntries, setMyEntries] = useState({});
+  const [picksBundle, setPicksBundle] = useState(null);
 
   const legacyItems = useMemo(
     () =>
@@ -784,6 +787,9 @@ export default function TeamPredictionHomeSection({
               colors={colors}
               groupId={currentGroupId}
               scheduleByGameId={scheduleByGameId}
+              onPressViewPicks={
+                bundle?.id ? () => setPicksBundle(bundle) : null
+              }
             />
           ) : null}
 
@@ -879,13 +885,7 @@ export default function TeamPredictionHomeSection({
                   colors={colors}
                 />
 
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-                  <MaterialCommunityIcons name="account-group" size={16} color={colors.subtext} />
-                  <Text style={{ color: colors.subtext, marginLeft: 6, fontSize: 13 }}>
-                    {participants}{" "}
-                    {i18n.t("common.participants", { defaultValue: "participant(s)" })}
-                  </Text>
-                </View>
+                <HomeParticipantsCountRow count={participants} colors={colors} />
 
                 <View style={{ marginTop: 12, gap: 10 }}>
                   <ResultsTabHint colors={colors} groupId={currentGroupId} />
@@ -913,6 +913,22 @@ export default function TeamPredictionHomeSection({
           })}
         </View>
       </View>
+
+      <LiveChallengePicksModal
+        visible={!!picksBundle}
+        kind="tp"
+        sport={sportLeague}
+        colors={colors}
+        tpBundle={
+          picksBundle
+            ? {
+                ...picksBundle,
+                id: String(picksBundle.id || picksBundle.bundleId || ""),
+              }
+            : null
+        }
+        onClose={() => setPicksBundle(null)}
+      />
     </>
   );
 }

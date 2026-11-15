@@ -26,10 +26,9 @@ import {
 import TeamLogoBadge from "@src/sports/TeamLogoBadge";
 import { lookupTeamByAbbr } from "@src/groups/data/fallbackTeams";
 
-import TeamMetaBadge from "./TeamMetaBadge"; // ✅ Rank: 2ième, +/-: 28
 import { formatSeasonLabel } from "@src/players/seasonStatsHelpers";
 import {
-  NhlOpponentMatchupLine,
+  NhlOpponentPickMeta,
   resolveNhlOpponentAbbr,
 } from "@src/nhl/NhlDefiPlayerMeta";
 import { normalizeNhlSeasonStatRow } from "@src/nhl/nhlSeasonStatDisplay";
@@ -143,6 +142,7 @@ export default function PlayerSelectModal({
   pickerSlotIndex = 0,
   sport = "NHL",
   formatStandingsLine = null,
+  getStandingsRecord = null,
   loading = false,
   poolStatsEpoch = 0,
   nhlDisplaySeasonIds = null,
@@ -775,8 +775,7 @@ export default function PlayerSelectModal({
               const injuryStatus = String(item?.injury?.status || "").toLowerCase();
               const isOut = injuryStatus === "out";
 
-              const oppRankOverall = item?.matchup?.oppRankOverall;
-              const oppGoalDifferential = item?.matchup?.oppGoalDifferential;
+              const oppMatchup = item?.matchup;
 
               const displayName = isMlb
                 ? String(item?.fullName || "—").trim() || "—"
@@ -868,17 +867,13 @@ export default function PlayerSelectModal({
                             <InjuryIcon injury={item?.injury} size={16} />
                           </View>
 
-                          {item?.matchup && nhlOppAbbr ? (
-                            <View style={{ marginTop: 6, gap: 4 }}>
-                              <NhlOpponentMatchupLine
+                          {nhlOppAbbr ? (
+                            <View style={{ marginTop: 6 }}>
+                              <NhlOpponentPickMeta
                                 opponentAbbr={nhlOppAbbr}
                                 colors={colors}
-                                formatStandingsLine={formatStandingsLine}
-                              />
-                              <TeamMetaBadge
-                                compact
-                                rankOverall={oppRankOverall}
-                                goalDifferential={oppGoalDifferential}
+                                teamOrMatchup={oppMatchup}
+                                getStandingsRecord={getStandingsRecord}
                               />
                             </View>
                           ) : null}

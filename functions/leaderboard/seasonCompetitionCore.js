@@ -47,6 +47,9 @@ export function buildNhlCompetitionLabel(phase, seasonId, fromYmd) {
   const human = formatNhlSeasonLabel(displaySeasonId);
   const p = String(phase || "regular").toLowerCase();
   if (p === "playoffs") return `Saison NHL ${human} — Séries`;
+  if (p === "opening") return `Saison NHL ${human} — Ouverture`;
+  if (p === "winter") return `Saison NHL ${human} — Hiver`;
+  if (p === "sprint") return `Saison NHL ${human} — Sprint`;
   return `Saison NHL ${human} — Saison régulière`;
 }
 
@@ -134,13 +137,25 @@ export function deriveMlbCompetitionEntries(seasonId, bounds = null) {
   ];
 }
 
+function isCatalogEntryEligible(entry) {
+  const st = String(entry?.status || "").toLowerCase();
+  return st !== "retired" && st !== "archived" && st !== "finalized";
+}
+
 export function pickCompetitionForDate(entries, gameYmd) {
   const ymd = String(gameYmd || "").slice(0, 10);
   if (!ymd || !Array.isArray(entries) || !entries.length) return null;
 
-  const sportEntries = entries.filter((e) => e?.fromYmd && e?.toYmd);
-  const exact = sportEntries.find((e) => e.fromYmd <= ymd && ymd <= e.toYmd);
-  if (exact) return exact;
+  const sportEntries = entries.filter((e) => e?.fromYmd && e?.toYmd && isCatalogEntryEligible(e));
+  const exactMatches = sportEntries.filter((e) => e.fromYmd <= ymd && ymd <= e.toYmd);
+  if (exactMatches.length) {
+    exactMatches.sort(
+      (a, b) =>
+        competitionPhaseSortIndex(a?.phase) - competitionPhaseSortIndex(b?.phase) ||
+        String(a?.fromYmd || "").localeCompare(String(b?.fromYmd || ""))
+    );
+    return exactMatches[0];
+  }
 
   const future = sportEntries
     .filter((e) => e.fromYmd > ymd)
@@ -160,6 +175,46 @@ export function resolveLeaderboardReadKeys(competitionKey) {
   return [key];
 }
 
+export function filterLeaderboardCompetitionEntries(entries = []) {
+  const list = (Array.isArray(entries) ? entries : []).filter(Boolean);
+  const visible = list.filter((e) => {
+    const st = String(e.status || "").toLowerCase();
+    return st !== "retired" && st !== "archived";
+  });
+
+  const seasonsWithFourBlock = new Set();
+  for (const e of visible) {
+    if (e.sport !== "nhl") continue;
+    const p = String(e.phase || "").toLowerCase();
+    if (p === "opening" || p === "winter" || p === "sprint") {
+      seasonsWithFourBlock.add(String(e.seasonId || ""));
+    }
+  }
+
+  const primaryNhlFourBlockSeason = [...seasonsWithFourBlock].sort((a, b) => b.localeCompare(a))[0] || "";
+
+  return visible.filter((e) => {
+    if (e.sport !== "nhl") return true;
+    const sid = String(e.seasonId || "");
+    if (primaryNhlFourBlockSeason && sid !== primaryNhlFourBlockSeason) return false;
+    if (!seasonsWithFourBlock.has(sid)) return true;
+    const p = String(e.phase || "").toLowerCase();
+    const key = String(e.competitionKey || "");
+    if (p === "regular" || key.endsWith("_regular")) return false;
+    return true;
+  });
+}
+
+export function competitionPhaseSortIndex(phase) {
+  const p = String(phase || "").toLowerCase();
+  if (p === "opening") return 0;
+  if (p === "winter") return 1;
+  if (p === "sprint") return 2;
+  if (p === "playoffs") return 3;
+  if (p === "regular") return 10;
+  return 5;
+}
+
 export function normalizeCompetitionEntry(raw, id) {
   if (!raw || typeof raw !== "object") return null;
   const sport = normalizeSport(raw.sport);
@@ -169,8 +224,9 @@ export function normalizeCompetitionEntry(raw, id) {
     String(raw.competitionKey || id || buildCompetitionKey(sport, seasonId, phase)).trim();
 
   const fromYmd = String(raw.fromYmd || "").slice(0, 10);
-  let label = String(raw.label || competitionKey);
-  if (sport === "nhl" && fromYmd) {
+  const explicitLabel = String(raw.label || "").trim();
+  let label = explicitLabel || competitionKey;
+  if (!explicitLabel && sport === "nhl" && fromYmd) {
     label = buildNhlCompetitionLabel(phase, seasonId, fromYmd);
   }
 
@@ -196,13 +252,15 @@ export function isWithinCompetitionWindow(competition, gameYmd) {
 
 export function isCompetitionOpenForCredit(competition, gameYmd) {
   if (!competition) return false;
-  if (String(competition.status || "").toLowerCase() === "finalized") return false;
+  const st = String(competition.status || "").toLowerCase();
+  if (st === "finalized" || st === "retired" || st === "archived") return false;
   return isWithinCompetitionWindow(competition, gameYmd);
 }
 
 export function isCompetitionReadyToFinalize(competition, todayYmd, graceDays = 2) {
   if (!competition) return false;
-  if (String(competition.status || "").toLowerCase() === "finalized") return false;
+  const st = String(competition.status || "").toLowerCase();
+  if (st === "finalized" || st === "retired" || st === "archived") return false;
   const to = String(competition.toYmd || "").slice(0, 10);
   const today = String(todayYmd || "").slice(0, 10);
   if (!to || !today) return false;

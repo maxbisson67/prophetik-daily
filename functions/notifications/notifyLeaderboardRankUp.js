@@ -178,3 +178,80 @@ export async function notifyLeaderboardRankUpAfterPointsCredit({
     previousRank,
   });
 }
+
+/**
+ * Après finalize (matin) : compare le rang actuel au dernier rang mémorisé
+ * (pas de push en direct pendant les matchs SOLO/DUO).
+ */
+export async function runMorningLeaderboardRankNotificationsForGroup({
+  groupId,
+  seasonId,
+}) {
+  const gid = String(groupId || "").trim();
+  const sid = String(seasonId || "").trim();
+
+  if (!gid || !sid) {
+    return { ok: true, skipped: true, reason: "invalid-input" };
+  }
+
+  const memberUids = await fetchActiveMemberUids(gid);
+  if (memberUids.length < 2) {
+    return { ok: true, skipped: true, reason: "single-member-group" };
+  }
+
+  let notified = 0;
+  let baselined = 0;
+
+  for (const uid of memberUids) {
+    if (String(uid).toLowerCase() === "ai") continue;
+
+    const afterRank = await computeMemberSeasonRank({
+      groupId: gid,
+      seasonId: sid,
+      uid,
+      memberUids,
+    });
+
+    if (!Number.isFinite(afterRank) || afterRank < 1) continue;
+
+    const stateRef = rankStateRef(gid, sid, uid);
+    const stateSnap = await stateRef.get();
+    const lastRank = Number(stateSnap.data()?.lastRank);
+
+    if (!Number.isFinite(lastRank) || lastRank < 1) {
+      await stateRef.set(
+        {
+          groupId: gid,
+          seasonId: sid,
+          lastRank: afterRank,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      baselined += 1;
+      continue;
+    }
+
+    if (afterRank >= lastRank) {
+      await stateRef.set(
+        {
+          lastRank: afterRank,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      continue;
+    }
+
+    const res = await maybeNotifyLeaderboardRankUp({
+      groupId: gid,
+      seasonId: sid,
+      uid,
+      previousRank: lastRank,
+    });
+
+    if (res?.sent) notified += 1;
+  }
+
+  return { ok: true, notified, baselined, memberCount: memberUids.length };
+}

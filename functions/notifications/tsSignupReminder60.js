@@ -286,8 +286,8 @@ export async function runTsSignupReminder60Scan(now = new Date()) {
 
 export const tsSignupReminder60 = onSchedule(
   {
-    // :55 de 12h à 23h (Toronto) — peu de matchs NHL avant 13h.
-    schedule: "55 12-23 * * *",
+    // :55 de 8h à 23h (Toronto) — rappel H-60 aussi pour matinées (ex. deadline ~12h15).
+    schedule: "55 8-23 * * *",
     timeZone: APP_TZ,
     region: "us-central1",
   },

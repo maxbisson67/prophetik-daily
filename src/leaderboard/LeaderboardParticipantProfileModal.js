@@ -66,20 +66,43 @@ function rankHeadline(rank, t) {
   });
 }
 
-function ParticipantRankDisc({ rank, total, accent, colors, t, size = 56, compact = false }) {
+function ParticipantRankDisc({
+  rank,
+  total,
+  accent,
+  colors,
+  t,
+  size = 56,
+  compact = false,
+  caption = null,
+}) {
   const n = Number(rank) || 0;
-  if (!n) return null;
+  const hasRank = n > 0;
+  const dash = t("leaderboard.participantProfile.noRank", { defaultValue: "—" });
 
   const discSize = compact ? 44 : size;
-  const fontSize = compact ? 16 : Math.round(discSize * 0.38);
-  const headline = rankHeadline(n, t);
+  const fontSize = compact ? (hasRank ? 16 : 18) : Math.round(discSize * 0.38);
+  const headline = hasRank ? rankHeadline(n, t) : null;
   const membersLine = t("leaderboard.participantProfile.amongMembers", {
     total: Number(total) || 0,
     defaultValue: "sur {{total}} membres",
   });
 
   return (
-    <View style={{ alignItems: "center", gap: compact ? 2 : 4, minWidth: compact ? 52 : 72 }}>
+    <View style={{ alignItems: "center", gap: compact ? 2 : 4, minWidth: compact ? 72 : 72 }}>
+      {caption ? (
+        <Text
+          style={{
+            color: colors.subtext,
+            fontWeight: "800",
+            fontSize: 11,
+            textAlign: "center",
+          }}
+          numberOfLines={2}
+        >
+          {caption}
+        </Text>
+      ) : null}
       <View
         style={{
           width: discSize,
@@ -88,38 +111,51 @@ function ParticipantRankDisc({ rank, total, accent, colors, t, size = 56, compac
           alignItems: "center",
           justifyContent: "center",
           borderWidth: compact ? 2.5 : 3,
-          borderColor: accent,
-          backgroundColor: hexWithAlpha(accent, "1A"),
-          shadowColor: accent,
-          shadowOpacity: 0.25,
+          borderColor: hasRank ? accent : colors.border,
+          backgroundColor: hasRank ? hexWithAlpha(accent, "1A") : colors.card2,
+          shadowColor: hasRank ? accent : "transparent",
+          shadowOpacity: hasRank ? 0.25 : 0,
           shadowOffset: { width: 0, height: 2 },
           shadowRadius: 4,
-          elevation: 3,
+          elevation: hasRank ? 3 : 0,
         }}
       >
         <Text
           style={{
-            color: accent,
+            color: hasRank ? accent : colors.subtext,
             fontWeight: "900",
             fontSize,
             includeFontPadding: false,
           }}
         >
-          {n}
+          {hasRank ? n : dash}
         </Text>
       </View>
       {!compact ? (
-        <>
-          <Text
-            style={{
-              color: colors.text,
-              fontWeight: "900",
-              fontSize: 14,
-              textAlign: "center",
-            }}
-          >
-            {headline}
-          </Text>
+        hasRank ? (
+          <>
+            <Text
+              style={{
+                color: colors.text,
+                fontWeight: "900",
+                fontSize: 14,
+                textAlign: "center",
+              }}
+            >
+              {headline}
+            </Text>
+            <Text
+              style={{
+                color: colors.subtext,
+                fontWeight: "700",
+                fontSize: 12,
+                textAlign: "center",
+              }}
+            >
+              {membersLine}
+            </Text>
+          </>
+        ) : (
           <Text
             style={{
               color: colors.subtext,
@@ -128,24 +164,28 @@ function ParticipantRankDisc({ rank, total, accent, colors, t, size = 56, compac
               textAlign: "center",
             }}
           >
-            {membersLine}
+            {t("live.participantProfile.rankNotStarted", {
+              defaultValue: "Avant les résultats du jour",
+            })}
           </Text>
-        </>
+        )
       ) : (
         <Text
           style={{
-            color: accent,
+            color: hasRank ? accent : colors.subtext,
             fontWeight: "900",
             fontSize: 10,
             textAlign: "center",
           }}
           numberOfLines={2}
         >
-          {t("leaderboard.participantProfile.rankCompact", {
-            rank: n,
-            total: Number(total) || 0,
-            defaultValue: "{{rank}}e / {{total}}",
-          })}
+          {hasRank
+            ? t("leaderboard.participantProfile.rankCompact", {
+                rank: n,
+                total: Number(total) || 0,
+                defaultValue: "{{rank}}e / {{total}}",
+              })
+            : dash}
         </Text>
       )}
     </View>
@@ -351,11 +391,20 @@ function StatPill({ colors, label, value, accent }) {
   );
 }
 
+function resolveSeasonRowForDaily(row, seasonPeerRows = []) {
+  const uid = String(row?.uid || row?.id || "").trim();
+  if (!uid) return null;
+  return (
+    (seasonPeerRows || []).find((m) => String(m?.id || m?.uid || "").trim() === uid) || null
+  );
+}
+
 export default function LeaderboardParticipantProfileModal({
   visible,
   onClose,
   row,
   peerRows = [],
+  seasonPeerRows = [],
   profiles = {},
   sport,
   colors,
@@ -387,6 +436,16 @@ export default function LeaderboardParticipantProfileModal({
   }, [row, peerRows, isDaily]);
 
   const dailyBonusAccent = colors.primary || "#ef4444";
+
+  const seasonMemberCount = seasonPeerRows?.length || 0;
+
+  const seasonOverallRank = useMemo(() => {
+    if (!isDaily || !row || !seasonPeerRows?.length) return null;
+    const seasonRow = resolveSeasonRowForDaily(row, seasonPeerRows);
+    if (!seasonRow) return null;
+    const rankMaps = buildLeaderboardRankMaps(seasonPeerRows);
+    return buildParticipantChallengeStats(seasonRow, rankMaps)?.overall?.rank ?? null;
+  }, [isDaily, row, seasonPeerRows]);
 
   const sectionTitles = useMemo(
     () => ({
@@ -514,14 +573,51 @@ export default function LeaderboardParticipantProfileModal({
               {identity?.displayName || row?.id || "—"}
             </Text>
 
-            <ParticipantRankDisc
-              rank={stats?.overall?.rank}
-              total={memberCount}
-              accent={OVERALL_RANK_ACCENT}
-              colors={colors}
-              t={t}
-              size={64}
-            />
+            {isDaily && seasonMemberCount > 0 ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                  gap: 20,
+                  marginTop: 4,
+                }}
+              >
+                <ParticipantRankDisc
+                  rank={stats?.overall?.rank}
+                  total={memberCount}
+                  accent={OVERALL_RANK_ACCENT}
+                  colors={colors}
+                  t={t}
+                  compact
+                  size={52}
+                  caption={t("live.participantProfile.rankToday", {
+                    defaultValue: "Classement aujourd'hui",
+                  })}
+                />
+                <ParticipantRankDisc
+                  rank={seasonOverallRank}
+                  total={seasonMemberCount}
+                  accent={colors.primary || OVERALL_RANK_ACCENT}
+                  colors={colors}
+                  t={t}
+                  compact
+                  size={52}
+                  caption={t("live.participantProfile.rankSeason", {
+                    defaultValue: "Classement compétition",
+                  })}
+                />
+              </View>
+            ) : (
+              <ParticipantRankDisc
+                rank={stats?.overall?.rank}
+                total={memberCount}
+                accent={OVERALL_RANK_ACCENT}
+                colors={colors}
+                t={t}
+                size={64}
+              />
+            )}
           </View>
 
           <View

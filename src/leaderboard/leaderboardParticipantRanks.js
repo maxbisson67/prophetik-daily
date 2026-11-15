@@ -10,14 +10,24 @@ function sortByValueDesc(rows, getValue) {
   );
 }
 
-/** Rang compétition : ex-aequo partagent le même rang. */
-export function buildRankMap(rows, getValue) {
+/**
+ * Rang compétition : ex-aequo partagent le même rang.
+ * @param {object} [options]
+ * @param {number} [options.minExclusive] — si défini, valeurs ≤ ce seuil → pas de rang (null).
+ */
+export function buildRankMap(rows, getValue, options = {}) {
+  const minExclusive = Number(options.minExclusive);
+  const hasMin = Number.isFinite(minExclusive);
   const sorted = sortByValueDesc(rows, getValue);
   const map = new Map();
   let rank = 0;
 
   sorted.forEach((row, index) => {
     const value = Number(getValue(row) ?? 0);
+    if (hasMin && value <= minExclusive) {
+      map.set(rowId(row), null);
+      return;
+    }
     if (index === 0) {
       rank = 1;
     } else {
@@ -45,6 +55,7 @@ export function getParticipantRank(rankMap, row) {
   const id = rowId(row);
   if (!id || !rankMap) return null;
   const rank = rankMap.get(id);
+  if (rank == null) return null;
   return Number.isFinite(rank) && rank > 0 ? rank : null;
 }
 
@@ -84,13 +95,15 @@ export function buildParticipantChallengeStats(row, rankMaps) {
   };
 }
 
+const DAILY_RANK_OPTS = { minExclusive: 0 };
+
 export function buildDailyRankMaps(rows = []) {
   const list = Array.isArray(rows) ? rows : [];
   return {
-    overall: buildRankMap(list, (r) => r?.totalPoints ?? 0),
-    fgc: buildRankMap(list, (r) => r?.fgcPoints ?? 0),
-    tp: buildRankMap(list, (r) => r?.tpPoints ?? 0),
-    ts: buildRankMap(list, (r) => r?.tsPoints ?? 0),
+    overall: buildRankMap(list, (r) => r?.totalPoints ?? 0, DAILY_RANK_OPTS),
+    fgc: buildRankMap(list, (r) => r?.fgcPoints ?? 0, DAILY_RANK_OPTS),
+    tp: buildRankMap(list, (r) => r?.tpPoints ?? 0, DAILY_RANK_OPTS),
+    ts: buildRankMap(list, (r) => r?.tsPoints ?? 0, DAILY_RANK_OPTS),
   };
 }
 

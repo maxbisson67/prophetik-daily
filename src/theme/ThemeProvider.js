@@ -1,6 +1,15 @@
 // src/theme/ThemeProvider.js
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useColorScheme } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const THEME_STORAGE_KEY = "appThemeMode";
+const THEME_MODES = new Set(["system", "light", "dark"]);
+
+function normalizeThemeMode(value, fallback = "system") {
+  const v = String(value || "").trim().toLowerCase();
+  return THEME_MODES.has(v) ? v : fallback;
+}
 
 const LightColors = {
   background: "#f8fafc",
@@ -27,8 +36,34 @@ const DarkColors = {
 const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children, defaultMode = "system" }) {
-  const [mode, setMode] = useState(defaultMode); // 'system' | 'light' | 'dark'
+  const [mode, setModeState] = useState(() => normalizeThemeMode(defaultMode));
   const system = useColorScheme(); // 'light' | 'dark' | null
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        const next = saved ? normalizeThemeMode(saved, normalizeThemeMode(defaultMode)) : null;
+        if (mounted && next) setModeState(next);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [defaultMode]);
+
+  const setMode = useCallback(async (next) => {
+    const v = normalizeThemeMode(next);
+    setModeState(v);
+    try {
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, v);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // ✅ Mode réellement appliqué
   const resolvedMode = mode === "system" ? (system === "dark" ? "dark" : "light") : mode;
@@ -51,7 +86,7 @@ export function ThemeProvider({ children, defaultMode = "system" }) {
       isDark,
       colors,
     }),
-    [mode, resolvedMode, isDark]
+    [mode, resolvedMode, isDark, setMode]
   );
 
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;

@@ -11,6 +11,8 @@ import GroupPointsOverviewTable from "@src/live/GroupPointsOverviewTable";
 import LeaderboardParticipantProfileModal from "@src/leaderboard/LeaderboardParticipantProfileModal";
 import LiveChallengePicksModal from "@src/live/LiveChallengePicksModal";
 import { DAILY_TOP_BONUS_POINTS } from "@src/lib/challengeScoringConstants";
+import useLeaderboardCompetitionKey from "@src/hooks/useLeaderboardCompetitionKey";
+import useLeaderboardGroupMembers from "@src/leaderboard/useLeaderboardGroupMembers";
 
 export default function GroupPointsOverviewBlock({
   groupId,
@@ -49,6 +51,17 @@ export default function GroupPointsOverviewBlock({
   const uids = useMemo(() => rows.map((r) => String(r.uid)), [rows]);
   const profiles = useLeaderboardProfiles(uids);
 
+  const { competitionKey } = useLeaderboardCompetitionKey({
+    sport: league,
+    enabled: !!groupId && variant === "live",
+  });
+  const { rows: seasonPeerRows } = useLeaderboardGroupMembers({
+    groupId,
+    competitionKey,
+    sport: league,
+    enabled: !!groupId && variant === "live" && !!competitionKey,
+  });
+
   const title = isHistory
     ? t("challenges.pointsOverview.title", {
         defaultValue: "Points — {{date}}",
@@ -64,14 +77,13 @@ export default function GroupPointsOverviewBlock({
         defaultValue: "Récapitulatif live par participant",
       });
 
-  const hint = isHistory
-    ? t("challenges.pointsOverview.hint", {
-        defaultValue: "Points finaux selon les résultats confirmés.",
-      })
-    : t("live.pointsOverview.hint", {
-        defaultValue:
-          "Points provisoires selon les résultats confirmés ou en cours. Clique sur SOLO, DUO ou TRIO pour voir le détail.",
-      });
+  const hintProvisional = t("live.pointsOverview.hintProvisional", {
+    defaultValue: "Points provisoires selon les résultats confirmés ou en cours.",
+  });
+
+  const hintHistory = t("challenges.pointsOverview.hint", {
+    defaultValue: "Points finaux selon les résultats confirmés.",
+  });
 
   if (!groupId) return null;
 
@@ -124,20 +136,22 @@ export default function GroupPointsOverviewBlock({
           style,
         ]}
       >
-        <View
-          style={{
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.card2,
-          }}
-        >
-          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>{title}</Text>
-          <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4, fontWeight: "600" }}>
-            {subtitle}
-          </Text>
-        </View>
+        {isHistory ? (
+          <View
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+              backgroundColor: colors.card2,
+            }}
+          >
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15 }}>{title}</Text>
+            <Text style={{ color: colors.subtext, fontSize: 12, marginTop: 4, fontWeight: "600" }}>
+              {subtitle}
+            </Text>
+          </View>
+        ) : null}
 
         <GroupPointsOverviewTable
           rows={rows}
@@ -146,24 +160,37 @@ export default function GroupPointsOverviewBlock({
           currentUid={user?.uid}
           resolveMember={(row) => resolveLeaderboardMember(row, profiles)}
           embedded
+          showPlayerColumnLabel={isHistory}
           onParticipantPress={setProfileRow}
           onChallengeKindPress={setPicksKind}
         />
 
         <View style={{ paddingHorizontal: 14, paddingBottom: 12 }}>
-          {hint ? (
-          <Text
-            style={{
-              color: colors.subtext,
-              fontSize: 11,
-              lineHeight: 16,
-              fontWeight: "600",
-              marginTop: 10,
-            }}
-          >
-            {hint}
-          </Text>
-          ) : null}
+          {isHistory ? (
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 11,
+                lineHeight: 16,
+                fontWeight: "600",
+                marginTop: 10,
+              }}
+            >
+              {hintHistory}
+            </Text>
+          ) : (
+            <Text
+              style={{
+                color: colors.subtext,
+                fontSize: 11,
+                lineHeight: 16,
+                fontWeight: "600",
+                marginTop: 10,
+              }}
+            >
+              {hintProvisional}
+            </Text>
+          )}
 
           {isHistory ? (
             <Text
@@ -189,6 +216,7 @@ export default function GroupPointsOverviewBlock({
         visible={!!profileRow}
         row={profileRow}
         peerRows={rows}
+        seasonPeerRows={seasonPeerRows}
         profiles={profiles}
         sport={sport}
         colors={colors}

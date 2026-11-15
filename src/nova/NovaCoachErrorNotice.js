@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import i18n from "@src/i18n/i18n";
+import { SUBSCRIPTIONS_UI_VISIBLE, navigateToSubscriptions } from "@src/subscriptions/subscriptionsNav";
 
 export default function NovaCoachErrorNotice({
   message = null,

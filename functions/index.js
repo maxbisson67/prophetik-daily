@@ -64,6 +64,7 @@ export { backfillParticipantProgression } from "./achievements/backfillParticipa
 export { onGroupCreated } from "./groups/onGroupCreated.js";
 export { createGroupWithCap } from "./groups/createGroupWithCap.js";
 export { joinGroupWithCap } from "./groups/joinGroupWithCap.js";
+export { setGroupTeamSplit } from "./groups/setGroupTeamSplit.js";
 export { getUserPlanUsageCallable as getUserPlanUsage } from "./subscriptions/getUserPlanUsage.js";
 export { resolveAutopilotGroups } from "./groups/resolveAutopilotGroups.js";
 export { resolveActiveGroups } from "./groups/resolveActiveGroups.js";
@@ -145,4 +146,8 @@ export {
   disableInactiveAutopilotNow,
 } from "./autopilot/disableInactiveAutopilot.js";
 
-export { dailyGroupParticipationReportCron } from "./reports/dailyGroupParticipationReportCron.js";
+export {
+  syncNhlFirstGoalSeasonStatsDaily,
+  backfillNhlFirstGoalSeasonStats,
+} from "./nhl/nhlFirstGoalSeasonStatsFunctions.js";
+

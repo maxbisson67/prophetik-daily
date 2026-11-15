@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { getProphetikBusinessYmd } from "@src/lib/prophetikBusinessDate";
 import {
   competitionKeyMatchesSport,
+  daysRemainingUntil,
   pickDefaultLeaderboardCompetition,
 } from "@src/season/seasonCompetitionCore";
 import useActiveCompetition from "@src/hooks/useActiveCompetition";
@@ -46,6 +47,23 @@ export default function useLeaderboardCompetitionKey({
     if (picked?.competitionKey) return picked.competitionKey;
 
     return preferred;
+  const leaderboardCompetition = useMemo(
+    () => competitions.find((c) => c.competitionKey === competitionKey) || null,
+    [competitions, competitionKey]
+  );
+
+  const daysRemaining = useMemo(() => {
+    const toYmd = String(leaderboardCompetition?.toYmd || "").slice(0, 10);
+    if (!toYmd) return null;
+    return daysRemainingUntil(toYmd, todayYmd);
+  }, [leaderboardCompetition, todayYmd]);
+
+  const competitionLabel = useMemo(() => {
+    const fromCatalog = String(leaderboardCompetition?.label || "").trim();
+    if (fromCatalog) return fromCatalog;
+    return "";
+  }, [leaderboardCompetition]);
+
   }, [competitions, activeCompetitionKey, sport, todayYmd]);
 
   return {

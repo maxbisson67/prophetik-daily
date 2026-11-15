@@ -115,12 +115,6 @@ export default function FgcMatchupHeader({
         backgroundColor: colors.card,
       }}
     >
-      <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "800", marginBottom: 10, paddingHorizontal: 4 }}>
-        {i18n.t("firstGoal.pick.tapTeamToFilter", {
-          defaultValue: "Choisis une équipe pour voir ses joueurs",
-        })}
-      </Text>
-
       <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <TeamColumn
           abbr={away}

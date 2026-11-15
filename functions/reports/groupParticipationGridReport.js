@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { writeFileSync } from "node:fs";
 import { db, logger } from "../utils.js";
-import { addDaysToYmd, APP_TZ } from "../ProphetikDate.js";
+import { addDaysToYmd, APP_TZ, appYmd } from "../ProphetikDate.js";
 import { resolveGroupDisplayName } from "../groups/groupDisplayUtils.js";
 import { isActiveMembership } from "../groups/groupMembership.js";
 import { isNovaMember, isParticipatingMember } from "../groups/participationUtils.js";
@@ -47,8 +47,32 @@ function tsToYmd(ts) {
   return d.toLocaleDateString("en-CA", { timeZone: APP_TZ });
 }
 
-function evaluatedYmd() {
-  return getEvaluatedGameYmd(new Date());
+/**
+ * Dernier jour inclus dans la grille (%7j / %total).
+ * @param {object} [opts]
+ * @param {string} [opts.throughYmd] - YYYY-MM-DD explicite (prioritaire)
+ * @param {boolean} [opts.includeCurrentDay] - inclure le jour calendaire Toronto (appYmd)
+ */
+export function resolveParticipationGridEndYmd({
+  throughYmd = null,
+  includeCurrentDay = false,
+  now = new Date(),
+} = {}) {
+  const explicit = String(throughYmd || "").slice(0, 10);
+  if (explicit) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(explicit)) {
+      throw new Error(`Invalid throughYmd: ${throughYmd}`);
+    }
+    const today = appYmd(now);
+    if (explicit > today) {
+      throw new Error(`throughYmd ${explicit} is after today (${today})`);
+    }
+    return explicit;
+  }
+  if (includeCurrentDay) {
+    return appYmd(now);
+  }
+  return getEvaluatedGameYmd(now);
 }
 
 function last7Ymds(endYmd) {
@@ -194,14 +218,18 @@ function resolveTotalFromYmd(groupCreatedYmd, cohortYmd) {
  */
 export async function buildGroupParticipationGrid({
   cohortStartYmd = GRID_COHORT_START_YMD,
+  throughYmd = null,
+  includeCurrentDay = false,
 } = {}) {
-  const endYmd = evaluatedYmd();
+  const endYmd = resolveParticipationGridEndYmd({ throughYmd, includeCurrentDay });
   const generatedAt = new Date().toISOString();
   const groups = await loadCohortGroups(cohortStartYmd);
 
   logger.info("[participationGrid] start", {
     cohortStartYmd,
     endYmd,
+    includeCurrentDay: !!includeCurrentDay,
+    throughYmd: throughYmd || null,
     groupCount: groups.length,
   });
 
@@ -329,7 +357,15 @@ export async function buildGroupParticipationGrid({
     groupCount: groupSummaries.length,
   });
 
-  return { cohortStartYmd, endYmd, generatedAt, gridRows, groupSummaries };
+  return {
+    cohortStartYmd,
+    endYmd,
+    includeCurrentDay: !!includeCurrentDay,
+    throughYmd: throughYmd ? String(throughYmd).slice(0, 10) : null,
+    generatedAt,
+    gridRows,
+    groupSummaries,
+  };
 }
 
 export function gridRowsToCsv(gridRows) {

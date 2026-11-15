@@ -309,7 +309,7 @@ export default function DefiParticipationScreen() {
 
   const showNovaCoach = defiSport === "MLB" || defiSport === "NHL";
 
-  const { formatLine: formatStandingsLine } = useTeamStandingsLookup(
+  const { formatLine: formatStandingsLine, getRecord: getStandingsRecord } = useTeamStandingsLookup(
     defiSport === "MLB" || defiSport === "NHL" ? defiSport : null
   );
 
@@ -838,6 +838,9 @@ export default function DefiParticipationScreen() {
                   formatStandingsLine={
                     defiSport === "MLB" || defiSport === "NHL" ? formatStandingsLine : null
                   }
+                  getStandingsRecord={
+                    defiSport === "MLB" || defiSport === "NHL" ? getStandingsRecord : null
+                  }
                   showNovaButton={showNovaCoach}
                   onNovaPress={setNovaPlayer}
                 />
@@ -929,6 +932,9 @@ export default function DefiParticipationScreen() {
         sport={defiSport}
         formatStandingsLine={
           defiSport === "MLB" || defiSport === "NHL" ? formatStandingsLine : null
+        }
+        getStandingsRecord={
+          defiSport === "MLB" || defiSport === "NHL" ? getStandingsRecord : null
         }
         loading={loadingPool}
         poolStatsEpoch={poolStatsEpoch}

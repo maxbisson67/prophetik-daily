@@ -274,6 +274,8 @@
       "resultsTabHintLink": "En direct",
       "resultsTabHintSuffix": ".",
       "selectGroupLabel": "Sélectionne un groupe pour voir les défis associés",
+      "viewParticipantsPicks": "Voir les choix des participants",
+      "viewParticipantsPicksShort": "Voir les choix",
       "dailyDefisTitle": "Relève les défis du jour",
       "dailyDefisProgressTitle": "Ma progression des défis du jour",
       "groupChatTitle": "Chat du groupe",
@@ -416,8 +418,25 @@
         "seasonCurrentShort": "Saison {{season}}",
         "seasonPreviousShort": "Saison {{season}}",
         "goalsThisYear": "Cette saison :",
+        "firstGoalsSeason": "Premiers buts du match (saison) : {{count}}",
         "goalsLastYear": "L'an passé :",
         "goalsPerGameUnit": "B/MJ",
+        "firstGoalsPersonal": "{{name}} a compté {{count}} fois le premier but cette année.",
+        "firstGoalsPersonalNone": "{{name}} n'a pas encore marqué le premier but cette année.",
+        "playerFirstNameFallback": "Ce joueur",
+        "seasonStatsBlock": "Saison {{season}}",
+        "seasonStatsBlockPrevious": "Saison précédente · {{season}}",
+        "chooseShort": "Choisir",
+        "choosePlayer": "Choisir ce joueur",
+        "toggleStats": "Afficher les stats de {{name}}",
+        "nhlRowHint": "Touche la ligne pour les stats détaillées · Choisir pour participer",
+        "detailSeasonHint": "Saison en cours",
+        "detailGoals": "Buts",
+        "detailGoalsPerGame": "Buts / match",
+        "seasonGoalsTotalShort": "{{goals}} B",
+        "detailToi": "Temps de glace moy.",
+        "detailShotsPerGame": "Tirs / match",
+        "detailPpGoals": "Buts en avantage num.",
         "goalsGpTotals": "{{goals}} {{goalsUnit}} · {{gp}} {{gpUnit}}",
         "sortedByLineup": "Triés par ordre de frappe",
         "lineupOrder": "{{slot}}e frappeur",
@@ -618,6 +637,27 @@
           "transferRequiredTitle": "Transfert requis",
           "transferRequiredMessage": "Il reste d'autres membres. Tu dois transférer la propriété avant de quitter."
 
+      },
+      "teamSplit": {
+        "sectionTitle": "Duel par équipes (optionnel)",
+        "sectionHint": "Assigne les membres actifs. Le classement équipes apparaît pour tout le groupe une fois au moins un joueur par équipe.",
+        "teamA": "Équipe A",
+        "teamB": "Équipe B",
+        "teamAPlaceholder": "Ex. Parents",
+        "teamBPlaceholder": "Ex. Ados",
+        "ready": "Visible dans le Classement pour tous",
+        "notReady": "Assigne au moins un membre par équipe",
+        "noParticipatingMembers": "Aucun membre actif à assigner.",
+        "save": "Enregistrer le duel",
+        "errors": {
+          "ownerOnly": "Seul le propriétaire peut modifier les équipes.",
+          "memberNotParticipating": "Un membre assigné ne participe pas activement.",
+          "invalidTeam": "Équipe invalide.",
+          "teamNameTooLong": "Nom d'équipe trop long.",
+          "groupNotFound": "Groupe introuvable.",
+          "functionNotDeployed": "Fonction serveur absente. Déploie setGroupTeamSplit (firebase deploy --only functions:setGroupTeamSplit).",
+          "groupIdMissing": "Identifiant du groupe manquant. Rouvre l'écran du groupe."
+        }
       },
       "config": {
           "sectionTitle": "Configuration",
@@ -873,7 +913,8 @@
           },
           "matchup": {
             "rankShort": "Rang",
-            "diffShort": "+/-"
+            "diffShort": "+/-",
+            "goalsAgainstShort": "BC"
           },
           "playerSelect": {
               "title": "Sélectionner un joueur",
@@ -897,6 +938,7 @@
               "statSlg": "SLG",
               "statPoints": "PTS",
               "statPpgShort": "Moy.",
+              "pointsPerGameLine": "{{value}} points par match",
               "statHits": "H",
               "statRbi": "RBI",
               "statHr": "HR",
@@ -1860,7 +1902,10 @@
       "competitionDateLine": "{{from}} → {{to}}",
       "competitionPhase": {
         "regular": "Saison régulière",
-        "playoffs": "Séries éliminatoires"
+        "playoffs": "Séries",
+        "opening": "Ouverture",
+        "winter": "Hiver",
+        "sprint": "Sprint"
       },
       "competitionStatus": {
         "active": "En cours",
@@ -1944,7 +1989,8 @@
 
       "champions": {
         "title": "Champions de saison",
-        "current": "Compétition terminée",
+        "gap": "Écart : {{gap}} pts (moyenne)",
+        "gapLead": "🔥 {{team}} mène par {{gap}} points !",
         "past": "Compétition passée",
         "points": "{{count}} pts"
       },
@@ -2036,19 +2082,14 @@
       "noChallenges": "Aucun défi du jour pour ce groupe.",
       "noParticipants": "Aucune participation pour l'instant.",
       "hint": "Points provisoires selon les résultats confirmés ou en cours. Clique sur SOLO, DUO ou TRIO pour voir le détail.",
+      "hintProvisional": "Points provisoires selon les résultats confirmés ou en cours.",
+      "hintDiscoverability": "Touche SOLO, DUO ou TRIO pour voir les choix des participants.",
+      "columnPicksHint": "Clique pour voir les choix",
+      "a11yOpenFgcPicks": "Voir les choix SOLO des participants",
+      "a11yOpenTpPicks": "Voir les choix DUO des participants",
+      "a11yOpenTsPicks": "Voir les choix TRIO des participants",
       "tsWinnerBonusShort": "+{{bonus}} bonus",
-      "dailyBonusNote": "Bonus meilleure soirée : +{{bonus}} pts pour le plus haut total cumulé SOLO + DUO + TRIO (affiché en exposant sur la colonne Total)."
-    },
-    "participantProfile": {
-      "title": "Points du jour",
-      "totalToday": "Total du jour",
-      "byChallenge": "Points par défi aujourd'hui",
-      "successes": "Réussites",
-      "totalSuccesses": "{{count}} réussites au total"
-    },
-    "badge": {
-      "rbi": "SOLO",
-      "goal": "SOLO",
+      "dailyBonusNote": "Bonus meilleure soirée : +{{bonus}} pts pour le plus haut total cumulé SOLO + DUO + TRIO (affiché en exposant sur la colonne Total).",
       "score": "DUO",
       "trio": "TRIO"
     },
@@ -2057,7 +2098,10 @@
     "headerNoDate": "Matchs NHL",
     "tapHint": "Touchez un match pour voir les buts et les buteurs en temps réel.",
     "challenge": {
-      "partial": "En cours",
+      "totalSuccesses": "{{count}} réussites au total",
+      "rankToday": "Classement aujourd'hui",
+      "rankSeason": "Classement compétition",
+      "rankNotStarted": "Avant les résultats du jour",
       "myPick": "Mon choix",
       "fgcTitleMlb": "Premier point produit",
       "fgcTitleNhl": "Premier but",
@@ -2379,6 +2423,20 @@
       "summaryHintMvp": "5 pts pour la bonne équipe, +5 pts pour le score exact (10 max).",
       "statusIncomplete": "À compléter",
       "statusPending": "En attente…",
+      "teamFormRecord": "Fiche",
+      "teamFormHome": "Domicile",
+      "teamFormAway": "Extérieur",
+      "teamFormGoalsFor": "BP / Match",
+      "teamFormGoalsAgainst": "BC / Match",
+      "teamFormRunsFor": "Marques / match",
+      "teamFormRunsAgainst": "Encaissées / match",
+      "teamFormLastTen": "10 derniers",
+      "teamRecord": "Fiche · {{record}}",
+      "goalsRatePerGame": "{{gf}} BF/MJ · {{ga}} BC/MJ",
+      "runsRatePerGame": "{{rf}} mar./MJ · {{ra}} enc./MJ",
+      "teamLastTen": "10 derniers · {{record}}",
+      "sideSplitAway": "Extérieur · {{record}}",
+      "sideSplitHome": "Domicile · {{record}}",
       "statusSaving": "Enregistrement…",
       "statusSaved": "Enregistré",
       "statusError": "Erreur",

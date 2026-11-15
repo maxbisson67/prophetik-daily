@@ -117,7 +117,7 @@ export default function MatchupRow({
           <View style={{ width: COL_TIME }} />
 
           <View style={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>
-            <TeamMetaBadge rankOverall={away.rankOverall} goalDifferential={away.goalDifferential} />
+            <TeamMetaBadge rankOverall={away.rankOverall} teamOrMatchup={away} />
           </View>
 
           <View style={{ width: 28 }} />

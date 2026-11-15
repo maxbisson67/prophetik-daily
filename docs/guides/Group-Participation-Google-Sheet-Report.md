@@ -26,7 +26,7 @@ Rapport admin **quotidien** pour les groupes créés depuis **2026-09-01** :
 - **taux du jour** = participants ÷ membres participating (si défis ce jour-là)
 - **moyenne 7 jours** = moyenne des taux journaliers (jours avec au moins un défi)
 
-Calendrier : **veille** (fuseau `America/Toronto`), cron **7 h 15**.
+Calendrier manuel ou cron local : **veille** (fuseau `America/Toronto`). *(Le cron Cloud `dailyGroupParticipationReportCron` a été retiré.)*
 
 ## 1. Google Sheet
 
@@ -40,29 +40,7 @@ Calendrier : **veille** (fuseau `America/Toronto`), cron **7 h 15**.
 2. Créer une clé JSON.
 3. **Partager** la feuille avec l’email du compte de service (rôle **Éditeur**).
 
-## 3. Firebase / Functions
-
-Secrets et paramètres :
-
-```bash
-firebase functions:secrets:set GROUP_REPORT_SHEETS_SA_JSON
-# coller le JSON complet du compte de service
-
-# Dans functions/.env (non commité) :
-# GROUP_REPORT_SHEET_ID=VOTRE_SPREADSHEET_ID
-```
-
-Index Firestore (si demandé) :
-
-- Collection `groups`, champ `createdAt` (Ascending)
-
-Déployer :
-
-```bash
-firebase deploy --only functions:dailyGroupParticipationReportCron
-```
-
-## 4. Test local / manuel
+## 3. Test local / manuel (Sheet ou PDF)
 
 ```bash
 cd functions
@@ -77,7 +55,7 @@ DRY_RUN=1 node scripts/runGroupParticipationReport.js
 REPORT_YMD=2026-10-17 node scripts/runGroupParticipationReport.js
 ```
 
-## 5. Colonnes (`Daily`)
+## 4. Colonnes (`Daily`)
 
 | Colonne | Description |
 |--------|-------------|
@@ -102,6 +80,34 @@ Exclusions **par groupe × UID** (compte fantôme, etc.) : `functions/reports/pa
 
 ---
 
+## Rapport jour × groupe (CLI)
+
+Membres **participating** du groupe + indicateur **participé** (entrée humaine sur un défi auto SOLO/DUO/TRIO ce jour-là).
+
+```bash
+cd functions
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/firebase-admin.json"
+
+# Aujourd'hui (America/Toronto) — liste « Nom — oui/non »
+node scripts/runGroupDailyParticipationReport.js --groupId GJEpz6FmYbgzCESACiyW
+
+# Plusieurs groupes
+node scripts/runGroupDailyParticipationReport.js --groupIds id1,id2,id3
+
+# JSON détaillé
+node scripts/runGroupDailyParticipationReport.js --groupId GJEpz6FmYbgzCESACiyW --json
+
+# Date précise (≤ aujourd'hui Toronto)
+node scripts/runGroupDailyParticipationReport.js \
+  --groupId ovkcdDpAAKRwWSQQFUh7 \
+  --ymd 2026-10-23 \
+  --csv ./out/group-day.csv
+```
+
+Option `--include-non-participating` : liste aussi les membres actifs inactifs / admin-only (toujours avec oui/non si applicable).
+
+---
+
 ## Grille Excel / PDF (tous les groupes)
 
 Même tableau que Classement (**%7j**, **%Total** par participant), une ligne par (groupe × participant).  
@@ -116,6 +122,26 @@ node scripts/runGroupParticipationGridExport.js \
   --csv ./out/participation-grid.csv \
   --pdf ./out/participation-grid.pdf
 ```
+
+Par défaut, la période se termine à **J−1** (Toronto), comme l’app Classement — la journée en cours est encore « ouverte ».
+
+Pour inclure **aujourd’hui** (ex. export en fin de soirée, jour partiel accepté) :
+
+```bash
+node scripts/runGroupParticipationGridExport.js \
+  --include-current-day \
+  --csv ./out/participation-grid.csv
+```
+
+Ou une date de fin explicite :
+
+```bash
+node scripts/runGroupParticipationGridExport.js \
+  --throughYmd 2026-10-23 \
+  --csv ./out/participation-grid.csv
+```
+
+Équivalent env : `GRID_INCLUDE_CURRENT_DAY=1` ou `GRID_THROUGH_YMD=2026-10-23` (ne pas combiner les deux).
 
 Ouvre le **CSV** dans Excel / Google Sheets (grille complète). Le **PDF** affiche **Participant · %7j · %Total** (en-tête de bloc par groupe avec les moyennes).
 

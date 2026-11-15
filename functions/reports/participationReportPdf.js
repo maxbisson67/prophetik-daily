@@ -1,4 +1,3 @@
-import PDFDocument from "pdfkit";
 import { createWriteStream } from "node:fs";
 import { finished } from "node:stream/promises";
 
@@ -13,6 +12,15 @@ function truncate(text, maxLen) {
 }
 
 /**
+ * pdfkit/fontkit chargés à l'exécution seulement (évite ERR_ENCODING_NOT_SUPPORTED
+ * lors de l'analyse du codebase Firebase au deploy).
+ */
+async function loadPdfDocument() {
+  const mod = await import("pdfkit");
+  return mod.default;
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.title
  * @param {string} opts.subtitle
@@ -20,7 +28,9 @@ function truncate(text, maxLen) {
  * @param {string[][]} opts.rows
  * @returns {Promise<Buffer>}
  */
-export function buildParticipationReportPdfBuffer({ title, subtitle, header, rows }) {
+export async function buildParticipationReportPdfBuffer({ title, subtitle, header, rows }) {
+  const PDFDocument = await loadPdfDocument();
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "LETTER",
